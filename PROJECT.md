@@ -63,7 +63,7 @@ The plan describes subsequent steps: research and document disease conditions; r
 | Michał | @michcio10 | QGIS and spatial analysis | Wiktor |
 | Wiktor | @wwwitkowski | UX and project management | Michał |
 | Maciek | @terleckimaciej | Backend | Olaf |
-| Olaf | @leonkacpereski | Database and SQL | Maciek |
+| Olaf | @leonkacperesky22 | Database and SQL | Maciek |
 
 Work is tracked in [Project 1](https://github.com/orgs/geoearth-junction/projects/1). Assignments and implementation decisions belong in the issues.
 
