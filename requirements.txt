@@ -28,3 +28,6 @@ earthengine-api>=1.1
 geemap>=0.32
 # Uncomment if you Export.*.toCloudStorage and need to list/download GCS objects in Python:
 # google-cloud-storage>=2.14
+streamlit>=1.35
+pydeck>=0.9
+plotly>=5.20
