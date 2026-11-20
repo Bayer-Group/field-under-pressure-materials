@@ -1,42 +1,30 @@
-# [Team name] — Field Under Pressure
+# GeoEarth Junction — Field Under Pressure
 
-**Track:** Weather risk | Disease & pest | Yield & soil | Platform / dashboard  
 **Event:** [Field Under Pressure](https://geo-hackathon.g.location360.ag/) · 20–22 Nov 2026
+**Project requirements and current scope:** [PROJECT.md](../PROJECT.md)
+**Work board:** [Project 1](https://github.com/orgs/geoearth-junction/projects/1)
 
 ## Team
-| Name | Role | Contact |
-|------|------|---------|
-|      |      |         |
+
+| Name | Role | GitHub | Pair |
+| --- | --- | --- | --- |
+| Michał | QGIS and spatial analysis | @michcio10 | Wiktor |
+| Wiktor | UX and project management | @wwwitkowski | Michał |
+| Maciek | Backend | @terleckimaciej | Olaf |
+| Olaf | Database and SQL | @leonkacpereski | Maciek |
 
 ## One-liner
-What grower decision does this help? (spray / treat / harvest / wait)
 
-## Problem & scope
-- Focus area (crop, region, risk type):
-- In scope for the weekend:
-- Explicitly out of scope:
+Help farmers understand weather conditions that may favour crop disease and potential treatment windows, with clear context and uncertainty. Decisions remain with the farmer or agronomist.
 
-## Data we use
-- [ ] Weather
-- [ ] Satellite (Sentinel-2 / …)
-- [ ] Soil
-- [ ] Cropland
-- Notes / paths (local only — do not commit large files):
+## Scope
 
-## How to run
-```bash
-python -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-# put downloaded data somewhere local, then set path below or in a .env
-jupyter notebook notebooks/
-```
+- First iteration: select one crop and demonstrate selected available data being classified, made importable to the backend and displayed in the correct location in QGIS and MapLibre.
+- Product direction: a nationwide risk heatmap and field-level explanations. The crop, disease, data subset and implementation choices remain open.
+- Outside the planned hackathon scope: training a new model from scratch, diagnosing disease from photos, or directing a farmer to spray.
 
-## Demo notes (Sunday)
-- What to show (1–2 screens / maps):
-- Key result / insight:
-- Known limits / next steps:
+## Data and demo
 
-## Links
-- Repo:
-- Slides / recording (if any):
+See [dataset documentation](../data/README.md) and the candidate inputs and limitations in [PROJECT.md](../PROJECT.md). Record the selected sources, local paths, access restrictions, sample places, quality limitations and reproducible demo steps as the work is validated. Do not commit datasets, credentials or private access links.
+
+The merged bridge's starter instructions are in [README2.md](../README2.md). An integrated application setup and demonstration have not yet been verified.

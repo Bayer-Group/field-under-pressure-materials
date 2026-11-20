@@ -20,13 +20,41 @@ The team will decide implementation details, data formats, interfaces and accept
 - Historical weather is not a current forecast. Satellite vegetation indicators provide context and do not confirm disease. Farmer symptom reports, if added, remain a separate signal.
 - No training a new AI model from scratch, photo-based disease diagnosis, or instruction to spray is planned for the hackathon prototype.
 
+## Intended user journey (later iterations)
+
+1. The farmer identifies a field and provides the crop and growth stage; other field history and crop details can add context where available.
+2. The application shows weather conditions that may favour a disease, the relevant time period, and an explanation of the result. A map is intended to show risk across Poland, subject to actual data coverage and model validity.
+3. A field view makes data sources, freshness, missing values and uncertainty understandable. A farmer's symptom report is shown separately, including when it disagrees with a model.
+4. A forecast-based view shows possible treatment windows and the conditions behind them. Product label, equipment, current law and farmer preferences matter; where these are unknown, the app cannot confirm suitability or compliance.
+
+The plan proposes established, cited disease models and validation against expert or field evidence. Model choice, growth-stage requirements, data quality rules, thresholds, and how confidence is represented are open decisions for future work. Do not interpret weather suitability as evidence of infection or a prescription.
+
 ## Data direction
 
 Organizer data is available. Candidate inputs in the team plan include hourly and daily historical weather, weather-grid locations, IMERG precipitation, soil and crop maps, and Sentinel-2. Forecasts, product information, farmer inputs and expert validation are potential later inputs. Exact datasets, geographic and temporal coverage, access, quality and licensing must be checked and recorded as work proceeds. Keep large datasets and credentials out of Git; preserve source attribution and original values when documenting corrections.
 
+### Candidate inputs and limitations
+
+| Input | Intended role | Current status / limitation |
+| --- | --- | --- |
+| Organizer weather and grid | Historical conditions and geographic reference | [Weather documentation](data/weather.md) describes 2020–2025; this is not a forecast. Check the actual subset and grid mapping. |
+| IMERG precipitation | Compare or help investigate precipitation gaps | Separate historical product; differences and any filling method need assessment and provenance. |
+| Cropland and soil | Crop context and background | Crop maps are historical; soil is background in the plan. Check coverage and suitability. |
+| Sentinel-2 | Vegetation context | The documented organizer sample covers only part of southern Poland. NDVI is not disease confirmation. |
+| Forecast weather | Potential treatment windows and current conditions | Proposed for later; source and coverage need verification. |
+| Farmer inputs | Field, crop, growth stage, history and possible symptom reports | Intended, not implemented or validated by this documentation. |
+| Product labels and applicable rules | Context for treatment suitability | Verify current official sources and product-specific requirements before making any compliance claim. |
+| Crop protection references | Research into disease conditions | See [organizer reference inventory](data/yield-risks-protection.md); independently assess relevance and model validity. |
+
+Data selection, classifications and geographic checks for the first iteration are to be decided by the team in the work itself. Keep original and corrected values distinguishable, with provenance, reason and date for corrections where applicable.
+
 ## Existing starting point
 
 The PyQGIS–FastAPI bridge has been merged into this repository. It supplies a FastAPI backend, QGIS plugin, shared components and a MapLibre viewer as a starting point. Their presence does not mean that the crop-risk product, data ingestion, nationwide coverage or the end-to-end workflow is already implemented or validated. See [README2.md](README2.md) for the imported bridge instructions and [data/README.md](data/README.md) for organizer dataset documentation. The organizer's [README.md](README.md) remains the materials guide. Setup and demo instructions for the integrated product should be recorded once verified.
+
+## Later deliverables in the team plan
+
+The plan describes subsequent steps: research and document disease conditions; relate fields to weather and assess quality; calculate and explain historical risk; compare results with expert or field evidence; explore forecast treatment windows; incorporate symptom reports; and prepare an understandable demo. These are product directions, not completed capabilities or a fixed first-iteration commitment. The team can adjust sequencing in its issues. Each iteration should produce something demonstrable.
 
 ## Team and collaboration
 

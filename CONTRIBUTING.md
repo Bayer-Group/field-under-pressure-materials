@@ -1,6 +1,6 @@
 # 🤝 Przewodnik Kontrybucji (CONTRIBUTING)
 
-Dziękujemy za wkład w rozwój projektu **PyQGIS FastAPI Bridge**!  
+Dziękujemy za wkład w rozwój projektu **Field Under Pressure — GeoEarth Junction**, który zawiera scalony starter PyQGIS FastAPI Bridge!
 Niezależnie od tego, czy pracujesz samodzielnie, w zespole ludzkim, czy wspomagasz się agentami AI, w projekcie obowiązują poniższe zasady pracy z repozytorium, standardy kodu oraz konwencje commitów.
 
 ---
@@ -37,14 +37,14 @@ Aby utrzymać przejrzysty podział obowiązków, uniknąć konfliktów w kodzie 
 ## 🌿 Model Pracy z Gitem (GitHub Flow)
 
 Pracujemy w oparciu o prosty, zwinny model **GitHub Flow**:
-1. Gałąź `master` (lub `main`) jest zawsze stabilna i gotowa do uruchomienia.
-2. Każdą nową funkcjonalność lub poprawkę tworzymy na dedykowanej gałęzi odchodzącej od `master`.
+1. Gałęzią zespołu w tym repozytorium jest `team/geoearth-junction`. Nie zakładaj, że scalony starter jest już zweryfikowany jako gotowa aplikacja.
+2. Każdą nową funkcjonalność lub poprawkę tworzymy na dedykowanej gałęzi odchodzącej od gałęzi zespołu.
 3. Nazewnictwo gałęzi:
    * `feat/<nazwa-funkcji>` – nowe funkcjonalności (np. `feat/uldk-polygon-loader`)
    * `fix/<opis-bledu>` – naprawa błędów (np. `fix/crs-transformation-epsg2180`)
    * `docs/<temat>` – zmiany w dokumentacji (np. `docs/update-datasets-guide`)
    * `refactor/<zakres>` – przebudowa istniejącego kodu bez zmiany zachowania
-4. Po ukończeniu prac tworzymy Pull Request lub po weryfikacji przez człowieka scalamy do `master`.
+4. Po ukończeniu prac tworzymy Pull Request lub po weryfikacji przez człowieka scalamy do gałęzi zespołu.
 
 ---
 
@@ -96,4 +96,4 @@ Wszystkie commity w repozytorium **muszą** być formatowane zgodnie ze specyfik
 
 ## 🔒 Bezpieczeństwo i Higiena Danych
 1. **Nigdy nie commituj kluczy API, haseł ani tokenów!** Wszelkie wrażliwe dane trzymamy w plikach `.env` (plik ten jest ignorowany przez `.gitignore`).
-2. **Żadnych danych biznesowych ani pre-codingu:** Repozytorium przed startem oficjalnego wydarzenia musi zachować status uniwersalnej biblioteki narzędziowej.
+2. **Dane i licencje:** Nie commituj dużych danych ani prywatnych linków dostępu. Przestrzegaj warunków organizatorów i dokumentuj źródła.

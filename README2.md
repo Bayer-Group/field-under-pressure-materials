@@ -1,3 +1,9 @@
+# PyQGIS FastAPI Bridge — imported starting point
+
+> This bridge was merged into GeoEarth Junction's Field Under Pressure repository. See [PROJECT.md](PROJECT.md) for the product requirements, first iteration and current open decisions. The notes below describe the imported starter, not a completed crop-risk application. The data ingestion, nationwide risk map, treatment windows, and shared presentation of selected datasets in both clients remain to be built and verified.
+
+> Setup has not yet been validated end to end in the merged repository. The organizer's `requirements.txt` and the bridge's `backend/requirements.txt` / `requirements2.txt` are separate dependency lists. The commands below describe the imported starter; document an integrated, tested setup during the first iteration.
+
 # 🌉 PyQGIS FastAPI Bridge
 
 > **Asynchroniczny szkielet technologiczny (Developer Boilerplate)** łączący stację roboczą **QGIS (PyQGIS)**, serwer **FastAPI** oraz podgląd mapowy **MapLibre GL JS**.
@@ -28,7 +34,7 @@ Zaprojektowany jako uniwersalna biblioteka narzędziowa pod dowolne projekty geo
 
 1. **Wielowątkowość w QGIS (`QgsTask`):**
    * Zapytania do API wykonywane są w tle za pośrednictwem klasy `QgsTask`.
-   * Interfejs QGIS **nigdy się nie zawiesza** – użytkownik może swobodnie przesuwać mapę, przybliżać i klikać obiekty, podczas gdy zadania przetwarzają się w tle.
+   * Interfejs QGIS powinien pozostać responsywny – użytkownik może swobodnie przesuwać mapę, przybliżać i klikać obiekty, podczas gdy zadania przetwarzają się w tle.
 
 2. **Integracje z Polskimi Rejestrami Państwowymi (`backend/app/ingestion/`):**
    * **ULDK GUGiK (`uldk_connector.py`):** Pobieranie geometrii działek ewidencyjnych w układzie EPSG:2180 na podstawie numeru TERYT lub klikniętego punktu XY.
@@ -46,15 +52,15 @@ Zaprojektowany jako uniwersalna biblioteka narzędziowa pod dowolne projekty geo
 ## 🚀 Szybki Start
 
 ### 1. Wtyczka QGIS
-Wtyczka została podlinkowana bezpośrednio do profilu QGIS:
-1. Otwórz projekt testowy: **[`sample_project/sample_project.qgs`](file:///C:/Users/wiktor/PycharmProjects/pyqgis-fastapi-bridge/sample_project/sample_project.qgs)**.
+Wtyczka wymaga instalacji lub podlinkowania w profilu QGIS. Skrypty `link_plugin.sh` i `link_plugin.bat` są dostępne; sprawdź ich działanie przed uruchomieniem (skrypt shell usuwa istniejący cel w domyślnym profilu). Następnie:
+1. Otwórz projekt testowy: **[`sample_project/sample_project.qgs`](sample_project/sample_project.qgs)**.
 2. Wejdź w menu **Wtyczki $\rightarrow$ Zarządzaj wtyczkami...** $\rightarrow$ zakładka **Zainstalowane** i zaznacz:  
    ☑️ **`PyQGIS FastAPI Bridge`**.
 3. Na pasku narzędzi kliknij ikonkę wtyczki, aby otworzyć boczny panel.
 4. Kliknij **`▶ Run Analysis (FastAPI)`** – zadania zostaną zlecone w tle do menedżera zadań QGIS (`QgsTask`), a wyniki pojawią się w panelu bez zacinania mapy.
 
 ### 2. Backend FastAPI
-Uruchomienie serwera jednym poleceniem:
+Po przygotowaniu środowiska z zależnościami backendu (zob. `backend/requirements.txt`) uruchom z katalogu repozytorium:
 ```bash
 python backend/run_backend.py
 ```
@@ -63,15 +69,15 @@ python backend/run_backend.py
 * **Health Check:** `http://127.0.0.1:8000/health`
 
 ### 3. Testy Jednostkowe (Automated Testing)
-Uruchomienie całego pakietu testów (16 testów: API, schematy Pydantic, CRS, konektory ULDK/IMGW, walidacja wtyczki QGIS):
+Uruchomienie testów startera (ich wynik w scalonym repozytorium należy zweryfikować):
 * **Windows (1 kliknięcie):** Uruchom dwuklikiem `run_tests.bat`
 * **Linux / macOS:** `./run_tests.sh`
 * **Standardowe polecenie:** `python -m unittest discover -s tests -p "test_*.py" -v`
-* **GitHub Actions:** Każdy push i PR jest automatycznie testowany w chmurze (`.github/workflows/test.yml`).
+* **GitHub Actions:** Workflow `.github/workflows/test.yml` jest skonfigurowany dla pushy i PR-ów do `master` i `main`; nie zakładaj, że sprawdza każdy push na gałąź zespołu.
 
 ### 4. Podgląd Webowy
 Otwórz w przeglądarce plik:  
-👉 **[`web/index.html`](file:///C:/Users/wiktor/PycharmProjects/pyqgis-fastapi-bridge/web/index.html)**
+👉 **[`web/index.html`](web/index.html)**. To demonstracyjny klient startera; sposób uruchomienia i przepływ danych w scalonym projekcie wymagają weryfikacji.
 
 ---
 

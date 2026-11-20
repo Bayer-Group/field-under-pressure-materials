@@ -1,3 +1,5 @@
+> **GeoEarth Junction:** These are organizer dataset descriptions. The first iteration will select and validate a subset for one crop; the presence of a dataset below does not mean it has been downloaded, imported or displayed. See [project requirements](../PROJECT.md). Historical weather is not a current forecast, and the documented Sentinel-2 sample is not nationwide. Keep restricted data and access links outside Git.
+
 ## Dataset overview
 
 | Data source | What it is                                                | Format                  | Coverage                     | Link (Docs)                                                                                                                                                                                                                                                                     |
