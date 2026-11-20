@@ -1,4 +1,3 @@
-import json
 import pandas as pd
 import plotly.express as px
 import pydeck as pdk
@@ -14,280 +13,277 @@ from silnik_regul import (
 )
 
 st.set_page_config(
-    page_title="Dashboard farmIT — Zarządzanie Polami",
-    page_icon="🌾",
+    page_title="FieldGuard 33UXR — Prace polowe i pogoda",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
 
-# Pełny CSS odwzorowujący projekt UX (farmIT | FieldGuard 33UXR)
 st.markdown(
     """
     <style>
-    /* Globalne tło i typografia */
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
+    :root {
+        --bg: #F7F5F0;
+        --card: #FFFFFF;
+        --card-soft: #FBF9F5;
+        --ink: #1F2924;
+        --muted: #5A655F;
+        --line: #E2DDD3;
+        --green: #2E6F40;
+        --green-bg: #EAF4EC;
+        --green-line: #B7D8BE;
+        --amber: #9A5B13;
+        --amber-bg: #FDF4E7;
+        --amber-line: #EED2A6;
+        --red: #9E2A2B;
+        --red-bg: #FDECEC;
+        --red-line: #EBB8B8;
+    }
+
+    #MainMenu, footer, [data-testid="stToolbar"], [data-testid="stDecoration"], [data-testid="stStatusWidget"] {
+        display: none !important;
+    }
+    header[data-testid="stHeader"] {
+        background: transparent !important;
+        height: 0 !important;
+    }
+
     .stApp {
-        background-color: #F4F6F9;
-        color: #1E293B;
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        background-color: var(--bg);
+        color: var(--ink);
+        font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
     }
     .block-container {
-        padding-top: 1.5rem !important;
-        max-width: 1280px !important;
+        padding-top: 1.4rem !important;
+        padding-bottom: 2.5rem !important;
+        max-width: 1320px !important;
     }
 
-    /* Nagłówek główny z logo farmIT i zieloną pigułką FieldGuard 33UXR */
-    .top-brand-wrap {
-        display: flex;
-        align-items: center;
-        gap: 14px;
-        margin-bottom: 14px;
-    }
-    .logo-circle {
-        width: 46px;
-        height: 46px;
-        background: linear-gradient(135deg, #FEF3C7 0%, #DCFCE7 100%);
-        border: 1px solid #BBF7D0;
-        border-radius: 12px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 24px;
-    }
-    .brand-name {
-        font-size: 24px;
-        font-weight: 800;
-        color: #0F172A;
-        line-height: 1.1;
-    }
-    .pill-badge {
-        background-color: #DCFCE7;
-        color: #15803D;
-        font-size: 12px;
-        font-weight: 700;
-        padding: 3px 10px;
-        border-radius: 999px;
-        margin-left: 8px;
-        vertical-align: middle;
-    }
-    .brand-subtitle {
-        font-size: 13px;
-        color: #64748B;
-        margin-top: 2px;
+    .num {
+        font-variant-numeric: tabular-nums;
     }
 
-    /* Pasek zakładek (Tabs) jak pigułki z makiety */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 10px;
-        background-color: transparent;
-        border-bottom: none;
-        margin-bottom: 10px;
-    }
-    .stTabs [data-baseweb="tab"] {
-        background-color: #FFFFFF;
-        border: 1px solid #E2E8F0;
-        border-radius: 10px;
-        padding: 8px 18px;
-        font-weight: 600;
-        font-size: 14px;
-        color: #334155;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.03);
-    }
-    .stTabs [aria-selected="true"] {
-        background-color: #F1F5F9 !important;
-        border: 1.5px solid #0F172A !important;
-        color: #0F172A !important;
-        font-weight: 700 !important;
-    }
-
-    /* Karty KPI 2x2 z ikoną po prawej stronie */
-    .kpi-card {
-        background: #FFFFFF;
-        border: 1px solid #E2E8F0;
-        border-radius: 14px;
-        padding: 18px 22px;
+    /* Naglowek */
+    .farm-header {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+        gap: 16px;
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 18px 22px;
         margin-bottom: 14px;
     }
-    .kpi-label {
-        font-size: 11px;
-        font-weight: 700;
-        color: #64748B;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-    }
-    .kpi-value {
-        font-size: 26px;
+    .farm-title {
+        font-size: 24px;
         font-weight: 800;
-        color: #0F172A;
-        margin: 4px 0 2px 0;
+        color: var(--ink);
+        margin: 0;
+        letter-spacing: -0.015em;
     }
-    .kpi-sub {
-        font-size: 12px;
-        font-weight: 600;
-    }
-    .kpi-icon-box {
-        width: 42px;
-        height: 42px;
-        border-radius: 11px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 20px;
+    .farm-sub {
+        font-size: 14px;
+        color: var(--muted);
+        margin-top: 3px;
     }
 
-    /* Biała sekcja kartowa (Section Card) */
-    .section-card {
-        background: #FFFFFF;
-        border: 1px solid #E2E8F0;
-        border-radius: 16px;
-        padding: 20px 24px;
-        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
-        margin-bottom: 18px;
+    /* Glówny komunikat dnia (czy można pryskać / nawozić / siać) */
+    .day-banner {
+        border-radius: 12px;
+        padding: 16px 20px;
+        margin-bottom: 16px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
+        border: 1px solid;
     }
-    .section-title {
-        font-size: 18px;
+    .banner-go {
+        background: var(--green-bg);
+        border-color: var(--green-line);
+        color: var(--ink);
+    }
+    .banner-wait {
+        background: var(--amber-bg);
+        border-color: var(--amber-line);
+        color: var(--ink);
+    }
+    .banner-heading {
+        font-size: 17px;
         font-weight: 700;
-        color: #0F172A;
+        margin: 0 0 3px 0;
+    }
+    .banner-text {
+        font-size: 14px;
+        color: var(--muted);
         margin: 0;
     }
-    .section-sub {
+    .banner-chip {
         font-size: 13px;
-        color: #64748B;
-        margin-top: 2px;
-        margin-bottom: 14px;
+        font-weight: 700;
+        padding: 7px 14px;
+        border-radius: 999px;
+        white-space: nowrap;
+    }
+    .chip-go {
+        background: var(--green);
+        color: #FFFFFF;
+    }
+    .chip-wait {
+        background: var(--amber);
+        color: #FFFFFF;
     }
 
-    /* Małe kafelki pogodowe (Temperatura / Wiatr / Opad / Wilgotność) */
-    .weather-mini-card {
-        background: #F8FAFC;
-        border: 1px solid #E2E8F0;
-        border-radius: 12px;
-        padding: 14px 16px;
+    /* 4 proste kafelki na górze */
+    .stat-row {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px;
+        margin-bottom: 16px;
     }
-    .weather-mini-label {
-        font-size: 12px;
-        color: #64748B;
+    .stat-box {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 16px 18px;
+    }
+    .stat-label {
+        font-size: 13px;
         font-weight: 600;
+        color: var(--muted);
     }
-    .weather-mini-val {
-        font-size: 22px;
+    .stat-val {
+        font-size: 26px;
         font-weight: 800;
-        color: #0F172A;
-        margin-top: 4px;
+        color: var(--ink);
+        margin: 4px 0 2px 0;
+        font-variant-numeric: tabular-nums;
     }
-    .weather-mini-hint {
-        font-size: 11px;
-        color: #94A3B8;
-        margin-top: 2px;
+    .stat-hint {
+        font-size: 12px;
+        color: var(--muted);
     }
 
-    /* Wiersze Dziennika Stacji Pogodowej */
-    .log-row {
-        background: #FFFFFF;
-        border: 1px solid #E2E8F0;
+    /* Karta sekcji */
+    .soft-card {
+        background: var(--card);
+        border: 1px solid var(--line);
         border-radius: 12px;
-        padding: 12px 18px;
-        margin-bottom: 10px;
+        padding: 18px 20px;
+        margin-bottom: 16px;
+    }
+    .soft-card-title {
+        font-size: 17px;
+        font-weight: 700;
+        color: var(--ink);
+        margin: 0 0 4px 0;
+    }
+    .soft-card-sub {
+        font-size: 13px;
+        color: var(--muted);
+        margin: 0 0 14px 0;
+    }
+
+    /* Wiersze dziennika pogodowego */
+    .note-row {
         display: flex;
         justify-content: space-between;
         align-items: center;
+        padding: 12px 14px;
+        background: var(--card-soft);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        margin-bottom: 8px;
     }
-    .log-time {
-        font-weight: 700;
+    .note-time {
         font-size: 14px;
-        color: #0F172A;
+        font-weight: 700;
+        color: var(--ink);
     }
-    .log-details {
+    .note-meta {
         font-size: 13px;
-        color: #475569;
+        color: var(--muted);
         margin-top: 2px;
     }
-    .status-pill-warn {
-        background: #FEF3C7;
-        color: #B45309;
-        font-weight: 700;
+    .pill {
         font-size: 12px;
-        padding: 6px 12px;
-        border-radius: 8px;
-    }
-    .status-pill-ok {
-        background: #DCFCE7;
-        color: #15803D;
         font-weight: 700;
-        font-size: 12px;
-        padding: 6px 12px;
-        border-radius: 8px;
+        padding: 5px 12px;
+        border-radius: 999px;
     }
-    .status-pill-bad {
-        background: #FEE2E2;
-        color: #B91C1C;
-        font-weight: 700;
-        font-size: 12px;
-        padding: 6px 12px;
-        border-radius: 8px;
-    }
+    .pill-ok { background: var(--green-bg); color: var(--green); }
+    .pill-warn { background: var(--amber-bg); color: var(--amber); }
+    .pill-bad { background: var(--red-bg); color: var(--red); }
 
-    /* Zielony baner nagłówkowy Doradcy Siewu + karta Najlepsze Dopasowanie */
-    .advisor-banner {
-        background: #F0FDF4;
-        border: 1px solid #BBF7D0;
-        border-radius: 14px;
+    /* Karta polecanej uprawy */
+    .crop-result {
+        background: var(--green-bg);
+        border: 1px solid var(--green-line);
+        border-radius: 12px;
         padding: 18px 22px;
-        margin-bottom: 16px;
+        margin-top: 14px;
     }
-    .best-match-box {
-        background: #ECFDF5;
-        border: 1.5px solid #6EE7B7;
-        border-radius: 14px;
-        padding: 20px 24px;
-        margin-top: 16px;
-    }
-    .best-match-header {
+    .crop-tag {
         font-size: 12px;
-        font-weight: 800;
-        color: #15803D;
+        font-weight: 700;
+        color: var(--green);
         text-transform: uppercase;
         letter-spacing: 0.04em;
     }
-    .mode-chip {
-        background: #FFFFFF;
-        border: 1px solid #A7F3D0;
-        color: #065F46;
-        font-size: 11px;
-        font-weight: 600;
-        padding: 2px 10px;
-        border-radius: 999px;
-        margin-left: 8px;
-    }
-    .best-match-crop {
-        font-size: 20px;
+    .crop-name {
+        font-size: 21px;
         font-weight: 800;
-        color: #0F172A;
-        margin: 6px 0;
+        color: var(--ink);
+        margin: 4px 0 6px 0;
     }
-    .best-match-reason {
-        font-size: 13px;
-        color: #334155;
+    .crop-desc {
+        font-size: 14px;
+        color: var(--ink);
         margin: 0;
+        line-height: 1.5;
     }
 
-    /* Styl zielonych przycisków głównych */
-    div.stButton > button[kind="primary"], div.stDownloadButton > button {
-        background-color: #166534 !important;
-        color: #FFFFFF !important;
-        border-radius: 10px !important;
-        border: none !important;
+    /* Zakladki */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+        background: transparent;
+        border-bottom: 1px solid var(--line);
+        padding-bottom: 8px;
+        margin-bottom: 16px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        background: var(--card) !important;
+        border: 1px solid var(--line) !important;
+        border-radius: 9px !important;
+        padding: 8px 16px !important;
+        font-size: 14px !important;
         font-weight: 600 !important;
-        padding: 0.5rem 1.2rem !important;
+        color: var(--muted) !important;
+    }
+    .stTabs [aria-selected="true"] {
+        background: var(--green) !important;
+        border-color: var(--green) !important;
+        color: #FFFFFF !important;
+    }
+    .stTabs [data-baseweb="tab-highlight"] {
+        display: none !important;
+    }
+
+    div.stButton > button[kind="primary"], div.stDownloadButton > button {
+        background-color: var(--green) !important;
+        color: #FFFFFF !important;
+        border: none !important;
+        border-radius: 9px !important;
+        font-weight: 600 !important;
+        padding: 0.5rem 1.1rem !important;
     }
     div.stButton > button[kind="secondary"] {
-        background-color: #FFFFFF !important;
-        color: #1E293B !important;
-        border: 1px solid #CBD5E1 !important;
-        border-radius: 10px !important;
+        background-color: var(--card) !important;
+        color: var(--ink) !important;
+        border: 1px solid var(--line) !important;
+        border-radius: 9px !important;
         font-weight: 600 !important;
     }
     </style>
@@ -309,74 +305,74 @@ def get_base_data():
 fields_df, weather_df, rules_df, crop_dict_df = get_base_data()
 timestamps = sorted(weather_df["timestamp"].unique())
 
-# Inicjalizacja stanu sesji dla dziennika odczytów i zapisanych wyborów upraw
 if "weather_journal" not in st.session_state:
     st.session_state.weather_journal = [
-        {"czas": "Dziś, 19:00 (Okno wieczorne)", "temp": 18.2, "opad": 0.0, "wiatr_ms": 2.4, "ocena": "ok", "etykieta": "PRYSKAJ TERAZ — optymalne warunki"},
-        {"czas": "Dziś, 13:00 (Szczyt dzienny)", "temp": 22.5, "opad": 0.0, "wiatr_ms": 5.3, "ocena": "warn", "etykieta": "Zbyt silny wiatr na oprysk (> 4 m/s)"},
-        {"czas": "Wczoraj, 07:30", "temp": 16.5, "opad": 14.2, "wiatr_ms": 2.2, "ocena": "bad", "etykieta": "Opad — wstrzymać oprysk"},
+        {"czas": "Dziś, 19:00", "temp": 18.2, "opad": 0.0, "wiatr_ms": 2.4, "ocena": "ok", "etykieta": "Można pryskać"},
+        {"czas": "Dziś, 13:00", "temp": 22.5, "opad": 0.0, "wiatr_ms": 5.3, "ocena": "warn", "etykieta": "Za mocno wieje"},
+        {"czas": "Wczoraj, 07:30", "temp": 16.5, "opad": 14.2, "wiatr_ms": 2.2, "ocena": "bad", "etykieta": "Po deszczu — poczekać"},
     ]
 if "saved_crops" not in st.session_state:
     st.session_state.saved_crops = {}
 
-# Górny nagłówek farmIT | FieldGuard 33UXR
 st.markdown(
     """
-    <div class="top-brand-wrap">
-        <div class="logo-circle">🌾</div>
+    <div class="farm-header">
         <div>
-            <div class="brand-name">farmIT <span class="pill-badge">FieldGuard 33UXR</span></div>
-            <div class="brand-subtitle">FieldGuard 33UXR • Inteligentne zarządzanie polami i pogodą</div>
+            <h1 class="farm-title">FieldGuard 33UXR</h1>
+            <div class="farm-sub">Spokojny podgląd pogody, prac na polach i doboru upraw dla gospodarstwa</div>
+        </div>
+        <div class="farm-sub" style="text-align:right;">
+            Region: <strong>33UXR</strong> &middot; Dane satelitarne i glebowe
         </div>
     </div>
     """,
     unsafe_allow_html=True,
 )
 
-# Pasek nawigacyjny 4 zakładek (zgodnie z makietą Osoby 4)
 tab_pola, tab_siew, tab_kalk, tab_zasady = st.tabs(
     [
-        "🗂️ Pola i Pogoda",
-        "🧭 Polecanie Upraw",
-        "🧪 Kalkulator Nawozów i Pestycydów",
-        "📜 Zasady Agro i 33UXR",
+        "Pola i pogoda",
+        "Doradca siewu",
+        "Kalkulator nawozów i oprysku",
+        "Zasady zabiegów",
     ]
 )
 
 with tab_pola:
-    # Pasek narzędzi: Eksport JSON / Dane startowe / Symulacja What-If
-    b_col1, b_col2, b_col3, b_col4 = st.columns([1.1, 1.1, 1.4, 2.4])
-    with b_col1:
+    c_time, c_sim, c_exp, c_rst = st.columns([3.0, 1.4, 1.0, 0.9])
+    with c_time:
+        selected_ts = st.select_slider(
+            "Wybierz godzinę:",
+            options=timestamps,
+            value=timestamps[min(7, len(timestamps) - 1)],
+            format_func=lambda x: pd.to_datetime(x).strftime("%d.%m.%Y, %H:%M"),
+        )
+    with c_sim:
+        st.write("")
+        what_if = st.toggle("Sprawdź inną pogodę", value=False)
+    with c_exp:
+        st.write("")
         export_payload = fields_df.head(50).to_json(orient="records", force_ascii=False, indent=2)
         st.download_button(
-            "⬇️ Eksportuj JSON",
+            "Pobierz JSON",
             data=export_payload,
-            file_name="fieldguard_33uxr_ewidencja.json",
+            file_name="pola_33uxr.json",
             mime="application/json",
             use_container_width=True,
         )
-    with b_col2:
-        if st.button("🔄 Dane startowe", use_container_width=True):
+    with c_rst:
+        st.write("")
+        if st.button("Wyczyść", use_container_width=True):
             st.session_state.saved_crops = {}
-            st.toast("Przywrócono domyślne dane startowe kafla 33UXR!")
-    with b_col3:
-        what_if = st.toggle("🎛️ Tryb Symulacji „What-If”", value=False)
+            st.toast("Przywrócono ustawienia początkowe.")
 
     if what_if:
         w1, w2, w3 = st.columns(3)
-        sim_temp = w1.slider("Symulacja: Temperatura (°C)", -5.0, 38.0, 19.0, 0.5)
-        sim_wind = w2.slider("Symulacja: Wiatr (m/s)", 0.0, 15.0, 2.5, 0.1)
-        sim_precip = w3.slider("Symulacja: Opad 24h (mm)", 0.0, 30.0, 8.0, 0.5)
+        sim_temp = w1.slider("Temperatura (°C)", -5.0, 38.0, 19.0, 0.5)
+        sim_wind = w2.slider("Wiatr (m/s)", 0.0, 15.0, 2.5, 0.1)
+        sim_precip = w3.slider("Deszcz w ciągu 24h (mm)", 0.0, 30.0, 8.0, 0.5)
     else:
         sim_temp, sim_wind, sim_precip = 19.0, 2.5, 0.0
-
-    # Wybór godziny na osi czasu
-    selected_ts = st.select_slider(
-        "🕒 Oś czasu prognozy godzinowej (krok co 1h):",
-        options=timestamps,
-        value=timestamps[min(7, len(timestamps) - 1)],
-        format_func=lambda x: pd.to_datetime(x).strftime("%Y-%m-%d %H:%M"),
-    )
 
     result_df = evaluate_fields(
         fields_df=fields_df,
@@ -390,123 +386,95 @@ with tab_pola:
         crop_dict_df=crop_dict_df,
     )
 
-    # Siatka 2x2 kart KPI dokładnie jak na zrzucie 1 z Google Sites
     total_fields = len(result_df)
-    total_area_ha = total_fields * 1.50  # 1 heksagon H3 L10 ~ 1.5 ha
+    total_area_ha = total_fields * 1.50
     avg_humidity = float(result_df["humidity_pct"].mean()) if not result_df.empty else 0.0
-    ready_fields = sum(result_df["decyzja"].isin(["PRYSKAJ TERAZ", "NAWOŹ", "ZASIEJ"]))
-
-    kpi_r1_c1, kpi_r1_c2 = st.columns(2)
-    with kpi_r1_c1:
-        st.markdown(
-            f"""
-            <div class="kpi-card">
-                <div>
-                    <div class="kpi-label">LICZBA PÓL (H3 L10)</div>
-                    <div class="kpi-value">{total_fields} pól</div>
-                    <div class="kpi-sub" style="color:#64748B;">Ewidencja gospodarstwa (kafel 33UXR)</div>
-                </div>
-                <div class="kpi-icon-box" style="background:#EEF2FF; color:#4F46E5;">🗺️</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    with kpi_r1_c2:
-        st.markdown(
-            f"""
-            <div class="kpi-card">
-                <div>
-                    <div class="kpi-label">ŁĄCZNY AREAŁ</div>
-                    <div class="kpi-value">{total_area_ha:,.2f} ha</div>
-                    <div class="kpi-sub" style="color:#15803D;">Powierzchnia uprawna</div>
-                </div>
-                <div class="kpi-icon-box" style="background:#DCFCE7; color:#15803D;">📐</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    kpi_r2_c1, kpi_r2_c2 = st.columns(2)
-    with kpi_r2_c1:
-        st.markdown(
-            f"""
-            <div class="kpi-card">
-                <div>
-                    <div class="kpi-label">ŚR. WILGOTNOŚĆ POWIETRZA</div>
-                    <div class="kpi-value">{avg_humidity:.0f}%</div>
-                    <div class="kpi-sub" style="color:#15803D;">{"Optymalne uwilgotnienie do zabiegu" if avg_humidity >= 60 else "Podwyższona suchość powietrza"}</div>
-                </div>
-                <div class="kpi-icon-box" style="background:#DBEAFE; color:#2563EB;">💧</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    with kpi_r2_c2:
-        st.markdown(
-            f"""
-            <div class="kpi-card">
-                <div>
-                    <div class="kpi-label">POLA GOTOWE DO PRACY</div>
-                    <div class="kpi-value">{ready_fields} z {total_fields}</div>
-                    <div class="kpi-sub" style="color:#15803D;">PRYSKAJ TERAZ / NAWOŹ / ZASIEJ</div>
-                </div>
-                <div class="kpi-icon-box" style="background:#DCFCE7; color:#15803D;">✅</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    # Karta: Pogoda i Okno Zabiegowe (4 mini-kafelki + wykres słupkowy + mapa H3)
+    ready_fields = int(result_df["decyzja"].isin(["PRYSKAJ TERAZ", "NAWOŹ", "ZASIEJ"]).sum())
     avg_temp = float(result_df["temp_c"].mean()) if not result_df.empty else 0.0
     avg_wind = float(result_df["wind_ms"].mean()) if not result_df.empty else 0.0
     avg_precip = float(result_df["precip_24h_mm"].mean()) if not result_df.empty else 0.0
-    wind_kmh = avg_wind * 3.6
+
+    can_work = (avg_wind <= 4.0) and (avg_precip < 5.0)
+    banner_cls = "banner-go" if can_work else "banner-wait"
+    chip_cls = "chip-go" if can_work else "chip-wait"
+    if can_work:
+        b_head = "Dobre warunki do wyjazdu w pole"
+        b_desc = (
+            f"Wiatr wynosi średnio {avg_wind:.1f} m/s, opady w ostatnich 24h to {avg_precip:.1f} mm, "
+            f"a temperatura {avg_temp:.1f} °C. Na {ready_fields} z {total_fields} obszarów widać gotowość do zabiegu."
+        )
+        b_chip = "Można działać"
+    else:
+        powod = "zbyt silny wiatr (powyżej 4 m/s)" if avg_wind > 4.0 else "opady deszczu (ryzyko zmycia)"
+        b_head = "Lepiej wstrzymać oprysk"
+        b_desc = (
+            f"Powód: {powod}. Wiatr: {avg_wind:.1f} m/s, opad 24h: {avg_precip:.1f} mm, temperatura: {avg_temp:.1f} °C."
+        )
+        b_chip = "Warto poczekać"
 
     st.markdown(
         f"""
-        <div class="section-card">
-            <div class="section-title">🟢 Pogoda i Okno Zabiegowe (Oś Czasu + Mapa H3)</div>
-            <div class="section-sub">Warunki dla kafla Sentinel-2 33UXR (Małopolska: Kraków / Tarnów / Nowy Sącz) • Godzina: {pd.to_datetime(selected_ts).strftime('%Y-%m-%d %H:%M')}</div>
-            <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap: 12px;">
-                <div class="weather-mini-card">
-                    <div class="weather-mini-label">Temperatura</div>
-                    <div class="weather-mini-val">{avg_temp:.1f} °C</div>
-                    <div class="weather-mini-hint">Zakres zabiegowy: 10–25 °C</div>
-                </div>
-                <div class="weather-mini-card">
-                    <div class="weather-mini-label">Wiatr (próg 4 m/s)</div>
-                    <div class="weather-mini-val" style="color:{'#DC2626' if avg_wind > 4.0 else '#15803D'};">{avg_wind:.1f} m/s</div>
-                    <div class="weather-mini-hint">{wind_kmh:.1f} km/h</div>
-                </div>
-                <div class="weather-mini-card">
-                    <div class="weather-mini-label">Opad (24h / aktualny)</div>
-                    <div class="weather-mini-val" style="color:{'#DC2626' if avg_precip >= 5.0 else '#2563EB'};">{avg_precip:.1f} mm</div>
-                    <div class="weather-mini-hint">Blokada zmycia od 5.0 mm</div>
-                </div>
-                <div class="weather-mini-card">
-                    <div class="weather-mini-label">Wilgotność pow.</div>
-                    <div class="weather-mini-val">{avg_humidity:.0f}%</div>
-                    <div class="weather-mini-hint">Minimum dla oprysku: 60%</div>
-                </div>
+        <div class="day-banner {banner_cls}">
+            <div>
+                <div class="banner-heading">{b_head}</div>
+                <p class="banner-text">{b_desc}</p>
+            </div>
+            <div class="banner-chip {chip_cls}">{b_chip}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        f"""
+        <div class="stat-row">
+            <div class="stat-box">
+                <div class="stat-label">Obszary na mapie</div>
+                <div class="stat-val">{total_fields}</div>
+                <div class="stat-hint">Jednostki w regionie 33UXR</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Łączny areał (szac.)</div>
+                <div class="stat-val">{total_area_ha:,.1f} ha</div>
+                <div class="stat-hint">Ok. 1.5 ha na pojedynczy sektor</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Gotowe do prac</div>
+                <div class="stat-val" style="color:#2E6F40;">{ready_fields} z {total_fields}</div>
+                <div class="stat-hint">Oprysk, nawożenie lub siew</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Wiatr i wilgotność</div>
+                <div class="stat-val">{avg_wind:.1f} m/s</div>
+                <div class="stat-hint">Wilgotność powietrza: {avg_humidity:.0f}%</div>
             </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    col_map, col_bar = st.columns([1.3, 1.0])
     COLOR_MAP = {
-        "PRYSKAJ TERAZ": [22, 163, 74, 200],
-        "NAWOŹ": [147, 51, 234, 200],
-        "ZASIEJ": [8, 145, 178, 200],
-        "ZBIERAJ": [37, 99, 235, 200],
-        "MONITORUJ": [202, 138, 4, 195],
-        "CZEKAJ": [220, 38, 38, 210],
+        "PRYSKAJ TERAZ": [46, 111, 64, 215],
+        "NAWOŹ": [126, 87, 162, 205],
+        "ZASIEJ": [43, 122, 138, 205],
+        "ZBIERAJ": [59, 110, 165, 205],
+        "MONITORUJ": [196, 138, 36, 205],
+        "CZEKAJ": [178, 58, 58, 215],
     }
-    result_df["color"] = result_df["decyzja"].map(lambda d: COLOR_MAP.get(d, [100, 116, 139, 180]))
+    result_df["color"] = result_df["decyzja"].map(lambda d: COLOR_MAP.get(d, [130, 138, 132, 180]))
+
+    col_map, col_chart = st.columns([1.4, 1.0], gap="medium")
 
     with col_map:
-        st.markdown("**Mapa heksagonalna decyzji polowych (H3 Level 10)**")
+        st.markdown(
+            """
+            <div class="soft-card" style="margin-bottom:8px; padding-bottom:12px;">
+                <div class="soft-card-title">Mapa pól</div>
+                <div class="soft-card-sub" style="margin-bottom:0;">Najedź na wybrany sektor, aby zobaczyć uprawę, pogodę i zalecenie</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
         layer = pdk.Layer(
             "H3HexagonLayer",
             data=result_df,
@@ -516,7 +484,7 @@ with tab_pola:
             extruded=False,
             get_hexagon="h3_index",
             get_fill_color="color",
-            get_line_color=[30, 41, 59],
+            get_line_color=[45, 55, 48],
             line_width_min_pixels=1,
         )
         view_state = pdk.ViewState(
@@ -530,74 +498,96 @@ with tab_pola:
             layers=[layer],
             initial_view_state=view_state,
             tooltip={
-                "html": "<b>H3:</b> {h3_index} | <b>Reguła:</b> {rule_id}<br/>"
+                "html": "<div style='font-family:Plus Jakarta Sans,sans-serif;font-size:12px;line-height:1.5;'>"
                 "<b>Uprawa:</b> {crop_name} (NDVI: {ndvi})<br/>"
-                "<b>Decyzja:</b> {decyzja} | <b>Ryzyko:</b> {poziom_ryzyka}<br/>"
-                "<b>Komunikat:</b> {komunikat}<br/>"
+                "<b>Zalecenie:</b> {decyzja} ({poziom_ryzyka})<br/>"
+                "<b>Uwagi:</b> {komunikat}<br/>"
                 "<b>Nawóz:</b> {zalecany_nawoz} | <b>Siew:</b> {rekomendowana_uprawa}<br/>"
-                "<b>Gleba:</b> pH {soil_ph}, SOC {soil_soc} g/kg ({soil_texture})<br/>"
-                "<b>Pogoda:</b> Wiatr {wind_ms} m/s, Temp {temp_c} °C, Opad {precip_24h_mm} mm"
+                "<b>Gleba:</b> pH {soil_ph}, próchnica/SOC {soil_soc} g/kg ({soil_texture})<br/>"
+                "<b>Pogoda:</b> wiatr {wind_ms} m/s, temp. {temp_c} °C, deszcz 24h {precip_24h_mm} mm"
+                "</div>",
+                "style": {
+                    "backgroundColor": "#1F2924",
+                    "color": "#FFFFFF",
+                    "borderRadius": "8px",
+                },
             },
         )
         st.pydeck_chart(deck, use_container_width=True)
-
-    with col_bar:
-        st.markdown("**Prędkość wiatru na polach vs próg 4.0 m/s (jak na makiecie)**")
-        sample_fields = result_df.head(8).copy()
-        sample_fields["etykieta_pola"] = [f"Pole #{i+1} ({c[:8]})" for i, c in enumerate(sample_fields["crop_name"])]
-        sample_fields["status_wiatru"] = sample_fields["wind_ms"].apply(
-            lambda w: "Przekroczony (> 4 m/s)" if w > 4.0 else "Bezpieczny (<= 4 m/s)"
+        st.caption(
+            "Kolory na mapie: zielony — można pryskać | fioletowy — nawozić | "
+            "niebiesko-zielony — siać | niebieski — zbierać | żółty — obserwować | czerwony — poczekać."
         )
-        fig_wind = px.bar(
+
+    with col_chart:
+        st.markdown(
+            """
+            <div class="soft-card" style="margin-bottom:8px; padding-bottom:12px;">
+                <div class="soft-card-title">Siła wiatru na przykładowych polach</div>
+                <div class="soft-card-sub" style="margin-bottom:0;">Przerywana linia oznacza bezpieczny próg 4,0 m/s do oprysku</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        sample_fields = result_df.head(7).copy()
+        sample_fields["nazwa"] = [f"Pole {i+1}" for i in range(len(sample_fields))]
+        sample_fields["stan"] = sample_fields["wind_ms"].apply(
+            lambda w: "Za mocno wieje" if w > 4.0 else "Spokojny wiatr"
+        )
+        fig_w = px.bar(
             sample_fields,
-            x="etykieta_pola",
+            x="nazwa",
             y="wind_ms",
             text="wind_ms",
-            color="status_wiatru",
-            color_discrete_map={
-                "Bezpieczny (<= 4 m/s)": "#2563EB",
-                "Przekroczony (> 4 m/s)": "#EF4444",
-            },
-            labels={"etykieta_pola": "", "wind_ms": "Wiatr [m/s]", "status_wiatru": ""},
+            color="stan",
+            color_discrete_map={"Spokojny wiatr": "#2E6F40", "Za mocno wieje": "#B23A3A"},
+            labels={"nazwa": "", "wind_ms": "Wiatr (m/s)", "stan": ""},
         )
-        fig_wind.update_traces(texttemplate="%{text:.1f}", textposition="outside")
-        fig_wind.add_hline(y=4.0, line_dash="dash", line_color="#DC2626")
-        fig_wind.update_layout(
+        fig_w.update_traces(texttemplate="%{text:.1f} m/s", textposition="outside")
+        fig_w.add_hline(y=4.0, line_dash="dash", line_color="#9A5B13", annotation_text="Próg 4,0 m/s")
+        fig_w.update_layout(
+            font=dict(family="Plus Jakarta Sans, sans-serif", size=12, color="#1F2924"),
             plot_bgcolor="#FFFFFF",
             paper_bgcolor="#FFFFFF",
             showlegend=False,
-            margin=dict(t=25, b=20, l=10, r=10),
-            yaxis_range=[0, max(7.0, float(sample_fields["wind_ms"].max()) + 1.5)],
+            height=330,
+            margin=dict(t=24, b=20, l=10, r=10),
+            yaxis=dict(
+                gridcolor="#EFECE6",
+                range=[0, max(7.0, float(sample_fields["wind_ms"].max()) + 1.4) if not sample_fields.empty else 7.0],
+            ),
         )
-        st.plotly_chart(fig_wind, use_container_width=True)
+        st.plotly_chart(fig_w, use_container_width=True)
 
-    # Karta: Dziennik stacji pogodowej (dokładnie jak na zrzucie 2 z Google Sites)
+    st.write("")
     st.markdown(
         """
-        <div class="section-card">
-            <div class="section-title">Dziennik stacji pogodowej</div>
-            <div class="section-sub">Historia odczytów i szybka ocena warunków do oprysku</div>
+        <div class="soft-card" style="margin-bottom:10px; padding-bottom:12px;">
+            <div class="soft-card-title">Notatnik pogodowy</div>
+            <div class="soft-card-sub" style="margin-bottom:0;">Możesz zapisać własny odczyt z pola i szybko sprawdzić, czy warunki sprzyjają zabiegowi</div>
         </div>
         """,
         unsafe_allow_html=True,
     )
-    j1, j2, j3, j4 = st.columns([1.2, 1.2, 1.2, 1.1])
-    in_temp = j1.number_input("Temp °C", value=18.5, step=0.5, label_visibility="collapsed", key="j_temp")
-    in_rain = j2.number_input("Opad mm", value=0.0, step=0.5, label_visibility="collapsed", key="j_rain")
-    in_wind_kmh = j3.number_input("Wiatr km/h", value=11.0, step=1.0, label_visibility="collapsed", key="j_wind")
+    j1, j2, j3, j4 = st.columns([1.2, 1.2, 1.2, 1.0])
+    in_temp = j1.number_input("Temperatura (°C)", value=18.5, step=0.5, key="农_t")
+    in_rain = j2.number_input("Deszcz (mm)", value=0.0, step=0.5, key="农_r")
+    in_wind_kmh = j3.number_input("Wiatr (km/h)", value=11.0, step=1.0, key="农_w")
     with j4:
-        if st.button("+ Zapisz odczyt", type="primary", use_container_width=True):
+        st.write("")
+        st.write("")
+        if st.button("Dodaj wpis", type="primary", use_container_width=True):
             w_ms = in_wind_kmh / 3.6
             if in_rain >= 5.0:
-                ocena, etykieta = "bad", "Opad — wstrzymać oprysk"
+                ocena, etykieta = "bad", "Po deszczu — poczekać"
             elif w_ms > 4.0:
-                ocena, etykieta = "warn", "Zbyt silny wiatr na oprysk"
+                ocena, etykieta = "warn", "Za mocno wieje"
             else:
-                ocena, etykieta = "ok", "Warunki optymalne do zabiegu"
+                ocena, etykieta = "ok", "Można pryskać"
             st.session_state.weather_journal.insert(
                 0,
                 {
-                    "czas": f"Nowy odczyt ({pd.to_datetime(selected_ts).strftime('%H:%M')})",
+                    "czas": f"Wpis ({pd.to_datetime(selected_ts).strftime('%H:%M')})",
                     "temp": in_temp,
                     "opad": in_rain,
                     "wiatr_ms": round(w_ms, 1),
@@ -607,25 +597,22 @@ with tab_pola:
             )
 
     for entry in st.session_state.weather_journal[:5]:
-        pill_class = (
-            "status-pill-ok"
-            if entry["ocena"] == "ok"
-            else ("status-pill-bad" if entry["ocena"] == "bad" else "status-pill-warn")
-        )
+        p_cls = "pill-ok" if entry["ocena"] == "ok" else ("pill-bad" if entry["ocena"] == "bad" else "pill-warn")
         st.markdown(
             f"""
-            <div class="log-row">
+            <div class="note-row">
                 <div>
-                    <div class="log-time">{entry['czas']}</div>
-                    <div class="log-details">Temp: <b>{entry['temp']}°C</b> • Opad: <b>{entry['opad']} mm</b> • Wiatr: <b>{round(entry['wiatr_ms']*3.6)} km/h</b> ({entry['wiatr_ms']} m/s)</div>
+                    <div class="note-time">{entry['czas']}</div>
+                    <div class="note-meta">Temperatura: <b>{entry['temp']} °C</b> &middot; Deszcz: <b>{entry['opad']} mm</b> &middot; Wiatr: <b>{round(entry['wiatr_ms']*3.6)} km/h</b> ({entry['wiatr_ms']} m/s)</div>
                 </div>
-                <div class="{pill_class}">{entry['etykieta']}</div>
+                <div class="pill {p_cls}">{entry['etykieta']}</div>
             </div>
             """,
             unsafe_allow_html=True,
         )
 
-    with st.expander("📋 Rozwiń pełną tabelę ewidencji pól i reguł (CSV / Parquet)"):
+    st.write("")
+    with st.expander("Pokaż pełną listę obszarów i zaleceń"):
         display_cols = [
             "h3_index",
             "rule_id",
@@ -637,4 +624,115 @@ with tab_pola:
             "rekomendowana_uprawa",
             "komunikat",
         ]
-        st.dataframe(result_df[display_cols], use_container_width=True, hide_index=True
+        st.dataframe(result_df[display_cols], use_container_width=True, hide_index=True)
+
+with tab_siew:
+    st.markdown(
+        """
+        <div class="soft-card">
+            <div class="soft-card-title">Doradca siewu — co najlepiej dopasować do gleby</div>
+            <div class="soft-card-sub" style="margin-bottom:0;">Wybierz obszar z mapy albo ustaw ręcznie odczyn pH i rodzaj gleby, aby zobaczyć podpowiedź</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    mode = st.radio(
+        "Skąd wziąć dane o glebie?",
+        ["Z wybranego obszaru na mapie", "Wpiszę własne parametry"],
+        horizontal=True,
+    )
+
+    if mode == "Z wybranego obszaru na mapie" and not result_df.empty:
+        c1, c2 = st.columns(2)
+        with c1:
+            selected_h3 = st.selectbox(
+                "Wybierz obszar:",
+                options=result_df["h3_index"].tolist(),
+                format_func=lambda h: (
+                    f"Obszar {h} (obecnie: {result_df.loc[result_df['h3_index'] == h, 'crop_name'].values[0]})"
+                ),
+            )
+        row_s = result_df[result_df["h3_index"] == selected_h3].iloc[0]
+        with c2:
+            st.text_input(
+                "Rodzaj gleby i próchnica (SOC):",
+                value=f"{row_s['soil_texture']} · SOC {row_s['soil_soc']:.1f} g/kg",
+                disabled=True,
+            )
+        sc1, sc2 = st.columns(2)
+        in_ph = sc1.slider("Odczyn gleby (pH):", 4.0, 8.0, float(row_s["soil_ph"]), 0.1)
+        in_hum = sc2.slider("Wilgotność (%):", 10, 95, int(row_s["humidity_pct"]), 1)
+        in_soc = float(row_s["soil_soc"])
+        in_tex = str(row_s["soil_texture"])
+        target_label = f"obszaru {selected_h3}"
+    else:
+        c1, c2 = st.columns(2)
+        with c1:
+            in_tex = st.selectbox(
+                "Rodzaj gleby:",
+                ["Loam", "Silt Loam", "Clay Loam", "Sandy Loam", "Sand"],
+            )
+        with c2:
+            in_soc = st.slider("Zawartość próchnicy / SOC (g/kg):", 5.0, 35.0, 18.0, 0.5)
+        sc1, sc2 = st.columns(2)
+        in_ph = sc1.slider("Odczyn gleby (pH):", 4.0, 8.0, 6.6, 0.1)
+        in_hum = sc2.slider("Wilgotność (%):", 10, 95, 68, 1)
+        selected_h3 = "wlasne"
+        target_label = "wybranych ustawień"
+
+    rec_crop, rec_reason = recommend_crop_by_soil(in_ph, in_soc, in_tex, crop_dict_df=crop_dict_df)
+    st.markdown(
+        f"""
+        <div class="crop-result">
+            <div class="crop-tag">Podpowiedź dla {target_label}</div>
+            <div class="crop-name">Najlepiej pasuje: {rec_crop}</div>
+            <p class="crop-desc">{rec_reason}</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.write("")
+    if st.button("Zapisz wybór uprawy", type="primary"):
+        st.session_state.saved_crops[selected_h3] = rec_crop
+        st.success(f"Zapisano uprawę: {rec_crop}.")
+
+with tab_kalk:
+    st.markdown(
+        """
+        <div class="soft-card">
+            <div class="soft-card-title">Kalkulator nawozów i oprysku</div>
+            <div class="soft-card-sub" style="margin-bottom:0;">Szybkie przeliczenie ilości preparatu i wody na wybrany areał</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    k1, k2, k3 = st.columns(3)
+    area_ha = k1.number_input("Powierzchnia pola (ha):", min_value=0.1, max_value=5000.0, value=15.0, step=0.5)
+    dose_ha = k2.number_input("Dawka na 1 ha (kg lub l):", min_value=0.05, max_value=2000.0, value=1.5, step=0.1)
+    water_ha = k3.number_input("Woda na 1 ha przy oprysku (l):", min_value=0.0, max_value=600.0, value=200.0, step=10.0)
+
+    st.markdown(
+        f"""
+        <div class="crop-result">
+            <div class="crop-tag">Podsumowanie dla {area_ha:.1f} ha</div>
+            <div class="crop-name">Potrzebujesz: {area_ha * dose_ha:,.2f} kg (lub l)</div>
+            <p class="crop-desc">
+                Przy dawce <b>{dose_ha:.2f} / ha</b>. Łącznie do opryskiwacza wejdzie około <b>{area_ha * water_ha:,.0f} l</b> wody.
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+with tab_zasady:
+    st.markdown(
+        """
+        <div class="soft-card">
+            <div class="soft-card-title">Zasady podejmowania decyzji</div>
+            <div class="soft-card-sub" style="margin-bottom:0;">Tabela reguł pogodowych, glebowych i zabiegowych używana przez aplikację</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.dataframe(rules_df, use_container_width=True, hide_index=True)
