@@ -7,7 +7,6 @@ const COLLECTIONS = [
   'Orchard',
   'Tree',
   'CropPref',
-  'Preferences',
   'Geofence',
   'JobSchedule',
   'JobLog',

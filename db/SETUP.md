@@ -4,13 +4,12 @@ Reprodukowalny obraz Docker z bazą danych MongoDB oraz idempotentnym skryptem s
 
 ## Kolekcje
 
-Skrypt [`scripts/seed.js`](scripts/seed.js) tworzy w bazie `field_under_pressure` następujące 9 pustych kolekcji:
+Skrypt [`scripts/seed.js`](scripts/seed.js) tworzy w bazie `field_under_pressure` następujące 8 pustych kolekcji:
 
 - `User`
 - `Orchard`
 - `Tree`
 - `CropPref`
-- `Preferences`
 - `Geofence`
 - `JobSchedule`
 - `JobLog`
