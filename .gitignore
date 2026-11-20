@@ -31,3 +31,9 @@ data_local/
 *.tif
 *.tiff
 *.zip
+
+**/data_local/
+metodyki/
+*.tif
+*.tiff
+*.zip
