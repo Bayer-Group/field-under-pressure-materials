@@ -5,7 +5,8 @@ LABEL org.opencontainers.image.title="field-under-pressure-mongodb" \
 
 ENV MONGO_INITDB_DATABASE=field_under_pressure
 
-# Automatically executed by the official mongo entrypoint on first database initialization
-COPY scripts/seed.js /docker-entrypoint-initdb.d/01-seed-collections.js
+# Bundle database archives and auto-restore the latest dump on first container initialization
+COPY backups/ /backups/
+COPY scripts/init-restore.sh /docker-entrypoint-initdb.d/01-restore-latest.sh
 
 EXPOSE 27017

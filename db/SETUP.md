@@ -1,10 +1,8 @@
 # MongoDB — Field Under Pressure (Hackathon GEO · Crop Science)
 
-Reprodukowalny obraz Docker z bazą danych MongoDB oraz idempotentnym skryptem seedującym puste kolekcje wyłącznie z identyfikatorem `_id` typu `ObjectId` (bez sztucznych dokumentów i dodatkowych pól).
+Reprodukowalny obraz Docker z bazą danych MongoDB odtwarzaną automatycznie z najnowszego dumpa (`.archive.gz`) — wraz ze wszystkimi kolekcjami, dokumentami, indeksami i walidatorami `$jsonSchema` (`_id: ObjectId`).
 
-## Kolekcje
-
-Skrypt [`scripts/seed.js`](scripts/seed.js) tworzy w bazie `field_under_pressure` następujące 8 pustych kolekcji:
+## Kolekcje w bazie `field_under_pressure`
 
 - `User`
 - `Orchard`
@@ -15,8 +13,6 @@ Skrypt [`scripts/seed.js`](scripts/seed.js) tworzy w bazie `field_under_pressure
 - `JobLog`
 - `ManualControl`
 
-Każda kolekcja posiada walidator `$jsonSchema` wymuszający wyłącznie pole `_id` typu `objectId` (bez definiowania dodatkowych parametrów ani wstawiania rekordów startowych).
-
 ## Uruchomienie przez Docker Compose (zalecane)
 
 Z katalogu głównego repozytorium:
@@ -25,7 +21,7 @@ Z katalogu głównego repozytorium:
 docker compose up -d --build
 ```
 
-Przy pierwszym uruchomieniu (pusty wolumen `mongodb_data`) skrypt `/docker-entrypoint-initdb.d/01-seed-collections.js` wykona się automatycznie i utworzy wszystkie kolekcje.
+Przy pierwszym uruchomieniu (pusty wolumen `mongodb_data`) skrypt `/docker-entrypoint-initdb.d/01-restore-latest.sh` automatycznie odtworzy bazę z najnowszego archiwum z katalogu `db/backups/`.
 
 Domyślne dane połączenia (można nadpisać zmiennymi środowiskowymi lub plikiem `.env`):
 
@@ -47,18 +43,6 @@ mongodb://admin:admin123@localhost:27017/field_under_pressure?authSource=admin
 ```bash
 docker build -t field-under-pressure-mongodb ./db
 docker run -d --name fup-mongodb -p 27017:27017 field-under-pressure-mongodb
-```
-
-## Ręczne uruchomienie skryptu seedującego
-
-Skrypt jest idempotentny — tworzy brakujące kolekcje i nie modyfikuje istniejących:
-
-```bash
-# Dla kontenera uruchomionego przez docker compose:
-./db/scripts/seed.sh
-
-# Dla dowolnej zewnętrznej instancji MongoDB (wymaga lokalnego mongosh):
-MONGO_URI="mongodb://admin:admin123@localhost:27017/field_under_pressure?authSource=admin" ./db/scripts/seed.sh
 ```
 
 ## Udostępnianie bazy między deweloperami (Backup & Restore)
@@ -104,7 +88,7 @@ docker compose exec mongodb mongosh \
   --eval "db.getCollectionNames().forEach(c => print(c, '-> docs:', db.getCollection(c).countDocuments()))"
 ```
 
-## Reset bazy do stanu początkowego
+## Reset bazy do stanu z najnowszego dumpa
 
 ```bash
 docker compose down -v
