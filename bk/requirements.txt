@@ -1,0 +1,9 @@
+torch
+segmentation-models-pytorch
+pystac-client>=0.8
+rasterio>=1.3
+geopandas>=1.0
+shapely>=2.0
+scipy
+numpy
+matplotlib
