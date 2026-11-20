@@ -11,7 +11,7 @@
 | Michał | QGIS and spatial analysis | @michcio10 | Wiktor |
 | Wiktor | UX and project management | @wwwitkowski | Michał |
 | Maciek | Backend | @terleckimaciej | Olaf |
-| Olaf | Database and SQL | @leonkacpereski | Maciek |
+| Olaf | Database and SQL | @leonkacperesky22 | Maciek |
 
 ## One-liner
 
