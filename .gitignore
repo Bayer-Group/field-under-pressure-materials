@@ -8,7 +8,7 @@ data/**
 *.nc
 *.zip
 *.SAFE/
-
+ML/wandb/
 # Secrets / local config
 .env
 .env.*
