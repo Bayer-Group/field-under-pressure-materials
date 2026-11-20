@@ -8,8 +8,8 @@ set -euo pipefail
 # Pass --no-drop to restore without dropping existing local data first.
 #
 # Usage:
-#   ./db/scripts/restore.sh                             # Restores from db/backups/field_under_pressure.archive.gz
-#   ./db/scripts/restore.sh path/to/custom.archive.gz   # Restores from a custom archive path
+#   ./db/scripts/restore.sh                             # Restores latest db/backups/field_under_pressure_*.archive.gz
+#   ./db/scripts/restore.sh path/to/custom.archive.gz   # Restores from a specific archive path
 #   ./db/scripts/restore.sh --no-drop [archive_file]    # Restores without dropping existing database
 #   MONGO_URI="mongodb://..." ./db/scripts/restore.sh   # Restores to a custom URI (requires local mongorestore)
 
@@ -49,13 +49,29 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-ARCHIVE_FILE="${ARCHIVE_FILE:-${BACKUP_DIR}/${MONGO_DB}.archive.gz}"
+if [[ -z "${ARCHIVE_FILE}" ]]; then
+  shopt -s nullglob
+  CANDIDATES=("${BACKUP_DIR}/${MONGO_DB}_"*.archive.gz)
+  shopt -u nullglob
+  if [[ ${#CANDIDATES[@]} -gt 0 ]]; then
+    # Filenames end with YYYYMMDD_HHMMSS, so the last lexicographical entry is the newest archive
+    ARCHIVE_FILE="${CANDIDATES[$(( ${#CANDIDATES[@]} - 1 ))]}"
+  elif [[ -f "${BACKUP_DIR}/${MONGO_DB}.archive.gz" ]]; then
+    ARCHIVE_FILE="${BACKUP_DIR}/${MONGO_DB}.archive.gz"
+  else
+    echo "Error: No archive found in ${BACKUP_DIR} matching '${MONGO_DB}_*.archive.gz'." >&2
+    echo "Create one first with: ./db/scripts/backup.sh" >&2
+    exit 1
+  fi
+fi
 
 if [[ ! -f "${ARCHIVE_FILE}" ]]; then
   echo "Error: Archive file not found: ${ARCHIVE_FILE}" >&2
   echo "Create it first with: ./db/scripts/backup.sh" >&2
   exit 1
 fi
+
+echo "[restore] Using archive: ${ARCHIVE_FILE}"
 
 RESTORE_ARGS=(--archive --nsInclude "${MONGO_DB}.*")
 if [[ "${ARCHIVE_FILE}" == *.gz ]]; then

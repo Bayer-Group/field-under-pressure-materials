@@ -5,7 +5,7 @@ set -euo pipefail
 # into a single compressed archive (.archive.gz) for sharing between developers.
 #
 # Usage:
-#   ./db/scripts/backup.sh                              # Saves to db/backups/field_under_pressure.archive.gz
+#   ./db/scripts/backup.sh                              # Saves to db/backups/field_under_pressure_YYYYMMDD_HHMMSS.archive.gz
 #   ./db/scripts/backup.sh path/to/custom.archive.gz    # Saves to a custom path
 #   MONGO_URI="mongodb://..." ./db/scripts/backup.sh    # Dumps from a custom URI (requires local mongodump)
 
@@ -21,7 +21,8 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
   exit 0
 fi
 
-OUT_FILE="${1:-${BACKUP_DIR}/${MONGO_DB}.archive.gz}"
+TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
+OUT_FILE="${1:-${BACKUP_DIR}/${MONGO_DB}_${TIMESTAMP}.archive.gz}"
 
 mkdir -p "$(dirname "${OUT_FILE}")"
 

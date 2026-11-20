@@ -63,29 +63,29 @@ MONGO_URI="mongodb://admin:admin123@localhost:27017/field_under_pressure?authSou
 
 ## Udostępnianie bazy między deweloperami (Backup & Restore)
 
-Cała baza `field_under_pressure` (wszystkie kolekcje, dokumenty, indeksy i walidatory) jest eksportowana do jednego współdzielonego pliku archiwum: `db/backups/field_under_pressure.archive.gz`.
+Cała baza `field_under_pressure` (wszystkie kolekcje, dokumenty, indeksy i walidatory) jest eksportowana do archiwum z timestampem: `db/backups/field_under_pressure_YYYYMMDD_HHMMSS.archive.gz`.
 
 ### 1. Eksport bazy do archiwum (`backup.sh`)
 
 ```bash
-# Zrzut całej bazy field_under_pressure do db/backups/field_under_pressure.archive.gz
+# Zrzut całej bazy field_under_pressure do db/backups/field_under_pressure_YYYYMMDD_HHMMSS.archive.gz
 ./db/scripts/backup.sh
 
 # Opcjonalnie: zapis do własnej ścieżki
 ./db/scripts/backup.sh path/to/custom.archive.gz
 ```
 
-Wygenerowany plik `db/backups/field_under_pressure.archive.gz` można scommitować do repozytorium lub przekazać bezpośrednio innemu deweloperowi.
+Wygenerowane archiwum można scommitować do repozytorium lub przekazać bezpośrednio innemu deweloperowi.
 
 ### 2. Odtworzenie bazy z archiwum (`restore.sh`)
 
 ```bash
-# Odtworzenie całej bazy 1:1 z db/backups/field_under_pressure.archive.gz
+# Odtworzenie całej bazy 1:1 z najnowszego archiwum field_under_pressure_*.archive.gz w db/backups/
 # (domyślnie czyści lokalną bazę przed importem, aby stan był identyczny z archiwum)
 ./db/scripts/restore.sh
 
-# Opcjonalnie: odtworzenie z innej ścieżki lub bez czyszczenia lokalnej bazy (--no-drop)
-./db/scripts/restore.sh path/to/custom.archive.gz
+# Opcjonalnie: odtworzenie ze wskazanego archiwum lub bez czyszczenia lokalnej bazy (--no-drop)
+./db/scripts/restore.sh db/backups/field_under_pressure_20261120_235500.archive.gz
 ./db/scripts/restore.sh --no-drop
 ```
 
