@@ -1,0 +1,56 @@
+{
+  "species": "Malus domestica",
+  "Description": {
+    "Life form": "tree",
+    "Physiology": "deciduous, single stem",
+    "Habit": "erect",
+    "Category": "fruits & nuts, materials, ornamentals/turf, forest/wood",
+    "Life span": "perennial",
+    "Plant attributes": "grown on large scale"
+  },
+  "Ecology": {
+    "Soil depth": "deep (>>150 cm)",
+    "Temperat. requir.": {
+      "Optimal": {
+        "Min": 14,
+        "Max": 27
+      }
+    },
+    "Soil texture": "medium, light",
+    "Rainfall (annual)": {
+      "Optimal": {
+        "Min": 700,
+        "Max": 2500
+      }
+    },
+    "Soil fertility": "high",
+    "Latitude": {
+      "Optimal": {
+        "Min": 35,
+        "Max": 30
+      }
+    },
+    "Altitude": {
+      "Optimal": {
+        "Min": null,
+        "Max": null
+      }
+    },
+    "Soil salinity": "low (<4 dS/m)",
+    "Soil pH": {
+      "Optimal": {
+        "Min": 6,
+        "Max": 7
+      }
+    },
+    "Soil drainage": "well (dry spells)",
+    "Light intensity": {
+      "Optimal": {
+        "Min": "very bright",
+        "Max": "clear skies"
+      }
+    },
+    "Killing temp. during rest": -30,
+    "Killing temp. early growth": -2
+  }
+}

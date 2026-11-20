@@ -1,0 +1,56 @@
+{
+  "species": "Prunus avium",
+  "Description": {
+    "Life form": "tree",
+    "Physiology": "deciduous, single stem",
+    "Habit": "erect",
+    "Category": "fruits & nuts, medicinals & aromatic, forest/wood",
+    "Life span": "perennial",
+    "Plant attributes": "grown on large scale, harvested from wild"
+  },
+  "Ecology": {
+    "Soil depth": "deep (>>150 cm)",
+    "Temperat. requir.": {
+      "Optimal": {
+        "Min": 18,
+        "Max": 28
+      }
+    },
+    "Soil texture": "heavy, medium",
+    "Rainfall (annual)": {
+      "Optimal": {
+        "Min": 500,
+        "Max": 900
+      }
+    },
+    "Soil fertility": "moderate",
+    "Latitude": {
+      "Optimal": {
+        "Min": null,
+        "Max": 40
+      }
+    },
+    "Altitude": {
+      "Optimal": {
+        "Min": null,
+        "Max": null
+      }
+    },
+    "Soil salinity": "low (<4 dS/m)",
+    "Soil pH": {
+      "Optimal": {
+        "Min": 5.5,
+        "Max": 6.5
+      }
+    },
+    "Soil drainage": "well (dry spells)",
+    "Light intensity": {
+      "Optimal": {
+        "Min": "very bright",
+        "Max": "very bright"
+      }
+    },
+    "Killing temp. during rest": -3,
+    "Killing temp. early growth": 0
+  }
+}
