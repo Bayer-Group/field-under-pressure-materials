@@ -6,7 +6,11 @@
 ## Team
 | Name | Role | Contact |
 |------|------|---------|
-|      |      |         |
+|Natalia Ławreszuk|team lider; fetilizers|tashy444|
+|Bartosz Krzyczkowski|Fields|mleczu|
+|Krzysztof Wroniak|Soils|Cr0wek|
+|Jakub Załuga|Meteo & Satelite Data|kuba_zezolek|
+|Mateusz Woźniak|Backend developer|mateusz2180|
 
 ## One-liner
 What grower decision does this help? (spray / treat / harvest / wait)
@@ -17,10 +21,10 @@ What grower decision does this help? (spray / treat / harvest / wait)
 - Explicitly out of scope:
 
 ## Data we use
-- [ ] Weather
-- [ ] Satellite (Sentinel-2 / …)
-- [ ] Soil
-- [ ] Cropland
+- [x] Weather
+- [x] Satellite (Sentinel-2 / …)
+- [x] Soil
+- [x] Cropland
 - Notes / paths (local only — do not commit large files):
 
 ## How to run
