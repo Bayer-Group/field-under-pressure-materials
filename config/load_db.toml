@@ -1,0 +1,30 @@
+# Configuration for scripts/load_db.py (target: the existing PostGIS schema `fup`). CLI flags override these.
+# Relative paths are resolved against the repository root.
+
+[database]
+backend = "postgis"
+# Connection string: put it in the environment, NOT here:
+#   PowerShell:  $env:LOAD_DB_DSN = "postgresql://user:password@host:5432/dbname"
+#   bash:        export LOAD_DB_DSN="postgresql://user:password@host:5432/dbname"
+dsn = ""
+
+[database.options]
+schema = "fup"          # tables live in schema fup (search_path = fup, public)
+
+# Only needed if your real table names differ from the DDL: logical name = real name ("schema.table" ok)
+# [tables]
+# weather_hourly = "fup.weather_hourly"
+
+[paths]
+raw = "data/raw"
+report = "data/db/load_report.json"
+
+[inputs]
+# fields = "data/fields.geojson"      # farmer's fields -> field + field_crop_share
+# fields_source = "farmer-x"          # stored in field.source (default: the file name)
+
+[datasets]
+enabled = ["grid_cell", "weather_hourly", "field", "field_crop_share"]
+
+[options]
+batch_size = 1_000_000
