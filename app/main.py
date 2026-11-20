@@ -475,24 +475,46 @@ with tab_pola:
             """,
             unsafe_allow_html=True,
         )
-        layer = pdk.Layer(
-            "H3HexagonLayer",
-            data=result_df,
-            pickable=True,
-            stroked=True,
-            filled=True,
-            extruded=False,
-            get_hexagon="h3_index",
-            get_fill_color="color",
-            get_line_color=[45, 55, 48],
-            line_width_min_pixels=1,
-        )
+        if "polygon_json" in result_df.columns and not result_df.empty:
+            import json
+
+            result_df = result_df.copy()
+            result_df["polygon"] = result_df["polygon_json"].map(json.loads)
+            layer = pdk.Layer(
+                "PolygonLayer",
+                data=result_df,
+                pickable=True,
+                stroked=True,
+                filled=True,
+                extruded=False,
+                get_polygon="polygon",
+                get_fill_color="color",
+                get_line_color=[45, 55, 48],
+                line_width_min_pixels=1,
+            )
+            default_zoom = 11.2
+        else:
+            layer = pdk.Layer(
+                "H3HexagonLayer",
+                data=result_df,
+                pickable=True,
+                stroked=True,
+                filled=True,
+                extruded=False,
+                get_hexagon="h3_index",
+                get_fill_color="color",
+                get_line_color=[45, 55, 48],
+                line_width_min_pixels=1,
+            )
+            default_zoom = 8.5
+
         view_state = pdk.ViewState(
-            latitude=float(result_df["lat"].mean()) if not result_df.empty else 50.06,
-            longitude=float(result_df["lon"].mean()) if not result_df.empty else 19.94,
-            zoom=8.5,
+            latitude=float(result_df["lat"].mean()) if not result_df.empty else 50.18,
+            longitude=float(result_df["lon"].mean()) if not result_df.empty else 20.35,
+            zoom=default_zoom,
             pitch=0,
         )
+
         deck = pdk.Deck(
             map_style="light",
             layers=[layer],
