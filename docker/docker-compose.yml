@@ -6,13 +6,20 @@ services:
     image: postgis/postgis:15-3.3
     container_name: spatial_postgis
     environment:
-      POSTGRES_USER: gis_user
-      POSTGRES_PASSWORD: secretpassword
-      POSTGRES_DB: spatial_db
+      POSTGRES_USER: ${POSTGRES_USER:-gis_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secretpassword}
+      POSTGRES_DB: ${POSTGRES_DB:-spatial_db}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgis_data:/var/lib/postgresql/data
+      # Schemat tworzony automatycznie przy pierwszym starcie na pustym wolumenie
+      - ./initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-gis_user} -d ${POSTGRES_DB:-spatial_db}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   # 2. Lokalne S3 na pliki rastrowe COG (MinIO)
   minio:

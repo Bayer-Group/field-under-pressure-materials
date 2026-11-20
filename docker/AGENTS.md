@@ -15,8 +15,19 @@ Folder `docker/` zawiera opcjonalną konfigurację środowisk kontenerowych dla 
 ## 📂 Struktura Katalogu
 ```text
 docker/
-└── docker-compose.yml       # Definicja serwisów: postgis (5432), minio (9000/9001), titiler (8080)
+├── docker-compose.yml       # Definicja serwisów: postgis (5432), minio (9000/9001), titiler (8080)
+├── README.md                # Opis bazy: uruchomienie, połączenie, tabele, mapowanie ze źródeł, ładowanie
+└── initdb/                  # Skrypty SQL wykonywane przy pierwszym starcie PostGIS (pusty wolumen)
+    ├── 01_extensions.sql    # PostGIS + schemat fup
+    └── 02_schema.sql        # Tabele MVP: grid_cell, weather_hourly, crop_class, field, field_crop_share, ingest_log
 ```
+
+Schemat `fup` (pogoda godzinowa 4 km, pola, uprawy) wykonuje się tylko na pustym wolumenie. Po zmianie
+plików w `initdb/` trzeba odtworzyć bazę: `docker compose down -v` i ponownie `up` (kasuje dane w bazie).
+
+Konfiguracja (użytkownik, hasło, baza, port) jest wspólna dla całej aplikacji: wzór w [`/example.env`](../example.env),
+własna kopia w `/.env` (ignorowana przez git). Uruchomienie z rootu repo:
+`docker compose --env-file .env -f docker/docker-compose.yml up -d postgis`.
 
 ---
 
