@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyqgis-fastapi-bridge"
+version = "0.1.0"
+authors = [
+  { name = "Wiktor", email = "author@example.com" },
+]
+description = "Asynchronous GIS boilerplate bridging QGIS (PyQGIS QgsTask), FastAPI, and MapLibre GL JS."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+keywords = ["gis", "qgis", "fastapi", "pyqgis", "geospatial", "epsg-2180", "uldk", "imgw"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: GIS",
+]
+dependencies = [
+    "fastapi>=0.100.0",
+    "uvicorn[standard]>=0.23.0",
+    "pydantic>=2.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "build>=1.0.0",
+    "wheel>=0.40.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["shared*", "backend*"]
+exclude = ["tests*", "qgis_plugin*", "web*", "docker*", "docs*"]
