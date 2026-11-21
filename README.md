@@ -1,6 +1,25 @@
 # TITLE
 
+> [!IMPORTANT]
+> ## ▶ Try the app: [`static_version/index.html`](static_version/index.html)
+> **Judges, start here.** Clone or download this repo, then double-click **[`static_version/index.html`](static_version/index.html)**. It opens in any browser (Chrome, Firefox or Safari) with nothing to install: no Python, no npm, no data downloads, no API keys. If it won't work just double click `index.html` in file explorer (Finder on Mac) and it should open a browser. 
+
 Hackathon project combining **bioinformatic** and **geoinformatic** data to support smarter, earlier decisions in agriculture.
+
+## Quick start (judges)
+
+1. `git clone` this repo (or *Code → Download ZIP* on GitHub and unzip it).
+2. Open **[`static_version/index.html`](static_version/index.html)** in a browser.
+
+If your browser refuses to open the local file, serve the folder instead:
+
+```bash
+python3 -m http.server -d static_version
+```
+
+Then open http://127.0.0.1:8000.
+
+The static demo is a read-only snapshot of 5 plots (North Sterling, Colorado). All tabs work: greenness over time, soil microbes, soil functions and crop disease risk. The data is built in; only the map background needs internet. For the full live app and the data pipeline, see [GUI](#gui) below.
 
 ## Goal
 
@@ -34,15 +53,20 @@ The *Crop disease risk* tab shows, for each plot and year, each crop's rank amon
 
 The *Soil microbes* tab has a Taxonomy | Roles switch. Roles shows the sample's reads by role (useful, potentially harmful, nitrogen cyclers and so on), and genus names show a short description on hover. The *Soil functions* tab shows which named genera may carry each gene-backed function. The roles are AI-annotated at genus level; see [`AGENT.md`](AGENT.md) (sections 3.14 and 5) for the caveats.
 
+The *Treatment plan* tab lists, for a plot, year and crop, the product types worth considering before planting and during growth (seed treatments, foliar fungicides, biologicals, fertilisers, nitrogen stabilisers, inoculants, lime), each with the soil finding behind it and the test that would confirm it. It draws on the crop disease risk, the soil measurements and bacterial genes of the same year, the crop history and the site. The product list (`rules/products.csv`) is not verified: it names product classes, not brands or rates.
+
 ```bash
 cd web && npm install && npm run build      # once, and after changing anything in web/
 .venv/bin/python scripts/13_fetch_ndvi_maps.py   # once: greenness maps (network, about 300 MB); optional
 .venv/bin/python scripts/12_gui.py          # then open http://127.0.0.1:8000
 ```
 
+`bash scripts/bake_static.sh` regenerates `static_version/` after data or frontend changes.
+
 - `src/cropfit/api.py`: the local JSON API over `data/processed/` (new backend results get a route here); `api_microbiome.py` holds the soil microbes routes (plot → samples, sample → composition by phylum, class or genus).
 - `web/src/api.ts`: the typed client; `web/src/features/<name>/`: one folder per part of the screen.
 - `src/cropfit/api_risk.py`: the crop risk routes (plot → units, unit → crop ranks, crop → genera behind the score); `web/src/features/risk/`: the *Crop disease risk* tab.
+- `src/cropfit/products.py` and `rules/products.csv`: the product rules; `web/src/features/plan/`: the *Treatment plan* tab.
 - Frontend development: run `scripts/12_gui.py` and, in `web/`, `npm run dev` (it forwards `/api` to port 8000).
 
 ## Status

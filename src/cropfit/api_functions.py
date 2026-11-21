@@ -920,14 +920,15 @@ def _gene_cards(copies: dict[str, int], pathways: list[Pathway], fungi: Fungi | 
 
     # ---- measured: nitrogen available now (soil nitrate test)
     if m and m.nitrate_n_mgkg is not None:
-        no3 = m.nitrate_n_mgkg
+        no3, nh4 = m.nitrate_n_mgkg, m.ammonium_n_mgkg      # ammonium may be missing: never shown as 0 then
         st = "good" if no3 >= NITRATE_ENOUGH else "watch" if no3 >= NITRATE_LOW else "act"
         cards.append(DecisionCard(
             card="n_now", title="Nitrogen available now", status=st,
-            headline=f"{no3:.1f} mg/kg nitrate · {m.ammonium_n_mgkg or 0:.1f} mg/kg ammonium",
+            headline=f"{no3:.1f} mg/kg nitrate" + (f" · {nh4:.1f} mg/kg ammonium" if nh4 is not None else ""),
             flag=None if st == "good" else f"Below the {NITRATE_ENOUGH:.0f} mg/kg soil-test level for corn"
             + (f" (and below {NITRATE_LOW:.0f})" if st == "act" else ""),
-            finding=f"Soil nitrate is {no3:.1f} mg N/kg (ammonium {m.ammonium_n_mgkg or 0:.1f}).",
+            finding=f"Soil nitrate is {no3:.1f} mg N/kg" + (f" (ammonium {nh4:.1f})." if nh4 is not None else
+                                                               "; ammonium was not measured."),
             implications=[
                 imp(U, "Above the 25 mg/kg level of the soil nitrate test: for corn, the soil alone usually covers "
                        "the rest of the season's nitrogen.") if st == "good" else
@@ -939,7 +940,8 @@ def _gene_cards(copies: dict[str, int], pathways: list[Pathway], fungi: Fungi | 
                     "Little nitrate means little to wash out with heavy rain."),
             ],
             basis="measured", confidence="medium",
-            evidence=[f"Nitrate {no3:.2f} and ammonium {m.ammonium_n_mgkg or 0:.2f} mg N/kg, {m.date}",
+            evidence=[f"Nitrate {no3:.2f}" + (f" and ammonium {nh4:.2f}" if nh4 is not None else "")
+                      + f" mg N/kg, {m.date}",
                       "Rule: late-spring soil nitrate test for corn (25 and 10 mg/kg; 0-30 cm, corn 15-30 cm tall). "
                       "NEON's timing and depth are close to, not exactly, that protocol, and the test is calibrated "
                       "for corn, not for other crops."]))
@@ -1084,12 +1086,9 @@ def _gene_cards(copies: dict[str, int], pathways: list[Pathway], fungi: Fungi | 
     missing = [p.name.lower() for p in (fix,) if not any(s.status == "found" for s in p.steps)]
     finding = ("Microbes here carry " + ", ".join(carried) + "." if carried else "Few nitrogen-cycle genes found.") + (
         f" No {', '.join(missing)} genes found." if missing else "")
-    imps, nflag = [], None
+    imps = []
     makers, cleaners, keepers, gas = c("norB"), c("nosZ"), c("nrfA"), c("nirK", "nirS")
-    if makers >= MIN_COUNT and cleaners == 0:
-        nflag = "N2O-making genes but no N2O-removing gene found"
-    elif cleaners and makers / cleaners >= N2O_FLAG_RATIO:
-        nflag = f"{makers / cleaners:.0f}× more N2O-making than N2O-removing genes"
+    nflag = _n2o_flag(copies)
     short = (["full denitrification" if den.complete else "partial denitrification"]
              if any(s.status == "found" for s in den.steps) else []) + (
         ["nitrate kept as ammonium"] if has(dnra, 1) else []) + (["nitrification"] if has(nit, 0) else []) + (
@@ -1274,6 +1273,57 @@ def _score(cards: list[DecisionCard], r, m: Measured | None, fungi: Fungi | None
 def _rank(cards: list[DecisionCard]) -> list[DecisionCard]:
     """One list, most trustworthy first: by confidence, cards without data last; rule order within a rank."""
     return sorted(cards, key=lambda c: (c.status == "unknown", CONF_RANK.get(c.confidence, 3)))
+
+
+# ---------------------------------------------------------------- signals for other modules
+def _n2o_flag(copies: dict[str, int]) -> str | None:
+    """Why the nitrogen card is coloured: N2O makers (norB) without, or far outnumbering, removers (nosZ)."""
+    makers, cleaners = copies.get("norB", 0), copies.get("nosZ", 0)
+    if makers >= MIN_COUNT and cleaners == 0:
+        return "N2O-making genes but no N2O-removing gene found"
+    if cleaners and makers / cleaners >= N2O_FLAG_RATIO:
+        return f"{makers / cleaners:.0f}× more N2O-making than N2O-removing genes"
+    return None
+
+
+def soil_signals(plot_id: str, year: int, dates: list[dt.date]) -> tuple[dict, list[str]]:
+    """What this module knows about a plot's soil in one year, as plain values for products.recommend, and one
+    sentence per source saying where they come from (or that there is none).
+
+    Measurements: NEON's, within MATCH_DAYS of one of `dates` (the days the fungi were sampled), else of the
+    metagenome. Genes: the plot's metagenome of that year (a deep one if there is one, then the latest); statuses
+    as in the gene groups of the soil functions view. Keys without data are left out."""
+    sig: dict = {}
+    sources: list[str] = []
+    r = None
+    if _has("metagenomes") and _has("ko_panel"):
+        mg = _metagenomes()
+        mg = mg[(mg["plotID"] == plot_id) & (mg["date"].map(lambda d: d.year) == year)]
+        if len(mg):
+            r = next(mg.sort_values(["ko_depth_ok", "date"]).tail(1).itertuples())
+    m = next((x for x in (_measured(plot_id, d) for d in list(dates) + ([r.date] if r is not None else [])) if x), None)
+    if m is not None:
+        vals = {"nitrate_n_mgkg": m.nitrate_n_mgkg, "cn_ratio": m.cn_ratio, "ph": m.ph_water,
+                "organic_c_pct": m.organic_c_pct}
+        sig.update({k: v for k, v in vals.items() if v is not None})
+        sources.append(f"Soil measurements: NEON, {m.date:%-d %b %Y}.")
+    else:
+        sources.append("NEON measured no soil chemistry within a week of this sample: the rules on nitrate, pH, "
+                       "C:N and organic carbon were not checked.")
+    if r is None:
+        sources.append(f"No metagenome of this plot in {year}: the rules on bacterial genes were not checked.")
+    else:
+        deep = bool(r.ko_depth_ok)
+        panel = core.table("ko_panel")
+        mine = panel[panel["metagenome_key"] == r.metagenome_key]
+        by_group = mine.groupby("function_group")["count"].sum()
+        for g in ("urease", "nitrification", "copper_resistance", "phlD"):
+            sig[g] = _status(int(by_group.get(g, 0)), deep)
+        if deep:
+            sig["n2o_flag"] = _n2o_flag(mine.groupby("gene")["count"].sum().astype(int).to_dict()) is not None
+        sources.append(f"Bacterial genes: metagenome of {r.date:%-d %b %Y}"
+                       + ("." if deep else ", too shallow to read most gene groups."))
+    return sig, sources
 
 
 # ---------------------------------------------------------------- routes

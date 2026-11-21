@@ -20,6 +20,16 @@
       "port": 8001
     },
     {
+      "name": "gui-8004",
+      "runtimeExecutable": ".venv/bin/python",
+      "runtimeArgs": [
+        "scripts/12_gui.py",
+        "--port",
+        "8004"
+      ],
+      "port": 8004
+    },
+    {
       "name": "deck",
       "runtimeExecutable": "python3",
       "runtimeArgs": [

@@ -1,6 +1,6 @@
 # Terranos presentation (reveal.js + GSAP)
 
-A slide deck that runs in the browser. reveal.js handles navigation, speaker notes, the overview and PDF export. GSAP handles the animations. No build step and no network: both libraries are copied into `vendor/`.
+A slide deck that runs in the browser. reveal.js handles navigation, speaker notes, the overview and PDF export. GSAP handles the animations. No build step and no network: all libraries are copied into `vendor/`.
 
 ## Run it
 
@@ -43,8 +43,9 @@ To get a PDF, open `http://127.0.0.1:8090/deck/?print-pdf` in Chromium and print
 | `css/theme.css` | Colors, type and per-slide layout (same palette as `../video.html`) |
 | `js/data.js` | Content the animations read: data sources, sites, chart data, nitrogen cycle |
 | `js/engine.js` | Connects reveal.js and GSAP: builds, plays, steps through and resets each slide's animation |
+| `js/earth.js` | The spinning Earth in the title logo (a canvas drawn with d3-geo) |
 | `js/anims/*.js` | One animation per slide type |
-| `vendor/` | reveal.js 6.0.2 and GSAP 3.15.1 (copied from npm) |
+| `vendor/` | reveal.js 6.0.2, GSAP 3.15.1, and d3-geo + topojson-client + world-atlas land outlines for the spinning Earth (copied from npm) |
 
 ## How a slide animates
 

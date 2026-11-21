@@ -1,0 +1,33 @@
+{
+ "baked_at": "2026-11-21T20:58:24+00:00",
+ "git_sha": "66b366949a3642ae8e1e3ca4277d943430d95d3a",
+ "light_plots": [
+  "STER_006",
+  "STER_010",
+  "STER_011",
+  "STER_012",
+  "STER_016"
+ ],
+ "counts": {
+  "plots": 1,
+  "greenness": 5,
+  "events": 5,
+  "aerial": 5,
+  "greenness_maps": 5,
+  "microbiome": 5,
+  "functions": 5,
+  "crop_risk_units": 5,
+  "event": 179,
+  "img_aerial": 59,
+  "img_ndvi": 1235,
+  "ndvi_grid": 1235,
+  "ndvi_decode": 1,
+  "composition": 135,
+  "roles": 45,
+  "function_profile": 12,
+  "crop_risk": 16,
+  "crop_contributions": 160,
+  "crop_tests": 160
+ },
+ "skipped": []
+}

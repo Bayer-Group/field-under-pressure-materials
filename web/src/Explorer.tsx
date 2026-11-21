@@ -1,13 +1,15 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api, type Plot } from './api'
+import { ErrorBoundary } from './ErrorBoundary'
 import { LayerControl, NdviLegend } from './features/map/LayerControl'
 import { PlotMap, type MapOverlay } from './features/map/PlotMap'
 import { FunctionsPanel } from './features/functions/FunctionsPanel'
 import { MicrobiomePanel } from './features/microbiome/MicrobiomePanel'
 import { PlotTimeline, type MapLayer, type TimelineChoice } from './features/timeline/PlotTimeline'
 import { formatDate } from './format'
+import { PlanPanel } from './features/plan/PlanPanel'
 import { RiskPanel } from './features/risk/RiskPanel'
-import { functionsHref, microbesHref, navigate, plotHref, riskHref, type MicrobeView, type PlotTab } from './router'
+import { functionsHref, microbesHref, navigate, planHref, plotHref, riskHref, type MicrobeView, type PlotTab } from './router'
 import { bySite, formatLatLon, shortId, siteName } from './sites'
 import { useFetch } from './useFetch'
 
@@ -16,8 +18,8 @@ const CONTEXT_M: Record<MapLayer, number> = { photo: 130, greenness: 1050, none:
 
 /** Map of all plots beside a panel. With no plot chosen the panel lists the plots by site; once one is chosen
  *  it has one tab per kind of plot data: the timeline (greenness, visits, aerial photos; the image chosen on it
- *  is laid over the map), the soil microbiome, the soil characteristics and the crop disease risk. Panels for future backend results become further tabs. */
-const tabHref = (tab: PlotTab, id: string) => (tab === 'microbes' ? microbesHref(id) : tab === 'risk' ? riskHref(id) : tab === 'functions' ? functionsHref(id) : plotHref(id))
+ *  is laid over the map), the soil microbiome, the soil characteristics, the crop disease risk and the products to consider. Panels for future backend results become further tabs. */
+const tabHref = (tab: PlotTab, id: string) => (tab === 'microbes' ? microbesHref(id) : tab === 'risk' ? riskHref(id) : tab === 'plan' ? planHref(id) : tab === 'functions' ? functionsHref(id) : plotHref(id))
 
 export function Explorer({ plotId, tab, sampleId, unit, crop, view }: {
   plotId: string | null; tab: PlotTab; sampleId: string | null; unit: string | null; crop: string | null; view: MicrobeView
@@ -76,10 +78,14 @@ export function Explorer({ plotId, tab, sampleId, unit, crop, view }: {
         ) : (
           <>
             <PlotHead plot={selected} plots={plots.data!} tab={tab} onOpen={open} />
+            {/* an error in one tab leaves the plot head, the other tabs and the map usable */}
+            <ErrorBoundary key={`${selected.plot_id}/${tab}`}>
             {tab === 'microbes' ? (
               <MicrobiomePanel plotId={selected.plot_id} sampleId={sampleId} view={view} />
             ) : tab === 'risk' ? (
               <RiskPanel plotId={selected.plot_id} unit={unit} crop={crop} />
+            ) : tab === 'plan' ? (
+              <PlanPanel plotId={selected.plot_id} unit={unit} crop={crop} />
             ) : tab === 'functions' ? (
               <FunctionsPanel plotId={selected.plot_id} sampleId={sampleId} />
             ) : timelineError ? (
@@ -92,6 +98,7 @@ export function Explorer({ plotId, tab, sampleId, unit, crop, view }: {
                 layer={layer} photoId={photo?.photo_id ?? null} mapId={gmap?.map_id ?? null} onChange={choose}
               />
             )}
+            </ErrorBoundary>
           </>
         )}
       </section>
@@ -122,7 +129,8 @@ function Overview({ plots, focusSite, onFocusSite, onHighlight }: {
       <h1>Sampled plots</h1>
       <p className="lead">
         {plots.length} plots at {groups.length} {groups.length === 1 ? 'site' : 'sites'}. Choose one to see how green it has
-        been over the years, its aerial photos, its soil sampling visits and the microbes found in its soil.
+        been over the years, its aerial photos and soil sampling visits, the microbes found in its soil and what
+        they can do, and the crop disease risk and products to consider that follow from them.
       </p>
       {groups.map(({ site, plots: ps }) => (
         <section key={site} className={`site-card ${focusSite === site ? 'focused' : ''}`}>
@@ -157,6 +165,15 @@ function PlotHead({ plot, plots, tab, onOpen }: { plot: Plot; plots: Plot[]; tab
   const order = groups.flatMap((g) => g.plots)
   const at = order.findIndex((p) => p.plot_id === plot.plot_id)
   const prev = order[at - 1], next = order[at + 1]
+  // On a narrow screen the tab row scrolls sideways: keep the current tab in view.
+  const tabs = useRef<HTMLElement>(null)
+  useEffect(() => {
+    const row = tabs.current, on = row?.querySelector<HTMLElement>('[aria-current]')
+    if (!row || !on) return
+    const left = on.offsetLeft - row.offsetLeft, right = left + on.offsetWidth
+    if (left < row.scrollLeft) row.scrollLeft = left
+    else if (right > row.scrollLeft + row.clientWidth) row.scrollLeft = right - row.clientWidth
+  }, [tab])
   return (
     <div className="plot-head">
       <div className="plot-nav">
@@ -175,11 +192,12 @@ function PlotHead({ plot, plots, tab, onOpen }: { plot: Plot; plots: Plot[]; tab
       </div>
       <h1>Plot {plot.plot_id}</h1>
       <p className="muted plot-sub">{siteName(plot.site)} · {formatLatLon(plot.lat, plot.lon)} · {plot.half_m * 2} × {plot.half_m * 2} m (yellow square on the map)</p>
-      <nav className="tabs" aria-label="What to show for this plot">
+      <nav className="tabs" ref={tabs} aria-label="What to show for this plot">
         <a href={plotHref(plot.plot_id)} aria-current={tab === 'greenness' ? 'page' : undefined}>Greenness over time</a>
         <a href={microbesHref(plot.plot_id)} aria-current={tab === 'microbes' ? 'page' : undefined}>Soil microbes</a>
         <a href={functionsHref(plot.plot_id)} aria-current={tab === 'functions' ? 'page' : undefined}>Soil characteristics</a>
         <a href={riskHref(plot.plot_id)} aria-current={tab === 'risk' ? 'page' : undefined}>Crop disease risk</a>
+        <a href={planHref(plot.plot_id)} aria-current={tab === 'plan' ? 'page' : undefined}>Treatment plan</a>
       </nav>
     </div>
   )

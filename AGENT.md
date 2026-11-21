@@ -86,8 +86,8 @@ Pipeline order (what produces what):
 | Microbe roles: export | `scripts/17_export_microbe_taxa.py` (offline, after 02b and 05) | `data/processed/microbe_taxa.csv` (2,358 genera: 1,095 bacteria, 96 archaea, 1,167 fungi) |
 | Microbe roles: annotation | Manual step: LLM agents write the chunks by hand, following `rules/microbe_annotation_prompt.md` (no script) | `data/annotation_chunks/` (gitignored) |
 | Microbe roles: merge | `scripts/18_merge_microbe_annotations.py` (offline, after the chunks exist) | Validates the chunks and `review_*` overrides, merges them into `rules/microbe_annotations.csv` and `rules/microbe_genera.csv`, prints coverage and the blind agreement with FUNGuild (saved to `data/processed/microbe_roles_agreement_blind.csv`) |
-| KEGG modules | `scripts/19_build_kegg_modules.py` (network once for KEGG REST, cached; then offline, after 05) | `kegg_modules`, `kegg_module_completeness` (see 3.15) |
-| Who carries which function | `scripts/20_build_gene_taxa.py` (offline; needs the NMDC gene phylogeny files, see 3.15) | `ko_taxa` (see 3.15) |
+| KEGG modules | `scripts/19_build_kegg_modules.py` (network once for KEGG REST, cached; then offline, after 05) | `kegg_modules`, `kegg_module_completeness` (see 3.16) |
+| Who carries which function | `scripts/20_build_gene_taxa.py` (offline; needs the NMDC gene phylogeny files, see 3.16) | `ko_taxa` (see 3.16) |
 
 Note: `03_build_plots.py` takes its plots from the event registry (the 29 plots that were actually sampled). `04_build_fields.py` still carries the two windows of `config/regions.yaml`. The site list is defined once, as the keys of `windows` in `config/regions.yaml` (`config.sites()`); only the standalone NMDC pull script has its own `--sites` default.
 
@@ -498,7 +498,20 @@ For a quick start (or a small laptop), switch light mode on **before** downloadi
   - `Taxon.description`: hover text at genus rank in the composition.
   - `/api/functions/{id}`: gains `carriers` ("who may carry it by name", per gene-backed role, with an agreement status) and a `bacteria_pathogens` card.
 
-### 3.15 KEGG modules and who carries which function (all KEGG genes, not only the panel)
+### 3.15 Product recommendations (prototype)
+
+- **What:** `products.recommend(contributions, summary, unit_id, crop, signals=..., context=...)` lists product types worth considering for one crop on one unit, each with a timing (`before_planting` or `during_growth`), a reason, what it rests on and the follow-up tests that would confirm it. `products.unanswered(crop, signals, context)` lists the soil rules that could not be evaluated. API: `GET /api/plots/{plot}/crop-risk/{unit}/{crop}/products`. GUI: the "Treatment plan" tab (`web/src/features/plan/`), linked from the crop disease risk tab.
+- **Triggers** (constants at the top of `src/cropfit/products.py`; the genus thresholds are those of 3.13):
+  - `pathogen_high`: a catalogued genus is detected, not weak, and A ≥ 0.75. The item names the follow-up tests for that genus and crop.
+  - `confirm_first`: the genus is detected weakly (≤ 10 reads, or one core of several). The item says to test before buying.
+  - `site_favoured`: oomycete seed treatments, only when the row is `favoured_by` wet and the site is wet (as in 3.13). Nothing is recommended for an unmeasured organism otherwise. Nematodes have no product rows.
+  - `soil_signal`: one of the rules in `SIGNAL_RULES`, on the `signals` dict: nitrate below 25 or 10 mg/kg (corn), C:N above 20, pH below 5.5, pH 5.5 to 6.0 (legumes), pH of 7.5 or more, organic carbon below 1%, urease genes found, the N2O flag of the soil functions view or nitrification genes on a wet site, a legume not in the crop history, copper resistance genes found, phlD found.
+- **Signals** come from `api_functions.soil_signals(plot, year, dates)` and `api_risk._history_signals`: NEON soil measurements within 7 days of the fungal sample (else of the metagenome), the gene groups of the plot's metagenome of that year, `plot_crop_history` before that year and the Bradyrhizobium percentile of `plot_biology_timeseries`. A missing value gives no item; the rule is listed as not checked. Metagenomes exist for few years (3.1), and most are too shallow to read gene groups.
+- **Catalogue:** `rules/products.csv`, one row per rule (`kind` pathogen, blind_spot or soil; `category`; `product_class`; `timing`; `stage`; `crops`; `genus`; `tests`; `signal`; `favoured_by`; `works_because`; `caution`; `source`; `verified`). Rows name active-ingredient groups with FRAC codes, never brands or rates. Category `no_product` says that no product works and what to do instead. All 29 rows were written from general knowledge on 21 Nov 2026 and are **not verified** (a unit test keeps the flag honest). Replace `source` with a citation and set `verified` = yes only after checking a row.
+- **Priority** (0-1) only orders the list: for genera as in 3.13 without the residue factor (0.4 scale for weak detections, + 0.1 when the site favours the disease); 0.5 for `site_favoured`; a fixed strength per soil rule. The weights are not tuned.
+- **Limits:** product groups follow US practice and registration was not checked for any country. The soil thresholds are copied from `api_functions.py` (a test keeps them equal). The nitrate rule uses whatever NEON measurement is nearest the fungal sample, which is often not the late-spring sample the 25 mg/kg level is calibrated for. Urease and copper genes are weak signals. Everything in 3.12 and 3.13 about genus-level detection applies.
+
+### 3.16 KEGG modules and who carries which function (all KEGG genes, not only the panel)
 
 - **Why:** `ko_panel` keeps 41 hand-picked KOs; a deep metagenome has about 6,000 distinct KOs (STER 2022: median 6,174 per metagenome, 8,205 over the site-year). These two tables use all of them.
 - **KEGG modules** (`src/cropfit/kegg.py`, `scripts/19_build_kegg_modules.py`): 583 module definitions and the BRITE hierarchy `br:ko00002` from KEGG REST (free for academic use; cached in `data/cache/kegg/`). Each DEFINITION is parsed (space = step, `,` = alternative, `+` = complex member, `-` = optional member, `--` = step without a KO, `Mxxxxx` = another module) and scored per metagenome: completeness = steps with at least one KO copy / steps.
@@ -511,7 +524,7 @@ For a quick start (or a small laptop), switch light mode on **before** downloadi
   - **Read the lineage as the closest known relative**, not the organism: median identity is ~70 %, so phylum or class is reliable and genus is a hint unless identity is high (e.g. nosZ matched to *Bradyrhizobium* at 97 %).
   - Example (STER_006, 2022): about 75 % of K10944 copies match ammonia-oxidising archaea (*Nitrososphaerota*, ~97 % identity) or *Nitrosomonadaceae*; the rest are actinobacterial monooxygenases (~72 %): mostly true nitrifiers.
 
-### 3.16 Soil characteristics cards: reference colours and computed confidence
+### 3.17 Soil characteristics cards: reference colours and computed confidence
 
 - **Reference:** gene cards compare the sample with the *other* well-sequenced metagenomes (`ko_depth_ok`; now 9, all STER). Per-genome values = KO copies / `marker_mean`.
 - **Colour (gene cards):** only when the sample is above or below *every* reference soil (`_ref_colour` in `api_functions.py`): more N2O removers per N2O maker, P-freeing genes, stress-relief genes, breakdown routes -> green "More than usual" (yellow when below, except breakdown); copper-resistance genes above all -> yellow. Inside the range: no colour. The rule is listed in the card's "Numbers and rules".

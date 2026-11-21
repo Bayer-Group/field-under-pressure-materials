@@ -16,7 +16,7 @@ from pydantic import BaseModel
 
 from . import api as core
 from . import kb as kbmod
-from . import config, followup, neon, risk
+from . import api_functions, config, followup, neon, products, risk
 
 MIN_UNIT_READS = 2000           # risk.compute_crop_risk default; below this a unit is not scored
 CURRENT_PRODUCT = ".002"
@@ -46,6 +46,17 @@ TRIGGER_LABELS = {"resolve_species": "Identify the species", "confirm_detection"
 FOLLOWUP_NOTE = ("Suggestions are prompts for what to ask a diagnostic lab. The list of tests was written from "
                  "general knowledge and is not verified; no result thresholds are given. A test is suggested "
                  "because of a gap in this assessment, not because disease is expected.")
+
+PRODUCT_TRIGGER_LABELS = {"pathogen_high": "High for the site", "confirm_first": "Test first",
+                          "site_favoured": "Site favours it", "soil_signal": "Soil finding"}
+CATEGORY_LABELS = {"fungicide_seed": "Seed treatment", "fungicide_foliar": "Foliar fungicide",
+                   "biocontrol": "Biological", "fertiliser": "Fertiliser", "inhibitor": "Nitrogen stabiliser",
+                   "inoculant": "Inoculant", "amendment": "Soil amendment", "no_product": "No product works",
+                   "caution": "Caution", "note": "Note"}
+PRODUCT_NOTE = ("These are product types to discuss with an agronomist, not prescriptions: no brands, no rates. "
+                "The list was written from general knowledge and is not verified. Registration differs by country "
+                "and the product label is binding. A finding in the soil's DNA names a genus, not a disease.")
+HISTORY_AS = {"double_wheat_soy": ("winter_wheat", "soybean")}     # rotation groups counted as their crops
 
 _lock = threading.Lock()
 
@@ -179,6 +190,48 @@ class FollowupTests(BaseModel):
     note: str
 
 
+class TestRef(BaseModel):
+    test_id: str
+    name: str
+
+
+class ProductRecommendation(BaseModel):
+    product_id: str
+    category: str
+    category_label: str
+    product_class: str
+    timing: str                      # before_planting | during_growth
+    stage: str | None
+    trigger: str                     # pathogen_high | confirm_first | site_favoured | soil_signal
+    trigger_label: str
+    priority: float
+    basis: str                       # measured | genes | fungi | site | history
+    confidence: str
+    genus: str | None
+    reason: str
+    works_because: str | None
+    caution: str | None
+    confirm_with: list[TestRef]
+    source: str | None
+    verified: bool
+
+
+class UncheckedProduct(BaseModel):
+    product_id: str
+    product_class: str
+
+
+class ProductPlan(BaseModel):
+    plot_id: str
+    unit: str
+    crop: str
+    label: str
+    recommendations: list[ProductRecommendation]     # highest priority first
+    unchecked: list[UncheckedProduct]                # soil rules whose values are missing for this plot and year
+    sources: list[str]                               # where the soil values come from, or what is missing
+    note: str
+
+
 # ---------------------------------------------------------------- helpers
 def _num(v, nd: int = 4) -> float | None:
     if v is None or pd.isna(v):
@@ -250,8 +303,7 @@ def _kb(mtimes) -> kbmod.KB:
 @lru_cache(maxsize=8)
 def _result(site: str, year: int, core_mtime: tuple, kb_mtimes: tuple) -> risk.CropRiskResult:
     # core_mtime and kb_mtimes are cache keys: the tables themselves are loaded here at request time
-    with _lock:
-        return risk.compute_crop_risk(site, year, core=_core_df(), kb=_kb(kb_mtimes))
+    return risk.compute_crop_risk(site, year, core=_core_df(), kb=_kb(kb_mtimes))
 
 
 @lru_cache(maxsize=16)
@@ -347,10 +399,20 @@ def _kb_sources(meta: dict) -> list[KbSource]:
     return out
 
 
-def _scored(plot_id: str, unit: str):
-    """(site, unit row, result, unit_id) for a unit of the plot; 404/503 as the routes document."""
+def _scored(plot_id: str, unit: str, crop: str | None = None):
+    """(site, unit row, result, unit_id) for a unit of the plot; 404 for an unknown crop or unit, 503 when the
+    inputs are not built."""
+    if crop is not None and crop not in kbmod.SCORED_CROPS:
+        raise HTTPException(404, f"unknown crop {crop}")
     site, u = _find_unit(plot_id, unit)
-    res = _result(site, int(u.year), _core_mtime(), _kb_mtimes())
+    key = (site, int(u.year), _core_mtime(), _kb_mtimes())
+    # One screen asks for the ranks, the genera, the tests and the products of a unit at once. The lock is held
+    # around the cache lookup, not inside the cached function, so the first request computes the site-year
+    # (1-3 s) and the others wait for it instead of each computing it again.
+    with _lock:
+        res = _result(*key)
+    if res.summary.empty:
+        raise HTTPException(404, f"unknown crop-risk unit {unit} for plot {plot_id}")
     return site, u, res, u.unit_id
 
 
@@ -369,8 +431,6 @@ def crop_risk_units(plot_id: str):
 def crop_risk(plot_id: str, unit: str):
     """Risk index of every crop for one unit, ranked against the same site, year and ITS method."""
     site, u, res, uid = _scored(plot_id, unit)
-    if res.summary.empty:
-        raise HTTPException(404, f"unknown crop-risk unit {unit} for plot {plot_id}")
     md = res.metadata
     peers = res.summary[res.summary["product"] == u.product].drop_duplicates("unit_id")
     crops = [_crop_row(res, c, uid, u.product) for c in kbmod.SCORED_CROPS]
@@ -389,11 +449,7 @@ def crop_risk(plot_id: str, unit: str):
 @router.get("/plots/{plot_id}/crop-risk/{unit}/{crop}", response_model=CropContributions)
 def crop_contributions(plot_id: str, unit: str, crop: str):
     """The genera behind one crop's score for one unit (contribution above zero, largest first)."""
-    if crop not in kbmod.SCORED_CROPS:
-        raise HTTPException(404, f"unknown crop {crop}")
-    site, u, res, uid = _scored(plot_id, unit)
-    if res.summary.empty:
-        raise HTTPException(404, f"unknown crop-risk unit {unit} for plot {plot_id}")
+    site, u, res, uid = _scored(plot_id, unit, crop)
     c = res.contributions
     c = c[(c["unit_id"] == uid) & (c["crop"] == crop)]
     pos = c[c["contribution"] > 0].sort_values(["contribution", "genus"], ascending=[False, True])
@@ -430,11 +486,52 @@ def _site_context(plot_id: str) -> dict:
 @router.get("/plots/{plot_id}/crop-risk/{unit}/{crop}/tests", response_model=FollowupTests)
 def crop_followup_tests(plot_id: str, unit: str, crop: str):
     """Follow-up tests that would close gaps in one crop's assessment for one unit, most useful first."""
-    if crop not in kbmod.SCORED_CROPS:
-        raise HTTPException(404, f"unknown crop {crop}")
-    site, u, res, uid = _scored(plot_id, unit)
-    if res.summary.empty:
-        raise HTTPException(404, f"unknown crop-risk unit {unit} for plot {plot_id}")
+    site, u, res, uid = _scored(plot_id, unit, crop)
     items = followup.suggest(res.contributions, res.summary, uid, crop, context=_site_context(plot_id))
     return FollowupTests(plot_id=plot_id, unit=unit, crop=crop, label=CROP_LABELS.get(crop, crop), note=FOLLOWUP_NOTE,
                          suggestions=[TestSuggestion(**i, trigger_label=TRIGGER_LABELS[i["trigger"]]) for i in items])
+
+
+def _history_signals(plot_id: str, year: int, crop: str) -> tuple[dict, list[str]]:
+    """Whether the crop was grown on the plot before `year`, and the plot's Bradyrhizobium percentile (0-1)."""
+    sig: dict = {}
+    sources: list[str] = []
+    if (core.PROCESSED / "plot_crop_history.parquet").exists():
+        h = core.table("plot_crop_history")
+        h = h[(h["unit_id"] == plot_id) & (h["year"] < year)]
+        if len(h):
+            grown = {c for g in h["crop_group"] for c in HISTORY_AS.get(g, (g,))}
+            sig["crop_in_history"] = crop in grown
+            sources.append(f"Crop history: crop maps of {int(h['year'].min())} to {int(h['year'].max())}.")
+    if "crop_in_history" not in sig:
+        sources.append("No crop history for this plot before this year: the inoculant rule was not checked.")
+    if (core.PROCESSED / "plot_biology_timeseries.parquet").exists():
+        b = core.table("plot_biology_timeseries")
+        col = "bio_genus_pct_Bradyrhizobium"
+        if col in b.columns:
+            b = b[(b["plotID"] == plot_id) & (b["year"] == year)]
+            if len(b) and pd.notna(b.iloc[0][col]):
+                sig["bradyrhizobium_pct"] = float(b.iloc[0][col]) / 100
+    return sig, sources
+
+
+@router.get("/plots/{plot_id}/crop-risk/{unit}/{crop}/products", response_model=ProductPlan)
+def crop_products(plot_id: str, unit: str, crop: str):
+    """Product types worth considering for one crop on one unit, before planting and during growth."""
+    site, u, res, uid = _scored(plot_id, unit, crop)
+    dates = [pd.Timestamp(d).date() for d in _ref(u).collect_dates]
+    signals, sources = api_functions.soil_signals(plot_id, int(u.year), dates)
+    hist, hist_sources = _history_signals(plot_id, int(u.year), crop)
+    signals.update(hist)
+    context = _site_context(plot_id)
+    items = products.recommend(res.contributions, res.summary, uid, crop, signals=signals, context=context)
+    names = followup.load_catalogue().set_index("test_id")
+    name = lambda t: names.at[t, "target"] or names.at[t, "method"]  # noqa: E731
+    cat = products.load_catalogue().set_index("product_id")
+    recs = [ProductRecommendation(**{**i, "confirm_with": [TestRef(test_id=t, name=name(t)) for t in i["confirm_with"]]},
+                                  category_label=CATEGORY_LABELS[i["category"]],
+                                  trigger_label=PRODUCT_TRIGGER_LABELS[i["trigger"]]) for i in items]
+    unchecked = [UncheckedProduct(product_id=p, product_class=cat.at[p, "product_class"])
+                 for p in products.unanswered(crop, signals, context)]
+    return ProductPlan(plot_id=plot_id, unit=unit, crop=crop, label=CROP_LABELS.get(crop, crop),
+                       recommendations=recs, unchecked=unchecked, sources=sources + hist_sources, note=PRODUCT_NOTE)

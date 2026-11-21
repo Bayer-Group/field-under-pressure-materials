@@ -1,4 +1,5 @@
 data/
+!static_version/data/
 __pycache__/
 *.part
 .venv/

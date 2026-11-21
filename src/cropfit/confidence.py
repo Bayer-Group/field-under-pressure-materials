@@ -16,7 +16,7 @@ from pydantic import BaseModel
 Level = Literal["high", "medium", "low"]
 ORDER = ["low", "medium", "high"]
 
-# cut-offs (high, medium); below medium is low. Chosen from the ranges in the data, see AGENT.md 3.16
+# cut-offs (high, medium); below medium is low. Chosen from the ranges in the data, see AGENT.md 3.17
 GENES = (100, 20)                  # gene copies behind the statement (its weakest step)
 DEPTH = (300, 100)                 # genome equivalents: mean copies of 5 single-copy marker genes (deep samples 55-843)
 IDENTITY = (75, 60)                # median % protein identity of the genes to their closest known genome

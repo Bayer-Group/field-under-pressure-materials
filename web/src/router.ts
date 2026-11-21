@@ -6,9 +6,10 @@ import { useSyncExternalStore } from 'react'
 //   #/plot/<plot_id>/microbes[/<sample>][?view=roles]  the same plot with its soil microbiome composition (or roles)
 //   #/plot/<plot_id>/functions[/<sample>] the same plot with what its soil microbes are equipped to do
 //   #/plot/<plot_id>/risk[/<unit>[/<crop>]]  the same plot with its crop disease risk
+//   #/plot/<plot_id>/plan[/<unit>[/<crop>]]  the same plot with products to consider for a crop
 //   #/event/<event_id>                    details of one sampling visit
 export type MicrobeView = 'taxonomy' | 'roles'
-export type PlotTab = 'greenness' | 'microbes' | 'functions' | 'risk'
+export type PlotTab = 'greenness' | 'microbes' | 'functions' | 'risk' | 'plan'
 export type Route =
   | { page: 'map'; plotId: string | null; tab: PlotTab; sampleId: string | null; unit: string | null; crop: string | null; view: MicrobeView }
   | { page: 'event'; eventId: string }
@@ -22,10 +23,11 @@ export function parseRoute(hash: string): Route {
   const microbes = plotId !== null && tab === 'microbes'
   const functions = plotId !== null && tab === 'functions'
   const risk = plotId !== null && tab === 'risk'
+  const plan = plotId !== null && tab === 'plan'
   return {
-    page: 'map', plotId, tab: microbes ? 'microbes' : functions ? 'functions' : risk ? 'risk' : 'greenness',
+    page: 'map', plotId, tab: microbes ? 'microbes' : functions ? 'functions' : risk ? 'risk' : plan ? 'plan' : 'greenness',
     sampleId: (microbes || functions) && third ? third : null,
-    unit: risk && third ? third : null, crop: risk && third && fourth ? fourth : null, view,
+    unit: (risk || plan) && third ? third : null, crop: (risk || plan) && third && fourth ? fourth : null, view,
   }
 }
 
@@ -34,6 +36,8 @@ export const microbesHref = (plotId: string, sampleId?: string, view?: MicrobeVi
   `${plotHref(plotId)}/microbes${sampleId ? `/${encodeURIComponent(sampleId)}` : ''}${view === 'roles' ? '?view=roles' : ''}`
 export const riskHref = (plotId: string, unit?: string | null, crop?: string | null) =>
   `${plotHref(plotId)}/risk${unit ? `/${encodeURIComponent(unit)}${crop ? `/${encodeURIComponent(crop)}` : ''}` : ''}`
+export const planHref = (plotId: string, unit?: string | null, crop?: string | null) =>
+  `${plotHref(plotId)}/plan${unit ? `/${encodeURIComponent(unit)}${crop ? `/${encodeURIComponent(crop)}` : ''}` : ''}`
 export const functionsHref = (plotId: string, sampleId?: string) =>
   `${plotHref(plotId)}/functions${sampleId ? `/${encodeURIComponent(sampleId)}` : ''}`
 export const eventHref = (eventId: string) => `#/event/${encodeURIComponent(eventId)}`
