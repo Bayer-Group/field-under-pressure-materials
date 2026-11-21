@@ -1,121 +1,1539 @@
 <!DOCTYPE html>
-<html lang="pl">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>PyQGIS FastAPI Bridge - Web Viewer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#edf3ed" />
+  <title>Your fields — Field Under Pressure</title>
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" />
   <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
-  <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet" />
+  <script src="https://unpkg.com/@turf/turf@7.1.0/turf.min.js"></script>
+  <script src="geometry-preview.js?v=multicut-2"></script>
+  <script src="sandbox-client.js?v=error-detail-2"></script>
+  <script src="farmer-data.js?v=wheat-only-14"></script>
+  <script src="crop-workflow.js?v=validation-errors-4"></script>
   <style>
-    body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; height: 100vh; }
-    #sidebar { width: 340px; background: #ffffff; border-right: 1px solid #e2e8f0; padding: 20px; box-sizing: border-box; display: flex; flex-direction: column; gap: 15px; }
-    #map { flex: 1; height: 100%; }
-    h1 { font-size: 16px; margin: 0; color: #1e293b; }
-    p { font-size: 13px; margin: 0; color: #64748b; line-height: 1.4; }
-    button { background: #0284c7; color: white; border: none; padding: 10px 14px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 13px; }
-    button:hover { background: #0369a1; }
-    pre { background: #0f172a; color: #38bdf8; padding: 10px; border-radius: 4px; font-size: 11px; overflow-x: auto; flex: 1; margin: 0; }
+    :root { color-scheme: light; --green: #176544; --ink: #15221b; --muted: #66766d; --line: rgba(32,62,45,.10); --paper: rgba(248,251,247,.93); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-kerning: normal; }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: var(--ink); background: #e8efe8; }
+    button, input { font: inherit; }
+    button { cursor: pointer; }
+    button:focus-visible, input:focus-visible { outline: 3px solid #2d815d; outline-offset: 3px; }
+    svg { width: 21px; height: 21px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+    .app { position: relative; height: 100vh; height: 100dvh; overflow: hidden; isolation: isolate; }
+    #map { position: absolute; inset: 0; background: #e6ede3; }
+    .zoom-hint { position: absolute; z-index: 2; top: calc(max(16px, env(safe-area-inset-top)) + 62px); left: 16px; max-width: calc(100% - 32px); padding: 8px 12px; border-radius: 12px; background: rgba(248,251,247,.88); color: #385244; box-shadow: 0 3px 12px rgba(24,50,35,.1); backdrop-filter: blur(12px); font-size: 12px; pointer-events: none; }
+    .app:has(.results.visible) .zoom-hint, .app:has(.top.searching) .zoom-hint, .app.cropping .zoom-hint, .app.sandbox-mode .zoom-hint { display: none; }
+    .top { position: absolute; top: max(16px, env(safe-area-inset-top)); left: 16px; right: 16px; display: flex; gap: 8px; z-index: 2; }
+    .app.cropping .top { justify-content: flex-end; }
+    .app.cropping .top .search { display: none; }
+    .search { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; padding: 0 14px; height: 52px; border: 1px solid rgba(255,255,255,.8); border-radius: 17px; background: var(--paper); box-shadow: 0 5px 22px rgba(24,50,35,.12); backdrop-filter: blur(18px); }
+    .search svg { width: 19px; color: #42564a; }
+    .search input { width: 100%; min-width: 0; padding: 0; color: var(--ink); border: 0; outline: 0; background: transparent; font-size: 15px; }
+    .search input::placeholder { color: #69786d; opacity: 1; }
+    .locate { width: 52px; height: 52px; display: grid; place-items: center; flex: none; border: 1px solid rgba(255,255,255,.8); border-radius: 17px; background: var(--paper); color: var(--ink); box-shadow: 0 5px 22px rgba(24,50,35,.12); backdrop-filter: blur(18px); }
+    .locate:active, .option:active { transform: scale(.985); }
+    .sheet { position: absolute; z-index: 2; left: 0; right: 0; bottom: 0; padding: 10px 20px max(20px, env(safe-area-inset-bottom)); border: 1px solid rgba(255,255,255,.85); border-bottom: 0; border-radius: 28px 28px 0 0; background: rgba(235,246,238,.94); box-shadow: 0 -10px 40px rgba(20,50,33,.14); backdrop-filter: blur(25px); max-height: min(68dvh, 570px); overflow-y: auto; transition: transform 360ms cubic-bezier(.22,1,.36,1), opacity 220ms ease; }
+    .sheet.resizing { overflow: hidden; }
+    .handle { width: 36px; height: 4px; border-radius: 4px; background: #a9bdb0; margin: 1px auto 20px; }
+    .eyebrow { color: var(--green); font-size: 11px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; margin: 0 0 8px; }
+    h1 { font-size: clamp(25px, 7vw, 30px); letter-spacing: -.045em; line-height: 1.1; margin: 0; }
+    .subtitle { color: var(--muted); margin: 7px 0 19px; font-size: 14px; line-height: 1.4; }
+    .sheet:has(.selected.visible) .subtitle { display: none; }
+    .sheet:has(.selected.visible) h1 { margin-bottom: 14px; }
+    .options { display: grid; gap: 7px; }
+    .option { width: 100%; min-height: 52px; display: flex; align-items: center; gap: 14px; padding: 0 15px; text-align: left; border: 1px solid rgba(255,255,255,.9); border-radius: 14px; background: rgba(255,255,255,.74); color: var(--ink); font-size: 14px; font-weight: 650; transition: transform 100ms ease, background 100ms ease; }
+    .option .icon { color: var(--green); display: grid; place-items: center; width: 22px; }
+    .option .chevron { margin-left: auto; width: 17px; color: #829188; }
+    .selected { display: none; margin: 0 0 13px; padding: 12px 14px; border: 1px solid rgba(23,101,68,.14); border-radius: 14px; background: rgba(255,255,255,.66); }
+    .selected.visible { display: block; }
+    .selected-head { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
+    .selected-area { margin: 6px 0 0 16px; color: #53685a; font-size: 12px; }
+    .selected-list { margin: 9px 0 0; display: grid; gap: 6px; max-height: 100px; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+    .parcel-row { display: flex; align-items: center; gap: 4px; border-radius: 10px; background: #e7f1e9; }
+    .parcel-details-button { flex: 1; min-width: 0; display: grid; gap: 3px; padding: 9px 10px; text-align: left; border: 0; background: transparent; color: #28573d; }
+    .parcel-details-button strong { font-size: 12px; }
+    .parcel-details-button small { overflow-wrap: anywhere; font-size: 11px; color: #61766a; }
+    .parcel-remove { width: 44px; min-height: 44px; border: 0; background: transparent; color: #53685a; font-size: 20px; }
+    .selected, .parcel-detail-list, .results { font-variant-numeric: tabular-nums; }
+    .parcel-popup { z-index: 3; }
+    .parcel-popup .maplibregl-popup-content { min-width: 235px; max-width: min(80vw, 310px); padding: 16px; border: 1px solid rgba(255,255,255,.85); border-radius: 16px; background: rgba(248,251,247,.96); box-shadow: 0 8px 28px rgba(24,50,35,.2); color: var(--ink); }
+    .parcel-popup .maplibregl-popup-close-button { width: 36px; height: 36px; font-size: 22px; color: #61766a; border-radius: 0 16px 0 10px; }
+    .app.sandbox-mode .search[hidden] { display: none; }
+    dialog.journey-dialog { width: min(520px, calc(100vw - 32px)); max-width: none; padding: clamp(24px, 6vw, 38px); border: 1px solid rgba(255,255,255,.85); border-radius: 28px; color: var(--ink); background: rgba(241,248,242,.96); box-shadow: 0 22px 70px rgba(20,50,33,.25); }
+    dialog.journey-dialog::backdrop { background: rgba(27,48,36,.30); backdrop-filter: blur(9px); }
+    .journey-eyebrow { margin: 0 0 12px; color: var(--green); font-size: 11px; font-weight: 750; letter-spacing: .1em; text-transform: uppercase; }
+    .journey-dialog h2 { margin: 0; font-size: clamp(27px, 7vw, 34px); line-height: 1.08; letter-spacing: -.04em; }
+    .journey-intro { margin: 10px 0 22px; color: #5a6e60; font-size: 15px; line-height: 1.45; }
+    .journey-choices { display: grid; gap: 10px; }
+    .journey-choice { width: 100%; min-height: 80px; padding: 16px; display: flex; align-items: center; justify-content: space-between; gap: 14px; text-align: left; color: var(--ink); background: rgba(255,255,255,.82); border: 1px solid rgba(33,75,47,.1); border-radius: 17px; }
+    .journey-choice:active { transform: scale(.99); }
+    .journey-choice strong, .journey-choice small { display: block; }
+    .journey-choice strong { font-size: 16px; letter-spacing: -.02em; }
+    .journey-choice small { margin-top: 4px; color: #627568; font-size: 13px; line-height: 1.35; }
+    .journey-choice svg { color: #759080; width: 18px; }
+    .sandbox-panel { display: grid; gap: 12px; }
+    .sandbox-panel[hidden] { display: none; }
+    .sandbox-list { display: grid; gap: 7px; max-height: 38dvh; overflow-y: auto; }
+    .sandbox-area { display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%; min-height: 50px; padding: 10px 12px; text-align: left; border: 1px solid rgba(32,62,45,.1); border-radius: 13px; background: rgba(255,255,255,.7); color: var(--ink); }
+    .sandbox-area.active { border-color: var(--green); }
+    .sandbox-risk { font-size: 12px; color: #526658; }
+    .sandbox-detail { padding: 12px; background: rgba(255,255,255,.72); border-radius: 14px; }
+    .sandbox-detail h2 { margin: 0 0 7px; font-size: 17px; }
+    .sandbox-detail p { margin: 5px 0; font-size: 13px; line-height: 1.4; }
+    .sandbox-detail input[type=range] { width: 100%; accent-color: var(--green); }
+    .risk-eyebrow { margin: 3px 0 -7px; color: var(--green); font-size: 11px; font-weight: 750; letter-spacing: .08em; }
+    .sheet .risk-heading { margin: 0; font-size: 25px; letter-spacing: -.04em; }
+    .risk-intro, .risk-note { margin: -5px 0 0; color: #607266; font-size: 13px; line-height: 1.4; }
+    .sandbox-detail { padding: 17px; border: 1px solid rgba(255,255,255,.9); border-radius: 19px; background: rgba(255,255,255,.8); box-shadow: 0 4px 18px rgba(20,50,33,.05); }
+    .risk-detail-head, .risk-list-heading { display: flex; justify-content: space-between; align-items: center; color: #53685b; font-size: 12px; font-weight: 700; }
+    .risk-detail-date { color: #6a7c6f; font-size: 10px; letter-spacing: .08em; }
+    .sandbox-detail h2 { margin: 10px 0 2px; color: var(--ink); font-size: 20px; letter-spacing: -.03em; }
+    .sandbox-detail .risk-selected-date { margin: 0 0 11px; color: #708074; font-size: 12px; font-variant-numeric: tabular-nums; }
+    .risk-reading { min-height: 40px; }
+    .risk-badge { display: inline-flex; align-items: center; max-width: 180px; padding: 6px 9px; border-radius: 10px; font-size: 11px; font-weight: 750; line-height: 1.25; }
+    .risk-low { background: #e0f1e3; color: #21623a; } .risk-medium { background: #fff0d3; color: #85530d; } .risk-high { background: #fbe3df; color: #a23730; } .risk-unknown { background: #edf0ed; color: #52635a; }
+    .risk-explanation { color: #405648; } .sandbox-detail .risk-meta, .risk-loading { color: #64776a; font-size: 12px; }
+    .risk-slider-label { display: grid; gap: 6px; margin-top: 15px; color: #425a49; font-size: 12px; font-weight: 700; }
+    .risk-slider-label input { margin: 3px 0; } .risk-slider-ticks { display: flex; justify-content: space-between; color: #7a8a7d; font-size: 11px; font-weight: 500; }
+    .risk-list-heading { margin: 4px 1px -5px; color: #344f3d; font-size: 13px; }
+    .sandbox-list { max-height: 170px; overscroll-behavior: contain; }
+    .sandbox-area { min-height: 56px; padding: 9px 12px; } .sandbox-area.active { border-color: #6b9b79; background: #fff; box-shadow: 0 0 0 1px #6b9b79; }
+    .risk-area-name { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 13px; }
+    .risk-area-dot { width: 9px; height: 9px; flex: none; border-radius: 50%; background: #89928c; } .risk-dot-low { background: #328250; } .risk-dot-medium { background: #d2932b; } .risk-dot-high { background: #c7463e; }
+    .risk-note { margin: 0 2px; font-size: 11px; } .risk-empty { color: #607266; font-size: 13px; line-height: 1.4; }
+    .sandbox-choice { display: grid; gap: 8px; }
+    .sandbox-choice .crop-outline { text-align: left; }
+    .geometry-popup-message { margin: 8px 0 0; color: #5c7062; font-size: 13px; line-height: 1.4; }
+    .geometry-popup-action { min-height: 44px; }
+    .geometry-fix-actions { display: grid; gap: 6px; margin-top: 10px; max-height: 180px; overflow-y: auto; }
+    .geometry-icon-action { display: flex; align-items: center; justify-content: center; gap: 8px; }
+    .geometry-icon-action svg { width: 20px; height: 20px; }
+    .parcel-popup h2 { padding-right: 22px; margin: 0; font-size: 16px; letter-spacing: -.02em; }
+    .parcel-detail-list { margin: 12px 0 0; display: grid; gap: 9px; }
+    .parcel-detail-list div { display: flex; justify-content: space-between; gap: 16px; font-size: 13px; }
+    .parcel-detail-list dt { color: var(--muted); }
+    .parcel-detail-list dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
+    .crop-panel[hidden], .crop-draw-toolbar[hidden], [hidden] { display: none !important; }
+    .crop-workflow-head h1 { margin: 0 0 6px; }
+    .crop-workflow-head { display: flex; align-items: center; gap: 11px; margin: 0 0 12px; }
+    .crop-workflow-head .crop-back-icon { flex: none; display: grid; place-items: center; width: 44px; height: 44px; min-height: 44px; margin: 0; padding: 10px; border: 0; border-radius: 13px; color: #304b3a; background: rgba(255,255,255,.65); box-shadow: 0 1px 4px rgba(20,50,33,.08); }
+    .crop-back-icon svg { width: 23px; height: 23px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .sheet .crop-workflow-head h1#crop-heading { margin: 0; }
+    .crop-selection-box { margin: 0 0 14px; padding: 14px 16px; border: 1px solid rgba(255,255,255,.9); border-radius: 18px; background: rgba(255,255,255,.62); box-shadow: 0 2px 10px rgba(20,50,33,.04); }
+    .crop-selection-box .crop-selection-summary { padding: 0; }
+    .crop-selection-box .crop-parcel-picker { margin-top: 8px; padding-top: 5px; border-top: 1px solid var(--line); }
+    .crop-selection-summary { padding: 0 1px 14px; color: #53685b; font-size: 12px; }
+    .crop-selection-summary > strong { display: block; margin-bottom: 6px; color: #284b35; font-size: 13px; font-variant-numeric: tabular-nums; }
+    .crop-selection-parcels { display: flex; flex-wrap: wrap; gap: 4px 12px; line-height: 1.4; }
+    .crop-selection-parcels span { font-variant-numeric: tabular-nums; }
+
+    .crop-back, .crop-link { min-height: 44px; padding: 4px 0; border: 0; background: transparent; color: var(--green); font-size: 13px; font-weight: 700; text-align: left; }
+    .crop-back { margin-bottom: 6px; font-size: 14px; }
+    .crop-intro, .crop-muted { color: var(--muted); font-size: 13px; line-height: 1.45; margin: 0 0 14px; }
+    .crop-label { display: grid; gap: 6px; margin: 10px 0; font-size: 12px; font-weight: 700; color: #42564a; }
+    .crop-input { width: 100%; min-height: 46px; padding: 9px 11px; border: 1px solid rgba(32,62,45,.17); border-radius: 12px; color: var(--ink); background: rgba(255,255,255,.94); font: inherit; font-size: 14px; }
+    .crop-card { margin: 12px 0; padding: 15px; border: 1px solid rgba(255,255,255,.9); border-radius: 18px; background: rgba(255,255,255,.76); box-shadow: 0 2px 10px rgba(20,50,33,.04); }
+    .crop-card-heading, .crop-suggestion { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .crop-card-heading strong, .crop-sprays > strong { font-size: 13px; }
+    .crop-area-title { display: flex; align-items: center; gap: 8px; }
+    .crop-area-color { width: 10px; height: 10px; border-radius: 50%; }
+    .crop-suggestion, .crop-notice { color: #285b3e; font-size: 12px; line-height: 1.45; }
+    .crop-notice { padding: 10px 12px; border-radius: 12px; background: rgba(215,234,218,.7); margin: 10px 0; }
+    .crop-outline { width: 100%; min-height: 46px; padding: 9px 12px; border: 1px solid rgba(23,101,68,.24); border-radius: 12px; background: rgba(248,251,247,.85); color: var(--green); font-size: 13px; font-weight: 700; }
+    .crop-sprays { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+    .crop-sprays .crop-muted { margin: 7px 0 0; }
+    .spray-row { display: grid; grid-template-columns: 1fr; gap: 8px; margin-bottom: 10px; padding: 12px; border: 1px solid rgba(32,62,45,.12); border-radius: 14px; background: rgba(255,255,255,.8); }
+    .spray-inputs-grid { display: grid; grid-template-columns: 1fr 120px; gap: 10px; align-items: end; }
+    .spray-row .crop-link { justify-self: start; }
+    .spray-alert-box.pulse-alert { animation: alert-pulse 400ms ease-in-out 3; }
+    @keyframes alert-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.02); box-shadow: 0 0 0 4px rgba(212,149,43,.4); } }
+    /* Crop details: quiet hierarchy and explicit required choices. */
+    .crop-workflow-head .eyebrow { margin-bottom: 5px; }
+    .crop-workflow-head h1 { font-size: 25px; letter-spacing: -.035em; line-height: 1.12; }
+    .crop-workflow-head .crop-intro { font-size: 14px; }
+    .crop-card { padding: 18px; border-radius: 20px; }
+    .crop-card-heading { margin-bottom: 16px; }
+    .crop-area-heading { display: grid; gap: 3px; }
+    .crop-area-heading strong { font-size: 17px; letter-spacing: -.02em; }
+    .crop-area-kicker, .crop-picker-label { color: #607669; font-size: 11px; font-weight: 750; letter-spacing: .05em; }
+    .crop-picker-label { margin: 18px 0 8px; letter-spacing: 0; font-size: 13px; }
+    .crop-parcel-tabs { display: flex; gap: 7px; overflow-x: auto; padding: 2px 1px 8px; scrollbar-width: thin; }
+    .crop-parcel-tab { flex: 0 0 auto; min-height: 44px; padding: 0 14px; border: 1px solid rgba(32,62,45,.13); border-radius: 14px; background: rgba(255,255,255,.7); color: #385244; font-weight: 650; }
+    .crop-parcel-tab[aria-pressed="true"] { background: var(--green); color: white; border-color: var(--green); }
+    .crop-suggestion { align-items: center; gap: 10px; margin: 0 0 16px; padding: 11px 13px; border-radius: 13px; background: #edf5ee; }
+    .crop-suggestion-text { display: grid; gap: 3px; }
+    .crop-suggestion-text span { color: #62776a; font-size: 11px; }
+    .crop-suggestion-text strong { color: #244b34; font-size: 14px; }
+    .crop-suggestion-selected { font-size: 12px; font-weight: 700; }
+    .crop-label { margin: 14px 0; gap: 7px; font-size: 13px; }
+    .crop-input, .apple-date-pill { min-height: 50px; }
+    .crop-select { font-weight: 600; }
+    .crop-boundary { margin: 4px 0 0; }
+    .crop-sprays { margin-top: 20px; padding-top: 18px; }
+    .crop-sprays h3 { margin: 0; font-size: 16px; letter-spacing: -.02em; }
+    .crop-sprays .crop-muted { margin: 6px 0 12px; font-size: 13px; }
+    .spray-required { margin: 0 0 10px; color: #6b5a36; font-size: 12px; font-weight: 650; }
+    .spray-choice-actions { display: grid !important; grid-template-columns: 1fr; gap: 8px; }
+    .spray-btn-add, .spray-btn-none { min-height: 48px !important; text-align: center; }
+    .spray-row { gap: 0; padding: 14px; background: #f6faf6; }
+    .spray-row-head { display: flex; align-items: center; justify-content: space-between; }
+    .spray-row-head strong { font-size: 13px; }
+    .spray-row .crop-label { margin: 8px 0; }
+    .spray-confirmed-info { display: grid !important; gap: 3px !important; }
+    .spray-confirmed-info p { margin: 0; }
+    .crop-area-actions-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+    .crop-action { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-width: 0; min-height: 48px; padding: 8px; }
+    .crop-action svg { width: 19px; height: 19px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .crop-sprays-compact { margin-top: 15px; padding-top: 15px; }
+    .spray-compact-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+    .spray-compact-heading h3 { font-size: 14px; }
+    .spray-compact-heading > span { color: var(--muted); font-size: 11px; }
+    .crop-sprays-compact .crop-label { margin: 8px 0 0; }
+    .crop-sprays-compact .apple-date-pill { min-height: 46px; }
+    .spray-none-link, .spray-add, .spray-remove { min-height: 40px; font-size: 12px; }
+    .spray-compact-confirmed { display: flex; align-items: center; justify-content: space-between; padding: 0 10px; margin-top: 8px; border-radius: 12px; background: #edf6ef; font-size: 13px; font-weight: 650; }
+    .spray-compact-row { margin: 8px 0; padding: 10px 12px; gap: 0; }
+    .spray-number { font-size: 12px; }
+    .spray-mode-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 7px; font-size: 12px; font-weight: 700; color: #42564a; }
+    .spray-mode-toggle { min-height: 38px; font-size: 11px; text-align: right; }
+    .spray-end-picker { margin-top: 0 !important; }
+    .spray-end-picker > span:first-child { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+    .spray-remove { color: #718277; }
+    .required-star { color: #bd3c32; font-weight: 750; }
+    .spray-question-label { display: block; color: #42564a; font-size: 13px; font-weight: 700; }
+    .spray-binary { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; margin-top: 8px; padding: 4px; border-radius: 14px; background: #e7ece8; }
+    .spray-binary-option { min-height: 44px; border: 0; border-radius: 10px; background: transparent; color: #596d60; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; transition: background 160ms ease, box-shadow 160ms ease, color 160ms ease; }
+    .spray-binary-option[aria-checked="true"] { background: #fff; color: #174f34; box-shadow: 0 1px 5px rgba(24,50,35,.18); }
+    .spray-details, .spray-reveal { animation: spray-reveal 220ms cubic-bezier(.22,1,.36,1) both; transform-origin: top; }
+    @keyframes spray-reveal { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+    .spray-compact-row { margin: 6px 0; padding: 0; border: 0; background: transparent; }
+    .spray-duration { margin-top: 10px !important; }
+    .geometry-review { margin: 15px 0 4px; padding: 14px; border: 1px solid rgba(32,62,45,.1); border-radius: 16px; background: rgba(255,255,255,.7); }
+    .geometry-review-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .geometry-review-head strong { font-size: 14px; }
+    .geometry-review-copy, .geometry-demo p { margin: 6px 0; color: #5c7062; font-size: 12px; line-height: 1.4; }
+    .geometry-demo { margin-top: 6px; color: #42634d; font-size: 12px; }
+    .geometry-demo summary { min-height: 40px; padding-top: 11px; cursor: pointer; font-weight: 700; }
+    .geometry-demo .crop-input { min-height: 44px; }
+    .geometry-demo-label { margin: 10px 0; color: #765529; font-size: 11px; font-weight: 750; }
+    .geometry-error, .geometry-ok { margin: 9px 0; font-size: 13px; font-weight: 650; line-height: 1.4; }
+    .geometry-error { color: #a3332d; }
+    .geometry-ok { color: #246342; }
+    .geometry-confirm { display: flex; align-items: flex-start; gap: 9px; margin: 10px 0; padding: 10px; border-radius: 12px; background: #fff3ef; color: #703c35; font-size: 13px; line-height: 1.4; }
+    .geometry-confirm input { flex: none; width: 20px; height: 20px; margin: 0; accent-color: var(--green); }
+    .crop-card-footer { display: flex; justify-content: flex-end; margin-top: 18px; padding-top: 10px; border-top: 1px solid var(--line); }
+    .crop-remove-icon { display: grid; place-items: center; width: 44px; height: 44px; padding: 11px; border: 0; border-radius: 11px; background: transparent; color: #7a8a7f; cursor: pointer; }
+    .crop-remove-icon:hover { background: #f9eae7; color: #9a4136; }
+    .crop-remove-icon svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .crop-action:first-child svg { width: 25px; }
+    .crop-area-actions { display: flex; align-items: center; flex: none; gap: 4px; }
+    .crop-edit-icon { display: grid; place-items: center; width: 48px; height: 48px; padding: 9px; border: 0; border-radius: 14px; color: #3d5045; background: #e9edeb; box-shadow: 0 1px 3px rgba(20,50,33,.08); cursor: pointer; transition: background 150ms ease, transform 150ms ease; }
+    .crop-edit-icon:hover { background: #dce3df; }
+    .crop-edit-icon:active { transform: scale(.96); }
+    .crop-edit-icon svg { width: 29px; height: 29px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .crop-area-identify { display: flex; align-items: center; gap: 11px; padding: 0; border: 0; background: transparent; text-align: left; color: inherit; cursor: pointer; min-height: 44px; }
+    .crop-area-number, .crop-map-label { display: grid; place-items: center; width: 34px; height: 34px; flex: none; border: 2px solid white; border-radius: 50%; background: var(--area-color); color: white; font-size: 14px; font-weight: 750; box-shadow: 0 2px 8px #142c1e55; }
+    .crop-map-label { width: 38px; height: 38px; cursor: pointer; }
+    .crop-map-label-name { position: absolute; top: calc(100% + 4px); left: 50%; transform: translateX(-50%); max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 3px 7px; border-radius: 8px; background: rgba(250, 252, 250, .94); color: #243b2c; box-shadow: 0 2px 7px #142c1e33; font-size: 11px; line-height: 1.2; font-weight: 650; pointer-events: none; }
+    .crop-map-label.active { outline: 3px solid #142c1e; outline-offset: 2px; }
+    .crop-card.active { border-color: #33744c; box-shadow: 0 0 0 2px #33744c55; }
+    .crop-split-toggle { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 50px; padding: 0 2px; border: 0; background: transparent; color: #274b35; font-size: 13px; font-weight: 700; text-align: left; }
+    .crop-switch { position: relative; width: 42px; height: 26px; border-radius: 16px; background: #b7c9bd; transition: background 160ms ease; }
+    .crop-switch::after { content: ''; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: white; box-shadow: 0 1px 3px #0003; transition: transform 160ms ease; }
+    .crop-split-toggle[aria-pressed="true"] .crop-switch { background: var(--green); }
+    .crop-split-toggle[aria-pressed="true"] .crop-switch::after { transform: translateX(16px); }
+    .crop-import { display: block; margin: 8px auto 0; text-align: center; }
+    .crop-geometry-pending { margin: 10px 0; color: #765529; font-size: 12px; line-height: 1.4; }
+    .crop-inline-error { margin: 0 0 14px; padding: 12px; border-radius: 12px; background: #fff1e8; color: #823b1b; font-size: 13px; font-weight: 650; line-height: 1.4; }
+    .crop-panel button:focus-visible, .crop-panel select:focus-visible, .crop-panel input:focus-visible { outline: 3px solid #41865b; outline-offset: 2px; }
+    .crop-vertex { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; background: transparent; touch-action: none; }
+    .crop-vertex::before { content: ''; width: 22px; height: 22px; border: 3px solid #fff; border-radius: 50%; background: var(--green); box-shadow: 0 2px 8px rgba(0,0,0,.35); }
+    .crop-draw-dot { display: block; width: 12px; height: 12px; border: 2px solid #fff; border-radius: 50%; background: var(--green); pointer-events: none; }
+
+    /* --- Animated Apple Design Dropdowns --- */
+    .crop-dropdown-wrap { position: relative; width: 100%; }
+    .crop-dropdown-trigger { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 48px; padding: 10px 14px; border: 1px solid rgba(32,62,45,.18); border-radius: 14px; background: rgba(255,255,255,.95); color: var(--ink); font: inherit; font-size: 14px; font-weight: 550; cursor: pointer; text-align: left; box-shadow: 0 1px 3px rgba(20,50,33,.05); transition: all 160ms cubic-bezier(.22,1,.36,1); }
+    .crop-dropdown-trigger:hover { background: #ffffff; border-color: rgba(23,101,68,.3); }
+    .crop-dropdown-trigger:focus-visible { outline: 2.5px solid var(--green); outline-offset: 2px; }
+    .crop-dropdown-trigger[aria-expanded="true"] { border-color: var(--green); box-shadow: 0 0 0 2px rgba(23,101,68,.18); }
+    .crop-dropdown-trigger[aria-expanded="true"] .crop-dropdown-chevron { transform: rotate(180deg); }
+    .crop-trigger-content { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .crop-trigger-icon { font-size: 18px; line-height: 1; flex: none; }
+    .crop-trigger-text { font-size: 14px; font-weight: 650; color: var(--ink); }
+    .crop-trigger-placeholder { color: #61766a; font-weight: 500; font-size: 14px; }
+    .crop-dropdown-chevron { width: 18px; height: 18px; color: #556c5e; transition: transform 220ms cubic-bezier(.22,1,.36,1); display: flex; align-items: center; flex: none; }
+    .crop-dropdown-menu { margin-top: 8px; padding: 6px; border: 1px solid rgba(255,255,255,.92); border-radius: 18px; background: rgba(255,255,255,.98); box-shadow: 0 10px 34px rgba(20,50,33,.14); backdrop-filter: blur(24px); animation: dropdown-pop 220ms cubic-bezier(.22,1,.36,1); display: grid; gap: 3px; }
+    @keyframes dropdown-pop { from { opacity: 0; transform: translateY(-8px) scale(0.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
+    .crop-dropdown-head { padding: 6px 10px 4px; font-size: 11px; font-weight: 750; letter-spacing: .06em; text-transform: uppercase; color: #728578; }
+    .crop-dropdown-item { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 48px; padding: 8px 12px; border: 0; border-radius: 12px; background: transparent; color: var(--ink); cursor: pointer; text-align: left; transition: background 130ms ease, transform 100ms ease; }
+    .crop-dropdown-item:hover { background: #edf5ee; }
+    .crop-dropdown-item:active { transform: scale(0.99); }
+    .crop-dropdown-item.is-selected { background: #e4f2e7; }
+    .crop-item-left { display: flex; align-items: center; gap: 12px; min-width: 0; }
+    .crop-item-icon { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px; background: #f1f8f3; font-size: 18px; flex: none; }
+    .crop-item-info { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+    .crop-item-title { font-size: 14px; font-weight: 650; color: var(--ink); }
+    .crop-item-sub { font-size: 12px; color: var(--muted); }
+    .crop-item-check { width: 20px; height: 20px; display: grid; place-items: center; color: var(--green); opacity: 0; transition: opacity 120ms ease; flex: none; }
+    .crop-dropdown-item.is-selected .crop-item-check { opacity: 1; }
+
+    /* --- Combined Field Summary --- */
+    .crop-combined-card { margin: 0 0 16px; padding: 16px; border: 1px solid rgba(255,255,255,.9); border-radius: 18px; background: rgba(240,248,242,.92); box-shadow: 0 3px 12px rgba(20,50,33,.06); }
+    .crop-combined-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+    .crop-combined-title { font-size: 18px; letter-spacing: -.03em; margin: 2px 0 0; color: var(--ink); }
+    .crop-combined-badge { display: inline-block; padding: 2px 7px; border-radius: 6px; background: rgba(23,101,68,.12); color: var(--green); font-size: 10px; font-weight: 750; letter-spacing: .06em; text-transform: uppercase; }
+    .crop-total-stat { text-align: right; display: flex; flex-direction: column; align-items: flex-end; }
+    .crop-total-stat .stat-num { font-size: 19px; font-weight: 750; color: var(--green); font-variant-numeric: tabular-nums; line-height: 1.1; }
+    .crop-total-stat .stat-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .crop-parcels-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+    .crop-parcel-pill { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 10px; background: rgba(255,255,255,.8); border: 1px solid rgba(32,62,45,.08); font-size: 12px; color: #2b3e32; font-variant-numeric: tabular-nums; }
+    .crop-parcel-pill strong { font-weight: 700; color: var(--ink); }
+    .crop-parcel-pill small { color: var(--green); font-weight: 600; }
+
+    /* --- Apple-Style Visual Calendar --- */
+    .apple-date-control { position: relative; width: 100%; }
+    .apple-date-pill { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 48px; padding: 10px 14px; border: 1px solid rgba(32,62,45,.18); border-radius: 13px; background: rgba(255,255,255,.95); color: var(--ink); font-size: 14px; font-weight: 550; cursor: pointer; text-align: left; box-shadow: 0 1px 3px rgba(20,50,33,.05); transition: all 160ms ease; font-variant-numeric: tabular-nums; }
+    .apple-date-pill:hover { background: #ffffff; border-color: rgba(23,101,68,.3); }
+    .apple-date-pill:focus-visible { outline: 2.5px solid var(--green); outline-offset: 2px; }
+    .apple-date-pill-left { display: flex; align-items: center; gap: 10px; }
+    .apple-date-pill-left svg { width: 18px; height: 18px; color: var(--green); }
+    .apple-date-pill-chevron { width: 16px; height: 16px; color: #6d7f73; transition: transform 200ms ease; display: flex; align-items: center; }
+    .apple-date-pill[aria-expanded="true"] .apple-date-pill-chevron { transform: rotate(180deg); }
+    .apple-calendar-popover { margin: 10px auto; max-width: 340px; padding: 14px; border: 1px solid rgba(255,255,255,.9); border-radius: 18px; background: rgba(255,255,255,.98); box-shadow: 0 8px 30px rgba(20,50,33,.12); backdrop-filter: blur(20px); animation: cal-pop 200ms cubic-bezier(.22,1,.36,1); font-variant-numeric: tabular-nums; }
+    @keyframes cal-pop { from { opacity: 0; transform: translateY(-6px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+    .cal-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .cal-nav-title { font-size: 14px; font-weight: 700; color: var(--ink); }
+    .cal-nav-actions { display: flex; align-items: center; gap: 4px; }
+    .cal-nav-btn { width: 34px; height: 34px; display: grid; place-items: center; border: 0; border-radius: 9px; background: #edf5ee; color: var(--green); font-size: 16px; font-weight: 700; cursor: pointer; transition: background 120ms ease; }
+    .cal-nav-btn:hover { background: #dcece0; }
+    .cal-today-btn { height: 34px; padding: 0 10px; border: 0; border-radius: 9px; background: #edf5ee; color: var(--green); font-size: 12px; font-weight: 700; cursor: pointer; }
+    .cal-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; margin-bottom: 6px; font-size: 11px; font-weight: 700; color: #7b8e82; }
+    .cal-days-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+    .cal-day-cell { position: relative; aspect-ratio: 1; min-height: 36px; display: grid; place-items: center; border: 0; border-radius: 50%; background: transparent; color: var(--ink); font-size: 13px; font-weight: 550; cursor: pointer; transition: all 120ms ease; }
+    .cal-day-cell:hover:not(.is-selected) { background: #ebf5ee; }
+    .cal-day-cell.out-of-month { color: #adbdb2; font-weight: 400; }
+    .cal-day-cell.is-today:not(.is-selected) { color: var(--green); font-weight: 800; }
+    .cal-day-cell.is-today:not(.is-selected)::after { content: ''; position: absolute; bottom: 3px; width: 4px; height: 4px; border-radius: 50%; background: var(--green); }
+    .cal-day-cell.is-selected { background: var(--green) !important; color: #ffffff !important; font-weight: 750; box-shadow: 0 2px 8px rgba(23,101,68,.35); }
+    .cal-manual-box { margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(32,62,45,.08); display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .cal-manual-box span { font-size: 12px; color: var(--muted); white-space: nowrap; }
+    .cal-manual-input { flex: 1; min-width: 0; height: 36px; padding: 0 10px; border: 1px solid rgba(32,62,45,.16); border-radius: 9px; background: #ffffff; color: var(--ink); font-size: 13px; font-variant-numeric: tabular-nums; }
+    .cal-manual-input:focus-visible { outline: 2px solid var(--green); outline-offset: 1px; }
+
+    /* --- Spray Requirement Alert & Choices --- */
+    .crop-sprays-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+    .spray-alert-box { padding: 14px; border: 1.5px solid #d4952b; border-radius: 16px; background: rgba(254, 248, 237, 0.95); box-shadow: 0 3px 12px rgba(212, 149, 43, 0.12); margin: 10px 0; }
+    .spray-alert-head { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 12px; }
+    .spray-alert-icon { font-size: 20px; line-height: 1; flex: none; }
+    .spray-alert-head strong { display: block; font-size: 13px; color: #7c4d05; font-weight: 750; margin-bottom: 2px; }
+    .spray-alert-head p { margin: 0; font-size: 12px; color: #8c5e14; line-height: 1.4; }
+    .spray-choice-actions { display: flex; flex-direction: column; gap: 8px; }
+    @media (min-width: 480px) { .spray-choice-actions { flex-direction: row; } }
+    .spray-btn-none { flex: 1; min-height: 44px; padding: 0 12px; border: 1.5px solid rgba(23, 101, 68, 0.35); border-radius: 12px; background: rgba(255, 255, 255, 0.95); color: var(--green); font-size: 13px; font-weight: 700; cursor: pointer; transition: all 140ms ease; }
+    .spray-btn-none:hover { background: #edf5ee; border-color: var(--green); }
+    .spray-btn-add { flex: 1; min-height: 44px; padding: 0 12px; border: 0; border-radius: 12px; background: var(--green); color: #ffffff; font-size: 13px; font-weight: 700; cursor: pointer; box-shadow: 0 2px 8px rgba(23, 101, 68, 0.25); transition: all 140ms ease; }
+    .spray-btn-add:hover { background: #135438; }
+    .spray-confirmed-none { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; border: 1px solid rgba(23, 101, 68, 0.25); border-radius: 14px; background: rgba(238, 248, 241, 0.92); margin: 10px 0; }
+    .spray-confirmed-info { display: flex; align-items: center; gap: 10px; }
+    .spray-confirmed-check { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; background: var(--green); color: #fff; font-size: 13px; font-weight: 800; flex: none; }
+    .spray-confirmed-info strong { display: block; font-size: 13px; color: #173824; }
+    .spray-confirmed-info p { margin: 0; font-size: 11px; color: #4f6857; }
+
+    /* --- Toolbar & Snapping Magnet --- */
+    .crop-draw-toolbar { position: absolute; z-index: 4; left: 16px; right: 16px; bottom: calc(var(--drawer-height, 61px) + 12px); padding: 12px; border: 1px solid rgba(255,255,255,.9); border-radius: 16px; background: rgba(248,251,247,.96); box-shadow: 0 8px 28px rgba(24,50,35,.18); }
+    .partition-undo { min-height: 38px; padding: 0 3px; }
+    .crop-vertex-notice { margin: 0 0 8px; color: #345643; font-size: 13px; line-height: 1.35; }
+    .crop-vertex-notice:empty { display: none; }
+    .crop-draw-actions { display: flex; gap: 8px; }
+    .crop-draw-actions button { flex: 1; min-height: 48px; padding: 0 16px; border: 0; border-radius: 13px; background: #e1ede3; color: var(--green); font-weight: 700; font-size: 14px; }
+    .crop-draw-actions button#crop-draw-finish { background: #14221a; color: #fff; }
+    .crop-draw-actions button:disabled { opacity: .45; }
+    .locate.crop-magnet-btn { display: none; transition: all 160ms cubic-bezier(.22,1,.36,1); }
+    .app.cropping .locate.crop-magnet-btn { display: none; }
+    .locate.crop-magnet-btn.active { background: var(--green); color: #ffffff; border-color: var(--green); box-shadow: 0 4px 18px rgba(23,101,68,.35); }
+    .locate.crop-magnet-btn:active { transform: scale(.96); }
+    .crop-snap-indicator { position: absolute; width: 22px; height: 22px; border-radius: 50%; border: 2.5px solid #fff; background: rgba(23,101,68,.88); box-shadow: 0 0 14px rgba(23,101,68,.8); pointer-events: none; transform: translate(-50%, -50%); animation: snap-pulse 450ms ease-out forwards; }
+    @keyframes snap-pulse { 0% { transform: translate(-50%, -50%) scale(0.3); opacity: 0; } 50% { transform: translate(-50%, -50%) scale(1.35); opacity: 1; } 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.95; } }
+    .primary { width: 100%; min-height: 52px; margin-top: 12px; border: 0; border-radius: 15px; background: #14221a; color: #fff; font-size: 14px; font-weight: 700; }
+    .primary:disabled { opacity: .38; cursor: not-allowed; }
+    .status { position: static; margin: 0 0 12px; padding: 10px 13px; border-radius: 12px; font-size: 13px; line-height: 1.4; }
+    .status:empty { display: none; }
+    .status { background: rgba(239,247,240,.84); border: 1px solid rgba(255,255,255,.7); backdrop-filter: blur(18px); color: #294c36; }
+    .map-guide { display: none; position: absolute; z-index: 3; left: 50%; top: calc((100% - var(--drawer-height, 61px)) / 2); width: min(84vw, 320px); transform: translate(-50%, -50%); justify-items: center; gap: 0; text-align: center; pointer-events: none; }
+    .map-guide.visible { display: grid; animation: guide-enter 260ms cubic-bezier(.22,1,.36,1) both; }
+    .map-guide-illustration { width: min(100%, 270px); height: 150px; overflow: visible; filter: drop-shadow(0 2px 3px rgba(22,49,31,.24)); }
+    .demo-parcel { fill: rgba(237,246,237,.20); stroke: rgba(255,255,255,.75); stroke-width: 2.5; }
+    .demo-parcel-line { fill: none; stroke: rgba(33,83,55,.4); stroke-width: 1.2; }
+    .demo-marquee-parcel { animation: marquee-parcel 4.2s ease-in-out infinite; }
+    .demo-marquee-parcel.second { animation-name: marquee-parcel-second; }
+    .demo-marquee-parcel.third { animation-name: marquee-parcel-third; }
+    .demo-marquee { fill: rgba(23,101,68,.12); stroke: #176544; stroke-width: 3; stroke-dasharray: 7 4; stroke-dashoffset: 40; transform-box: fill-box; transform-origin: left top; animation: select-area 4.2s ease-in-out infinite; }
+    .demo-pointer { fill: #fff; stroke: #176544; stroke-width: 2.2; stroke-linejoin: round; filter: drop-shadow(0 2px 3px rgba(0,0,0,.4)); animation: drag-pointer 4.2s ease-in-out infinite; }
+    .map-guide-copy { display: grid; gap: 2px; padding: 0 8px; color: #17251c; text-shadow: 0 1px 7px rgba(255,255,255,.95), 0 0 2px rgba(255,255,255,.95); }
+    .map-guide-copy strong { font-size: 13px; }
+    .map-guide-copy span { color: #3d5144; font-size: 11px; line-height: 1.35; }
+    .map-guide-options { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; width: 100%; }
+    .map-guide-option { display: grid; justify-items: center; align-content: start; min-width: 0; }
+    .map-guide-option .map-guide-illustration { width: min(100%, 160px); height: 115px; }
+    .map-guide-option .map-guide-copy { gap: 3px; }
+    .map-guide-option .map-guide-copy span { max-width: 145px; }
+    .demo-tap-fill { fill: rgba(23,101,68,.14); stroke: #176544; stroke-width: 2.5; animation: tap-fill 3.4s ease-in-out infinite; }
+    .demo-tap-ring { fill: none; stroke: #176544; stroke-width: 3; transform-box: fill-box; transform-origin: center; animation: tap-ring 3.4s ease-out infinite; }
+    .demo-tap-pointer { fill: #fff; stroke: #176544; stroke-width: 2.2; stroke-linejoin: round; filter: drop-shadow(0 2px 3px rgba(0,0,0,.4)); animation: tap-pointer 3.4s ease-in-out infinite; }
+    @keyframes tap-fill { 0%,30% { fill: rgba(23,101,68,.08); } 40%,77% { fill: rgba(23,101,68,.42); } 88%,100% { fill: rgba(23,101,68,.08); } }
+    @keyframes tap-ring { 0%,30% { opacity: 0; transform: scale(.3); } 35% { opacity: .9; } 55%,100% { opacity: 0; transform: scale(2); } }
+    @keyframes tap-pointer { 0%,15% { opacity: 0; transform: translate(106px, 90px); } 25% { opacity: 1; transform: translate(92px, 72px); } 37% { transform: translate(92px, 76px) scale(.94); } 48%,75% { opacity: 1; transform: translate(92px, 72px); } 90%,100% { opacity: 0; transform: translate(106px, 90px); } }
+    .crop-guide .map-guide-illustration { width: min(72vw, 220px); }
+    .demo-draw-line { fill: rgba(23,101,68,.24); stroke: #176544; stroke-width: 3; stroke-linejoin: round; animation: draw-shape 4.5s linear infinite; }
+    .demo-draw-triangle { animation: draw-triangle 4.5s ease-in-out infinite; }
+    .demo-draw-point { fill: #176544; stroke: white; stroke-width: 3; }
+    .demo-draw-point.p1 { animation: draw-point-one 4.5s infinite; }
+    .demo-draw-point.p2 { animation: draw-point-two 4.5s infinite; }
+    .demo-draw-point.p3 { animation: draw-point-three 4.5s linear infinite; }
+    .demo-draw-point.p4 { animation: draw-point-four 4.5s linear infinite; }
+    .demo-draw-pointer { fill: white; stroke: #176544; stroke-width: 2.2; stroke-linejoin: round; filter: drop-shadow(0 2px 3px rgba(0,0,0,.4)); animation: draw-pointer 4.5s linear infinite; }
+    @keyframes draw-point-one { 0%,10% { opacity: 0; } 15%,97% { opacity: 1; } 100% { opacity: 0; } }
+    @keyframes draw-point-two { 0%,26% { opacity: 0; } 31%,97% { opacity: 1; } 100% { opacity: 0; } }
+    @keyframes draw-point-three { 0%,42% { opacity: 0; transform: translate(0,0); } 47%,82% { opacity: 1; transform: translate(0,0); } 92% { opacity: 1; transform: translate(-15px,-75px); } 94%,100% { opacity: 0; transform: translate(-15px,-75px); } }
+    @keyframes draw-point-four { 0%,58% { opacity: 0; transform: translate(0,0); } 63%,65% { opacity: 1; transform: translate(0,0); } 68% { opacity: 1; transform: translate(8px,-8px); } 71% { opacity: 1; transform: translate(0,-16px); } 74% { opacity: 1; transform: translate(-8px,-8px); } 77%,97% { opacity: 1; transform: translate(0,0); } 100% { opacity: 0; transform: translate(0,0); } }
+    @keyframes draw-triangle { 0%,42% { opacity: 0; } 47%,59% { opacity: 1; } 63%,100% { opacity: 0; } }
+    @keyframes draw-shape { 0%,58% { opacity: 0; d: path('M35 30 L150 35 L165 110 L52 118 Z'); } 63%,65% { opacity: 1; d: path('M35 30 L150 35 L165 110 L52 118 Z'); } 68% { opacity: 1; d: path('M35 30 L150 35 L165 110 L60 110 Z'); } 71% { opacity: 1; d: path('M35 30 L150 35 L165 110 L52 102 Z'); } 74% { opacity: 1; d: path('M35 30 L150 35 L165 110 L44 110 Z'); } 77%,82% { opacity: 1; d: path('M35 30 L150 35 L165 110 L52 118 Z'); } 92%,97% { opacity: 1; d: path('M35 30 L150 35 L150 35 L52 118 Z'); } 100% { opacity: 0; d: path('M35 30 L150 35 L150 35 L52 118 Z'); } }
+    @keyframes draw-pointer { 0%,4% { opacity: 0; transform: translate(35px,30px); } 10%,15% { opacity: 1; transform: translate(35px,30px); } 26%,31% { opacity: 1; transform: translate(150px,35px); } 42%,47% { opacity: 1; transform: translate(165px,110px); } 58%,65% { opacity: 1; transform: translate(52px,118px); } 68% { opacity: 1; transform: translate(60px,110px); } 71% { opacity: 1; transform: translate(52px,102px); } 74% { opacity: 1; transform: translate(44px,110px); } 77% { opacity: 1; transform: translate(52px,118px); } 82% { opacity: 1; transform: translate(165px,110px); } 92%,97% { opacity: 1; transform: translate(150px,35px); } 100% { opacity: 0; transform: translate(150px,35px); } }
+    .vertex-demo-shape { fill: rgba(23,101,68,.24); stroke: #176544; stroke-width: 3; stroke-linejoin: round; animation: vertex-shape 4.5s linear infinite; }
+    .vertex-demo-first { animation: vertex-first 4.5s linear infinite; }
+    @keyframes vertex-first { 0%,10% { transform: translate(0,0); } 23%,95% { transform: translate(10px,15px); } 100% { transform: translate(0,0); } }
+    .vertex-demo-added { animation: vertex-added 4.5s linear infinite; }
+    .vertex-demo-pointer { fill: white; stroke: #176544; stroke-width: 2.2; stroke-linejoin: round; filter: drop-shadow(0 2px 3px rgba(0,0,0,.4)); animation: vertex-pointer 4.5s linear infinite; }
+    @keyframes vertex-shape { 0%,10% { d: path('M35 35 L105 35 L170 35 L170 110 L35 110 Z'); } 23%,31% { d: path('M45 50 L105 42 L170 35 L170 110 L35 110 Z'); } 44%,56% { d: path('M45 50 L105 42 L170 35 L170 110 L35 110 Z'); } 76%,100% { d: path('M45 50 L170 35 L170 35 L170 110 L35 110 Z'); } }
+    @keyframes vertex-added { 0%,36% { opacity: 0; transform: translate(0,0); } 42%,56% { opacity: 1; transform: translate(0,0); } 74% { opacity: 1; transform: translate(65px,-7px); } 78%,100% { opacity: 0; transform: translate(65px,-7px); } }
+    @keyframes vertex-pointer { 0%,3% { opacity: 0; transform: translate(35px,35px); } 10% { opacity: 1; transform: translate(35px,35px); } 23%,28% { opacity: 1; transform: translate(45px,50px); } 38%,56% { opacity: 1; transform: translate(105px,42px); } 74%,82% { opacity: 1; transform: translate(170px,35px); } 93%,100% { opacity: 0; transform: translate(170px,35px); } }
+    .guide-touch { display: none; }
+    @media (hover: none) { .guide-touch { display: inline; } .guide-mouse { display: none; } }
+    @keyframes guide-enter { from { opacity: 0; transform: translate(-50%, calc(-50% + 8px)); } to { opacity: 1; transform: translate(-50%, -50%); } }
+    @keyframes marquee-parcel { 0%,25% { fill: rgba(237,246,237,.20); } 35%,70% { fill: rgba(23,101,68,.42); } 82%,100% { fill: rgba(237,246,237,.20); } }
+    @keyframes marquee-parcel-second { 0%,38% { fill: rgba(237,246,237,.20); } 48%,70% { fill: rgba(23,101,68,.42); } 82%,100% { fill: rgba(237,246,237,.20); } }
+    @keyframes marquee-parcel-third { 0%,49% { fill: rgba(237,246,237,.20); } 56%,70% { fill: rgba(23,101,68,.42); } 82%,100% { fill: rgba(237,246,237,.20); } }
+    @keyframes select-area { 0%,20% { opacity: 0; transform: scale(.01); } 21% { opacity: 1; transform: scale(.01); } 54%,66% { opacity: 1; transform: scale(1); } 78%,100% { opacity: 0; transform: scale(1); } }
+    @keyframes drag-pointer { 0%,12% { opacity: 0; transform: translate(18px, 22px); } 20% { opacity: 1; transform: translate(18px, 22px); } 54%,66% { opacity: 1; transform: translate(157px, 94px); } 78%,100% { opacity: 0; transform: translate(157px, 94px); } }
+    .sheet.collapsed { overflow: hidden; padding-bottom: max(8px, env(safe-area-inset-bottom)); }
+    .drawer-content { opacity: 1; overflow: visible; transition: opacity 150ms ease; }
+    .sheet.collapsed .drawer-content, .sheet.collapsed .crop-panel { height: 0; opacity: 0; overflow: hidden; pointer-events: none; }
+    .drawer-toggle { display: block; width: 100%; border: 0; background: transparent; padding: 1px 0 10px; cursor: pointer; touch-action: none; user-select: none; }
+    .drawer-toggle .handle { display: block; margin: 1px auto 4px; }
+    .drawer-toggle span:last-child { display: none; color: var(--green); font-size: 11px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
+    .sheet.collapsed .drawer-toggle span:last-child { display: block; }
+    .sheet.search-hidden { transform: translateY(calc(100% + 12px)); opacity: 0; pointer-events: none; }
+    .top.searching { position: absolute; z-index: 6; top: 50%; left: 50%; right: auto; width: min(90vw, 440px); transform: translate(-50%, -50%); transition: top 360ms cubic-bezier(.22,1,.36,1), width 360ms cubic-bezier(.22,1,.36,1); }
+    .top.searching .locate { display: none; }
+    .top.searching .search { height: 60px; box-shadow: 0 12px 40px rgba(24,50,35,.24); }
+    .results.searching { position: absolute; z-index: 6; top: calc(50% + 38px); left: 50%; right: auto; width: min(90vw, 440px); max-height: min(32dvh, 260px); overflow: auto; transform: translateX(-50%); }
+    .parcel-step { display: none; position: absolute; z-index: 3; top: calc(max(16px, env(safe-area-inset-top)) + 58px); left: 16px; right: 76px; }
+    .parcel-step.visible { display: flex; }
+    .parcel-step.searching { z-index: 6; top: calc(50% + 38px); left: 50%; right: auto; width: min(90vw, 440px); transform: translateX(-50%); }
+    .parcel-step .search { width: 100%; }
+    .results.after-parcel-step { top: calc(max(16px, env(safe-area-inset-top)) + 116px); }
+    .results.searching.after-parcel-step { top: calc(50% + 96px); max-height: min(25dvh, 220px); }
+    .search-backdrop { display: none; position: absolute; inset: 0; z-index: 5; background: rgba(16,35,24,.23); }
+    .search-backdrop.visible { display: block; }
+    dialog { width: min(90vw, 390px); padding: 24px; border: 1px solid rgba(255,255,255,.9); border-radius: 24px; color: var(--ink); background: rgba(242,249,243,.97); box-shadow: 0 16px 50px rgba(15,40,25,.22); }
+    dialog::backdrop { background: rgba(16,35,24,.32); }
+    dialog h2 { font-size: 22px; letter-spacing: -.035em; margin: 0 0 8px; }
+    dialog p { color: var(--muted); font-size: 14px; line-height: 1.45; }
+    .upload-zone { display: flex; align-items: center; justify-content: center; flex-direction: column; min-height: 172px; padding: 20px; margin: 18px 0 10px; text-align: center; border: 1.5px dashed #9bb6a3; border-radius: 16px; background: rgba(255,255,255,.62); cursor: pointer; }
+    .upload-zone svg { width: 31px; height: 31px; color: var(--green); margin-bottom: 13px; }
+    .upload-zone strong { font-size: 14px; }
+    .upload-zone small { color: var(--muted); margin-top: 6px; font-size: 12px; line-height: 1.4; }
+    .upload-zone:focus-within { outline: 3px solid #2d815d; outline-offset: 3px; }
+    .upload-zone input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+    .selection-rectangle { display: none; position: absolute; z-index: 1; pointer-events: none; border: 1.5px solid var(--green); background: rgba(23,101,68,.16); }
+    .selection-rectangle.visible { display: block; }
+    dialog .close-dialog { border: 0; padding: 10px 16px; border-radius: 12px; background: #14221a; color: #fff; }
+    .maplibregl-ctrl-top-right { top: auto; bottom: calc(var(--drawer-height, 370px) + max(26px, env(safe-area-inset-bottom) + 12px)); right: 16px; transition: bottom 220ms ease; }
+    .maplibregl-ctrl-group { border-radius: 17px !important; overflow: hidden; box-shadow: 0 5px 22px rgba(24,50,35,.12) !important; }
+    .maplibregl-ctrl-group button { width: 52px !important; height: 52px !important; background: rgba(248,251,247,.94) !important; }
+
+    .results { display: none; position: absolute; z-index: 3; top: calc(max(16px, env(safe-area-inset-top)) + 58px); left: 16px; right: 76px; padding: 6px; border-radius: 14px; background: rgba(250,252,249,.97); box-shadow: 0 5px 20px rgba(24,50,35,.15); backdrop-filter: blur(18px); }
+    .results.visible { display: grid; max-height: min(45dvh, 320px); overflow-y: auto; }
+    .results button { display: grid; gap: 3px; width: 100%; text-align: left; min-height: 52px; border: 0; border-radius: 9px; background: transparent; color: var(--ink); padding: 8px 10px; }
+    .result-title { font-size: 14px; font-weight: 700; }
+    .result-meta { color: #596d60; font-size: 12px; }
+    .result-id { color: #89948d; font-size: 10px; }
+    .results-hint { color: #286346; padding: 10px 10px 8px; font-size: 12px; line-height: 1.4; }
+    .results button:hover { background: #edf5ee; }
+    .maplibregl-ctrl-bottom-right { bottom: min(68dvh, 570px); }
+    .maplibregl-ctrl-attrib { font-size: 10px !important; }
+    @media (min-width: 720px) { .top { left: 24px; right: 24px; width: auto; top: 24px; } .sheet { left: 24px; bottom: 0; right: auto; width: 390px; max-height: calc(100dvh - 115px); border-radius: 25px 25px 0 0; border-bottom: 0; } .sheet.search-hidden { transform: translateY(calc(100% + 12px)); } .maplibregl-ctrl-top-right { bottom: max(26px, env(safe-area-inset-bottom) + 12px); } .maplibregl-ctrl-bottom-right { bottom: 0; } .results, .parcel-step { left: 24px; right: 84px; width: auto; top: 82px; } .results.after-parcel-step { top: 140px; } .parcel-step.searching { top: calc(50% + 38px); } .results.searching.after-parcel-step { top: calc(50% + 96px); } }
+    @media (prefers-reduced-motion: reduce) { .vertex-demo-shape, .vertex-demo-pointer, .vertex-demo-added, .vertex-demo-first { animation: none; } .vertex-demo-added { opacity: 1; } .vertex-demo-pointer { transform: translate(105px,42px); } .demo-marquee-parcel { animation: none !important; fill: rgba(23,101,68,.35); } .demo-draw-triangle { display: none; } .demo-tap-pointer, .demo-draw-pointer { opacity: 1; animation: none; transform: translate(92px, 72px); } .demo-draw-line, .demo-draw-point { opacity: 1; animation: none !important; } .demo-tap-fill { animation: none; fill: rgba(23,101,68,.35); } .demo-tap-ring { animation: none; opacity: 0; } *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; scroll-behavior: auto !important; } .demo-marquee { opacity: 1; transform: none; stroke-dashoffset: 0; } .demo-pointer { opacity: 1; transform: translate(157px, 94px); } }
   </style>
 </head>
 <body>
-  <div id="sidebar">
-    <h1>🌐 PyQGIS FastAPI Bridge</h1>
-    <p>Generyczny podgląd mapowy łączący MapLibre GL JS z backendem analitycznym.</p>
-    
-    <button onclick="fetchGeoJson()">📥 Fetch GeoJSON from API</button>
-    <div id="status" style="font-size: 12px; color: #64748b;"></div>
-    
-    <pre id="output">// Odpowiedź z serwera pojawi się tutaj</pre>
-  </div>
+  <main class="app">
+    <div id="map" aria-label="Parcel map"></div>
+    <div id="selection-rectangle" class="selection-rectangle" aria-hidden="true"></div>
+    <div id="search-backdrop" class="search-backdrop"></div>
+    <aside id="map-guide" class="map-guide" role="note" aria-label="Animation showing parcel selection" aria-hidden="true">
+      <div class="map-guide-options">
+        <div class="map-guide-option">
+          <svg class="map-guide-illustration" viewBox="0 0 220 150" aria-hidden="true">
+            <path class="demo-parcel" d="m20 27 68-13 23 47-41 35-59-20z" />
+            <path class="demo-parcel" d="m90 14 75 13 19 53-73-19z" />
+            <path class="demo-tap-fill" d="m70 98 41-35 73 19-14 54-82 4z" />
+            <circle class="demo-tap-ring" cx="92" cy="72" r="9" />
+            <path class="demo-tap-pointer" d="M0 0a3 3 0 0 1 3 3v12l2-1a3 3 0 0 1 4 1l2-1a3 3 0 0 1 4 2l1 1a3 3 0 0 1 4 3v7c0 7-4 12-11 12H7c-4 0-7-2-9-5l-6-9a3 3 0 0 1 5-4l3 4V3a3 3 0 0 1 3-3Z" />
+          </svg>
+          <div class="map-guide-copy"><strong>Tap a parcel</strong><span>Add or deselect with one tap.</span></div>
+        </div>
+        <div class="map-guide-option">
+      <svg class="map-guide-illustration" viewBox="0 0 220 150" aria-hidden="true">
+        <path class="demo-parcel demo-marquee-parcel" d="m20 27 68-13 23 47-41 35-59-20z" />
+        <path class="demo-parcel demo-marquee-parcel second" d="m90 14 75 13 19 53-73-19z" />
+        <path class="demo-parcel demo-marquee-parcel third" d="m70 98 41-35 73 19-14 54-82 4z" />
+        <path class="demo-parcel-line" d="m13 76 57 22m20-84-2 60m19-13-14 54m72-101 19 53" />
+        <rect class="demo-marquee" x="18" y="22" width="139" height="72" rx="4" />
+        <path class="demo-pointer" d="M0 0a3 3 0 0 1 3 3v12l2-1a3 3 0 0 1 4 1l2-1a3 3 0 0 1 4 2l1 1a3 3 0 0 1 4 3v7c0 7-4 12-11 12H7c-4 0-7-2-9-5l-6-9a3 3 0 0 1 5-4l3 4V3a3 3 0 0 1 3-3Z" />
+      </svg>
+          <div class="map-guide-copy"><strong>Hold and drag</strong><span>Select several parcels with a box.</span></div>
+        </div>
+      </div>
+      <div class="map-guide-copy"><span class="guide-touch">Hold and release a parcel to see details.</span><span class="guide-mouse">Right-click a parcel to see details.</span></div>
+    </aside>
+    <aside id="crop-guide" class="map-guide crop-guide" role="note" aria-label="How to draw a crop area" aria-hidden="true">
+      <svg class="map-guide-illustration" viewBox="0 0 220 150" aria-hidden="true">
+        <path class="demo-parcel" d="M18 20 L175 17 L196 129 L25 138 Z" />
+        <path class="demo-draw-line demo-draw-triangle" d="M35 30 L150 35 L165 110 Z" />
+        <path class="demo-draw-line" d="M35 30 L150 35 L165 110 L52 118 Z" />
+        <circle class="demo-draw-point p1" cx="35" cy="30" r="6" />
+        <circle class="demo-draw-point p2" cx="150" cy="35" r="6" />
+        <circle class="demo-draw-point p3" cx="165" cy="110" r="6" />
+        <circle class="demo-draw-point p4" cx="52" cy="118" r="6" />
+        <path class="demo-draw-pointer" d="M0 0a3 3 0 0 1 3 3v12l2-1a3 3 0 0 1 4 1l2-1a3 3 0 0 1 4 2l1 1a3 3 0 0 1 4 3v7c0 7-4 12-11 12H7c-4 0-7-2-9-5l-6-9a3 3 0 0 1 5-4l3 4V3a3 3 0 0 1 3-3Z" />
+      </svg>
 
-  <div id="map"></div>
-
-  <script src="farmer-data.js"></script>
+      <div class="map-guide-copy"><strong>Draw a crop boundary</strong><span>Tap at least three points on the map. Add a point on an edge or drag it onto another to remove it.</span></div>
+    </aside>
+    <aside id="crop-edit-guide" class="map-guide crop-guide" role="note" aria-label="How to edit a crop boundary" aria-hidden="true">
+      <svg class="map-guide-illustration" viewBox="0 0 220 150" aria-hidden="true">
+        <path class="demo-parcel" d="M18 20 L190 17 L196 135 L20 138 Z" />
+        <path class="vertex-demo-shape" d="M35 35 L170 35 L170 110 L35 110 Z" />
+        <circle class="demo-draw-point vertex-demo-first" cx="35" cy="35" r="6" />
+        <circle class="demo-draw-point" cx="170" cy="35" r="6" />
+        <circle class="demo-draw-point" cx="170" cy="110" r="6" />
+        <circle class="demo-draw-point" cx="35" cy="110" r="6" />
+        <circle class="demo-draw-point vertex-demo-added" cx="105" cy="42" r="6" />
+        <path class="vertex-demo-pointer" d="M0 0a3 3 0 0 1 3 3v12l2-1a3 3 0 0 1 4 1l2-1a3 3 0 0 1 4 2l1 1a3 3 0 0 1 4 3v7c0 7-4 12-11 12H7c-4 0-7-2-9-5l-6-9a3 3 0 0 1 5-4l3 4V3a3 3 0 0 1 3-3Z" />
+      </svg>
+      <div class="map-guide-copy"><strong>Edit boundary</strong><span>Move a point. Tap an edge to add one; drag it onto another to remove it.</span></div>
+    </aside>
+    <div class="top" id="top-controls">
+      <form class="search" id="search-form" role="search">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4 4"/></svg>
+        <input id="parcel-number" aria-label="Village, parcel number or identifier" placeholder="Village, parcel number or identifier" autocomplete="off" />
+      </form>
+      <button class="locate crop-magnet-btn active" id="crop-draw-magnet" type="button" aria-label="Snap to boundaries" title="Snap to boundaries" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v7a8 8 0 0 0 16 0V4M4 4h4m8 0h4M4 8h4m8 0h4"/></svg></button>
+      <button class="locate" id="locate" type="button" aria-label="Find my location"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 3-7.5 18-2.7-7.8L3 10.5 21 3Z"/></svg></button>
+    </div>
+    <div id="parcel-step" class="parcel-step">
+      <form class="search" id="parcel-step-form" role="search">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3 7 21M17 3l-2 18M4 9h16M3 15h16"/></svg>
+        <input id="parcel-step-input" aria-label="Parcel number in the selected village" placeholder="Enter a parcel number, e.g. 123/4" autocomplete="off" />
+      </form>
+    </div>
+    <div id="results" class="results" aria-label="Search results"></div>
+    <div id="zoom-hint" class="zoom-hint" hidden>Zoom in to see parcel boundaries.</div>
+    <aside id="crop-draw-toolbar" class="crop-draw-toolbar" hidden>
+      <p id="crop-vertex-notice" class="crop-vertex-notice" role="status" aria-live="polite"></p>
+      <div class="crop-draw-actions">
+        <button id="crop-draw-finish" type="button">Finish drawing</button>
+        <button id="crop-draw-cancel" type="button">Cancel</button>
+      </div>
+    </aside>
+    <section class="sheet" aria-labelledby="heading">
+      <button id="drawer-toggle" class="drawer-toggle" type="button" aria-label="Collapse panel" aria-expanded="true"><span class="handle" aria-hidden="true"></span><span id="drawer-summary">Your fields</span></button>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+      <div id="drawer-content" class="drawer-content">
+      <button class="crop-outline" id="open-sandbox" type="button">Open a farm</button>
+      <p class="eyebrow">Your fields</p>
+      <h1 id="heading">Select a parcel</h1>
+      <p class="subtitle">Find parcels on the map, search for them or import a file.</p>
+      <div id="selected" class="selected"><div class="selected-head"><span class="dot"></span><span id="selected-count" aria-live="polite"></span></div><p id="selected-area" class="selected-area"></p><div id="selected-list" class="selected-list"></div></div>
+      <div class="options">
+        <button class="option" id="search-option" type="button"><span class="icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3 7 21M17 3l-2 18M4 9h16M3 15h16"/></svg></span><span>Parcel number</span><svg class="chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>
+        <button class="option" id="map-option" type="button"><span class="icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 3 14 10-7 1-3 6L5 3Z"/></svg></span><span>Select on map</span><svg class="chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>
+        <button class="option" id="import-option" type="button"><span class="icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3m-4 4 4-4 4 4M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg></span><span>Import file</span><svg class="chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>
+      </div>
+      <button id="continue" class="primary" disabled type="button">Continue</button>
+      </div>
+      <div id="crop-panel" class="crop-panel" hidden></div>
+      <div id="sandbox-panel" class="sandbox-panel" hidden></div>
+    </section>
+    <dialog id="journey-dialog" class="journey-dialog" aria-labelledby="journey-title" aria-describedby="journey-intro">
+      <p class="journey-eyebrow">Field Under Pressure</p>
+      <h2 id="journey-title">Where would you like to start?</h2>
+      <p class="journey-intro" id="journey-intro">View your farm or set up a new one.</p>
+      <div class="journey-choices">
+        <button class="journey-choice" id="journey-farmer" type="button"><span><strong>Farmer view</strong><small>See your crop areas and their conditions.</small></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>
+        <button class="journey-choice" id="journey-new" type="button"><span><strong>New view</strong><small>Choose parcels and set up crops in a separate sandbox.</small></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>
+      </div>
+    </dialog>
+    <dialog id="setup-dialog" aria-labelledby="setup-title">
+      <h2 id="setup-title">Preparing your map</h2>
+      <p id="setup-message" role="status" aria-live="polite">Connecting…</p>
+      <button id="setup-retry" class="primary" type="button" hidden>Try again</button>
+      <button id="setup-restart" class="primary" type="button" hidden>Start a new sandbox</button>
+      <button id="setup-back" class="crop-outline" type="button" hidden>Back</button>
+    </dialog>
+    <dialog id="sandbox-dialog" aria-labelledby="sandbox-title">
+      <h2 id="sandbox-title">Choose your farm</h2>
+      <p>Start with an example farm or an empty one. Your farm session is saved in this browser for up to 8 hours.</p>
+      <div class="sandbox-choice">
+        <button class="crop-outline" id="sandbox-mock" type="button">Explore an example farm</button>
+        <button class="crop-outline" id="sandbox-empty" type="button">Start with an empty farm</button>
+        <button class="crop-outline" id="sandbox-local" type="button">Open parcel design preview</button>
+      </div>
+      <p id="sandbox-error" role="status" aria-live="polite"></p>
+    </dialog>
+    <dialog id="import-dialog" aria-labelledby="import-title">
+      <h2 id="import-title">Import file</h2>
+      <p>Choose a GeoJSON file or a zipped Shapefile (.zip).</p>
+      <label class="upload-zone" for="import-file">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3m-4 4 4-4 4 4M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg>
+        <strong>Choose file</strong><small>GeoJSON or Shapefile in a ZIP file</small>
+        <input id="import-file" type="file" accept=".geojson,.json,.zip,application/geo+json,application/zip" aria-label="Choose a GeoJSON or ZIP file" />
+      </label>
+      <p id="import-note">Choose a file to see a preview.</p>
+      <button class="primary" id="use-import" type="button" hidden>Add to map</button>
+      <button class="close-dialog" id="close-import" type="button">Close</button>
+    </dialog>
+  </main>
   <script>
-    const map = new maplibregl.Map({
-      container: 'map',
-      style: {
-        version: 8,
-        sources: {
-          osm: {
-            type: 'raster',
-            tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-            tileSize: 256,
-            attribution: '&copy; OpenStreetMap contributors'
-          }
-        },
-        layers: [{ id: 'osm', type: 'raster', source: 'osm' }]
-      },
-      center: [20.76, 52.175],
-      zoom: 13
-    });
-
-    async function fetchGeoJson() {
-      const status = document.getElementById('status');
-      const out = document.getElementById('output');
-      status.innerText = 'Odpytywanie API...';
-
-      // Przykładowy poligon w GeoJSON (np. pobrany z API)
-      const sampleGeoJson = {
-        "type": "FeatureCollection",
-        "features": [
-          {
-            "type": "Feature",
-            "properties": { "id": "PARCEL-001", "name": "Przykładowy poligon" },
-            "geometry": {
-              "type": "Polygon",
-              "coordinates": [
-                [
-                  [20.7510, 52.1810],
-                  [20.7580, 52.1815],
-                  [20.7575, 52.1765],
-                  [20.7505, 52.1760],
-                  [20.7510, 52.1810]
-                ]
-              ]
-            }
-          }
-        ]
-      };
-
-      try {
-        const res = await fetch('http://127.0.0.1:8000/api/v1/analysis/PARCEL-001');
-        const data = await res.json();
-        out.innerText = JSON.stringify(data, null, 2);
-        status.innerHTML = '<span style="color: green;">✓ Dane pobrane z API</span>';
-      } catch (e) {
-        out.innerText = JSON.stringify(sampleGeoJson, null, 2);
-        status.innerHTML = '<span style="color: #64748b;">(Tryb offline: załadowano lokalny GeoJSON)</span>';
+    'use strict';
+    // Set mode to 'backend' and provide baseUrl when the real search API is ready.
+    let dataProvider = FarmerData.createProvider({ mode: 'mock' });
+    const provider = new Proxy({}, { get: (_, name) => dataProvider[name] });
+    const farmerClient = SandboxClient.create();
+    const newViewClient = SandboxClient.create({ storageKey: `${SandboxClient.STORAGE_KEY}.new-view` });
+    let sandboxClient = farmerClient;
+    let pendingJourney = 'farmer';
+    let sandboxActive = false;
+    const selected = new Map();
+    const input = document.getElementById('parcel-number');
+    const parcelStep = document.getElementById('parcel-step');
+    const parcelStepInput = document.getElementById('parcel-step-input');
+    const status = document.getElementById('status');
+    const results = document.getElementById('results');
+    const next = document.getElementById('continue');
+    const sheet = document.querySelector('.sheet');
+    const drawerToggle = document.getElementById('drawer-toggle');
+    const topControls = document.getElementById('top-controls');
+    const searchBackdrop = document.getElementById('search-backdrop');
+    const importDialog = document.getElementById('import-dialog');
+    let parcelPopup = null;
+    let popupParcelId = null;
+    const mapGuide = document.getElementById('map-guide');
+    let drawerBeforeSearch = true;
+    let searchLocality = null;
+    let suggestionTimer = null;
+    let searchVersion = 0;
+    let drawerResizeAnimation = null;
+    let previewParcel = null;
+    let previewRequest = 0;
+    /** Animate between measured panel heights without showing temporary scrollbars. */
+    function animateDrawerResize(previousHeight) {
+      if (drawerResizeAnimation) { drawerResizeAnimation.cancel(); drawerResizeAnimation = null; }
+      sheet.classList.add('resizing');
+      const nextHeight = sheet.getBoundingClientRect().height;
+      const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (Math.abs(previousHeight - nextHeight) < 1) { sheet.classList.remove('resizing'); return; }
+      if (window.matchMedia('(max-width: 719px)').matches && !sheet.classList.contains('search-hidden')) {
+        map.panBy([0, (nextHeight - previousHeight) / 2], { duration: reduceMotion ? 0 : 280, easing: t => 1 - Math.pow(1 - t, 3) });
       }
-
-      // Rysowanie niebieskiego obrysu na mapie
-      if (map.getSource('sample-data')) {
-        map.getSource('sample-data').setData(sampleGeoJson);
+      if (reduceMotion) { sheet.classList.remove('resizing'); return; }
+      const animation = sheet.animate([{ height: `${previousHeight}px` }, { height: `${nextHeight}px` }], { duration: 280, easing: 'cubic-bezier(.22,1,.36,1)' });
+      drawerResizeAnimation = animation;
+      animation.onfinish = () => { if (drawerResizeAnimation === animation) { drawerResizeAnimation = null; sheet.classList.remove('resizing'); } };
+    }
+    /** Expand or collapse the selection panel. */
+    function setDrawer(open) {
+      if (sheet.classList.contains('collapsed') === !open) { document.getElementById('drawer-content').inert = !open; document.getElementById('crop-panel').inert = !open; return; }
+      const previousHeight = sheet.getBoundingClientRect().height;
+      if (drawerResizeAnimation) { drawerResizeAnimation.cancel(); drawerResizeAnimation = null; }
+      sheet.classList.add('resizing');
+      sheet.classList.toggle('collapsed', !open);
+      document.getElementById('drawer-content').inert = !open;
+      document.getElementById('crop-panel').inert = !open;
+      drawerToggle.setAttribute('aria-expanded', String(open));
+      drawerToggle.setAttribute('aria-label', open ? 'Collapse panel' : 'Open panel');
+      animateDrawerResize(previousHeight);
+    }
+    /** Open or dismiss the centred parcel search. */
+    function setSearch(open) {
+      if (open === topControls.classList.contains('searching')) return;
+      if (open) hideMapGuide();
+      if (open) drawerBeforeSearch = !sheet.classList.contains('collapsed');
+      topControls.classList.toggle('searching', open);
+      results.classList.toggle('searching', open);
+      parcelStep.classList.toggle('searching', open);
+      searchBackdrop.classList.toggle('visible', open);
+      sheet.classList.toggle('search-hidden', open);
+      document.getElementById('drawer-content').inert = open || sheet.classList.contains('collapsed');
+      document.getElementById('crop-panel').inert = open || sheet.classList.contains('collapsed');
+      if (open) { clearTimeout(suggestionTimer); searchVersion++; results.classList.remove('visible'); resetLocality(); input.value = ''; status.textContent = ''; input.focus(); }
+      else { clearTimeout(suggestionTimer); searchVersion++; results.classList.remove('visible'); input.blur(); parcelStepInput.blur(); resetLocality(); setDrawer(drawerBeforeSearch); }
+    }
+    /** Return to the first search step when the locality changes or search closes. */
+    function resetLocality() { searchLocality = null; parcelStepInput.value = ''; parcelStep.classList.remove('visible'); results.classList.remove('after-parcel-step'); }
+    /** Show the map-selection hint until the farmer interacts with the map. */
+    function showMapGuide() { mapGuide.classList.add('visible'); mapGuide.setAttribute('aria-hidden', 'false'); }
+    /** Dismiss the map-selection hint and remove it from the accessibility tree. */
+    function hideMapGuide() { mapGuide.classList.remove('visible'); mapGuide.setAttribute('aria-hidden', 'true'); }
+    let drawerGesture = null;
+    let suppressDrawerClick = false;
+    drawerToggle.addEventListener('pointerdown', event => {
+      if (event.button !== 0 || drawerGesture) return;
+      drawerGesture = { id: event.pointerId, startY: event.clientY, startedCollapsed: sheet.classList.contains('collapsed'), moving: false };
+      drawerToggle.setPointerCapture(event.pointerId);
+    });
+    drawerToggle.addEventListener('pointermove', event => {
+      if (!drawerGesture || event.pointerId !== drawerGesture.id) return;
+      const delta = event.clientY - drawerGesture.startY;
+      if (!drawerGesture.moving && Math.abs(delta) < 6) return;
+      event.preventDefault();
+      if (!drawerGesture.moving) {
+        drawerGesture.moving = true;
+        hideMapGuide();
+        if (drawerResizeAnimation) { drawerResizeAnimation.cancel(); drawerResizeAnimation = null; }
+        const initialHeight = sheet.getBoundingClientRect().height;
+        sheet.classList.add('resizing');
+        sheet.style.height = '';
+        sheet.classList.add('collapsed');
+        drawerGesture.closedHeight = sheet.getBoundingClientRect().height;
+        sheet.classList.remove('collapsed');
+        drawerGesture.openHeight = sheet.getBoundingClientRect().height;
+        drawerGesture.initialHeight = drawerGesture.startedCollapsed ? drawerGesture.closedHeight : initialHeight;
+      }
+      const height = Math.max(drawerGesture.closedHeight, Math.min(drawerGesture.openHeight, drawerGesture.initialHeight - delta));
+      sheet.style.height = `${height}px`;
+    });
+    function finishDrawerGesture(event) {
+      if (!drawerGesture || event.pointerId !== drawerGesture.id) return;
+      const gesture = drawerGesture;
+      drawerGesture = null;
+      if (!gesture.moving) return;
+      suppressDrawerClick = true;
+      setTimeout(() => { suppressDrawerClick = false; }, 0);
+      const currentHeight = sheet.getBoundingClientRect().height;
+      const open = event.type === 'pointercancel'
+        ? !gesture.startedCollapsed
+        : currentHeight >= (gesture.openHeight + gesture.closedHeight) / 2;
+      sheet.style.height = '';
+      sheet.classList.toggle('collapsed', !open);
+      document.getElementById('drawer-content').inert = !open;
+      document.getElementById('crop-panel').inert = !open;
+      drawerToggle.setAttribute('aria-expanded', String(open));
+      drawerToggle.setAttribute('aria-label', open ? 'Collapse panel' : 'Open panel');
+      animateDrawerResize(currentHeight);
+      if (open && previewParcel) fitParcelPreview(previewParcel, { onlyIfObscured: true });
+    }
+    drawerToggle.addEventListener('pointerup', finishDrawerGesture);
+    drawerToggle.addEventListener('pointercancel', finishDrawerGesture);
+    drawerToggle.addEventListener('click', () => {
+      if (suppressDrawerClick) return;
+      hideMapGuide(); setDrawer(sheet.classList.contains('collapsed'));
+      if (previewParcel) fitParcelPreview(previewParcel, { onlyIfObscured: true });
+    });
+    document.addEventListener('click', event => {
+      if (document.getElementById('crop-panel').hidden || sheet.contains(event.target) || sheet.classList.contains('collapsed') || event.target.closest('dialog')) return;
+      // Let the map or other control process the same click before collapsing the crop drawer.
+      setTimeout(() => { if (!document.getElementById('crop-panel').hidden) setDrawer(false); }, 0);
+    }, true);
+    searchBackdrop.addEventListener('click', () => setSearch(false));
+    document.addEventListener('keydown', event => { if (event.key === 'Escape' && topControls.classList.contains('searching')) setSearch(false); });
+    const map = new maplibregl.Map({
+      container: 'map', center: [20.773, 52.175], zoom: 12.8, fadeDuration: 100,
+      style: { version: 8, sources: { osm: { type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256, attribution: '&copy; OpenStreetMap contributors' } }, layers: [{ id: 'osm', type: 'raster', source: 'osm' }] }
+    });
+    const cropWorkflow = CropWorkflow.create({ map, provider, selected, panel: document.getElementById('crop-panel'), status, setDrawer, fitParcelPreview, animateDrawerResize, onParcelChange: renderSelection, onSaved: () => sandboxOpen({ afterSave: true }) });
+    /** Fit the complete geometry in the visible map area after the drawer finishes resizing. */
+    async function fitParcelPreview(parcel, options = {}) {
+      const request = ++previewRequest;
+      while (drawerResizeAnimation) {
+        const animation = drawerResizeAnimation;
+        try { await animation.finished; } catch (_) { /* The next resize replaces an interrupted animation. */ }
+        if (request !== previewRequest) return;
+        if (drawerResizeAnimation === animation) break;
+      }
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      if (request !== previewRequest || (parcel.parcel_id && !selected.has(parcel.parcel_id))) return;
+      const bounds = new maplibregl.LngLatBounds();
+      const polygons = parcel.geometry.type === 'MultiPolygon' ? parcel.geometry.coordinates : [parcel.geometry.coordinates];
+      polygons.forEach(polygon => polygon[0].forEach(point => bounds.extend(point)));
+      const mapRect = map.getContainer().getBoundingClientRect();
+      const drawerRect = sheet.getBoundingClientRect();
+      const mobile = window.matchMedia('(max-width: 719px)').matches;
+      const padding = { top: 85, right: 24, bottom: 24, left: 24 };
+      if (mobile) padding.bottom = Math.max(24, mapRect.bottom - Math.max(mapRect.top, drawerRect.top) + 20);
+      else if (drawerRect.right > mapRect.left && drawerRect.left < mapRect.right) padding.left = Math.max(24, drawerRect.right - mapRect.left + 20);
+      if (options.onlyIfObscured) {
+        const visible = polygons.every(polygon => polygon[0].every(point => {
+          const screen = map.project(point);
+          return screen.x >= padding.left && screen.x <= mapRect.width - padding.right && screen.y >= padding.top && screen.y <= mapRect.height - padding.bottom;
+        }));
+        if (visible) return;
+      }
+      map.fitBounds(bounds, { padding, maxZoom: 17, duration: 450 });
+    }
+    map.on('dragstart', event => { if (event.originalEvent) { previewParcel = null; previewRequest++; } });
+    /** Render the selected parcels and their removable labels. */
+    function renderSelection() {
+      const previousHeight = sheet.getBoundingClientRect().height;
+      if (drawerResizeAnimation) { drawerResizeAnimation.cancel(); drawerResizeAnimation = null; }
+      const items = [...selected.values()];
+      const count = items.length;
+      const parcelWord = count === 1 ? 'parcel' : 'parcels';
+      const source = map.getSource('selected-parcels');
+      if (source) source.setData({ type: 'FeatureCollection', features: items.map(parcel => ({ type: 'Feature', geometry: parcel.geometry, properties: { id: parcel.parcel_id } })) });
+      const panel = document.getElementById('selected');
+      panel.classList.toggle('visible', items.length > 0);
+      document.getElementById('selected-count').textContent = `Selected: ${count} ${parcelWord}`;
+      document.getElementById('drawer-summary').textContent = count ? `Your fields · ${count} ${parcelWord}` : 'Your fields';
+      const knownAreas = items.filter(parcel => Number.isFinite(parcel.area_ha) && parcel.area_ha >= 0);
+      const totalArea = knownAreas.reduce((sum, parcel) => sum + parcel.area_ha, 0);
+      document.getElementById('selected-area').textContent = knownAreas.length === count ? `Total area: ${totalArea.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ha` : 'Total area: data missing for some parcels';
+      const list = document.getElementById('selected-list');
+      list.replaceChildren();
+      items.forEach(parcel => {
+        const row = document.createElement('div'); row.className = 'parcel-row';
+        const button = document.createElement('button'); button.type = 'button'; button.className = 'parcel-details-button';
+        const name = document.createElement('strong'); name.textContent = `Parcel ${parcel.parcel_number} · ${parcel.locality || 'locality unavailable'} · ${Number.isFinite(parcel.area_ha) ? `${parcel.area_ha.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ha` : 'area unavailable'}`;
+        const id = document.createElement('small'); id.textContent = parcel.cadastral_id || 'GUGiK identifier unavailable';
+        button.append(name, id); button.addEventListener('click', () => showParcelDetails(parcel, { focus: true }));
+        const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'parcel-remove'; remove.textContent = '×';
+        remove.setAttribute('aria-label', `Remove parcel ${parcel.parcel_number}, ${parcel.locality || ''}`);
+        remove.addEventListener('click', () => { selected.delete(parcel.parcel_id); if (previewParcel?.parcel_id === parcel.parcel_id) { previewParcel = null; previewRequest++; } if (popupParcelId === parcel.parcel_id && parcelPopup) parcelPopup.remove(); renderSelection(); });
+        row.append(button, remove); list.appendChild(row);
+      });
+      next.disabled = items.length === 0;
+      animateDrawerResize(previousHeight);
+    }
+    /** Calculate the centroid of a polygon's outer ring for the map annotation. */
+    function parcelCentroid(geometry) {
+      const ring = geometry.type === 'MultiPolygon' ? geometry.coordinates[0][0] : geometry.coordinates[0];
+      let twiceArea = 0, x = 0, y = 0;
+      for (let i = 0; i < ring.length - 1; i++) { const a = ring[i], b = ring[i + 1]; const cross = a[0] * b[1] - b[0] * a[1]; twiceArea += cross; x += (a[0] + b[0]) * cross; y += (a[1] + b[1]) * cross; }
+      return Math.abs(twiceArea) > 1e-12 ? [x / (3 * twiceArea), y / (3 * twiceArea)] : ring[0];
+    }
+    /** Show source-provided details in a map annotation anchored to the parcel. */
+    function showParcelDetails(parcel, options = {}) {
+      const center = parcelCentroid(parcel.geometry);
+      const content = document.createElement('div');
+      const title = document.createElement('h2'); title.textContent = `Parcel ${parcel.parcel_number}`;
+      const details = document.createElement('dl'); details.className = 'parcel-detail-list';
+      const values = [['Locality', parcel.locality], ['Municipality', parcel.commune], ['Area', Number.isFinite(parcel.area_ha) ? `${parcel.area_ha.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ha` : null], ['GUGiK identifier', parcel.cadastral_id]];
+      values.forEach(([label, value]) => { const row = document.createElement('div'); const term = document.createElement('dt'); const description = document.createElement('dd'); term.textContent = label; description.textContent = value || 'No data'; row.append(term, description); details.appendChild(row); });
+      content.append(title, details);
+      if (parcelPopup) parcelPopup.remove();
+      popupParcelId = parcel.parcel_id;
+      parcelPopup = new maplibregl.Popup({ className: 'parcel-popup', closeButton: true, closeOnClick: false, offset: 8, maxWidth: '310px' }).setLngLat(center).setDOMContent(content).addTo(map);
+      parcelPopup.getElement().querySelector('.maplibregl-popup-close-button').setAttribute('aria-label', 'Close parcel details');
+      parcelPopup.on('close', () => { popupParcelId = null; });
+      if (options.focus) {
+        previewParcel = parcel;
+        fitParcelPreview(parcel);
       } else {
-        map.addSource('sample-data', {
-          type: 'geojson',
-          data: sampleGeoJson
-        });
-        map.addLayer({
-          id: 'polygon-fill',
-          type: 'fill',
-          source: 'sample-data',
-          paint: {
-            'fill-color': '#0284c7',
-            'fill-opacity': 0.25
+        const popup = parcelPopup;
+        requestAnimationFrame(() => {
+          if (parcelPopup !== popup || !popup.isOpen()) return;
+          const rect = popup.getElement().getBoundingClientRect();
+          const mapRect = map.getContainer().getBoundingClientRect();
+          const drawerRect = sheet.getBoundingClientRect();
+          let dx = rect.right > mapRect.right - 12 ? rect.right - (mapRect.right - 12) : rect.left < mapRect.left + 12 ? rect.left - (mapRect.left + 12) : 0;
+          let dy = rect.top < mapRect.top + 80 ? rect.top - (mapRect.top + 80) : 0;
+          if (rect.right > drawerRect.left && rect.left < drawerRect.right && rect.bottom > drawerRect.top && rect.top < drawerRect.bottom) {
+            if (window.matchMedia('(max-width: 719px)').matches) dy = Math.max(dy, rect.bottom - drawerRect.top + 12);
+            else dx = Math.min(dx, rect.left - drawerRect.right - 12);
           }
-        });
-        map.addLayer({
-          id: 'polygon-outline',
-          type: 'line',
-          source: 'sample-data',
-          paint: {
-            'line-color': '#0284c7',
-            'line-width': 2
-          }
+          if (dx || dy) map.panBy([dx, dy], { duration: 300 });
         });
       }
     }
+    /** Add a selected result without claiming ownership. */
+    function selectParcel(parcel, options = {}) {
+      if (options.toggle && selected.has(parcel.parcel_id)) {
+        selected.delete(parcel.parcel_id); if (previewParcel?.parcel_id === parcel.parcel_id) { previewParcel = null; previewRequest++; } if (popupParcelId === parcel.parcel_id && parcelPopup) parcelPopup.remove(); status.textContent = ''; renderSelection(); return;
+      }
+      selected.set(parcel.parcel_id, parcel); results.classList.remove('visible'); status.textContent = ''; renderSelection();
+      if (options.toggle && !sheet.classList.contains('collapsed')) { previewParcel = parcel; fitParcelPreview(parcel, { onlyIfObscured: true }); }
+      if (!options.focus) return;
+      previewParcel = parcel;
+      fitParcelPreview(parcel);
+    }
+    /** Add a human-readable parcel suggestion with the cadastral ID as secondary detail. */
+    function addParcelSuggestion(parcel, options = {}) {
+      const button = document.createElement('button');
+      const title = document.createElement('span'); title.className = 'result-title'; title.textContent = `Parcel ${parcel.parcel_number}`;
+      const meta = document.createElement('span'); meta.className = 'result-meta';
+      meta.textContent = [parcel.locality, parcel.commune ? `municipality ${parcel.commune}` : null, Number.isFinite(parcel.area_ha) ? `${parcel.area_ha.toFixed(2)} ha` : null].filter(Boolean).join(' · ') || 'Parcel details unavailable';
+      const id = document.createElement('span'); id.className = 'result-id'; id.textContent = parcel.cadastral_id || parcel.parcel_id;
+      button.type = 'button'; button.append(title, meta, id);
+      button.addEventListener('click', () => { clearTimeout(suggestionTimer); searchVersion++; setSearch(false); resetLocality(); input.value = ''; input.blur(); selectParcel(parcel, options); });
+      results.appendChild(button);
+    }
+    /** Offer one or more backend-provided matches for map selection. */
+    function showMatches(parcels, autoSelect, options = {}) {
+      results.replaceChildren(); results.classList.remove('visible');
+      if (!parcels.length) { status.textContent = 'No parcel found. Please try again.'; return; }
+      if (parcels.length === 1 && autoSelect) { selectParcel(parcels[0], options); return; }
+      status.textContent = parcels.length > 1 ? 'Several parcels found. Select the right one.' : 'Select a parcel from the results.';
+      parcels.forEach(parcel => addParcelSuggestion(parcel, options));
+      results.classList.add('visible');
+    }
+    /** Show matching parcel suggestions returned by the mock or backend provider. */
+    function showSearchParcels(parcels) {
+      results.replaceChildren();
+      const hint = document.createElement('div'); hint.className = 'results-hint';
+      hint.textContent = !parcels.length ? 'No parcel found. Check the village, municipality or number.' : provider.mode === 'backend' ? 'Select a parcel to continue.' : searchLocality ? `Enter the parcel number in ${searchLocality.locality}, municipality ${searchLocality.commune}.` : 'Select a parcel and check the village and municipality.';
+      results.appendChild(hint);
+      parcels.forEach(parcel => addParcelSuggestion(parcel, { focus: true }));
+      results.classList.add('visible');
+    }
+    /** Show unique locality choices before a farmer enters the parcel number. */
+    function showLocalitySuggestions(parcels) {
+      const localities = new Map();
+      parcels.forEach(parcel => localities.set(`${parcel.locality}|${parcel.commune}`, parcel));
+      results.replaceChildren();
+      const hint = document.createElement('div'); hint.className = 'results-hint'; hint.textContent = localities.size ? 'Select a locality, then enter a parcel number.' : 'No locality found. Enter a parcel number or full identifier.'; results.appendChild(hint);
+      localities.forEach(parcel => {
+        const button = document.createElement('button'); button.type = 'button';
+        const title = document.createElement('span'); title.className = 'result-title'; title.textContent = parcel.locality;
+        const meta = document.createElement('span'); meta.className = 'result-meta'; meta.textContent = `municipality ${parcel.commune}`;
+        button.append(title, meta);
+        button.addEventListener('click', () => {
+          searchLocality = { locality: parcel.locality, commune: parcel.commune };
+          input.value = `${parcel.locality}, municipality ${parcel.commune}`;
+          parcelStepInput.value = ''; parcelStep.classList.add('visible'); results.classList.add('after-parcel-step');
+          searchVersion++; results.replaceChildren();
+          const hint = document.createElement('div'); hint.className = 'results-hint'; hint.textContent = `Enter the parcel number in ${parcel.locality}, municipality ${parcel.commune}.`;
+          results.appendChild(hint); results.classList.add('visible'); parcelStepInput.focus();
+        });
+        results.appendChild(button);
+      });
+      results.classList.add('visible');
+    }
+    /** Fly to a locality returned by the farm service. */
+    function showPlaces(places) {
+      results.replaceChildren();
+      const hint = document.createElement('div'); hint.className = 'results-hint';
+      hint.textContent = places.length ? 'Select a place to see parcels on the map.' : 'No results found.';
+      results.appendChild(hint);
+      places.forEach(place => {
+        if (!Number.isFinite(place.lon) || !Number.isFinite(place.lat)) return;
+        const button = document.createElement('button'); button.type = 'button';
+        const title = document.createElement('span'); title.className = 'result-title'; title.textContent = place.label || place.name;
+        button.appendChild(title);
+        button.addEventListener('click', () => {
+          clearTimeout(suggestionTimer); searchVersion++;
+          results.classList.remove('visible');
+          if (topControls.classList.contains('searching')) setSearch(false);
+          input.value = place.label || place.name; input.blur();
+          map.flyTo({ center: [place.lon, place.lat], zoom: Number.isFinite(place.zoom) ? Math.max(16, place.zoom) : 16 });
+        });
+        results.appendChild(button);
+      });
+      results.classList.add('visible');
+    }
+    /** Search a full identifier, a locality and number, a bare number, or a locality prefix. */
+    async function lookupParcelSearch() {
+      const term = (searchLocality ? parcelStepInput.value : input.value).trim();
+      const version = ++searchVersion;
+      if (!term) {
+        results.replaceChildren();
+        if (searchLocality) { const hint = document.createElement('div'); hint.className = 'results-hint'; hint.textContent = `Enter the parcel number in ${searchLocality.locality}, municipality ${searchLocality.commune}.`; results.appendChild(hint); results.classList.add('visible'); }
+        else results.classList.remove('visible');
+        return;
+      }
+      try {
+        if (provider.mode === 'backend') {
+          if (!searchLocality && !/^[\d]/.test(term)) {
+            if (term.length < 2) { results.replaceChildren(); results.classList.remove('visible'); return; }
+            const response = await sandboxClient.places(term);
+            if (version !== searchVersion) return;
+            if (!Array.isArray(response?.places)) throw new Error('Invalid place response');
+            showPlaces(response.places); return;
+          }
+          if (term.length < 3) { results.replaceChildren(); results.classList.remove('visible'); return; }
+          const response = await provider.findParcels({ number: term });
+          if (version !== searchVersion) return;
+          showSearchParcels(response.parcels);
+          return;
+        }
+        if (searchLocality && /^\d+(?:\/\d*)?$/.test(term)) {
+          const response = await provider.findParcels({ number: term, locality: `${searchLocality.locality} ${searchLocality.commune}` });
+          if (version !== searchVersion) return;
+          showSearchParcels(response.parcels); return;
+        }
+        const isId = /^\d{6}_\d\.\d{4}\.\d+(?:\/\d+)?$/.test(term);
+        const isNumber = /^\d+(?:\/\d*)?$/.test(term);
+        const isCombined = /^.+\s+\d+(?:\/\d*)?$/.test(term);
+        const response = await provider.findParcels({ number: term });
+        if (version !== searchVersion) return;
+        if (isId || isNumber || isCombined) showSearchParcels(response.parcels);
+        else showLocalitySuggestions(response.parcels);
+      } catch (_) { if (version !== searchVersion) return; results.replaceChildren(); const hint = document.createElement('div'); hint.className = 'results-hint'; hint.textContent = 'Could not search. Please try again.'; results.appendChild(hint); results.classList.add('visible'); }
+    }
+    new ResizeObserver(() => document.documentElement.style.setProperty('--drawer-height', `${sheet.offsetHeight}px`)).observe(sheet);
+    let compassNorthSelected = false;
+    const compassControl = {
+      onAdd(mapInstance) {
+        this.element = document.createElement('div'); this.element.className = 'maplibregl-ctrl maplibregl-ctrl-group';
+        ['pointerdown', 'pointerup', 'click', 'dblclick'].forEach(type => this.element.addEventListener(type, event => event.stopPropagation()));
+        for (const [label, symbol, change] of [['Zoom in', '+', 1], ['Zoom out', '−', -1]]) {
+          const zoomButton = document.createElement('button'); zoomButton.type = 'button';
+          zoomButton.setAttribute('aria-label', label); zoomButton.title = label;
+          zoomButton.textContent = symbol; zoomButton.style.fontSize = '24px';
+          zoomButton.addEventListener('click', () => mapInstance.zoomTo(mapInstance.getZoom() + change));
+          this.element.appendChild(zoomButton);
+        }
+        const button = document.createElement('button'); button.type = 'button'; button.className = 'maplibregl-ctrl-compass';
+        button.setAttribute('aria-label', 'Face north; press again for a top-down view');
+        button.title = 'Face north and view from above';
+        const icon = document.createElement('span'); icon.className = 'maplibregl-ctrl-icon'; icon.setAttribute('aria-hidden', 'true'); button.appendChild(icon);
+        button.addEventListener('click', () => {
+          if (compassNorthSelected) { compassNorthSelected = false; mapInstance.easeTo({ bearing: 0, pitch: 0, duration: 400 }); }
+          else { compassNorthSelected = true; mapInstance.resetNorth({ duration: 400 }); }
+        });
+        mapInstance.on('rotate', () => { icon.style.transform = `rotate(${-mapInstance.getBearing()}deg)`; });
+        mapInstance.on('rotatestart', event => { if (event.originalEvent) compassNorthSelected = false; });
+        mapInstance.on('pitchstart', event => { if (event.originalEvent) compassNorthSelected = false; });
+        this.element.appendChild(button); return this.element;
+      },
+      onRemove() { this.element.remove(); }
+    };
+    map.addControl(compassControl, 'top-right');
+    const zoomHint = document.getElementById('zoom-hint');
+    function updateZoomHint() { zoomHint.hidden = provider.mode !== 'backend' || map.getZoom() >= 15; }
+    map.on('zoom', updateZoomHint);
+    map.on('load', async () => {
+      map.addSource('gugik-dzialki', { type: 'raster', tileSize: 128, minzoom: 15, maxzoom: 20,
+        attribution: '© GUGiK', tiles: ['https://integracja01.gugik.gov.pl/cgi-bin/KrajowaIntegracjaEwidencjiGruntow?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=dzialki,numery_dzialek&STYLES=&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256&FORMAT=image/png&TRANSPARENT=TRUE'] });
+      map.addLayer({ id: 'gugik-dzialki', type: 'raster', source: 'gugik-dzialki', minzoom: 15, paint: { 'raster-opacity': 0.9 } });
+      updateZoomHint();
+      const selectionColor = getComputedStyle(document.documentElement).getPropertyValue('--green').trim();
+      map.addSource('selected-parcels', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      map.addLayer({ id: 'selected-fill', type: 'fill', source: 'selected-parcels', paint: { 'fill-color': selectionColor, 'fill-opacity': .25 } });
+      map.addLayer({ id: 'selected-outline', type: 'line', source: 'selected-parcels', paint: { 'line-color': selectionColor, 'line-width': 2.5 } });
+      map.addSource('crop-areas', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      map.addLayer({ id: 'crop-fill', type: 'fill', source: 'crop-areas', filter: ['==', ['geometry-type'], 'Polygon'], paint: { 'fill-color': ['coalesce', ['get', 'color'], '#4e8c5c'], 'fill-opacity': ['case', ['boolean', ['get', 'selected'], false], .62, .35] } });
+      map.addLayer({ id: 'crop-outline', type: 'line', source: 'crop-areas', paint: { 'line-color': ['case', ['boolean', ['get', 'selected'], false], '#ffffff', '#176544'], 'line-width': ['case', ['boolean', ['get', 'selected'], false], 5, 3] } });
+      map.addSource('partition-preview', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      map.addLayer({ id: 'partition-preview-fill', type: 'fill', source: 'partition-preview', filter: ['==', ['geometry-type'], 'Polygon'], paint: { 'fill-color': ['get', 'color'], 'fill-opacity': .55, 'fill-outline-color': '#fff' } });
+      map.addLayer({ id: 'partition-preview-line', type: 'line', source: 'partition-preview', filter: ['==', ['geometry-type'], 'LineString'], paint: { 'line-color': '#fff', 'line-width': 4, 'line-dasharray': [2, 1] } });
+      map.addSource('geometry-findings', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      map.addLayer({ id: 'geometry-findings-fill', type: 'fill', source: 'geometry-findings', paint: { 'fill-color': '#d33737', 'fill-opacity': .45 } });
+      map.addLayer({ id: 'geometry-findings-outline', type: 'line', source: 'geometry-findings', paint: { 'line-color': '#ad2424', 'line-width': 3 } });
+      map.addLayer({ id: 'crop-selected-outline', type: 'line', source: 'crop-areas', filter: ['==', ['get', 'selected'], true], paint: { 'line-color': '#ffffff', 'line-width': 5 } });
+      renderSelection();
+      setupSandbox();
+      try {
+        const { fields } = await provider.listFields();
+        map.addSource('sample-parcels', { type: 'geojson', data: { type: 'FeatureCollection', features: fields.map(field => ({ type: 'Feature', geometry: field.parcel.geometry, properties: {} })) } });
+        map.addLayer({ id: 'sample-outline', type: 'line', source: 'sample-parcels', paint: { 'line-color': '#617b68', 'line-width': 1.1, 'line-opacity': .65 } }, 'selected-fill');
+        if (sandboxActive) map.setLayoutProperty('sample-outline', 'visibility', 'none');
+      } catch (_) { status.textContent = 'Could not load parcels. Please try again.'; }
+    });
+    let suppressMapClick = false, suppressClickTimer = null;
+    // Hold, then draw a marquee; sample the existing point-lookup mock inside it.
+    // The first click dismisses an instructional overlay without editing the map.
+    map.getContainer().addEventListener('click', event => {
+      if (cropWorkflow.dismissGuide()) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }
+    }, true);
+    const canvas = map.getCanvas();
+    document.addEventListener('keydown', event => {
+      if (event.key !== 'Enter' || event.repeat || event.defaultPrevented || importDialog.open) return;
+      if (event.target !== document.body && event.target !== canvas) return;
+      if (cropWorkflow.deselectArea()) event.preventDefault();
+    });
+    const selectionBox = document.getElementById('selection-rectangle');
+    let holdTimer = null, drawing = false, startPoint = null, pointerId = null, pointerType = null, selectionMoved = false;
+    let anchor = null, cursor = null, panFrame = null, lastFrame = null;
+    let rectangleVersion = 0, preview = new Map(), pendingScan = Promise.resolve();
+    /** Show the current selection rectangle and return its screen bounds. */
+    function updateRectangle() {
+      const origin = map.project(anchor);
+      const left = Math.min(origin.x, cursor[0]), top = Math.min(origin.y, cursor[1]);
+      const right = Math.max(origin.x, cursor[0]), bottom = Math.max(origin.y, cursor[1]);
+      Object.assign(selectionBox.style, { left: `${left}px`, top: `${top}px`, width: `${right - left}px`, height: `${bottom - top}px` });
+      return { left, top, right, bottom };
+    }
+    /** Query mock parcel points inside the marquee without silently selecting outside it. */
+    async function scanRectangle(bounds, version) {
+      const found = new Map();
+      const width = bounds.right - bounds.left, height = bounds.bottom - bounds.top;
+      const columns = Math.max(1, Math.ceil(width / 24)), rows = Math.max(1, Math.ceil(height / 24));
+      try {
+        for (let row = 0; row <= rows; row++) {
+          if (version !== rectangleVersion) return;
+          const queries = [];
+          for (let col = 0; col <= columns; col++) {
+            const position = map.unproject([bounds.left + width * col / columns, bounds.top + height * row / rows]);
+            queries.push(provider.findParcels({ lon: position.lng, lat: position.lat }));
+          }
+          const results = await Promise.all(queries);
+          results.forEach(result => result.parcels.forEach(parcel => found.set(parcel.parcel_id, parcel)));
+        }
+        if (version === rectangleVersion) preview = found;
+      } catch (_) { status.textContent = 'Could not load parcels. Please try again.'; }
+    }
+    /** Refresh the pending selection when the rectangle changes. */
+    function queueScan() {
+      const bounds = updateRectangle();
+      const version = ++rectangleVersion;
+      pendingScan = scanRectangle(bounds, version);
+    }
+    /** Move gently near screen edges while the pointer is held, with no inertia. */
+    function panNearEdge(now) {
+      if (!drawing) return;
+      const elapsed = lastFrame === null ? 0 : Math.min((now - lastFrame) / 1000, .05);
+      lastFrame = now;
+      const rect = canvas.getBoundingClientRect();
+      const margin = 44, speed = 28;
+      const dx = cursor[0] < margin ? -speed : cursor[0] > rect.width - margin ? speed : 0;
+      const dy = cursor[1] < margin ? -speed : cursor[1] > rect.height - margin ? speed : 0;
+      if (dx || dy) { map.panBy([dx * elapsed, dy * elapsed], { duration: 0 }); updateRectangle(); }
+      panFrame = requestAnimationFrame(panNearEdge);
+    }
+    canvas.addEventListener('pointerdown', event => {
+      if (sandboxActive || cropWorkflow.isEditing()) return;
+      if (event.button !== 0 || pointerId !== null) return;
+      clearTimeout(suppressClickTimer); suppressMapClick = false;
+      pointerId = event.pointerId;
+      pointerType = event.pointerType;
+      selectionMoved = false;
+      const rect = canvas.getBoundingClientRect();
+      startPoint = [event.clientX - rect.left, event.clientY - rect.top];
+      cursor = startPoint;
+      holdTimer = setTimeout(() => {
+        drawing = true; suppressMapClick = true; map.dragPan.disable();
+        canvas.setPointerCapture(pointerId); anchor = map.unproject(startPoint); preview = new Map();
+        selectionBox.classList.add('visible'); status.textContent = 'Drag a rectangle over the parcels.';
+        updateRectangle(); lastFrame = null; panFrame = requestAnimationFrame(panNearEdge);
+      }, 450);
+    });
+    canvas.addEventListener('pointermove', event => {
+      if (event.pointerId !== pointerId || !startPoint) return;
+      const rect = canvas.getBoundingClientRect();
+      const point = [event.clientX - rect.left, event.clientY - rect.top];
+      if (Math.hypot(point[0] - startPoint[0], point[1] - startPoint[1]) > 10) selectionMoved = true;
+      if (!drawing && Math.hypot(point[0] - startPoint[0], point[1] - startPoint[1]) > 10) { clearTimeout(holdTimer); holdTimer = null; return; }
+      if (!drawing) return;
+      event.preventDefault(); cursor = point; updateRectangle();
+    });
+    /** Finish selection using the current rectangle and restore normal map panning. */
+    async function endSelectionDrag(event) {
+      if (event.pointerId !== pointerId) return;
+      clearTimeout(holdTimer); holdTimer = null;
+      const completed = drawing;
+      const isTouchHold = completed && pointerType === 'touch' && !selectionMoved;
+      const heldPosition = isTouchHold ? map.unproject(startPoint) : null;
+      if (completed) {
+        cancelAnimationFrame(panFrame); if (selectionMoved && event.type !== 'pointercancel') queueScan(); drawing = false; map.dragPan.enable();
+        selectionBox.classList.remove('visible');
+        suppressMapClick = true; clearTimeout(suppressClickTimer); suppressClickTimer = setTimeout(() => { suppressMapClick = false; }, 800);
+      }
+      pointerId = null; pointerType = null; startPoint = null; lastFrame = null;
+      if (isTouchHold && event.type !== 'pointercancel') { status.textContent = ''; hideMapGuide(); await showDetailsAt(heldPosition); return; }
+      if (completed && !selectionMoved) { status.textContent = ''; return; }
+      if (completed && event.type !== 'pointercancel') {
+        hideMapGuide();
+        await pendingScan;
+        preview.forEach(parcel => selected.set(parcel.parcel_id, parcel));
+        renderSelection();
+        status.textContent = preview.size ? '' : 'No parcels found in the selected area.';
+      } else if (completed) { rectangleVersion++; preview.clear(); }
+    }
+    canvas.addEventListener('pointerup', endSelectionDrag);
+    canvas.addEventListener('pointercancel', endSelectionDrag);
+    /** Look up a parcel for inspection without changing the selection. */
+    async function showDetailsAt(position) {
+      try {
+        const { parcels } = await provider.findParcels({ lon: position.lng, lat: position.lat });
+        if (!parcels.length) { status.textContent = 'No parcel found here.'; return; }
+        if (parcels.length === 1) { showParcelDetails(parcels[0]); return; }
+        results.replaceChildren();
+        const hint = document.createElement('div'); hint.className = 'results-hint'; hint.textContent = 'Select a parcel to see its details.'; results.appendChild(hint);
+        parcels.forEach(parcel => {
+          const button = document.createElement('button'); button.type = 'button';
+          const title = document.createElement('span'); title.className = 'result-title'; title.textContent = `Parcel ${parcel.parcel_number} · ${parcel.locality || 'locality unavailable'}`;
+          const id = document.createElement('span'); id.className = 'result-id'; id.textContent = parcel.cadastral_id || 'GUGiK identifier unavailable';
+          button.append(title, id); button.addEventListener('click', () => { results.classList.remove('visible'); showParcelDetails(parcel); }); results.appendChild(button);
+        });
+        results.classList.add('visible');
+      } catch (_) { status.textContent = 'Could not load parcel details. Please try again.'; }
+    }
+    map.on('contextmenu', event => {
+      event.originalEvent.preventDefault();
+      if (sandboxActive || cropWorkflow.isEditing()) return;
+      if (pointerType === 'touch' || event.originalEvent.pointerType === 'touch') return;
+      hideMapGuide(); showDetailsAt(event.lngLat);
+    });
+    map.on('click', async event => {
+      if (sandboxActive) { sandboxSelectAt(event.point); return; }
+      if (cropWorkflow.isEditing()) {
+        if (cropWorkflow.isDrawing()) cropWorkflow.addPoint(event.lngLat);
+        else if (!cropWorkflow.addEditPoint(event.lngLat)) {
+          const selectedArea = cropWorkflow.selectAt(event.point);
+          const selectedFinding = cropWorkflow.showFindingAt(event.point);
+          if (!selectedArea && !selectedFinding) cropWorkflow.deselectArea();
+        }
+        return;
+      }
+      if (suppressMapClick) return;
+      hideMapGuide();
+      try { const result = await provider.findParcels({ lon: event.lngLat.lng, lat: event.lngLat.lat }); showMatches(result.parcels, true, { toggle: true }); }
+      catch (_) { status.textContent = 'Could not load parcels. Please try again.'; }
+    });
+    document.getElementById('search-form').addEventListener('submit', event => { event.preventDefault(); clearTimeout(suggestionTimer); lookupParcelSearch(); });
+    document.getElementById('parcel-step-form').addEventListener('submit', event => { event.preventDefault(); clearTimeout(suggestionTimer); lookupParcelSearch(); });
+    input.addEventListener('focus', () => { if (!searchLocality && input.value.trim() && !topControls.classList.contains('searching')) { clearTimeout(suggestionTimer); suggestionTimer = setTimeout(lookupParcelSearch, 250); } });
+    input.addEventListener('input', () => {
+      clearTimeout(suggestionTimer);
+      resetLocality();
+      searchVersion++;
+      suggestionTimer = setTimeout(lookupParcelSearch, 250);
+    });
+    parcelStepInput.addEventListener('input', () => {
+      clearTimeout(suggestionTimer);
+      searchVersion++;
+      suggestionTimer = setTimeout(lookupParcelSearch, 250);
+    });
+    document.getElementById('search-option').addEventListener('click', () => setSearch(true));
+    document.getElementById('map-option').addEventListener('click', () => {
+      setDrawer(false); status.textContent = ''; showMapGuide();
+      if (selected.size) {
+        const bounds = new maplibregl.LngLatBounds();
+        selected.forEach(parcel => parcel.geometry.coordinates[0].forEach(point => bounds.extend(point)));
+        map.fitBounds(bounds, { padding: 80, maxZoom: 17, duration: 450 });
+      }
+    });
+    let importPreview = null;
+    document.getElementById('import-option').addEventListener('click', () => {
+      document.getElementById('import-title').textContent = 'Import file';
+      document.getElementById('import-note').textContent = 'Choose a file to see a preview.';
+      document.getElementById('import-file').value = '';
+      document.getElementById('use-import').hidden = true;
+      importPreview = null; setDrawer(false); importDialog.showModal();
+    });
+    document.getElementById('close-import').addEventListener('click', () => importDialog.close());
+    document.getElementById('import-file').addEventListener('change', async event => {
+      const file = event.target.files[0];
+      const note = document.getElementById('import-note');
+      const use = document.getElementById('use-import');
+      importPreview = null; use.hidden = true;
+      if (!file) { note.textContent = 'Choose a file to see a preview.'; return; }
+      note.textContent = 'Preparing preview…';
+      const context = cropWorkflow.isEditing() ? 'crop_areas' : 'parcels';
+      try {
+        const result = await provider.importGeometry(file, { context, parcelIds: [...selected.keys()] });
+        if (!importDialog.open || event.target.files[0] !== file || cropWorkflow.isEditing() !== (context === 'crop_areas')) return;
+        const items = context === 'crop_areas' ? result?.crop_areas : result?.parcels;
+        if (!Array.isArray(items) || !items.length || items.some(item => !item.geometry || !['Polygon', 'MultiPolygon'].includes(item.geometry.type) || (context === 'parcels' && !item.parcel_id))) throw new Error('Invalid import response');
+        importPreview = { context, result };
+        note.textContent = result.sample_only
+          ? `Selected: ${file.name}. The preview uses sample geometry — the file is not read yet.`
+          : `Selected: ${file.name}. Review the area after adding it to the map.`;
+        use.textContent = result.sample_only ? 'Add sample area' : 'Add to map';
+        use.hidden = false;
+      } catch (_) { if (importDialog.open && event.target.files[0] === file) note.textContent = 'Could not prepare a preview. Check the file format or try again.'; }
+    });
+    document.getElementById('use-import').addEventListener('click', () => {
+      if (!importPreview) return;
+      if (importPreview.context === 'crop_areas') {
+        cropWorkflow.addImportedAreas(importPreview.result.crop_areas || []);
+      } else {
+        (importPreview.result.parcels || []).forEach(parcel => selected.set(parcel.parcel_id, parcel));
+        renderSelection(); setDrawer(true);
+      }
+      importPreview = null; importDialog.close();
+    });
+    document.getElementById('locate').addEventListener('click', () => {
+      if (!navigator.geolocation) { status.textContent = 'Location is not available on this device.'; return; }
+      status.textContent = 'Finding your location…';
+      navigator.geolocation.getCurrentPosition(position => { map.flyTo({ center: [position.coords.longitude, position.coords.latitude], zoom: 16 }); status.textContent = 'Location found. Tap a parcel on the map.'; }, () => { status.textContent = 'Could not find your location. Search for a parcel or select one on the map.'; });
+    });
+    next.addEventListener('click', () => cropWorkflow.open());
+
+    let sandboxFeatures = [];
+    let sandboxCrops = [];
+    let sandboxToday = null;
+    let sandboxSelected = null;
+    let sandboxRequest = 0;
+    let sandboxHistoryRequest = 0;
+    let sandboxOpenVersion = 0;
+    const sandboxDialog = document.getElementById('sandbox-dialog');
+    const sandboxPanel = document.getElementById('sandbox-panel');
+    const sandboxError = document.getElementById('sandbox-error');
+    const sandboxElement = (tag, cls, value) => {
+      const element = document.createElement(tag);
+      if (cls) element.className = cls;
+      if (value !== undefined) element.textContent = value;
+      return element;
+    };
+    function sandboxDate(offset) {
+      const date = new Date(`${sandboxToday}T00:00:00Z`);
+      date.setUTCDate(date.getUTCDate() + offset);
+      return date.toISOString().slice(0, 10);
+    }
+    function sandboxLabel(id) { return sandboxCrops.find(item => item.farmer_crop_id === id)?.label || id || 'Crop unavailable'; }
+    function sandboxSummary(properties) {
+      const labels = { protected: 'Protected by treatment', out_of_window: 'Outside growth window', insufficient_data: 'Not enough data', stage_unknown: 'Growth stage unavailable', uncertain: 'Uncertain assessment' };
+      if (properties.status !== 'ok') return labels[properties.status] || 'Assessment unavailable';
+      return ({ low: 'Low risk', medium: 'Moderate risk', high: 'High risk' })[properties.risk_class] || 'Risk unavailable';
+    }
+    function sandboxTone(properties) {
+      return properties.status === 'ok' && ['low', 'medium', 'high'].includes(properties.risk_class) ? properties.risk_class : 'unknown';
+    }
+    function sandboxRiskBadge(properties) {
+      return sandboxElement('span', `risk-badge risk-${sandboxTone(properties)}`, sandboxSummary(properties));
+    }
+    function sandboxRender() {
+      sandboxPanel.replaceChildren();
+      const eyebrow = sandboxElement('p', 'risk-eyebrow', 'SEPTORIA · WHEAT');
+      const heading = sandboxElement('h1', 'risk-heading', 'Field conditions'); heading.id = 'sandbox-heading';
+      const description = sandboxElement('p', 'risk-intro', 'Explore conditions on each area of your field.');
+      sandboxPanel.append(eyebrow, heading, description);
+      if (sandboxSelected) {
+        const detail = sandboxElement('section', 'sandbox-detail'); detail.id = 'sandbox-detail';
+        detail.append(sandboxElement('p', 'sandbox-risk', 'Loading area…')); sandboxPanel.append(detail);
+      }
+      const listTitle = sandboxElement('div', 'risk-list-heading');
+      listTitle.append(sandboxElement('strong', '', 'Your areas'), sandboxElement('span', '', `${sandboxFeatures.length}`));
+      const list = sandboxElement('div', 'sandbox-list');
+      if (!sandboxFeatures.length) list.append(sandboxElement('p', 'risk-empty', 'There are no crop areas yet. Select parcels to get started.'));
+      sandboxFeatures.forEach((feature, index) => {
+        const p = feature.properties || {};
+        const button = sandboxElement('button', 'sandbox-area'); button.type = 'button';
+        button.classList.toggle('active', p.crop_area_id === sandboxSelected);
+        button.setAttribute('aria-pressed', String(p.crop_area_id === sandboxSelected));
+        const name = sandboxElement('span', 'risk-area-name');
+        name.append(sandboxElement('span', `risk-area-dot risk-dot-${sandboxTone(p)}`), sandboxElement('strong', '', `Area ${index + 1} · ${sandboxLabel(p.farmer_crop_id)}`));
+        button.append(name, sandboxRiskBadge(p));
+        button.addEventListener('click', () => sandboxSelect(p.crop_area_id, { focus: true })); list.append(button);
+      });
+      const note = sandboxElement('p', 'risk-note', 'The map shows today’s conditions. Risk indicates favourable conditions for septoria, not a diagnosis.');
+      const manage = sandboxElement('button', 'crop-outline', 'Manage parcels'); manage.type = 'button';
+      manage.addEventListener('click', enterParcelSetup);
+      sandboxPanel.append(listTitle, list, note, manage);
+    }
+    async function sandboxShowRisk(id, offset, target, version, sequence) {
+      const day = sandboxDate(offset);
+      target.replaceChildren(sandboxElement('p', 'risk-loading', 'Loading conditions…'));
+      try {
+        const rows = await sandboxClient.risk(id, day, day);
+        if (version !== sandboxRequest || sequence !== sandboxHistoryRequest || id !== sandboxSelected || !target.isConnected) return;
+        if (!Array.isArray(rows)) throw new Error('Invalid conditions response');
+        const row = rows.find(item => item.date === day);
+        target.replaceChildren();
+        if (!row) { target.append(sandboxElement('p', 'risk-loading', 'No assessment is available for this date.')); return; }
+        target.append(sandboxRiskBadge(row));
+        if (row.status === 'ok' && typeof row.conditions_met === 'boolean') {
+          target.append(sandboxElement('p', 'risk-explanation', row.conditions_met ? 'Conditions favourable for septoria were identified.' : 'Conditions favourable for septoria were not identified.'));
+        }
+        if (Number.isFinite(row.h_hours)) target.append(sandboxElement('p', 'risk-meta', `${row.h_hours} h of favourable conditions`));
+        if (row.status === 'protected' && row.protected_until) target.append(sandboxElement('p', 'risk-meta', `Protection until ${row.protected_until}`));
+      } catch (_) {
+        if (version === sandboxRequest && sequence === sandboxHistoryRequest && target.isConnected) target.replaceChildren(sandboxElement('p', 'risk-loading', 'Could not load conditions. Change the date or select the area to try again.'));
+      }
+    }
+    async function sandboxSelect(id, options = {}) {
+      const feature = sandboxFeatures.find(item => item.properties?.crop_area_id === id);
+      if (!feature) return;
+      sandboxSelected = id; const version = ++sandboxRequest;
+      map.setFilter('sandbox-highlight', ['==', ['get', 'crop_area_id'], id]);
+      sandboxRender(); setDrawer(true);
+      if (options.focus && feature.geometry) fitParcelPreview({ geometry: feature.geometry });
+      const target = document.getElementById('sandbox-detail');
+      const index = sandboxFeatures.indexOf(feature);
+      const header = sandboxElement('div', 'risk-detail-head');
+      header.append(sandboxElement('div', '', `Area ${index + 1}`), sandboxElement('span', 'risk-detail-date', 'TODAY'));
+      const title = sandboxElement('h2', '', 'Septoria conditions');
+      const dateText = sandboxElement('p', 'risk-selected-date', sandboxToday);
+      const value = sandboxElement('div', 'risk-reading'); value.setAttribute('aria-live', 'polite');
+      const sliderLabel = sandboxElement('label', 'risk-slider-label', 'Explore the past 30 days');
+      const range = document.createElement('input'); range.type = 'range'; range.min = '-30'; range.max = '0'; range.step = '1'; range.value = '0'; range.setAttribute('aria-label', 'Conditions date, up to 30 days before today');
+      const ticks = sandboxElement('div', 'risk-slider-ticks'); ticks.append(sandboxElement('span', '', '30 days ago'), sandboxElement('span', '', 'Today'));
+      sliderLabel.append(range, ticks);
+      const details = sandboxElement('p', 'risk-meta', '');
+      target.replaceChildren(header, title, dateText, value, sliderLabel, details);
+      let timer = null;
+      const load = () => {
+        const offset = Number(range.value), day = sandboxDate(offset), sequence = ++sandboxHistoryRequest;
+        dateText.textContent = day;
+        header.lastChild.textContent = offset === 0 ? 'TODAY' : 'HISTORY';
+        value.replaceChildren(sandboxElement('p', 'risk-loading', 'Loading conditions…'));
+        clearTimeout(timer);
+        timer = setTimeout(() => sandboxShowRisk(id, offset, value, version, sequence), 150);
+      };
+      range.addEventListener('input', load); load();
+      try {
+        const result = await sandboxClient.area(id);
+        if (version !== sandboxRequest || id !== sandboxSelected || !details.isConnected) return;
+        const props = result?.properties || {};
+        details.textContent = props.sowing_date ? `Sown ${props.sowing_date}` : '';
+      } catch (_) { if (version === sandboxRequest && details.isConnected) details.textContent = 'Sowing date unavailable.'; }
+    }
+    function sandboxSelectAt(point) {
+      if (!map.getLayer('sandbox-fill')) return;
+      const feature = map.queryRenderedFeatures(point, { layers: ['sandbox-fill'] })[0];
+      if (feature?.properties?.crop_area_id) sandboxSelect(feature.properties.crop_area_id, { focus: true });
+    }
+    function sandboxSource() {
+      if (map.getSource('sandbox-areas')) return;
+      map.addSource('sandbox-areas', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      map.addLayer({ id: 'sandbox-fill', type: 'fill', source: 'sandbox-areas', paint: { 'fill-color': ['case', ['!=', ['get', 'status'], 'ok'], '#89928c', ['match', ['get', 'risk_class'], 'low', '#328250', 'medium', '#d2932b', 'high', '#c7463e', '#89928c']], 'fill-opacity': .55 } });
+      map.addLayer({ id: 'sandbox-outline', type: 'line', source: 'sandbox-areas', paint: { 'line-color': '#31493a', 'line-width': ['case', ['==', ['get', 'status'], 'uncertain'], 3, 1.5] } });
+      map.addLayer({ id: 'sandbox-highlight', type: 'line', source: 'sandbox-areas', filter: ['==', ['get', 'crop_area_id'], ''], paint: { 'line-color': '#fff', 'line-width': 4 } });
+    }
+    function enterParcelSetup() {
+        sandboxOpenVersion++; sandboxActive = false; sandboxRequest++; sandboxPanel.hidden = true;
+        dataProvider = sandboxClient.farmerProvider(); selected.clear();
+        document.getElementById('drawer-content').hidden = false; document.getElementById('search-form').hidden = false;
+        document.querySelector('.app').classList.remove('sandbox-mode'); document.querySelector('.sheet').setAttribute('aria-labelledby', 'heading');
+        ['sandbox-fill', 'sandbox-outline', 'sandbox-highlight'].forEach(layer => { if (map.getLayer(layer)) map.setLayoutProperty(layer, 'visibility', 'none'); });
+        ['selected-fill', 'selected-outline'].forEach(layer => map.setLayoutProperty(layer, 'visibility', 'visible'));
+        input.placeholder = 'Search for a place or parcel number';
+        updateZoomHint();
+        document.getElementById('open-sandbox').hidden = true;
+        document.getElementById('import-option').disabled = true; document.getElementById('import-option').title = 'File import is not available in the backend yet.';
+        renderSelection(); status.textContent = ''; setDrawer(true);
+    }
+    async function sandboxOpen(options = {}) {
+      const openVersion = ++sandboxOpenVersion;
+      sandboxError.textContent = 'Loading farm…';
+      try {
+        const [collection, crops, clock] = await Promise.all([sandboxClient.areas(), sandboxClient.crops(), sandboxClient.clock()]);
+        if (openVersion !== sandboxOpenVersion) return;
+        if (collection?.type !== 'FeatureCollection' || !Array.isArray(collection.features) || !Array.isArray(crops) || !/^\d{4}-\d{2}-\d{2}$/.test(clock?.today || '')) throw new Error('The farm service returned incomplete data.');
+        if (options.afterSave && cropWorkflow.isEditing()) cropWorkflow.close();
+        sandboxFeatures = collection.features; sandboxCrops = crops; sandboxToday = clock.today; sandboxSelected = null; sandboxRequest++;
+        sandboxSource();
+        map.getSource('sandbox-areas').setData(collection);
+        ['sandbox-fill', 'sandbox-outline', 'sandbox-highlight'].forEach(layer => map.setLayoutProperty(layer, 'visibility', 'visible'));
+        ['selected-fill', 'selected-outline', 'sample-outline'].forEach(layer => { if (map.getLayer(layer)) map.setLayoutProperty(layer, 'visibility', 'none'); });
+        map.setFilter('sandbox-highlight', ['==', ['get', 'crop_area_id'], '']);
+        sandboxActive = true; document.getElementById('drawer-content').hidden = true; document.getElementById('crop-panel').hidden = true; sandboxPanel.hidden = false;
+        document.getElementById('search-form').hidden = true; document.getElementById('parcel-step').classList.remove('visible'); results.classList.remove('visible');
+        document.querySelector('.app').classList.add('sandbox-mode'); document.querySelector('.sheet').setAttribute('aria-labelledby', 'sandbox-heading');
+        document.getElementById('drawer-summary').textContent = 'Your crop areas'; status.textContent = '';
+        sandboxRender(); setDrawer(true); sandboxError.textContent = ''; if (sandboxDialog.open) sandboxDialog.close();
+        if (pendingJourney === 'setup') { pendingJourney = 'farmer'; enterParcelSetup(); return true; }
+        if (sandboxFeatures.length) {
+          const bounds = new maplibregl.LngLatBounds();
+          const extendCoordinates = value => { if (Array.isArray(value) && typeof value[0] === 'number' && typeof value[1] === 'number') bounds.extend(value); else if (Array.isArray(value)) value.forEach(extendCoordinates); };
+          sandboxFeatures.forEach(feature => { if (feature.geometry) extendCoordinates(feature.geometry.coordinates); });
+          if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: { top: 90, right: 50, bottom: 170, left: 50 }, maxZoom: 16, duration: 500 });
+        }
+        if (sandboxFeatures.length && sandboxFeatures[0].properties?.crop_area_id) sandboxSelect(sandboxFeatures[0].properties.crop_area_id);
+        return true;
+      } catch (error) {
+        if (openVersion !== sandboxOpenVersion || options.afterSave) return false;
+        sandboxError.textContent = error.message || 'Could not load the farm. Please try again.';
+        if (!sandboxDialog.open) sandboxDialog.showModal();
+        return false;
+      }
+    }
+    function setupSandbox() {
+      document.getElementById('open-sandbox').addEventListener('click', () => { if (provider.mode === 'backend' && sandboxClient.hasSession()) { sandboxOpen(); return; } sandboxError.textContent = ''; if (!sandboxDialog.open) sandboxDialog.showModal(); });
+      for (const mode of ['mock', 'empty']) document.getElementById(`sandbox-${mode}`).addEventListener('click', async () => {
+        if (sandboxClient.hasSession() && !window.confirm('Start a new farm? This browser will no longer hold the current farm token.')) return;
+        const buttons = sandboxDialog.querySelectorAll('button'); buttons.forEach(button => button.disabled = true);
+        try { sandboxError.textContent = 'Creating farm…'; await sandboxClient.start(mode); await sandboxOpen(); }
+        catch (error) { sandboxError.textContent = error.message || 'Could not create a farm.'; }
+        finally { buttons.forEach(button => button.disabled = false); }
+      });
+      document.getElementById('sandbox-local').addEventListener('click', () => {
+        sandboxOpenVersion++; sandboxActive = false; sandboxRequest++; sandboxPanel.hidden = true; dataProvider = FarmerData.createProvider({ mode: 'mock' }); selected.clear(); document.getElementById('drawer-content').hidden = false;
+        input.placeholder = 'Village, parcel number or identifier'; document.getElementById('open-sandbox').hidden = false; document.getElementById('open-sandbox').textContent = 'Open a farm';
+        document.getElementById('import-option').disabled = false; document.getElementById('import-option').title = '';
+        document.getElementById('search-form').hidden = false; document.querySelector('.app').classList.remove('sandbox-mode');
+        document.querySelector('.sheet').setAttribute('aria-labelledby', 'heading');
+        if (map.getLayer('sandbox-fill')) ['sandbox-fill', 'sandbox-outline', 'sandbox-highlight'].forEach(layer => map.setLayoutProperty(layer, 'visibility', 'none'));
+        ['selected-fill', 'selected-outline', 'sample-outline'].forEach(layer => { if (map.getLayer(layer)) map.setLayoutProperty(layer, 'visibility', 'visible'); });
+        renderSelection(); status.textContent = ''; if (sandboxDialog.open) sandboxDialog.close();
+      });
+      const resume = sandboxElement('button', 'crop-outline', 'Resume saved farm'); resume.type = 'button';
+      resume.addEventListener('click', sandboxOpen); sandboxDialog.querySelector('.sandbox-choice').prepend(resume);
+      const updateResume = () => { resume.hidden = !sandboxClient.hasSession(); };
+      const observer = new MutationObserver(updateResume);
+      observer.observe(sandboxDialog, { attributes: true, attributeFilter: ['open'] });
+      updateResume();
+      const journey = document.getElementById('journey-dialog');
+      const setupDialog = document.getElementById('setup-dialog');
+      const setupMessage = document.getElementById('setup-message');
+      const setupRetry = document.getElementById('setup-retry');
+      const setupRestart = document.getElementById('setup-restart');
+      const setupBack = document.getElementById('setup-back');
+      journey.addEventListener('cancel', event => event.preventDefault());
+      setupDialog.addEventListener('cancel', event => event.preventDefault());
+      function fitFields(fields) {
+        const bounds = new maplibregl.LngLatBounds();
+        const extend = value => { if (Array.isArray(value) && typeof value[0] === 'number' && typeof value[1] === 'number') bounds.extend(value); else if (Array.isArray(value)) value.forEach(extend); };
+        fields.forEach(field => {
+          const geometries = [...(field.parcels || []), ...(field.parcel ? [field.parcel] : []), ...(field.crop_areas || [])];
+          geometries.forEach(item => { if (item.geometry?.coordinates) extend(item.geometry.coordinates); });
+        });
+        if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: { top: 90, right: 50, bottom: 170, left: 50 }, maxZoom: 16, duration: 500 });
+      }
+      let newSetupReady = false;
+      const startSetup = async (renewed = false) => {
+        sandboxClient = newViewClient;
+        if (!setupDialog.open) setupDialog.showModal();
+        setupMessage.textContent = 'Connecting…';
+        setupRetry.hidden = true; setupRestart.hidden = true; setupBack.hidden = true;
+        try {
+          if (!newSetupReady) { await sandboxClient.start('empty'); newSetupReady = true; }
+          const response = await sandboxClient.fields();
+          if (!Array.isArray(response?.fields)) throw new Error('The farm service returned incomplete field data.');
+          setupDialog.close();
+          enterParcelSetup();
+          fitFields(response.fields);
+        } catch (error) {
+          if (error.status === 401) {
+            if (!renewed) { newSetupReady = false; await startSetup(true); return; }
+            setupMessage.textContent = 'Could not start a new sandbox. Please try again.';
+            setupRetry.hidden = false;
+          } else {
+            setupMessage.textContent = error.message || 'Could not connect. Please try again.';
+            setupRetry.hidden = false;
+          }
+          setupBack.hidden = false;
+        }
+      };
+      setupRetry.addEventListener('click', () => startSetup());
+      setupRestart.addEventListener('click', () => { newSetupReady = false; startSetup(); });
+      setupBack.addEventListener('click', () => { setupDialog.close(); journey.showModal(); });
+      const startJourney = async setup => {
+        if (setup) { newSetupReady = false; journey.close(); await startSetup(); return; }
+        sandboxClient = farmerClient;
+        pendingJourney = setup ? 'setup' : 'farmer';
+        sandboxError.textContent = '';
+        journey.close();
+        if (sandboxClient.hasSession()) { await sandboxOpen(); return; }
+        updateResume(); sandboxDialog.showModal();
+        const buttons = sandboxDialog.querySelectorAll('button');
+        buttons.forEach(button => button.disabled = true);
+        try { sandboxError.textContent = 'Preparing your farm…'; await sandboxClient.start(setup ? 'empty' : 'mock'); await sandboxOpen(); }
+        catch (error) { sandboxError.textContent = error.message || 'Could not create a farm.'; }
+        finally { buttons.forEach(button => button.disabled = false); }
+      };
+      document.getElementById('journey-farmer').addEventListener('click', () => startJourney(false));
+      document.getElementById('journey-new').addEventListener('click', () => startJourney(true));
+      journey.showModal();
+    }
+
   </script>
 </body>
 </html>
