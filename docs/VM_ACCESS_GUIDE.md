@@ -49,9 +49,18 @@ Shell, or simply type the `gcloud` commands of section 4 yourself.
 
 **Option A (recommended): native Windows**
 
-1. Download and run the installer from `https://cloud.google.com/sdk/docs/install#windows` (`GoogleCloudSDKInstaller.exe`). Keep the
-   defaults (bundled Python). **Untick "Run gcloud init"** on the last page: we configure it by hand below, and `init` would change
-   your usual configuration. Open a **new** PowerShell (so that `gcloud` is on the PATH) and check `gcloud --version`.
+1. Install with one command in PowerShell (it needs no administrator and does not run `gcloud init`):
+   ```powershell
+   winget install --id Google.CloudSDK -e
+   ```
+   If `winget` is not there (older Windows 10) use one of these instead: the official one-liner
+   ```powershell
+   (New-Object Net.WebClient).DownloadFile("https://dl.google.com/dl/cloudsdk/channels/rapid/GoogleCloudSDKInstaller.exe", "$env:Temp\GoogleCloudSDKInstaller.exe")
+   & "$env:Temp\GoogleCloudSDKInstaller.exe"
+   ```
+   (a window opens: keep the defaults and **untick "Run gcloud init"** on the last page, we configure it by hand below) or, with
+   Chocolatey, `choco install gcloudsdk`. Then open a **new** PowerShell (so that `gcloud` is on the PATH) and check `gcloud --version`.
+   Useful next to it: `winget install --id Git.Git -e` (Git and Git Bash, section 2.3 intro) and, for `psql`, `winget install --id PostgreSQL.PostgreSQL -e`.
 2. Log in with the granted account (the browser opens): `gcloud auth login`
 3. Create the separate configuration (the same commands in PowerShell and CMD; they do not touch your other projects):
    ```powershell
@@ -80,7 +89,7 @@ Shell, or simply type the `gcloud` commands of section 4 yourself.
    # the database password into an environment variable, without showing it
    $env:PGPASSWORD = (gcloud compute ssh fup-vm --zone europe-central2-a --configuration=geoearth --command "grep '^POSTGRES_PASSWORD=' ~/field-under-pressure-materials/.env | cut -d= -f2-" 2>$null).Trim()
    ```
-   For `psql` on Windows install the PostgreSQL client tools (`winget install --id PostgreSQL.PostgreSQL`, the command line tools are
+   For `psql` on Windows install the PostgreSQL client tools (`winget install --id PostgreSQL.PostgreSQL -e`, the command line tools are
    enough) or use QGIS (DB Manager) through the tunnel. A deploy is the helper script: `bash scripts/provision_vm.sh deploy` in Git Bash.
 
 **Option B (nothing to install): Cloud Shell.** Open `https://console.cloud.google.com` with the granted account, choose the project
