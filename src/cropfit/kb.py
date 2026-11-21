@@ -175,13 +175,15 @@ def download_file(url: str, dest: Path, *, refresh: bool = False, source_version
     h, n = hashlib.sha256(), 0
     try:
         r = http.get(url, stream=True, timeout=(30, 600))
-        with open(part, "wb") as f:
-            for chunk in r.iter_content(chunk_size=1 << 20):
-                if chunk:
-                    f.write(chunk)
-                    h.update(chunk)
-                    n += len(chunk)
-        r.close()
+        try:
+            with open(part, "wb") as f:
+                for chunk in r.iter_content(chunk_size=1 << 20):
+                    if chunk:
+                        f.write(chunk)
+                        h.update(chunk)
+                        n += len(chunk)
+        finally:
+            r.close()
         os.replace(part, dest)
     except BaseException:
         part.unlink(missing_ok=True)

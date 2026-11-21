@@ -44,7 +44,11 @@ SKIPPED_COLUMNS = ["site", "year", "plotID", "product", "unit_id", "genus", "rea
 FORMULA = "risk = sum_g A(p,g) * H(g,c)"
 INDEX_TYPE = "relative risk index, not a probability of disease"
 REFERENCE_DEFINITION = "same site, same ITS product, all years, depth-OK units incl. target"
-SAME_HOST_TAXA_AS = {"spring_wheat": "winter_wheat"}
+# Count columns written as nullable integers (not floats) in the result frames and the JSON.
+INT_COLUMNS = ("reads", "total_reads", "n_cores", "n_cores_detected", "reference_n", "reference_n_min",
+               "reference_n_max", "n_species_documented", "n_species_on_crop", "n_records_on_crop",
+               "n_genus_only_records_on_crop", "n_genera_scored", "n_genera_contributing", "n_genera_not_detected",
+               "n_genera_skipped_depth")
 
 CAVEATS = [
     "The risk index is a relative score, not a probability of disease or of yield loss.",
@@ -53,11 +57,13 @@ CAVEATS = [
     "A USDA host record means a species of the genus can infect the crop somewhere in the world; it does not "
     "show disease in this field.",
     "Fungi only: bacteria and other non-fungal pathogens are out of scope.",
-    "Pythium, Phytophthora and Aphanomyces are oomycete genera, not measured by fungal ITS primers, and are excluded.",
+    f"{', '.join(sorted(OOMYCETE_GENERA))} are oomycete genera, not measured by fungal ITS primers, and are "
+    "excluded (as are FungalTraits genera of non-fungal phyla).",
     "ITS products DP1.10081.001 and DP1.10081.002 (.001 and .002) are not comparable; references never mix them.",
     "Genera not detected in a unit but depth-adequate contribute their mid-rank percentile (a tie of zeros "
     "gets the average rank, so often about 0.4 to 0.5); see risk_from_not_detected. Genera never detected in "
-    "the whole reference are not scored.",
+    "the whole reference are not scored. s_typ_pct NaN means s_typ is undefined (genus detected in fewer than "
+    "3 reference units), so the per-genus depth rule is not applied to that genus.",
     "USDA Fungus-Host snapshot dated 2021-11-05; records are worldwide (no country filter) and there is no "
     "species synonymy (dual names can double-count).",
     "Note that totals are comparable only within one site and ITS product (reference sets and scored genera "
@@ -94,9 +100,13 @@ def _build(core: pd.DataFrame, synonyms: dict[str, str]):
         notes.append("sequenceCountQF column missing: all cores treated as QC-OK")
     if "product" not in df.columns:
         raise KeyError(f"core table has no `product` column; {STALE_HINT}")
-    df = df.copy()
-    df["year"] = pd.to_datetime(df["collectDate"]).dt.year.astype(int)
-    df["_date"] = pd.to_datetime(df["collectDate"]).dt.date.astype(str)
+    dates = pd.to_datetime(df["collectDate"], errors="coerce")
+    if dates.isna().any():
+        notes.append(f"{int(dates.isna().sum())} core rows without a valid collectDate dropped")
+    df = df[dates.notna()].copy()
+    dates = dates[dates.notna()]
+    df["year"] = dates.dt.year.astype(int)
+    df["_date"] = dates.dt.date.astype(str)
     df["product"] = df["product"].fillna("").astype(str)
 
     cores = (df.drop_duplicates("dnaSampleID")[["site", "plotID", "year", "product", "dnaSampleID", "_date",
@@ -441,12 +451,38 @@ def _kb_metadata(meta: dict) -> dict:
     return out
 
 
+def same_host_taxa(host: pd.DataFrame, crops) -> dict[str, str]:
+    """crop -> an earlier crop whose host evidence is identical for every genus (so their scores are identical).
+    Derived from the KB, e.g. winter_wheat and spring_wheat differ when durum wheat maps to spring_wheat only."""
+    if host is None or host.empty:
+        return {}
+    sig = {}
+    for c in crops:
+        sub = host[host["crop_group"] == c]
+        sig[c] = frozenset(zip(sub["genus"], sub["species_on_crop"].fillna("")))
+    out = {}
+    for i, c in enumerate(crops):
+        for e in crops[:i]:
+            if sig[c] == sig[e]:
+                out[c] = e
+                break
+    return out
+
+
+def _int_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Cast count columns to nullable Int64 so parquet and JSON carry integers, not floats like 1440.0."""
+    for c in INT_COLUMNS:
+        if c in df.columns:
+            df[c] = pd.to_numeric(df[c], errors="coerce").round().astype("Int64")
+    return df
+
+
 def _metadata(site, year, kb, params, crops, units, notes, reason) -> dict:
     products = sorted(units["product"].unique()) if len(units) else []
     n_low = int((units["total_reads"] < params["min_unit_reads"]).sum()) if len(units) else 0
     return {"schema_version": SCHEMA_VERSION, "formula": FORMULA, "index_type": INDEX_TYPE,
             "parameters": dict(params), "crops_scored": list(crops), "crops_excluded": dict(EXCLUDED_CROP_GROUPS),
-            "same_host_taxa_as": dict(SAME_HOST_TAXA_AS), "reference_definition": REFERENCE_DEFINITION,
+            "same_host_taxa_as": same_host_taxa(kb.host, tuple(crops)), "reference_definition": REFERENCE_DEFINITION,
             "products": products, "n_units": int(len(units)), "n_units_insufficient_depth": n_low,
             "kb": _kb_metadata(kb.meta), "synonyms": dict(kb.synonyms), "caveats": list(CAVEATS), "notes": list(notes),
             "reason": reason, "generated_utc": _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds")}
@@ -472,16 +508,23 @@ def compute_crop_risk(site: str, year: int, *, core: pd.DataFrame | None = None,
     elif "product" not in core.columns:
         raise KeyError(f"core table has no `product` column; {STALE_HINT}")
     crops = tuple(crops)
+    site, year = str(site).strip().upper(), int(year)
     params = {"min_unit_reads": min_unit_reads, "min_expected_reads": min_expected_reads,
               "min_reference": min_reference, "hard_min_reference": hard_min_reference}
 
     site_core = core[core["site"] == site]
     units, shares, info = _build(site_core, kb.synonyms) if len(site_core) else (None, None, None)
     if units is None or not (units["year"] == year).any():
-        years = pd.to_datetime(core["collectDate"]).dt.year
-        avail = sorted({f"{s} {y}" for s, y in zip(core["site"], years)})
-        return _empty_result(site, year, kb, params, crops,
-                             f"no ITS units for {site} {year}; available: {avail}", [])
+        years = pd.to_datetime(core["collectDate"], errors="coerce").dt.year
+        here = (core["site"] == site) & (years == year)
+        if here.any():
+            reason = (f"ITS cores exist for {site} {year} but none passed NEON QC (sequenceCountQF) and the "
+                      f"horizon filter; no units to score")
+        else:
+            qc = core.get("sequenceCountQF", pd.Series("", index=core.index)) != "Below threshold"
+            avail = sorted({f"{s} {int(y)}" for s, y in zip(core["site"][qc], years[qc]) if pd.notna(y)})
+            reason = f"no ITS units for {site} {year}; available: {avail}"
+        return _empty_result(site, year, kb, params, crops, reason, [])
 
     notes = list(info["notes"])
     target = units[units["year"] == year].reset_index(drop=True)
@@ -506,4 +549,4 @@ def compute_crop_risk(site: str, year: int, *, core: pd.DataFrame | None = None,
     md["n_units"] = int(len(target))
     md["n_units_insufficient_depth"] = int((target["total_reads"] < min_unit_reads).sum())
     md["products"] = sorted(target["product"].unique())
-    return CropRiskResult(site, int(year), summary, contrib, skipped, md)
+    return CropRiskResult(site, int(year), _int_columns(summary), _int_columns(contrib), _int_columns(skipped), md)

@@ -465,7 +465,7 @@ def test_metadata_content_and_caveats():
     assert md["parameters"] == {"min_unit_reads": 2000, "min_expected_reads": 3.0, "min_reference": 10,
                                 "hard_min_reference": 5}
     assert md["crops_scored"] == list(CROPS)
-    assert md["same_host_taxa_as"] == {"spring_wheat": "winter_wheat"}
+    assert md["same_host_taxa_as"] == {}                     # no two test crops share identical host evidence
     assert "double_wheat_soy" in md["crops_excluded"]
     meta = mk_kb().meta                                      # kb_meta.json, sources flattened to the top level
     assert md["kb"] == {**meta["sources"], **{k: v for k, v in meta.items() if k != "sources"}}
@@ -497,3 +497,27 @@ def test_no_scored_genera_anywhere_does_not_crash(kw, core):
     res = run(worked_core() if core is None else core, **kw)
     assert res.contributions.empty and (res.summary["status"] != "ok").all()
     assert res.summary["risk_index"].isna().all()
+
+
+# ---------------------------------------------------------------------------------------------- review fixes
+
+def test_same_host_taxa_is_derived_from_the_kb():
+    host = mk_kb().host
+    assert risk.same_host_taxa(host, ("winter_wheat", "spring_wheat", "corn")) == {}   # spring_wheat has no records
+    twin = host[host["crop_group"] == "winter_wheat"].assign(crop_group="spring_wheat")
+    host2 = pd.concat([host[host["crop_group"] != "spring_wheat"], twin], ignore_index=True)
+    assert risk.same_host_taxa(host2, ("winter_wheat", "spring_wheat", "corn")) == {"spring_wheat": "winter_wheat"}
+
+
+def test_all_cores_failing_qc_gives_a_specific_reason():
+    core = pd.DataFrame(core_rows("STER", "STER_026", "2022-07-12", ".002", {"Fusarium": 100}, qf="Below threshold"))
+    res = run(core)
+    assert res.empty and "none passed NEON QC" in res.metadata["reason"]
+
+
+def test_counts_are_integers_and_year_is_coerced():
+    res = risk.compute_crop_risk("ster", "2022", core=worked_core(), kb=mk_kb(), crops=CROPS)
+    assert not res.empty and res.year == 2022
+    assert str(res.contributions["reads"].dtype) == "Int64" and str(res.summary["reference_n_min"].dtype) == "Int64"
+    rec = res.to_dict()["contributions"][0]
+    assert isinstance(rec["reads"], int) and isinstance(rec["reference_n"], int)
