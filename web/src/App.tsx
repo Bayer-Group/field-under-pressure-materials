@@ -9,7 +9,7 @@ export function App() {
       <header className="topbar">
         <a href="#/" className="brand">Field explorer</a>
       </header>
-      {route.page === 'event' ? <EventDetails eventId={route.eventId} /> : <Explorer plotId={route.plotId} tab={route.tab} sampleId={route.sampleId} />}
+      {route.page === 'event' ? <EventDetails eventId={route.eventId} /> : <Explorer plotId={route.plotId} tab={route.tab} sampleId={route.sampleId} unit={route.unit} crop={route.crop} />}
     </div>
   )
 }

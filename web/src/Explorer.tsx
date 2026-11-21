@@ -4,7 +4,8 @@ import { PlotMap, type MapOverlay } from './features/map/PlotMap'
 import { PlotTimeline, type MapLayer, type TimelineChoice } from './features/timeline/PlotTimeline'
 import { formatDate } from './format'
 import { MicrobiomePanel } from './features/microbiome/MicrobiomePanel'
-import { microbesHref, navigate, plotHref, type PlotTab } from './router'
+import { RiskPanel } from './features/risk/RiskPanel'
+import { microbesHref, navigate, plotHref, riskHref, type PlotTab } from './router'
 import { useFetch } from './useFetch'
 
 // How far around the plot the map shows: aerial photos cover about 120-240 m, greenness maps 1 km.
@@ -13,7 +14,11 @@ const CONTEXT_M: Record<MapLayer, number> = { photo: 130, greenness: 1050, none:
 /** Map of all plots; once a plot is chosen, a panel below with one tab per kind of plot data: the timeline
  *  (greenness, visits, aerial photos; the image chosen on it is laid over the map) and the soil microbiome.
  *  Panels for future backend results (recommendations etc.) become further tabs. */
-export function Explorer({ plotId, tab, sampleId }: { plotId: string | null; tab: PlotTab; sampleId: string | null }) {
+const tabHref = (tab: PlotTab, id: string) => (tab === 'microbes' ? microbesHref(id) : tab === 'risk' ? riskHref(id) : plotHref(id))
+
+export function Explorer({ plotId, tab, sampleId, unit, crop }: {
+  plotId: string | null; tab: PlotTab; sampleId: string | null; unit: string | null; crop: string | null
+}) {
   const plots = useFetch('plots', api.plots)
   const photos = useFetch(plotId, (s) => api.aerial(plotId!, s))
   const maps = useFetch(plotId, (s) => api.greennessMaps(plotId!, s))
@@ -52,7 +57,7 @@ export function Explorer({ plotId, tab, sampleId }: { plotId: string | null; tab
       <section className="map-area">
         <PlotMap
           plots={plots.data ?? []} selected={selected} overlay={selected ? overlay : null} contextM={CONTEXT_M[layer]}
-          onSelect={(id) => navigate(tab === 'microbes' ? microbesHref(id) : plotHref(id))} inspect={selected ? inspect : undefined}
+          onSelect={(id) => navigate(tabHref(tab, id))} inspect={selected ? inspect : undefined}
         />
         {selected && layer === 'greenness' && (
           <div className="ndvi-legend">
@@ -76,11 +81,14 @@ export function Explorer({ plotId, tab, sampleId }: { plotId: string | null; tab
               <nav className="tabs" aria-label="What to show for this plot">
                 <a href={plotHref(plotId)} aria-current={tab === 'greenness' ? 'page' : undefined}>Greenness over time</a>
                 <a href={microbesHref(plotId)} aria-current={tab === 'microbes' ? 'page' : undefined}>Soil microbes</a>
+                <a href={riskHref(plotId)} aria-current={tab === 'risk' ? 'page' : undefined}>Crop disease risk</a>
               </nav>
               <a href="#/" className="all-plots">All plots</a>
             </div>
             {tab === 'microbes' ? (
               <MicrobiomePanel plotId={plotId} sampleId={sampleId} />
+            ) : tab === 'risk' ? (
+              <RiskPanel plotId={plotId} unit={unit} crop={crop} />
             ) : loading ? (
               <p className="message">Loading…</p>
             ) : (

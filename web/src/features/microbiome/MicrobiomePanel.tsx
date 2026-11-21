@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Choice } from '../../Choice'
 import { api, type MicrobeKind, type MicrobiomeSample, type TaxonRank } from '../../api'
 import { formatDate, toTime } from '../../format'
 import { microbesHref, navigate } from '../../router'
@@ -103,15 +104,6 @@ export function MicrobiomePanel({ plotId, sampleId }: { plotId: string; sampleId
           <CompositionView data={comp.data} query={query} onQuery={setQuery} />
         </>
       )}
-    </div>
-  )
-}
-
-function Choice({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="choice" role="group" aria-label={label}>
-      <span className="choice-label">{label}</span>
-      <div className="seg-buttons">{children}</div>
     </div>
   )
 }

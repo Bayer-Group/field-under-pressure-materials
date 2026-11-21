@@ -136,3 +136,50 @@ h2 { font-size: 1rem; margin: 0; }
 }
 .taxon-search input:focus { outline: 2px solid var(--green); outline-offset: -1px; border-color: transparent; }
 .search-count { font-size: 0.8rem; color: var(--muted); }
+
+/* crop disease risk */
+.risk .controls { display: flex; flex-wrap: wrap; gap: 8px 22px; margin: 4px 0 14px; }
+.risk h2 { margin: 14px 0 6px; }
+.risk .chart-head h2 { margin: 0; }
+.risk .muted, .risk .hint { color: var(--muted); }
+.risk .hint { font-size: 0.75rem; }
+.risk .rank-hint { margin: 8px 0 4px; font-size: 0.8rem; color: var(--muted); }
+.risk .list-tools { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 8px 20px; margin-bottom: 6px; }
+.risk .legend i { border-radius: 2px; }
+.risk .key-found { background: var(--green); }
+.risk .key-notfound { background: color-mix(in srgb, var(--green) 35%, transparent); }
+.crop-rows { list-style: none; margin: 0; padding: 0; }
+.crop-rows li {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; padding: 5px 6px;
+  border-bottom: 1px solid var(--line); font-size: 0.85rem;
+}
+.crop-rows li.on { background: var(--bg); }
+.crop-rows .crop-name { width: 10em; font-weight: 600; color: var(--ink); text-decoration: none; }
+.crop-rows .crop-name:hover { text-decoration: underline; }
+.crop-rows .crop-name[aria-current='true'] { color: var(--green); }
+.crop-rows .rank { width: 12em; }
+.crop-rows .value { color: var(--muted); font-variant-numeric: tabular-nums; }
+.badge {
+  display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 0.75rem; color: var(--muted);
+  background: color-mix(in srgb, var(--muted) 14%, transparent);
+}
+.pill { display: inline-block; padding: 0 8px; border-radius: 999px; font-size: 0.75rem; }
+.pill.found { color: var(--green); background: color-mix(in srgb, var(--green) 14%, transparent); }
+.pill.notfound { color: var(--muted); background: color-mix(in srgb, var(--muted) 14%, transparent); }
+.dot-strip { display: block; overflow: visible; }
+.dot-strip .axis { stroke: var(--line); stroke-width: 1; }
+.dot-strip .peer { fill: var(--muted); fill-opacity: 0.55; }
+.dot-strip a:hover .peer, .dot-strip a:focus-visible .peer { fill-opacity: 1; stroke: var(--ink); }
+.dot-strip a:focus-visible { outline: none; }
+.dot-strip .me { fill: var(--green); stroke: var(--surface); stroke-width: 1.5; }
+.split-bar { display: block; }
+.split-bar .track { fill: var(--line); fill-opacity: 0.35; }
+.split-bar .found { fill: var(--green); }
+.split-bar .notfound { fill: var(--green); fill-opacity: 0.35; }
+.risk a:focus-visible, .risk summary:focus-visible, .risk button:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+.risk .contributions .foot { margin: 6px 0 0; font-size: 0.8rem; color: var(--muted); }
+.risk .comp-table details summary { cursor: pointer; }
+.risk .comp-table details ul { margin: 2px 0 4px; padding-left: 18px; font-size: 0.8rem; color: var(--muted); }
+.risk .skipped details { margin: 4px 0; font-size: 0.85rem; }
+.risk .skipped summary { cursor: pointer; }
+.risk .skipped ul { margin: 4px 0; padding-left: 20px; font-size: 0.8rem; }
