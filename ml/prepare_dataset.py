@@ -396,6 +396,10 @@ def build_weather_table_from_open_meteo(
     """
     fields_df = pd.read_parquet(fields_master_parquet)
     om_df = pd.read_parquet(open_meteo_parquet)
+    if "sm_l3" not in om_df.columns and "sm_l2" in om_df.columns:
+        print("[INFO] Brak kolumny sm_l3 w danych Open-Meteo — podstawiam sm_l2 jako przybliżenie głębszej warstwy.")
+        om_df = om_df.copy()
+        om_df["sm_l3"] = om_df["sm_l2"]
     field_pt_df = _map_fields_to_nearest_grid(fields_df, om_df, ["lat", "lon"])
 
     merged = field_pt_df.merge(om_df, on=["lat", "lon"], how="inner")
