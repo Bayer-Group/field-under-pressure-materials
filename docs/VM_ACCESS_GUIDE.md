@@ -22,8 +22,8 @@ fix** that your feature depends on.
 
 1. A **Google account** (Gmail is fine). Give its e-mail to the project owner: access is granted to that exact address. No card, no
    separate "GCP account".
-2. A terminal: Linux or macOS, or on Windows **WSL2** (section 2.3: the scripts of the repo are bash) or, with nothing to install,
-   **Cloud Shell** in the browser (section 2.3).
+2. A terminal: Linux, macOS or **Windows** (PowerShell or CMD work, section 2.3), or, with nothing to install, **Cloud Shell** in the
+   browser.
 3. The repo cloned (`git clone https://github.com/geoearth-junction/field-under-pressure-materials.git`).
 
 ## 2. Install and set up gcloud (once, about 10 minutes)
@@ -42,43 +42,46 @@ brew install --cask google-cloud-sdk
 
 ### 2.3 Windows
 
-The scripts of the repo (`scripts/provision_vm.sh`) are bash and the guide assumes a Linux shell, so on Windows use **WSL2** (a real
-Ubuntu inside Windows). Native Windows works for `gcloud` alone, but not for the scripts. Nobody on the team tested the native
-route, so it is described only as a fallback.
+`gcloud` runs natively on Windows, in **PowerShell** or **CMD** (or in the "Google Cloud SDK Shell" that the installer adds). The
+only thing that is not native is the helper script `scripts/provision_vm.sh`: it is bash, so run it from **Git Bash** (it comes with
+Git for Windows: right click in the repo folder, "Git Bash Here"; the script is not tested there by the team) or from WSL2 or Cloud
+Shell, or simply type the `gcloud` commands of section 4 yourself.
 
-**Option A (recommended): WSL2 with Ubuntu.** Needs Windows 10 (version 2004 or newer) or Windows 11 and virtualisation enabled in
-the BIOS (it usually is).
+**Option A (recommended): native Windows**
 
-1. Open **PowerShell as administrator** and run:
+1. Download and run the installer from `https://cloud.google.com/sdk/docs/install#windows` (`GoogleCloudSDKInstaller.exe`). Keep the
+   defaults (bundled Python). **Untick "Run gcloud init"** on the last page: we configure it by hand below, and `init` would change
+   your usual configuration. Open a **new** PowerShell (so that `gcloud` is on the PATH) and check `gcloud --version`.
+2. Log in with the granted account (the browser opens): `gcloud auth login`
+3. Create the separate configuration (the same commands in PowerShell and CMD; they do not touch your other projects):
    ```powershell
-   wsl --install -d Ubuntu
+   gcloud config configurations create geoearth
+   gcloud config set account YOUR_EMAIL@gmail.com
+   gcloud config set project geo-earth-junction
+   gcloud config set compute/zone europe-central2-a
+   gcloud config set compute/region europe-central2
+   gcloud config configurations activate default        # back to your usual one (optional)
    ```
-   Restart the computer when asked, then open **Ubuntu** from the Start menu and create a Linux user name and password (a new one, it
-   is not your Windows password). If the command only prints a help text, WSL is already there: `wsl --install -d Ubuntu` still
-   works, and `wsl -l -v` must show `VERSION 2`.
-2. **From now on everything happens inside the Ubuntu terminal.** Install the tools:
-   ```bash
-   sudo apt update && sudo apt install -y git curl ca-certificates gnupg python3 python3-venv postgresql-client
-   # gcloud from the official Google repository
-   curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg
-   echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" \
-     | sudo tee /etc/apt/sources.list.d/google-cloud-sdk.list
-   sudo apt update && sudo apt install -y google-cloud-cli
-   gcloud --version
+   For one session: PowerShell `$env:CLOUDSDK_ACTIVE_CONFIG_NAME = "geoearth"`, CMD `set CLOUDSDK_ACTIVE_CONFIG_NAME=geoearth`; or add
+   `--configuration=geoearth` to every command.
+4. `gcloud compute ssh` needs an **SSH client**. Windows 10 and 11 usually have the "OpenSSH Client": check `ssh -V`; if it is
+   missing, add it in Settings, Apps, Optional features, "Add a feature", "OpenSSH Client".
+5. Check (PowerShell):
+   ```powershell
+   gcloud compute instances list --configuration=geoearth
+   gcloud compute ssh fup-vm --zone europe-central2-a --configuration=geoearth        # a shell on the VM; "exit" to leave
    ```
-3. **Keep the repo inside the Linux filesystem**, not under `/mnt/c/...` (that is slow and breaks file permissions and line endings):
-   ```bash
-   git config --global core.autocrlf input
-   mkdir -p ~/repos && cd ~/repos
-   git clone https://github.com/geoearth-junction/field-under-pressure-materials.git
-   cd field-under-pressure-materials
+6. The everyday commands of section 4 in PowerShell (the remote command goes in double quotes):
+   ```powershell
+   gcloud compute ssh fup-vm --zone europe-central2-a --configuration=geoearth --command "sudo docker ps --format '{{.Names}}: {{.Status}}'"
+   gcloud compute ssh fup-vm --zone europe-central2-a --configuration=geoearth --command "sudo docker logs --tail 100 spatial_backend"
+   # the tunnel to the database, in its own window, left open: localhost:5433 -> the database on the VM
+   gcloud compute ssh fup-vm --zone europe-central2-a --configuration=geoearth -- -N -L 5433:localhost:5432
+   # the database password into an environment variable, without showing it
+   $env:PGPASSWORD = (gcloud compute ssh fup-vm --zone europe-central2-a --configuration=geoearth --command "grep '^POSTGRES_PASSWORD=' ~/field-under-pressure-materials/.env | cut -d= -f2-" 2>$null).Trim()
    ```
-   Log in to GitHub the same way you push today, but inside WSL (`gh auth login`, or an SSH key made in WSL). Windows credentials are not
-   shared with it. You can open the folder from Windows at `\\wsl$\Ubuntu\home\<you>\repos` and edit with VS Code ("WSL" extension).
-4. Continue with the login below. `gcloud auth login` normally opens the browser of Windows. If it does not, copy the printed link
-   into the browser by hand (if your gcloud asks for it, use `gcloud auth login --no-launch-browser` or `--no-browser`).
-5. The tunnel works for Windows programs too: with WSL2 the port opened in Ubuntu (`scripts/provision_vm.sh tunnel`, port 5433) is
-   reachable from QGIS on Windows at `localhost:5433` (WSL2 forwards localhost by default).
+   For `psql` on Windows install the PostgreSQL client tools (`winget install --id PostgreSQL.PostgreSQL`, the command line tools are
+   enough) or use QGIS (DB Manager) through the tunnel. A deploy is the helper script: `bash scripts/provision_vm.sh deploy` in Git Bash.
 
 **Option B (nothing to install): Cloud Shell.** Open `https://console.cloud.google.com` with the granted account, choose the project
 `geo-earth-junction` and click the terminal icon at the top right. `gcloud` and `git` are there, signed in already:
@@ -90,14 +93,15 @@ git clone https://github.com/geoearth-junction/field-under-pressure-materials.gi
 GCLOUD_CONFIG=default scripts/provision_vm.sh status      # Cloud Shell has the "default" configuration only
 ```
 
-Good for looking at logs, deploying and running `psql` on the VM. Not for QGIS and not for a tunnel to your laptop, and the session is
-temporary (your home directory is kept). Use `GCLOUD_CONFIG=default` in front of every `scripts/provision_vm.sh` command there.
+Good for looking at logs, deploying and running `psql` on the VM, with the bash script working as it is. Not for QGIS and not for a
+tunnel to your laptop, and the session is temporary (your home directory is kept). Use `GCLOUD_CONFIG=default` in front of every
+`scripts/provision_vm.sh` command there.
 
-**Option C (fallback): native Windows.** Install `gcloud` with the installer from
-`https://cloud.google.com/sdk/docs/install#windows` (it opens a "Google Cloud SDK Shell"). `gcloud compute ssh` then needs the OpenSSH
-client (Settings, System, Optional features, add "OpenSSH Client"; the SDK can also use PuTTY). `scripts/provision_vm.sh` does not run
-in PowerShell: use Git Bash, or type the `gcloud` commands of section 4 by hand. In PowerShell set the configuration with
-`$env:CLOUDSDK_ACTIVE_CONFIG_NAME = "geoearth"`. If something odd happens here, switch to option A.
+**Option C: WSL2 (Ubuntu inside Windows)** if you prefer a Linux shell for everything, scripts included. In PowerShell as
+administrator: `wsl --install -d Ubuntu`, restart, open Ubuntu and create a user. Then follow the Linux steps (section 2.1) inside
+Ubuntu, with the packages `git curl ca-certificates gnupg python3 python3-venv postgresql-client`, and keep the repo in the Linux
+filesystem (`~/repos`, not `/mnt/c`; `git config --global core.autocrlf input`). Log in to GitHub inside WSL as well. A tunnel opened
+in Ubuntu is reachable from Windows programs (QGIS) at `localhost:5433`.
 
 Create a **separate configuration** for this project, so that your other GCP projects stay untouched. Use exactly the name
 `geoearth`: `scripts/provision_vm.sh` uses it by default.
@@ -130,7 +134,7 @@ The first `ssh` creates an SSH key for you (leave the passphrase empty) and may 
 | `Required 'compute.instances.get' permission` or `403` | the owner has not granted your account yet, or you logged in with another e-mail (`gcloud auth list`) |
 | `Permission denied (publickey)` right after the first try | wait a minute and retry; if it persists, tell the owner |
 | `Could not fetch resource` / wrong project | `gcloud config list --configuration=geoearth` must show your account and `geo-earth-junction` |
-| `gcloud: command not found` | restart the terminal; on Windows install gcloud inside WSL (Ubuntu), not only in Windows, and run it there |
+| `gcloud: command not found` | restart the terminal (on Windows the PATH is read when a terminal starts); if it persists, use the "Google Cloud SDK Shell" from the Start menu |
 | the VM is `TERMINATED` | **do not start it on your own initiative without telling the team**; see section 6 |
 
 ## 4. Everyday use
