@@ -7,7 +7,6 @@ from pathlib import Path
 import sys
 from typing import Iterable
 
-
 def _sanitize_proj_env() -> None:
     """Clear external PROJ_LIB/PROJ_DATA so venv wheels use their bundled proj.db"""
     prefix = Path(sys.prefix).resolve()
@@ -20,7 +19,6 @@ def _sanitize_proj_env() -> None:
                 os.environ.pop(var, None)
         except OSError:
             os.environ.pop(var, None)
-
 
 _sanitize_proj_env()
 
@@ -74,16 +72,10 @@ ZONE_LABELS_3 = {
 
 _STRUCT4 = np.array([[0, 1, 0], [1, 1, 1], [0, 1, 0]], dtype=bool)
 
-
 def _zone_label(zone_id: int, n_clusters: int) -> str:
     if n_clusters == 3 and zone_id in ZONE_LABELS_3:
         return ZONE_LABELS_3[zone_id]
     return f"strefa_{zone_id}"
-
-
-# ==============================================================================
-# 1. POLA I EKSTRAKCJA CECH Z RASTROW NDVI
-# ==============================================================================
 
 
 def load_fields(boundary_file: str | Path, min_area_ha: float = 3.0) -> gpd.GeoDataFrame:
@@ -324,11 +316,6 @@ def compute_field_zscore_median(
             inner_buffer_m=inner_buffer_m,
             min_valid_pixels=min_valid_pixels,
         )
-
-
-# ==============================================================================
-# 2. GLEBA PODPOLOWA AWC (H3 POZIOM 10) PRZEZ KW.SOIL / KW.SOIL_AWS
-# ==============================================================================
 
 
 def load_h3_awc_lookup(
