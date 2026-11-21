@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import tempfile
 import time
 from pathlib import Path
 
@@ -40,13 +42,29 @@ def post(url: str, **kw) -> requests.Response:
 
 
 def cached(namespace: str, key: str, fetch, *, as_text: bool = False):
-    """Return cached JSON/text for (namespace, key); call fetch() on miss and store it."""
+    """Return cached JSON/text for (namespace, key); call fetch() on miss and store it.
+
+    Writes go to a unique temp file and are renamed into place, so a crash or two threads fetching the same
+    key never leave a half-written entry. An unreadable JSON entry (e.g. from older code) is refetched."""
     d = CACHE / namespace
     d.mkdir(parents=True, exist_ok=True)
     h = hashlib.sha1(key.encode()).hexdigest()[:20]
     p: Path = d / (h + (".txt" if as_text else ".json"))
     if p.exists():
-        return p.read_text() if as_text else json.loads(p.read_text())
+        txt = p.read_text()
+        if as_text:
+            return txt
+        try:
+            return json.loads(txt)
+        except json.JSONDecodeError:
+            pass
     val = fetch()
-    p.write_text(val if as_text else json.dumps(val))
+    fd, tmp = tempfile.mkstemp(dir=d, prefix=h, suffix=".part")
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(val if as_text else json.dumps(val))
+        os.replace(tmp, p)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
     return val

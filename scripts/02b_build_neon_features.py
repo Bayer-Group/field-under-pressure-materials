@@ -29,7 +29,6 @@ bt = cores.groupby(["plotID", "collectDate"])["_bt"].mean().rename("its_below_th
 g = g.merge(bt, on=["plotID", "collectDate"], how="left")
 g.to_parquet(PROCESSED / "its_genus.parquet", index=False)
 ts = neon.plot_its_timeseries(g)
-ts["collectDate"] = ts["collectDate"]
 ts = ts.merge(bt, on=["plotID", "collectDate"], how="left")
 ts.to_parquet(PROCESSED / "plot_its_timeseries.parquet", index=False)
 neon.plot_its_latest(ts).to_parquet(PROCESSED / "plot_its.parquet", index=False)

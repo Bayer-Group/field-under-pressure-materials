@@ -59,11 +59,26 @@ def percentile_rank(values: pd.Series, ref: pd.Series) -> pd.Series:
     return pd.Series(out, index=values.index)
 
 
-def fetch_product(dpid: str, sites=SITES, tabl="all", package="basic") -> dict[str, pd.DataFrame]:
-    """Pull one product for all sites, concatenating per table; saves parquet under data/raw/neon/<dpid>/."""
+class IncompleteFetch(RuntimeError):
+    """A pull did not get everything it asked for; nothing was written. Message never contains the token."""
+
+
+def _write_parquet_atomic(df: pd.DataFrame, path: Path) -> None:
+    tmp = path.with_name(path.name + ".part")
+    df.to_parquet(tmp, index=False)
+    os.replace(tmp, path)
+
+
+def fetch_product(dpid: str, sites=SITES, tabl="all", package="basic",
+                  allow_partial: bool = False) -> dict[str, pd.DataFrame]:
+    """Pull one product for all sites, concatenating per table; saves parquet under data/raw/neon/<dpid>/.
+
+    Each table file holds every site, so if any site fails nothing is written (the existing raw files stay
+    as they were) and IncompleteFetch is raised. allow_partial=True writes the sites that succeeded."""
     import neonutilities as nu
     token = get_token()
     parts: dict[str, list[pd.DataFrame]] = {}
+    failed = []
     for site in sites:
         try:
             res = nu.load_by_product(dpid, site=site, startdate=None, enddate=None, package=package,
@@ -71,16 +86,19 @@ def fetch_product(dpid: str, sites=SITES, tabl="all", package="basic") -> dict[s
                                      token=token, progress=False)
         except Exception as e:  # noqa: BLE001 - never echo token-bearing details
             print(f"  {dpid} {site}: FAILED {type(e).__name__}")
+            failed.append(site)
             continue
         for name, df in res.items():
             if isinstance(df, pd.DataFrame) and len(df):
                 parts.setdefault(name, []).append(df)
+    if failed and not allow_partial:
+        raise IncompleteFetch(f"{dpid}: sites failed {failed}; raw files left unchanged")
     out = {}
     d = RAW_NEON / dpid
     d.mkdir(parents=True, exist_ok=True)
     for name, dfs in parts.items():
         df = pd.concat(dfs, ignore_index=True)
-        df.to_parquet(d / f"{name}.parquet", index=False)
+        _write_parquet_atomic(df, d / f"{name}.parquet")
         out[name] = df
     return out
 
@@ -158,6 +176,13 @@ def build_its_core(raw: pd.DataFrame) -> pd.DataFrame:
         df = df[df[kc].astype("string").str.lower() == "fungi"].copy()
     df["dnaSampleID"] = df[idc].astype(str)
     df["soilSampleID"] = df["dnaSampleID"].str.replace(r"-GEN(-DNA\d+)?$", "", regex=True)
+    # Downstream treats a DNA sample as a core (n_cores, per-core mean shares, the metagenome join by
+    # soilSampleID). Two extracts of one core (-DNA1/-DNA2) would be counted twice and their shares summed.
+    ext = df.groupby("soilSampleID")["dnaSampleID"].nunique()
+    if (ext > 1).any():
+        dup = ext[ext > 1]
+        raise ValueError(f"{len(dup)} soil cores have more than one DNA extract, e.g. {dup.index[:3].tolist()}; "
+                         "pick one extract per core before building per-core tables")
     df["_cnt"] = pd.to_numeric(df[cc], errors="coerce").fillna(0)
     df["genus"] = df[gc].astype("string").str.strip()
     # fungal reads without a genus stay visible (cores with only such reads would otherwise vanish)
@@ -263,11 +288,6 @@ def plot_its_latest(ts: pd.DataFrame) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------- chemistry / qPCR
-def _site_from(df):
-    c = _pick(df, "siteID")
-    return df[c] if c else df["plotID"].str[:4]
-
-
 def build_chem(tables: dict[str, pd.DataFrame]) -> pd.DataFrame:
     """Per plotID x collectDate means from sls_soilChemistry, sls_soilpH, sls_soilMoisture (names matched loosely)."""
     out = None
@@ -286,8 +306,6 @@ def build_chem(tables: dict[str, pd.DataFrame]) -> pd.DataFrame:
             continue
         df["collectDate"] = pd.to_datetime(df[dc], errors="coerce").dt.normalize()
         have = {k: v for k, v in cols.items() if k in df.columns}
-        if key == "soilChemistry" and "soilMoisture" in df.columns:
-            pass
         for k in have:
             df[k] = pd.to_numeric(df[k], errors="coerce")
         # horizon: keep mineral if the column exists
@@ -311,37 +329,16 @@ def build_chem(tables: dict[str, pd.DataFrame]) -> pd.DataFrame:
     return out.sort_values(["plotID", "collectDate"]).reset_index(drop=True)
 
 
-def build_qpcr(tables: dict[str, pd.DataFrame]) -> pd.DataFrame:
-    name = next((n for n in tables if "qpcr" in n.lower() and "validation" not in n.lower()), None)
-    if name is None:
-        name = next(n for n in tables if "soilMicrobeGroup".lower() in n.lower() or "mga" in n.lower())
-    df = tables[name].copy()
-    return df  # reshaped in build_qpcr_plot once columns are inspected
-
-
-def build_qpcr_plot(df: pd.DataFrame) -> pd.DataFrame:
-    idc = _pick(df, "dnaSampleID", "sampleID")
-    df = df.copy()
-    pc = _pick(df, "plotID")
-    dc = _pick(df, "collectDate")
-    if dc:
-        df["collectDate"] = pd.to_datetime(df[dc], errors="coerce").dt.normalize()
-    if idc and (not pc or df[pc].isna().all()):
-        p = df[idc].map(parse_sample_id)
-        df["plotID"] = p.map(lambda d: d.get("plotID"))
-        if "collectDate" not in df or df["collectDate"].isna().all():
-            df["collectDate"] = p.map(lambda d: d.get("date"))
-    elif pc:
-        df = df.rename(columns={pc: "plotID"})
-    return df
-
-
 # ---------------------------------------------------------------- ITS per-sample files
-def fetch_its_sample_files(product: str = "DP1.10081.002", workers: int = 8) -> pd.DataFrame:
+def fetch_its_sample_files(product: str = "DP1.10081.002", workers: int = 8,
+                           allow_partial: bool = False) -> pd.DataFrame:
     """ITS taxon tables come as per-sample CSVs (public storage URLs listed in the product's sample-metadata
     table: mct_soilSampleMetadata_ITS for .002, mcc_soilSeqVariantMetadata_ITS for .001). Download all of them
     (every run of re-sequenced samples; select_its_runs() picks one later), keep taxonomy + counts (no
-    sequences), save one parquet at its_taxonomy_path(product)."""
+    sequences), save one parquet at its_taxonomy_path(product).
+
+    If any file fails, nothing is written (the existing parquet stays) and IncompleteFetch is raised;
+    allow_partial=True writes what was downloaded."""
     import io
     from concurrent.futures import ThreadPoolExecutor
     from . import http
@@ -375,6 +372,11 @@ def fetch_its_sample_files(product: str = "DP1.10081.002", workers: int = 8) -> 
     print(f"  {product} ITS per-sample files: {len(ok)}/{len(res)} downloaded")
     if failed:
         print(f"  FAILED ({len(failed)}): {', '.join(failed[:10])}{' ...' if len(failed) > 10 else ''}")
+        if not allow_partial:
+            raise IncompleteFetch(f"{product}: {len(failed)}/{len(res)} ITS files failed; "
+                                  f"{its_taxonomy_path(product).name} left unchanged")
+    if not ok:
+        raise IncompleteFetch(f"{product}: no ITS files downloaded")
     out = pd.concat(ok, ignore_index=True)
-    out.to_parquet(its_taxonomy_path(product), index=False)
+    _write_parquet_atomic(out, its_taxonomy_path(product))
     return out

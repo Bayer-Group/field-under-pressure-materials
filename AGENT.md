@@ -15,7 +15,7 @@ Related: `docs/nmdc-data-guide.md` (how to interpret the NMDC files and how STER
 ```bash
 uv venv --python 3.12 .venv            # geo wheels are risky on newer system Pythons
 uv pip install --python .venv/bin/python -e .
-.venv/bin/python -m pytest -q          # 14 tests, no network, no data needed
+.venv/bin/python -m pytest -q          # 22 tests, no network, no data needed
 ```
 
 The package is `cropfit` in `src/cropfit/` (the name is historical). Scripts add `src/` to `sys.path` themselves; run them from the repo root: `.venv/bin/python scripts/<name>.py`. `e1_match.py` and `pull_nmdc_cropland.py` use paths relative to the current directory, so run them from the repo root.
@@ -135,7 +135,7 @@ Note: `03_build_plots.py` and `04_build_fields.py` carry the `window`/`plot` sel
   - Chemistry and pH: 2013 to 2026 (the newest releases may be provisional; the pull uses `include_provisional=True`).
   - Pooling: 76 composites, 228 cores.
 - **Access:** NEON data portal API through the `neonutilities` package; **token required** (`NEON_API_TOKEN` in `.env`, sent as `X-API-Token`). `include_provisional=True`, release "current". The per-sample ITS CSVs are public storage URLs; the code fetches them with `http.get` (UA set).
-- **Download:** `.venv/bin/python scripts/02_fetch_neon.py [DPID ...]` (default: DP1.10081.002, DP1.10081.001, DP1.10109.001, DP1.10086.001). Raw tables land as parquet under `data/raw/neon/<DPID>/<table>.parquet`; for each ITS product the script then downloads **every** per-sample ITS CSV (all runs of re-sequenced samples, 8 threads; 275/275 for .002 and 321/321 for .001, measured), keeps taxonomy and counts only, and writes `mct_soilPerSampleTaxonomy_ITS.parquet` / `mcc_soilPerSampleTaxonomy_ITS.parquet`. Failed downloads are listed by file name.
+- **Download:** `.venv/bin/python scripts/02_fetch_neon.py [--allow-partial] [DPID ...]` (default: DP1.10081.002, DP1.10081.001, DP1.10109.001, DP1.10086.001). Raw tables land as parquet under `data/raw/neon/<DPID>/<table>.parquet`; for each ITS product the script then downloads **every** per-sample ITS CSV (all runs of re-sequenced samples, 8 threads; 275/275 for .002 and 321/321 for .001, measured), keeps taxonomy and counts only, and writes `mct_soilPerSampleTaxonomy_ITS.parquet` / `mcc_soilPerSampleTaxonomy_ITS.parquet`. Failed downloads are listed by file name. **An incomplete pull writes nothing:** if any site of a product, or any ITS file, fails, the existing raw parquet is left as it was and the script reports `IncompleteFetch` (a table file holds all sites, so writing only the sites that succeeded would silently drop the others). Re-run, or pass `--allow-partial` to keep what succeeded.
 - **Size and time:** raw parquet is small (a few MB). The full pull took a few minutes on 21 Nov 2026 (not timed precisely).
 - **Processing:** `scripts/02b_build_neon_features.py` (offline).
   - `neon.load_its_raw()` combines both ITS products and keeps **one run per DNA sample**: the deepest run within a product (NEON re-sequenced some samples), then .002 over .001 when a sample is in both (14 cores in STER 2016).
