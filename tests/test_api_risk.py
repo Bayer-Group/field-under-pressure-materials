@@ -305,3 +305,19 @@ def test_static_bake_includes_tests_and_products(client, tmp_path):
     assert m["counts"]["crop_products"] == m["counts"]["crop_tests"] == m["counts"]["crop_contributions"] > 0
     key = bake.path_to_key("/plots/STER_001/crop-risk/2022-002/winter_wheat/products")
     assert "fus_seed" in (out / "data" / f"{key}.js").read_text()
+
+
+def test_parallel_requests_score_a_site_year_once(client, monkeypatch):
+    # one screen asks for ranks, genera, tests and products of a unit at the same time
+    from concurrent.futures import ThreadPoolExecutor
+    calls, real = [], risk.compute_crop_risk
+
+    def counted(*a, **kw):
+        calls.append(1)
+        return real(*a, **kw)
+    monkeypatch.setattr(risk, "compute_crop_risk", counted)
+    base = "/api/plots/STER_001/crop-risk/2022-002"
+    with ThreadPoolExecutor(4) as ex:
+        codes = list(ex.map(lambda p: client.get(p).status_code,
+                            [base, base + "/corn", base + "/corn/tests", base + "/corn/products"]))
+    assert codes == [200] * 4 and len(calls) == 1

@@ -69,7 +69,7 @@ def _nitrate_low(sig, ctx):
         return None
     how = "well below" if v < NITRATE_LOW else "below"
     return (0.9 if v < NITRATE_LOW else 0.6,
-            f"Soil nitrate-N is {v:g} mg/kg, {how} the {NITRATE_ENOUGH:g} mg/kg at which corn needs no more nitrogen.")
+            f"Soil nitrate-N is {v:.1f} mg/kg, {how} the {NITRATE_ENOUGH:g} mg/kg at which corn needs no more nitrogen.")
 
 
 def _cn_high(sig, ctx):

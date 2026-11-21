@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api, type Plot } from './api'
+import { ErrorBoundary } from './ErrorBoundary'
 import { LayerControl, NdviLegend } from './features/map/LayerControl'
 import { PlotMap, type MapOverlay } from './features/map/PlotMap'
 import { FunctionsPanel } from './features/functions/FunctionsPanel'
@@ -77,6 +78,8 @@ export function Explorer({ plotId, tab, sampleId, unit, crop, view }: {
         ) : (
           <>
             <PlotHead plot={selected} plots={plots.data!} tab={tab} onOpen={open} />
+            {/* an error in one tab leaves the plot head, the other tabs and the map usable */}
+            <ErrorBoundary key={`${selected.plot_id}/${tab}`}>
             {tab === 'microbes' ? (
               <MicrobiomePanel plotId={selected.plot_id} sampleId={sampleId} view={view} />
             ) : tab === 'risk' ? (
@@ -95,6 +98,7 @@ export function Explorer({ plotId, tab, sampleId, unit, crop, view }: {
                 layer={layer} photoId={photo?.photo_id ?? null} mapId={gmap?.map_id ?? null} onChange={choose}
               />
             )}
+            </ErrorBoundary>
           </>
         )}
       </section>
@@ -125,7 +129,8 @@ function Overview({ plots, focusSite, onFocusSite, onHighlight }: {
       <h1>Sampled plots</h1>
       <p className="lead">
         {plots.length} plots at {groups.length} {groups.length === 1 ? 'site' : 'sites'}. Choose one to see how green it has
-        been over the years, its aerial photos, its soil sampling visits and the microbes found in its soil.
+        been over the years, its aerial photos and soil sampling visits, the microbes found in its soil and what
+        they can do, and the crop disease risk and products to consider that follow from them.
       </p>
       {groups.map(({ site, plots: ps }) => (
         <section key={site} className={`site-card ${focusSite === site ? 'focused' : ''}`}>
@@ -160,6 +165,15 @@ function PlotHead({ plot, plots, tab, onOpen }: { plot: Plot; plots: Plot[]; tab
   const order = groups.flatMap((g) => g.plots)
   const at = order.findIndex((p) => p.plot_id === plot.plot_id)
   const prev = order[at - 1], next = order[at + 1]
+  // On a narrow screen the tab row scrolls sideways: keep the current tab in view.
+  const tabs = useRef<HTMLElement>(null)
+  useEffect(() => {
+    const row = tabs.current, on = row?.querySelector<HTMLElement>('[aria-current]')
+    if (!row || !on) return
+    const left = on.offsetLeft - row.offsetLeft, right = left + on.offsetWidth
+    if (left < row.scrollLeft) row.scrollLeft = left
+    else if (right > row.scrollLeft + row.clientWidth) row.scrollLeft = right - row.clientWidth
+  }, [tab])
   return (
     <div className="plot-head">
       <div className="plot-nav">
@@ -178,7 +192,7 @@ function PlotHead({ plot, plots, tab, onOpen }: { plot: Plot; plots: Plot[]; tab
       </div>
       <h1>Plot {plot.plot_id}</h1>
       <p className="muted plot-sub">{siteName(plot.site)} · {formatLatLon(plot.lat, plot.lon)} · {plot.half_m * 2} × {plot.half_m * 2} m (yellow square on the map)</p>
-      <nav className="tabs" aria-label="What to show for this plot">
+      <nav className="tabs" ref={tabs} aria-label="What to show for this plot">
         <a href={plotHref(plot.plot_id)} aria-current={tab === 'greenness' ? 'page' : undefined}>Greenness over time</a>
         <a href={microbesHref(plot.plot_id)} aria-current={tab === 'microbes' ? 'page' : undefined}>Soil microbes</a>
         <a href={functionsHref(plot.plot_id)} aria-current={tab === 'functions' ? 'page' : undefined}>Soil functions</a>

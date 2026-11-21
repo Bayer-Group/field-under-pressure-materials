@@ -303,8 +303,7 @@ def _kb(mtimes) -> kbmod.KB:
 @lru_cache(maxsize=8)
 def _result(site: str, year: int, core_mtime: tuple, kb_mtimes: tuple) -> risk.CropRiskResult:
     # core_mtime and kb_mtimes are cache keys: the tables themselves are loaded here at request time
-    with _lock:
-        return risk.compute_crop_risk(site, year, core=_core_df(), kb=_kb(kb_mtimes))
+    return risk.compute_crop_risk(site, year, core=_core_df(), kb=_kb(kb_mtimes))
 
 
 @lru_cache(maxsize=16)
@@ -400,10 +399,20 @@ def _kb_sources(meta: dict) -> list[KbSource]:
     return out
 
 
-def _scored(plot_id: str, unit: str):
-    """(site, unit row, result, unit_id) for a unit of the plot; 404/503 as the routes document."""
+def _scored(plot_id: str, unit: str, crop: str | None = None):
+    """(site, unit row, result, unit_id) for a unit of the plot; 404 for an unknown crop or unit, 503 when the
+    inputs are not built."""
+    if crop is not None and crop not in kbmod.SCORED_CROPS:
+        raise HTTPException(404, f"unknown crop {crop}")
     site, u = _find_unit(plot_id, unit)
-    res = _result(site, int(u.year), _core_mtime(), _kb_mtimes())
+    key = (site, int(u.year), _core_mtime(), _kb_mtimes())
+    # One screen asks for the ranks, the genera, the tests and the products of a unit at once. The lock is held
+    # around the cache lookup, not inside the cached function, so the first request computes the site-year
+    # (1-3 s) and the others wait for it instead of each computing it again.
+    with _lock:
+        res = _result(*key)
+    if res.summary.empty:
+        raise HTTPException(404, f"unknown crop-risk unit {unit} for plot {plot_id}")
     return site, u, res, u.unit_id
 
 
@@ -422,8 +431,6 @@ def crop_risk_units(plot_id: str):
 def crop_risk(plot_id: str, unit: str):
     """Risk index of every crop for one unit, ranked against the same site, year and ITS method."""
     site, u, res, uid = _scored(plot_id, unit)
-    if res.summary.empty:
-        raise HTTPException(404, f"unknown crop-risk unit {unit} for plot {plot_id}")
     md = res.metadata
     peers = res.summary[res.summary["product"] == u.product].drop_duplicates("unit_id")
     crops = [_crop_row(res, c, uid, u.product) for c in kbmod.SCORED_CROPS]
@@ -442,11 +449,7 @@ def crop_risk(plot_id: str, unit: str):
 @router.get("/plots/{plot_id}/crop-risk/{unit}/{crop}", response_model=CropContributions)
 def crop_contributions(plot_id: str, unit: str, crop: str):
     """The genera behind one crop's score for one unit (contribution above zero, largest first)."""
-    if crop not in kbmod.SCORED_CROPS:
-        raise HTTPException(404, f"unknown crop {crop}")
-    site, u, res, uid = _scored(plot_id, unit)
-    if res.summary.empty:
-        raise HTTPException(404, f"unknown crop-risk unit {unit} for plot {plot_id}")
+    site, u, res, uid = _scored(plot_id, unit, crop)
     c = res.contributions
     c = c[(c["unit_id"] == uid) & (c["crop"] == crop)]
     pos = c[c["contribution"] > 0].sort_values(["contribution", "genus"], ascending=[False, True])
@@ -483,11 +486,7 @@ def _site_context(plot_id: str) -> dict:
 @router.get("/plots/{plot_id}/crop-risk/{unit}/{crop}/tests", response_model=FollowupTests)
 def crop_followup_tests(plot_id: str, unit: str, crop: str):
     """Follow-up tests that would close gaps in one crop's assessment for one unit, most useful first."""
-    if crop not in kbmod.SCORED_CROPS:
-        raise HTTPException(404, f"unknown crop {crop}")
-    site, u, res, uid = _scored(plot_id, unit)
-    if res.summary.empty:
-        raise HTTPException(404, f"unknown crop-risk unit {unit} for plot {plot_id}")
+    site, u, res, uid = _scored(plot_id, unit, crop)
     items = followup.suggest(res.contributions, res.summary, uid, crop, context=_site_context(plot_id))
     return FollowupTests(plot_id=plot_id, unit=unit, crop=crop, label=CROP_LABELS.get(crop, crop), note=FOLLOWUP_NOTE,
                          suggestions=[TestSuggestion(**i, trigger_label=TRIGGER_LABELS[i["trigger"]]) for i in items])
@@ -519,11 +518,7 @@ def _history_signals(plot_id: str, year: int, crop: str) -> tuple[dict, list[str
 @router.get("/plots/{plot_id}/crop-risk/{unit}/{crop}/products", response_model=ProductPlan)
 def crop_products(plot_id: str, unit: str, crop: str):
     """Product types worth considering for one crop on one unit, before planting and during growth."""
-    if crop not in kbmod.SCORED_CROPS:
-        raise HTTPException(404, f"unknown crop {crop}")
-    site, u, res, uid = _scored(plot_id, unit)
-    if res.summary.empty:
-        raise HTTPException(404, f"unknown crop-risk unit {unit} for plot {plot_id}")
+    site, u, res, uid = _scored(plot_id, unit, crop)
     dates = [pd.Timestamp(d).date() for d in _ref(u).collect_dates]
     signals, sources = api_functions.soil_signals(plot_id, int(u.year), dates)
     hist, hist_sources = _history_signals(plot_id, int(u.year), crop)
