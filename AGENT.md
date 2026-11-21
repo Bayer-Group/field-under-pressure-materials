@@ -15,7 +15,7 @@ Related: `docs/nmdc-data-guide.md` (how to interpret the NMDC files and how STER
 ```bash
 uv venv --python 3.12 .venv            # geo wheels are risky on newer system Pythons
 uv pip install --python .venv/bin/python -e .
-.venv/bin/python -m pytest -q          # 37 tests, no network, no data needed
+.venv/bin/python -m pytest -q          # 44 tests, no network, no data needed
 ```
 
 The package is `cropfit` in `src/cropfit/` (the name is historical). Scripts add `src/` to `sys.path` themselves; run them from the repo root: `.venv/bin/python scripts/<name>.py`. `e1_match.py` and `pull_nmdc_cropland.py` use paths relative to the current directory, so run them from the repo root.
@@ -68,6 +68,7 @@ Pipeline order (what produces what):
 | NMDC tables | `scripts/05_build_biology.py` (offline) | `metagenomes`, `ko_*`, `taxa_genus`, `plot_biology*` |
 | Satellite | `scripts/08_fetch_satellite.py` (after 01) | `plot_vi_timeseries`, `plot_season` |
 | Aerial photos | `scripts/09_fetch_aerial.py [naip] [aop]` (after 01; `aop` needs token) | `plot_aerial`, chips under `data/raw/imagery/` |
+| Greenness maps (for the GUI) | `scripts/13_fetch_ndvi_maps.py` (after 08; network, resumable) | `plot_ndvi_maps`, Sentinel-2 NDVI chips (10 m, 1 km around each plot, one per clear date) under `data/raw/imagery/s2_ndvi/` |
 | Event features | `scripts/07_build_event_features.py` (offline, last) | `event_features`, `event_table` (see 3.9) |
 | Association scan | `scripts/11_association_scan.py` (offline, after 07, under a minute) | `association_scan` (see 3.10) |
 | Inspector | `scripts/10_inspect_data.py [--standalone]` (offline) | `outputs/inspect/index.html`, a developer page to look at all of the above |
