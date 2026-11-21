@@ -16,3 +16,5 @@ windows:
     half_km: 15
     state_fips: "20"
 crops: [corn, soybean, winter_wheat, sorghum, sunflower]
+# Light mode (scripts/00_light_mode.py on): download and build everything for these plots only.
+light_plots: [STER_006, STER_010, STER_011, STER_012, STER_016]

@@ -13,7 +13,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from .config import DATA, RULES
+from .config import DATA, RULES, light_filter
 
 NMDC_DIR = DATA / "nmdc"
 
@@ -63,7 +63,7 @@ def parse_sample_name(name: str) -> dict | None:
 
 
 def load_samples(nmdc_dir: Path = NMDC_DIR) -> pd.DataFrame:
-    """samples.csv with parsed names, horizon M only, rows with a metagenome_key."""
+    """samples.csv with parsed names, horizon M only, rows with a metagenome_key (in light mode its plots only)."""
     s = pd.read_csv(nmdc_dir / "samples.csv")
     parsed = [parse_sample_name(n) for n in s["name"]]
     bad = [n for n, p in zip(s["name"], parsed) if p is None]
@@ -80,7 +80,7 @@ def load_samples(nmdc_dir: Path = NMDC_DIR) -> pd.DataFrame:
     nokey = s["metagenome_key"].isna() | (s["metagenome_key"] == "")
     if nokey.any():
         warnings.warn(f"{int(nokey.sum())} samples without a metagenome (no KO/Kraken2 object) dropped")
-    return s[~nokey].reset_index(drop=True)
+    return light_filter(s[~nokey]).reset_index(drop=True)
 
 
 def object_paths(nmdc_dir: Path = NMDC_DIR, root: Path | None = None) -> dict[str, dict[str, Path]]:

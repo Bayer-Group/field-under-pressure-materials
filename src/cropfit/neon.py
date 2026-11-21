@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from .config import RAW, PROCESSED, sites
+from .config import RAW, PROCESSED, light_filter, sites
 
 SITES = sites()
 RAW_NEON = RAW / "neon"
@@ -74,7 +74,9 @@ def fetch_product(dpid: str, sites=SITES, tabl="all", package="basic",
     """Pull one product for all sites, concatenating per table; saves parquet under data/raw/neon/<dpid>/.
 
     Each table file holds every site, so if any site fails nothing is written (the existing raw files stay
-    as they were) and IncompleteFetch is raised. allow_partial=True writes the sites that succeeded."""
+    as they were) and IncompleteFetch is raised. allow_partial=True writes the sites that succeeded.
+    In light mode (config.light_plots) rows of other plots are dropped before saving: NEON serves whole
+    sites, so the pull itself is not smaller, but the ITS per-sample files are fetched for these plots only."""
     import neonutilities as nu
     token = get_token()
     parts: dict[str, list[pd.DataFrame]] = {}
@@ -90,7 +92,7 @@ def fetch_product(dpid: str, sites=SITES, tabl="all", package="basic",
             continue
         for name, df in res.items():
             if isinstance(df, pd.DataFrame) and len(df):
-                parts.setdefault(name, []).append(df)
+                parts.setdefault(name, []).append(light_filter(df))
     if failed and not allow_partial:
         raise IncompleteFetch(f"{dpid}: sites failed {failed}; raw files left unchanged")
     out = {}
@@ -509,7 +511,7 @@ def fetch_its_sample_files(product: str = "DP1.10081.002", workers: int = 8,
     from . import http
     d = RAW_NEON / product
     meta = pd.read_parquet(d / f"{ITS_PRODUCTS[product]}.parquet")
-    meta = meta[meta["downloadFileUrl"].notna()].drop_duplicates("downloadFileUrl")
+    meta = light_filter(meta[meta["downloadFileUrl"].notna()].drop_duplicates("downloadFileUrl"))
     keep = ["dnaSampleID", "sequencerRunID", "kingdom", "phylum", "class", "order", "family", "genus",
             "specificEpithet", "scientificName", "individualCount"]
 

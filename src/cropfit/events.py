@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 from pyproj import Transformer
 
-from .config import PROCESSED, RAW, RESOURCES
+from .config import PROCESSED, RAW, RESOURCES, light_filter
 
 EVENT_GAP_DAYS = 3
 PLOT_HALF_M = 20.0       # NEON base plot is 40 x 40 m
@@ -98,7 +98,7 @@ def build_all() -> dict[str, pd.DataFrame]:
     mg = pd.read_parquet(PROCESSED / "metagenomes.parquet")
     its = pd.read_parquet(PROCESSED / "its_genus.parquet")
     chem = pd.read_parquet(PROCESSED / "neon_chem.parquet")
-    ev = build_events(mg, its, chem)
+    ev = light_filter(build_events(mg, its, chem)).reset_index(drop=True)   # light mode: its plots only
     geom = plot_geometry(ev["plotID"].unique())
     out = {"events": ev, "plot_geometry": geom}
     f = RAW / "neon" / "DP1.10086.001" / "sls_soilCoreCollection.parquet"
