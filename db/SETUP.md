@@ -2,6 +2,23 @@
 
 Reprodukowalny obraz Docker z bazą danych MongoDB odtwarzaną automatycznie z najnowszego dumpa (`.archive.gz`) — wraz ze wszystkimi kolekcjami, dokumentami, indeksami i walidatorami `$jsonSchema` (`_id: ObjectId`).
 
+## Lokalna baza i API pogody
+
+Potrzebujesz Pythona 3.10+, MongoDB 8.0 i MongoDB Database Tools. Z katalogu głównego repozytorium uruchom:
+
+```powershell
+python -m pip install -r backend/requirements.txt
+python db/scripts/start_weather.py
+```
+
+Przy pierwszym starcie skrypt pobiera z `origin/ml` najnowszy zrzut do odtworzenia. Uruchamia MongoDB na `127.0.0.1:27018`, importuje 14 dni pogody z punktów `Orchard.centroid`, uruchamia harmonogram i wyświetla adres działającego wykresu. API nasłuchuje domyślnie na `127.0.0.1:8000`. Kolejne starty używają tej samej bazy z `data/weather-mongodb` i uzupełniają ostatnie dni. `Ctrl+C` zamyka procesy uruchomione przez skrypt.
+
+- Jeśli narzędzia MongoDB są poza `PATH`, podaj `--mongo-bin` z katalogiem `mongod` i `--tools-bin` z katalogiem `mongorestore`. Jeśli oba pliki są w jednym katalogu, wystarczy `--mongo-bin`.
+- Opcja `--archive ścieżka/do/zrzutu.archive.gz` wybiera lokalny zrzut przy odtwarzaniu pustej bazy. `--data-dir`, `--mongo-port` i `--api-port` pozwalają uruchomić drugą instancję obok istniejącej.
+- Opcja `--check` sprawdza wszystkie pięć zakresów wykresu i CORS dla UI, a następnie zamyka oba procesy. Dane zostają w katalogu wybranej instancji.
+
+W Compass otwórz `mongodb://127.0.0.1:27018/field_under_pressure`. Bieżąca pogoda, prognoza i historia znajdują się w `Orchard.environmentalData`.
+
 ## Kolekcje w bazie `field_under_pressure`
 
 - `User`
@@ -13,15 +30,19 @@ Reprodukowalny obraz Docker z bazą danych MongoDB odtwarzaną automatycznie z n
 - `JobLog`
 - `ManualControl`
 
-## Uruchomienie przez Docker Compose (zalecane)
+## Uruchomienie samej bazy przez Docker Compose
 
 Z katalogu głównego repozytorium:
 
 ```bash
+git fetch origin ml:refs/remotes/origin/ml
+git restore --source=origin/ml --worktree -- db/backups/field_under_pressure_20261121_154819.archive.gz
 docker compose up -d --build
 ```
 
 Przy pierwszym uruchomieniu (pusty wolumen `mongodb_data`) skrypt `/docker-entrypoint-initdb.d/01-restore-latest.sh` automatycznie odtworzy bazę z najnowszego archiwum z katalogu `db/backups/`.
+
+Po uruchomieniu bazy ustaw `MONGO_URI` zgodnie z konfiguracją poniżej i uruchom `python -m backend.main migrate`, `python -m backend.main backfill` oraz `python -m backend.main run`.
 
 Domyślne dane połączenia (można nadpisać zmiennymi środowiskowymi lub plikiem `.env`):
 
