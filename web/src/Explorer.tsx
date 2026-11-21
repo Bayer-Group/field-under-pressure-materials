@@ -49,7 +49,10 @@ export function Explorer({ plotId, tab, sampleId, unit, crop }: {
     : undefined
 
   const selected = plots.data?.find((p) => p.plot_id === plotId) ?? null
-  const error = plots.error ?? photos.error ?? maps.error ?? greenness.error ?? events.error
+  // Only the plot list gates the whole panel; greenness/photo/event errors belong to the greenness tab,
+  // so a missing satellite or aerial table does not hide the microbes and crop risk tabs.
+  const error = plots.error
+  const timelineError = photos.error ?? maps.error ?? greenness.error ?? events.error
   const loading = greenness.loading || events.loading || photos.loading || maps.loading
 
   return (
@@ -89,6 +92,8 @@ export function Explorer({ plotId, tab, sampleId, unit, crop }: {
               <MicrobiomePanel plotId={plotId} sampleId={sampleId} />
             ) : tab === 'risk' ? (
               <RiskPanel plotId={plotId} unit={unit} crop={crop} />
+            ) : timelineError ? (
+              <p className="message error">Could not load data: {timelineError}</p>
             ) : loading ? (
               <p className="message">Loading…</p>
             ) : (
