@@ -121,8 +121,8 @@ function Body({ data, plotId, unit, crop, across, setAcross, picked, pick }: {
   return (
     <>
       <p className="risk-note">
-        Each cell is the crop risk index of a plot. Shading compares plots within each crop (darkest = highest for that crop).
-        Relative index, not a probability of disease.
+        Each cell is the crop risk index of a plot. Colour compares plots within each crop: <span className="key good">green</span> = lower
+        risk, <span className="key bad">red</span> = higher risk, stronger colour = further from the middle. Relative index, not a probability of disease.
         {data.notes.filter((n) => n.startsWith('Light mode')).map((n) => <strong key={n}> {n}</strong>)}
       </p>
       <Choice label="Shading">
