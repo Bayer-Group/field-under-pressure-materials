@@ -44,6 +44,7 @@ over them, so the farmer front end and QGIS see the same data and no business lo
 | `GET /crop-areas/{id}/risk?from=&to=` | `serve.risk_daily` | one row per day (the date slider), with `reasons` for the "Why?" screen |
 | `GET /crop-areas/{id}/changes` | `serve.risk_change_log` | when and why the class, status or `conditions_met` changed |
 | `GET /grid/risk?date=` | `serve.grid_risk_daily` | FeatureCollection of 4 km cells for the whole voivodeship (analyst), default today |
+| `GET /grid/risk/surface?date=&format=json\|png&resolution=&sigma_km=` | `serve.grid_risk_daily` | smoothed `risk_index` of the cells (a heatmap, analyst); PROPOSAL, see section 3 |
 | `POST /crop-areas` | `app.crop_area` | saves a crop area (`geometry`, `farmer_crop_id`, `sowing_date`, optional `bbch_override`), recomputes, returns it with today's class |
 | `POST /crop-areas/{id}/sprays` | `app.spray` | `{spray_date, protection_duration_days}`, may be in the past; recomputes, returns `{crop_area, changed_days}` |
 | `DELETE /crop-areas/{id}` | `app.field` | deletes a crop area, 204 |
@@ -75,7 +76,25 @@ sandbox, 150 ha per crop area, a valid polygon of at most 500 points, only aroun
 `protected_until`, `growth_stage_zone`, `growth_stage_source`, `gdd_since_resumption`, `reasons` (object), `model_version`.
 Fields can be `null` (for example `risk_class` when `status` is `out_of_window`); the reader must handle that.
 
-`GET /grid/risk`: features with `grid_id`, `date`, `risk_class`, `uncertain`, `h_low`, `h_high`, `coverage`.
+`GET /grid/risk`: features with `grid_id`, `date`, `risk_class`, `uncertain`, `h_low`, `h_high`, `coverage`, `risk_index`,
+`index_low`, `index_high`.
+
+**`risk_index` (PROPOSAL, #49).** H on a continuous 0-1 scale aligned with the classes (`septoria.risk_index`, thresholds from
+`config/septoria.toml`): 0 at 0 h, 0.5 at the medium threshold, 1 at the high threshold and above, linear in between. So `< 0.5`
+is `low`, `0.5` to `< 1` is `medium`, `1` is `high`, the same as `risk_class`; it adds no rule, it keeps what the three classes
+round away. `index_low` / `index_high` come from `h_low` / `h_high` (missing hours counted dry / wet). NULL wherever `risk_class`
+is NULL (e.g. `out_of_window`). Added to `GET /me/crop-areas` (`risk_index`), `GET /crop-areas/{id}/risk` (all three) and
+`GET /grid/risk` (all three).
+
+**`GET /grid/risk/surface` (PROPOSAL, #49).** A heatmap of the voivodeship for one day (analyst): each pixel of a regular
+EPSG:4326 grid is the Gaussian-weighted mean of `risk_index` of the cell centres around it (`backend/app/services/risk_surface.py`,
+standard library only). Normalised weights keep the value on the index scale, so a colour means the same class everywhere and the
+surface does not fade at the edge; pixels farther than 4 km from every cell centre are empty. Parameters: `resolution` (degrees,
+0.005-0.1, default 0.02), `sigma_km` (1-30, default 5). `format=json` (default): `{date, crs, bounds: [west, south, east, north],
+resolution_deg, width, height, sigma_km, max_distance_km, values: [[...]] (row 0 north, null outside), index_scale, model_version}`.
+`format=png`: an RGBA image on a fixed ramp (green, amber, red, as the suggested colours) with the bounds in the `X-Bounds` header
+(`west,south,east,north`), for an image source in MapLibre or a georeferenced layer in QGIS. It shows the cell results smoothly
+and is not a new assessment.
 
 ## 4. Open points
 
