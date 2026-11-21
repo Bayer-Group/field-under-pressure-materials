@@ -57,6 +57,29 @@
         onUpdate: () => (el.textContent = Math.round(o.v).toLocaleString('en-US')),
       })
     },
+    /** Place the globe of a .lockup (letters + globe images) over the "o", using brand/logo.js. */
+    lockup(el) {
+      const L = window.LOGO
+      const letters = el.querySelector('.letters'), globe = el.querySelector('.globe')
+      if (L && globe) {
+        Object.assign(globe.style, {
+          width: `${L.d * 100}%`,
+          left: `${(L.x - L.d / 2) * 100}%`,
+          top: `${(L.y - L.d / L.aspect / 2) * 100}%`,
+        })
+      }
+      return { letters, globe }
+    },
+    /** Logo entrance: the letters wipe in while the globe rolls into the "o" from the right. */
+    lockupIn(el) {
+      const { letters, globe } = Deck.lockup(el)
+      const roll = 640 // slide px the globe travels
+      const turns = roll / (Math.PI * Math.max(Deck.size(globe).w, 1)) // rolling without slipping
+      return gsap
+        .timeline()
+        .fromTo(letters, { clipPath: 'inset(0% 100% 0% 0%)' }, { clipPath: 'inset(0% 0% 0% 0%)', duration: 1.2, ease: 'power3.inOut' })
+        .from(globe, { x: roll, rotation: turns * 360, autoAlpha: 0, duration: 1.3, ease: 'back.out(1.3)' }, 0.25)
+    },
     /** Endless decorative motion: skipped when the viewer prefers reduced motion. */
     loop(fn) {
       return reduced ? null : fn()
@@ -111,6 +134,7 @@
     return { slide, ctx, tl, nav: null }
   }
   function enter(slide, instant = false) {
+    document.documentElement.classList.toggle('hide-brand', !!slide?.hasAttribute('data-hide-brand'))
     if (active) {
       if (active.slide === slide) {
         active.nav?.kill()

@@ -46,7 +46,7 @@ button { font: inherit; color: inherit; }
   background: var(--surface); border-bottom: 1px solid var(--line);
 }
 .brand { display: inline-flex; align-items: center; gap: 8px; font-weight: 650; color: var(--ink); text-decoration: none; }
-.brand svg { color: var(--green); }
+.brand-logo { height: 24px; width: auto; display: block; }
 .brand:hover { color: var(--ink); }
 .tagline { color: var(--muted); font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 

@@ -1,6 +1,6 @@
 <!doctype html>
 <!--
-  Field explorer: 30-second showcase video, written as code.
+  Terranos: 30-second showcase video, written as code.
   Every frame is a pure function of time: seek(t) lays out the whole stage for second t.
   - Open this file in a browser to watch it play (Space pauses, arrow keys step, click the bar to scrub).
   - showcase/render.mjs calls seek() frame by frame and pipes screenshots into ffmpeg.
@@ -9,7 +9,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Field explorer showcase</title>
+<title>Terranos showcase</title>
 <style>
   :root {
     --ink: #0b1a12; --deep: #0f2a1c; --green: #1f6f43; --leaf: #34a865; --lime: #b5f26b;
@@ -92,6 +92,7 @@
   body.render #ui { display: none; }
 </style>
 <script src="shots/rects.js"></script>
+<script src="brand/logo.js"></script>
 </head>
 <body>
 <div id="fit"><div id="stage"></div></div>
@@ -175,7 +176,7 @@ function tile(parent, shot, rect, scale) {
 function browserWindow(parent, shots, x, y, vw, vh) {
   const win = el('div', 'win', parent)
   css(win, { width: vw + 'px', height: vh + 44 + 'px', left: x + 'px', top: y + 'px' })
-  el('div', 'bar', win, '<i></i><i></i><i></i><div class="url">🔒 localhost · Field explorer</div>')
+  el('div', 'bar', win, '<i></i><i></i><i></i><div class="url">🔒 localhost · Terranos</div>')
   const vp = el('div', 'vp', win)
   css(vp, { width: vw + 'px', height: vh + 'px' })
   const imgs = Object.fromEntries(shots.map((s) => {
@@ -214,18 +215,30 @@ function scene(start, end, build) {
   scenes.push({ start, end, root, update })
 }
 
-// Brand mark, as in the GUI's top bar.
-const LEAF = `<svg viewBox="0 0 24 24" width="100%" height="100%"><path class="leaf-fill" d="M5 19c0-8 5-13 15-14-1 10-6 15-14 15" fill="#b5f26b"/>
-  <path class="leaf-line" d="M5 19c0-8 5-13 15-14-1 10-6 15-14 15M5 19 14 10" fill="none" stroke="#b5f26b" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" pathLength="1"/></svg>`
+// Brand mark: the Terranos wordmark as two images (letters, globe) so the globe can roll into the "o".
+// Globe position comes from brand/logo.js (scripts/make_brand_assets.py).
+function lockup(parent, width) {
+  const L = window.LOGO
+  const box = el('div', 'abs', parent); css(box, { width: width + 'px', height: width * L.aspect + 'px' })
+  const letters = el('img', 'abs', box); letters.src = 'brand/terranos-dark-letters.png'; css(letters, { width: '100%', height: '100%' })
+  const globe = el('img', 'abs', box); globe.src = 'brand/terranos-globe.png'
+  const d = L.d * width
+  css(globe, { width: d + 'px', height: d + 'px', left: L.x * width - d / 2 + 'px', top: L.y * width * L.aspect - d / 2 + 'px' })
+  const ROLL = 640, TURNS = ROLL / (Math.PI * d)
+  /** p: 0..1 letters wipe; g: 0..1 globe roll (may overshoot with outBack). */
+  const set = (p, g) => {
+    letters.style.clipPath = `inset(0 ${(1 - clamp(p)) * 100}% 0 0)`
+    globe.style.opacity = clamp(g * 4)
+    globe.style.transform = `translateX(${(1 - g) * ROLL}px) rotate(${(1 - g) * TURNS * 360}deg)`
+  }
+  return { box, set, width, height: width * L.aspect }
+}
 
 // =====================================================================================
 // 0-4 s  Intro: logo builds, then four beat-synced word flashes
 // =====================================================================================
 scene(0, 4, (root) => {
-  const logo = el('div', 'abs', root, LEAF); css(logo, { width: '150px', height: '150px' })
-  const line = logo.querySelector('.leaf-line'), fill = logo.querySelector('.leaf-fill')
-  const title = el('div', 'abs', root); css(title, { fontSize: '128px', fontWeight: 900, letterSpacing: '-0.035em', whiteSpace: 'nowrap' })
-  const letters = [...'Field explorer'].map((c) => { const s = el('span', '', title, c === ' ' ? '&nbsp;' : c); s.style.display = 'inline-block'; return s })
+  const logo = lockup(root, 1100)
   const sub = el('div', 'sub abs', root, 'Your fields, <b style="color:#b5f26b;font-weight:700">from orbit to the microbe</b>')
   css(sub, { fontSize: '36px' })
 
@@ -246,18 +259,9 @@ scene(0, 4, (root) => {
   return (t) => {
     // logo + title (0-2 s)
     const out = E.in3(prog(t, 1.75, 2.0))
-    const lp = E.outBack(prog(t, 0.05, 0.6))
-    place(logo, 960 - 75, 300 - out * 40, `scale(${lp * (1 - out * 0.4)}) rotate(${(1 - lp) * -40}deg)`)
-    line.style.strokeDasharray = '1 1'; line.style.strokeDashoffset = 1 - E.out3(prog(t, 0.1, 1.0))
-    fill.style.opacity = 0.22 * E.out3(prog(t, 0.6, 1.1))
-    logo.style.opacity = 1 - out
-    title.style.left = '0'; title.style.width = '1920px'; title.style.textAlign = 'center'
-    place(title, 0, 470 - out * 40)
-    title.style.opacity = 1 - out
-    letters.forEach((s, i) => {
-      const p = E.outBack(prog(t, 0.35 + i * 0.035, 0.85 + i * 0.035))
-      s.style.transform = `translateY(${(1 - p) * 90}px) scale(${0.6 + 0.4 * p})`; s.style.opacity = clamp(p * 1.5)
-    })
+    logo.set(E.inout3(prog(t, 0.05, 0.85)), E.outBack(prog(t, 0.2, 1.15)))
+    place(logo.box, 960 - logo.width / 2, 520 - logo.height - out * 40)
+    logo.box.style.opacity = 1 - out
     css(sub, { left: '0', width: '1920px', textAlign: 'center' })
     place(sub, 0, 640 + (1 - E.out3(prog(t, 0.9, 1.4))) * 30 - out * 40)
     sub.style.opacity = E.out3(prog(t, 0.9, 1.4)) * (1 - out)
@@ -520,9 +524,7 @@ scene(24, 26, (root) => {
 // 26-30 s  Outro
 // =====================================================================================
 scene(26, 30, (root) => {
-  const logo = el('div', 'abs', root, LEAF); css(logo, { width: '120px', height: '120px' })
-  logo.querySelector('.leaf-fill').style.opacity = 0.22
-  const title = el('div', 'abs', root, 'Field explorer'); css(title, { fontSize: '150px', fontWeight: 900, letterSpacing: '-0.04em', width: '1920px', textAlign: 'center' })
+  const logo = lockup(root, 1000)
   const tag = el('div', 'sub abs', root, 'Your fields, <b style="color:#b5f26b;font-weight:700">from orbit to the microbe.</b>')
   css(tag, { width: '1920px', textAlign: 'center', fontSize: '40px' })
   const feats = [
@@ -533,11 +535,8 @@ scene(26, 30, (root) => {
   const fade = el('div', 'abs', root); css(fade, { width: '1920px', height: '1080px', background: '#000' })
   let widths = null
   return (t) => {
-    const lp = E.outElastic(prog(t, 26.05, 26.9))
-    place(logo, 960 - 60, 210, `scale(${lp}) rotate(${(1 - clamp(lp)) * 90}deg)`)
-    const tp = E.outExpo(prog(t, 26.15, 26.9))
-    title.style.opacity = tp; place(title, 0, 330 + (1 - tp) * 60, `scale(${1.25 - 0.25 * tp})`); title.style.transformOrigin = '50% 50%'
-    title.style.letterSpacing = `${-0.04 + (1 - tp) * 0.08}em`
+    logo.set(E.inout3(prog(t, 26.05, 26.8)), E.outBack(prog(t, 26.15, 27.0)))
+    place(logo.box, 960 - logo.width / 2, 300)
     const sp = E.out3(prog(t, 26.6, 27.1)); tag.style.opacity = sp; place(tag, 0, 525 + (1 - sp) * 20)
     widths ??= feats.map((f) => f.offsetWidth)
     const total = widths.reduce((a, b) => a + b, 0) + 18 * (feats.length - 1)

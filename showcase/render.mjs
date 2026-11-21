@@ -1,5 +1,5 @@
 // Step 3: render video.html frame by frame into an MP4 (1920x1080, 30 fps), with the soundtrack from music.mjs.
-//   node showcase/render.mjs                    -> showcase/field-explorer-showcase.mp4
+//   node showcase/render.mjs                    -> showcase/terranos-showcase.mp4
 //   node showcase/render.mjs --stills 1,5.5,9   -> PNG stills in showcase/stills/ (quick checks)
 import { spawn } from 'node:child_process'
 import { mkdirSync, writeFileSync } from 'node:fs'
@@ -26,7 +26,7 @@ try {
   } else {
     const wav = DIR + 'soundtrack.wav'
     writeSoundtrack(wav, DURATION)
-    const out = DIR + 'field-explorer-showcase.mp4'
+    const out = DIR + 'terranos-showcase.mp4'
     const ff = spawn('ffmpeg', ['-y', '-loglevel', 'error',
       '-f', 'image2pipe', '-framerate', String(FPS), '-c:v', 'mjpeg', '-i', '-', '-i', wav,
       '-c:v', 'libx264', '-preset', 'slow', '-crf', '18', '-pix_fmt', 'yuv420p', '-movflags', '+faststart',

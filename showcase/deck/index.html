@@ -1,30 +1,31 @@
 <!doctype html>
 <!--
-  Field explorer presentation: reveal.js for navigation, GSAP for animation. See README.md.
+  Terranos presentation: reveal.js for navigation, GSAP for animation. See README.md.
   Keys: →/Space next · ← back · S speaker notes · O overview · R replay slide animation · F fullscreen · B blank
 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Field explorer</title>
+<title>Terranos</title>
+<link rel="icon" type="image/png" href="../brand/terranos-globe.png">
 <link rel="stylesheet" href="vendor/reveal/reset.css">
 <link rel="stylesheet" href="vendor/reveal/reveal.css">
 <link rel="stylesheet" href="css/theme.css">
 </head>
 <body>
+<img id="brand" src="../brand/terranos-dark.png" alt="Terranos">
 <div id="bg"><div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div><div class="dots"></div><div class="vignette"></div></div>
 
 <div class="reveal"><div class="slides">
 
   <!-- 1 · Title -->
-  <section data-anim="title" class="s-title">
-    <svg class="leaf" viewBox="0 0 120 120" aria-hidden="true">
-      <path d="M18,102 C18,46 56,16 106,14 C106,64 78,102 18,102 Z"/>
-      <path d="M18,102 C44,76 70,50 94,27"/>
-    </svg>
+  <section data-anim="title" class="s-title" data-hide-brand>
     <div class="kicker rise">Project showcase</div>
-    <h1 class="title">Field explorer</h1>
+    <h1 class="title lockup" aria-label="Terranos">
+      <img class="letters" src="../brand/terranos-dark-letters.png" alt="">
+      <img class="globe" src="../brand/terranos-globe.png" alt="">
+    </h1>
     <p class="sub rise">Satellite greenness, aerial photos and soil microbes for each sampled plot</p>
     <div class="tags rise"><span class="tag">2 NEON farm sites</span><span class="tag">29 plots</span><span class="tag">2013 – 2026</span></div>
     <aside class="notes">Open with the one-line pitch. Press R on any slide to replay its animation.</aside>
@@ -38,7 +39,7 @@
     <ul class="points">
       <li class="fragment fade-up">What lives in the soil comes from a lab, on the day the core was taken</li>
       <li class="fragment fade-up">Weather, crops, greenness and terrain live in separate datasets</li>
-      <li class="fragment fade-up">Field explorer puts them side by side for every sampled plot</li>
+      <li class="fragment fade-up">Terranos puts them side by side for every sampled plot</li>
     </ul>
     <aside class="notes">This slide shows reveal.js's own fragments: each bullet is one click.</aside>
   </section>
@@ -133,8 +134,9 @@
     <div class="gui-head"><div class="kicker"><b>07</b>Soil functions</div><h2 class="heading">What the microbes can do</h2></div>
     <div class="win"><div class="bar"><i></i><i></i><i></i><span class="url">127.0.0.1:8000</span></div>
       <div class="vp"><img data-shot="functions" alt="Soil functions tab with decision cards"></div></div>
-    <i class="fragment step" data-focus="cards" data-caption="Decision cards"></i>
-    <i class="fragment step" data-focus="ncycle" data-caption="Nitrogen cycle genes"></i>
+    <i class="fragment step" data-focus="cards" data-caption="One soil sample's story, card by card"></i>
+    <i class="fragment step" data-focus="card:0" data-caption="Measured nitrogen vs the soil-test level"></i>
+    <i class="fragment step" data-focus="card:4" data-caption="Nitrogen cycle microbes"></i>
     <i class="fragment step" data-focus="all"></i>
     <aside class="notes"></aside>
   </section>
@@ -168,14 +170,18 @@
     <div class="status"><span class="on">GUI running</span><span class="off">GUI not running: playing the recorded tour</span></div>
     <div class="win"><div class="bar"><i></i><i></i><i></i><span class="url">127.0.0.1:8000</span></div>
       <div class="vp">
-        <iframe data-url="http://127.0.0.1:8000" title="Field explorer, live"></iframe>
-        <video src="../field-explorer-showcase.mp4" preload="none" muted loop playsinline></video>
+        <iframe data-url="http://127.0.0.1:8000" title="Terranos, live"></iframe>
+        <video src="../terranos-showcase.mp4" preload="none" muted loop playsinline></video>
       </div></div>
     <aside class="notes">Start the GUI first (launch config "gui"). Click into the frame to use it; press Esc then → to move on.</aside>
   </section>
 
   <!-- 14 · Outro -->
-  <section data-anim="outro" class="s-outro">
+  <section data-anim="outro" class="s-outro" data-hide-brand>
+    <div class="lockup" aria-label="Terranos">
+      <img class="letters" src="../brand/terranos-dark-letters.png" alt="">
+      <img class="globe" src="../brand/terranos-globe.png" alt="">
+    </div>
     <h2 class="heading">Thank you</h2>
     <div class="stats">
       <div class="stat"><div class="n" data-to="2">0</div><div class="l">farm sites</div></div>
@@ -197,6 +203,7 @@
 <script src="vendor/gsap/Flip.min.js"></script>
 <script src="vendor/gsap/Draggable.min.js"></script>
 <script src="../shots/rects.js"></script>
+<script src="../brand/logo.js"></script>
 <script src="js/data.js"></script>
 <script src="js/engine.js"></script>
 <script src="js/anims/basic.js"></script>
