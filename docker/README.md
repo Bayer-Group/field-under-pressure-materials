@@ -143,7 +143,7 @@ Raw tables stay read-only; these tables are derived from them.
 | `curated.weather_daily_features` | grid cell × local day (`t_mean`, `gdd3`, wet hours, coverage, `gdd_since_resumption`) | `scripts/build_curated.py weather` |
 | `curated.vegetation_resumption` | grid cell × year | `scripts/build_curated.py weather` |
 | `curated.crop_mapping` | farmer crop → CTY class code (filled by hand) | the DDL |
-| `curated.crop_area_crop_map`, `curated.field_context`, `curated.risk_assessment` | per crop area (and day) | the backend, when a farmer saves a crop area |
+| `curated.crop_area_crop_map`, `curated.field_context`, `curated.risk_assessment` | per crop area (and day) | `scripts/refresh_crop_area.py` (the backend calls it when a farmer saves a crop area) |
 
 `python scripts/build_curated.py weather` (connection string in `LOAD_DB_DSN`, like the loader) is repeatable: each run rewrites
 its range or year in one transaction. `t_mean` comes from `raw.weather_daily.avg_temperature`, which equals the mean of the hourly values.
