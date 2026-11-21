@@ -17,11 +17,29 @@ interface Props {
   focusSite: string | null // with no plot selected: zoom to this site's plots instead of all plots
   highlight: string | null // plot id to emphasise (hovered in a list)
   overlay: MapOverlay | null
+  base: BaseMap
   contextM: number // how far around a selected plot the map shows, in metres
   onSelect: (plotId: string) => void
   onSite: (site: string) => void
   /** When given, clicking the map asks for a short text about that spot and shows it in a popup. */
   inspect?: (lat: number, lon: number) => Promise<string>
+}
+
+/** What is under everything else: a drawn street map, or orthophotos (aerial and satellite imagery). */
+export type BaseMap = 'streets' | 'imagery'
+
+const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services'
+// Static demo: opened from file:// there is no Referer, which OSM's tile servers refuse; Esri needs no key.
+const STATIC = import.meta.env.VITE_STATIC === '1'
+const BASE_MAPS: Record<BaseMap, { url: string; maxNativeZoom: number; attribution: string }> = {
+  streets: STATIC
+    ? { url: `${ESRI}/World_Topo_Map/MapServer/tile/{z}/{y}/{x}`, maxNativeZoom: 19,
+        attribution: 'Tiles &copy; Esri &mdash; Esri, HERE, Garmin, USGS, NGA, EPA, USDA, NPS' }
+    : { url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', maxNativeZoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' },
+  // beyond zoom 18 Esri has no imagery in many rural places: stretch the zoom-18 tiles instead of showing gaps
+  imagery: { url: `${ESRI}/World_Imagery/MapServer/tile/{z}/{y}/{x}`, maxNativeZoom: 18,
+             attribution: 'Imagery &copy; Esri &mdash; Esri, Maxar, Earthstar Geographics and the GIS User Community' },
 }
 
 const OVERLAY_PANE = 'overlay-image' // above the base map, below plot outlines and markers
@@ -36,7 +54,7 @@ function square(lat: number, lon: number, half: number): L.LatLngBounds {
 }
 
 /** Interactive map: every plot as a dot; the selected plot outlined, with one image laid over it. */
-export function PlotMap({ plots, selected, focusSite, highlight, overlay, contextM, onSelect, onSite, inspect }: Props) {
+export function PlotMap({ plots, selected, focusSite, highlight, overlay, base, contextM, onSelect, onSite, inspect }: Props) {
   const el = useRef<HTMLDivElement>(null)
   const map = useRef<L.Map | null>(null)
   const layers = useRef<L.ImageOverlay[]>([]) // overlays on the map: the visible one and newer ones still loading
@@ -49,20 +67,6 @@ export function PlotMap({ plots, selected, focusSite, highlight, overlay, contex
   useEffect(() => {
     const m = L.map(el.current!, { maxZoom: 21, zoomSnap: 0.5 }).setView([39.5, -100], 5)
     m.createPane(OVERLAY_PANE).style.zIndex = '350'
-    // Static demo: opened from file:// there is no Referer, which OSM's tile servers refuse; Esri needs no key.
-    const staticMode = import.meta.env.VITE_STATIC === '1'
-    L.tileLayer(
-      staticMode
-        ? 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}'
-        : 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-      {
-        maxNativeZoom: 19,
-        maxZoom: 21,
-        attribution: staticMode
-          ? 'Tiles &copy; Esri &mdash; Esri, HERE, Garmin, USGS, NGA, EPA, USDA, NPS'
-          : '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-      },
-    ).addTo(m)
     m.on('click', (e) => {
       const ask = cb.current.inspect
       if (!ask) return
@@ -82,6 +86,15 @@ export function PlotMap({ plots, selected, focusSite, highlight, overlay, contex
     map.current = m
     return () => { ro.disconnect(); m.remove(); map.current = null; layers.current = [] }
   }, [])
+
+  // The base map. Tiles of both are kept by the browser, so switching back and forth is quick.
+  useEffect(() => {
+    const m = map.current
+    if (!m) return
+    const { url, ...options } = BASE_MAPS[base]
+    const tiles = L.tileLayer(url, { ...options, maxZoom: 21 }).addTo(m)
+    return () => { tiles.remove() }
+  }, [base])
 
   // Plot dots and site labels, and the view: all plots, one site, or the selected plot with its surroundings.
   useEffect(() => {

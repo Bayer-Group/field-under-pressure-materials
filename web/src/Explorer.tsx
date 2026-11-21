@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { api, type Plot } from './api'
 import { ErrorBoundary } from './ErrorBoundary'
 import { LayerControl, NdviLegend } from './features/map/LayerControl'
-import { PlotMap, type MapOverlay } from './features/map/PlotMap'
+import { PlotMap, type BaseMap, type MapOverlay } from './features/map/PlotMap'
 import { FunctionsPanel } from './features/functions/FunctionsPanel'
 import { MicrobiomePanel } from './features/microbiome/MicrobiomePanel'
 import { PlotTimeline, type MapLayer, type TimelineChoice } from './features/timeline/PlotTimeline'
@@ -57,6 +57,8 @@ export function Explorer({ plotId, tab, sampleId, unit, crop, view }: {
     : undefined
 
   const selected = plots.data?.find((p) => p.plot_id === plotId) ?? null
+  // Under a greenness map the base is orthophotos, so greenness is read against the real ground, not a drawn map.
+  const baseMap: BaseMap = selected && layer === 'greenness' ? 'imagery' : 'streets'
   // Only the plot list gates the whole panel; greenness/photo/event errors belong to the greenness tab,
   // so a missing satellite or aerial table does not hide the microbes and crop risk tabs.
   const error = plots.error
@@ -106,6 +108,7 @@ export function Explorer({ plotId, tab, sampleId, unit, crop, view }: {
         <PlotMap
           plots={plots.data ?? []} selected={selected} focusSite={focusSite} highlight={highlight}
           overlay={selected ? overlay : null} contextM={CONTEXT_M[layer]}
+          base={baseMap}
           onSelect={open} onSite={setFocusSite} inspect={selected ? inspect : undefined}
         />
         {selected && !loading && (
