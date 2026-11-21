@@ -5,7 +5,7 @@ import { EventDetails } from './features/events/EventDetails'
 import { useRoute, type PlotTab, type Route } from './router'
 
 const TAB_TITLE: Record<PlotTab, string> = {
-  greenness: 'Greenness', microbes: 'Soil microbes', functions: 'Soil functions', risk: 'Crop disease risk', plan: 'Treatment plan',
+  greenness: 'Greenness', microbes: 'Soil microbes', functions: 'Soil characteristics', risk: 'Crop disease risk', plan: 'Treatment plan',
 }
 
 /** Browser tab title of a route, so history entries and bookmarks can be told apart. */
