@@ -102,7 +102,7 @@
     .results button:hover { background: #edf5ee; }
     .maplibregl-ctrl-bottom-right { bottom: min(68dvh, 570px); }
     .maplibregl-ctrl-attrib { font-size: 10px !important; }
-    @media (min-width: 720px) { .top { left: 24px; right: auto; width: 440px; top: 24px; } .sheet { left: 24px; bottom: 0; right: auto; width: 390px; max-height: calc(100dvh - 115px); border-radius: 25px 25px 0 0; border-bottom: 0; } .sheet.search-hidden { transform: translateY(calc(100% + 12px)); } .maplibregl-ctrl-bottom-right { bottom: 0; } .status { left: 24px; right: auto; width: 440px; top: 84px; } .results { left: 24px; right: auto; width: 380px; top: 82px; } }
+    @media (min-width: 720px) { .top { left: 24px; right: 24px; width: auto; top: 24px; } .sheet { left: 24px; bottom: 0; right: auto; width: 390px; max-height: calc(100dvh - 115px); border-radius: 25px 25px 0 0; border-bottom: 0; } .sheet.search-hidden { transform: translateY(calc(100% + 12px)); } .maplibregl-ctrl-top-right { bottom: max(26px, env(safe-area-inset-bottom) + 12px); } .maplibregl-ctrl-bottom-right { bottom: 0; } .status { left: 24px; right: auto; width: 440px; top: 84px; } .results { left: 24px; right: 84px; width: auto; top: 82px; } }
     @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; scroll-behavior: auto !important; } .demo-marquee { opacity: 1; transform: none; stroke-dashoffset: 0; } .demo-pointer { opacity: 1; transform: translate(157px, 94px); } }
   </style>
 </head>
