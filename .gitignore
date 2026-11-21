@@ -45,3 +45,4 @@ app/data_app/active_*.parquet
 app/data_app/gminy_cache/
 app/data_app/farm_profile.json
 app/data_app/*_33uxr.parquet
+.streamlit/secrets.toml
