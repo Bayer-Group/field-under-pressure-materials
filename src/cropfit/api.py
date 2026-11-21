@@ -12,7 +12,7 @@ from functools import lru_cache
 from pathlib import Path
 
 import pandas as pd
-from fastapi import APIRouter, FastAPI, HTTPException
+from fastapi import APIRouter, FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -191,8 +191,8 @@ def greenness_map_image(map_id: str):
 
 
 @router.get("/greenness-maps/{map_id}/value", response_model=GreennessValue)
-def greenness_map_value(map_id: str, lat: float, lon: float):
-    """Greenness at one spot of a map."""
+def greenness_map_value(map_id: str, lat: float = Query(ge=-90, le=90), lon: float = Query(ge=-180, le=180)):
+    """Greenness at one spot of a map; null outside the map or under cloud."""
     v = overlay.ndvi_at(_ndvi_chip(map_id), lat, lon)
     return GreennessValue(ndvi=None if v is None else round(v, 2))
 

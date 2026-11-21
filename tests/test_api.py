@@ -95,6 +95,8 @@ def test_greenness_maps(client):
     assert value(-96.6 + 0.001) == 0.5
     assert value(-96.6 - 0.001) is None                                      # under cloud
     assert value(-96.5) is None                                              # outside the map
+    bad = client.get(f"/api/greenness-maps/{maps[0]['map_id']}/value", params=dict(lat=95, lon="nan"))
+    assert bad.status_code == 422                                            # not a place on Earth
     assert client.get("/api/greenness-maps/unknown_map.png").status_code == 404
 
 

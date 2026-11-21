@@ -103,10 +103,12 @@ button { font: inherit; color: inherit; }
   padding: 5px 8px; background: var(--surface); color: var(--ink); cursor: pointer; font-variant-numeric: tabular-nums;
 }
 .plot-sub { font-size: 0.85rem; margin-top: 3px; }
-.tabs { display: flex; gap: 22px; margin-top: 14px; border-bottom: 1px solid var(--line); }
+/* one row at any width: on a narrow screen the row scrolls sideways instead of cutting the last tab off */
+.tabs { display: flex; gap: 22px; margin-top: 14px; box-shadow: inset 0 -1px var(--line); overflow-x: auto; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
 .tabs a {
   padding: 8px 0 9px; color: var(--ink-2); text-decoration: none; font-size: 0.92rem; font-weight: 500;
-  border-bottom: 2px solid transparent; margin-bottom: -1px;
+  border-bottom: 2px solid transparent; flex: none; white-space: nowrap;
 }
 .tabs a:hover { color: var(--ink); border-bottom-color: var(--line-2); }
 .tabs a[aria-current='page'] { color: var(--green); border-bottom-color: var(--green); font-weight: 600; }

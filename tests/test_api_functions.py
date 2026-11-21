@@ -118,6 +118,15 @@ def test_nitrate_thresholds():
     assert (status(30), status(15), status(5)) == ("good", "watch", "act")
 
 
+def test_missing_ammonium_is_not_shown_as_zero():
+    m = Measured(date=dt.date(2022, 6, 6), ammonium_n_mgkg=None, nitrate_n_mgkg=12.0, net_n_min_mgkg_d=None,
+                 net_nitrif_mgkg_d=None, ph_water=None, organic_c_pct=None, total_n_pct=None, cn_ratio=None,
+                 soil_moisture=None)
+    card = next(c for c in _cards({}, _pathways({}, False), None, m, False, pd.DataFrame()) if c.card == "n_now")
+    assert card.headline == "12.0 mg/kg nitrate" and "not measured" in card.finding
+    assert "ammonium" not in card.evidence[0]
+
+
 def test_funguild_primary_guild_and_category():
     assert funguild.primary_guild("Endophyte-|Plant Pathogen|-Plant Saprotroph") == "Plant Pathogen"
     assert funguild.primary_guild("Arbuscular Mycorrhizal") == "Arbuscular Mycorrhizal"

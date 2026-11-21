@@ -482,14 +482,15 @@ def _gene_cards(copies: dict[str, int], pathways: list[Pathway], fungi: Fungi | 
 
     # ---- measured: nitrogen available now (soil nitrate test)
     if m and m.nitrate_n_mgkg is not None:
-        no3 = m.nitrate_n_mgkg
+        no3, nh4 = m.nitrate_n_mgkg, m.ammonium_n_mgkg      # ammonium may be missing: never shown as 0 then
         st = "good" if no3 >= NITRATE_ENOUGH else "watch" if no3 >= NITRATE_LOW else "act"
         cards.append(DecisionCard(
             card="n_now", title="Nitrogen available now", status=st,
-            headline=f"{no3:.1f} mg/kg nitrate · {m.ammonium_n_mgkg or 0:.1f} mg/kg ammonium",
+            headline=f"{no3:.1f} mg/kg nitrate" + (f" · {nh4:.1f} mg/kg ammonium" if nh4 is not None else ""),
             flag=None if st == "good" else f"Below the {NITRATE_ENOUGH:.0f} mg/kg soil-test level for corn"
             + (f" (and below {NITRATE_LOW:.0f})" if st == "act" else ""),
-            finding=f"Soil nitrate is {no3:.1f} mg N/kg (ammonium {m.ammonium_n_mgkg or 0:.1f}).",
+            finding=f"Soil nitrate is {no3:.1f} mg N/kg" + (f" (ammonium {nh4:.1f})." if nh4 is not None else
+                                                               "; ammonium was not measured."),
             implications=[
                 imp(U, "Above the 25 mg/kg level of the soil nitrate test: for corn, the soil alone usually covers "
                        "the rest of the season's nitrogen.") if st == "good" else
@@ -501,7 +502,8 @@ def _gene_cards(copies: dict[str, int], pathways: list[Pathway], fungi: Fungi | 
                     "Little nitrate means little to wash out with heavy rain."),
             ],
             basis="measured", confidence="medium",
-            evidence=[f"Nitrate {no3:.2f} and ammonium {m.ammonium_n_mgkg or 0:.2f} mg N/kg, {m.date}",
+            evidence=[f"Nitrate {no3:.2f}" + (f" and ammonium {nh4:.2f}" if nh4 is not None else "")
+                      + f" mg N/kg, {m.date}",
                       "Rule: late-spring soil nitrate test for corn (25 and 10 mg/kg; 0-30 cm, corn 15-30 cm tall). "
                       "NEON's timing and depth are close to, not exactly, that protocol, and the test is calibrated "
                       "for corn, not for other crops."]))
