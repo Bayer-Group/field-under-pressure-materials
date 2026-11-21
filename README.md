@@ -24,7 +24,7 @@ Combine the two data sources to:
 
 ## Data guide
 
-How to download, process and use each dataset (NMDC, NEON, SSURGO, Daymet, CDL, CSB, LUCAS): see [`AGENT.md`](AGENT.md).
+What data is available, what it is for and how to build on it: [`docs/data-overview.md`](docs/data-overview.md). How to download, process and use each dataset (NMDC, NEON, SSURGO, Daymet, CDL, CSB, LUCAS): see [`AGENT.md`](AGENT.md).
 
 ## Status
 
