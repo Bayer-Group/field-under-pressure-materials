@@ -98,7 +98,8 @@ FROM curated.risk_change c;
 CREATE OR REPLACE VIEW serve.grid_risk_daily AS
 WITH o AS (SELECT min(lon) AS lon0, min(lat) AS lat0 FROM raw.grid_cell)
 SELECT d.grid_id, d.date + serve.shift_days() AS date, d.h_low, d.h_high, d.risk_class, d.uncertain, d.coverage,
-       ST_SnapToGrid(ST_MakeEnvelope(n.x - 0.022, n.y - 0.022, n.x + 0.022, n.y + 0.022, 4326), 0.00001)::geometry(Polygon, 4326) AS geom
+       ST_SnapToGrid(ST_MakeEnvelope(n.x - 0.022, n.y - 0.022, n.x + 0.022, n.y + 0.022, 4326), 0.00001)::geometry(Polygon, 4326) AS geom,
+       d.date AS data_date       -- the day in the time of the data: filter on this one (a filter on the shifted date calls shift_days() for every row)
 FROM curated.septoria_cell_day d
 JOIN raw.grid_cell g ON g.grid_id = d.grid_id
 CROSS JOIN o

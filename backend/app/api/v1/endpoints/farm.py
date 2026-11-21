@@ -150,8 +150,8 @@ def grid_risk(day: Optional[date] = Query(None, alias="date"), user=Depends(curr
         raise HTTPException(status_code=403, detail="analyst role required")
     rows = con.execute(
         "SELECT jsonb_build_object('type', 'Feature', 'geometry', ST_AsGeoJSON(geom, 6)::jsonb, "
-        "'properties', to_jsonb(g) - 'geom') AS f FROM serve.grid_risk_daily g "
-        "WHERE date = COALESCE(%s::date, current_date) ORDER BY grid_id", (day,)).fetchall()
+        "'properties', to_jsonb(g) - 'geom' - 'data_date') AS f FROM serve.grid_risk_daily g "
+        "WHERE data_date = COALESCE(%s::date, current_date) - serve.shift_days() ORDER BY grid_id", (day,)).fetchall()
     collection = _collection(rows)
     for feature in collection["features"]:
         _add_index(feature["properties"], "h_low", "h_low", "h_high")
@@ -176,7 +176,7 @@ def grid_risk_surface(day: Optional[date] = Query(None, alias="date"),
         raise HTTPException(status_code=422, detail="method=smooth needs resolution >= 0.02 (it takes seconds per request)")
     rows = con.execute(
         "SELECT ST_X(ST_Centroid(geom)) AS lon, ST_Y(ST_Centroid(geom)) AS lat, h_low, date FROM serve.grid_risk_daily "
-        "WHERE date = COALESCE(%s::date, current_date)", (day,)).fetchall()
+        "WHERE data_date = COALESCE(%s::date, current_date) - serve.shift_days()", (day,)).fetchall()
     if not rows:
         raise HTTPException(status_code=404, detail="no grid data for this date")
     rules = _rules()
