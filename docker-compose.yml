@@ -1,4 +1,40 @@
 services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:-8000}:8000"
+    environment:
+      EARTHENGINE_PROJECT: ${EARTHENGINE_PROJECT:-}
+      EARTHENGINE_MODEL_ASSET: ${EARTHENGINE_MODEL_ASSET:-}
+      MONGO_URI: ${MONGO_URI:-}
+      MONGO_HOST: mongodb
+      MONGO_PORT: "27017"
+      MONGO_DB: ${MONGO_DB:-field_under_pressure}
+      MONGO_ROOT_USER: ${MONGO_ROOT_USER:-admin}
+      MONGO_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-admin123}
+      MONGO_ORCHARD_ID: ${MONGO_ORCHARD_ID:-}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://127.0.0.1:8000/openapi.json', timeout=3).close()"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  ui:
+    build:
+      context: ./ui
+    ports:
+      - "127.0.0.1:${UI_PORT:-5173}:8080"
+    depends_on:
+      backend:
+        condition: service_healthy
+        restart: true
+
   mongodb:
     build:
       context: ./db

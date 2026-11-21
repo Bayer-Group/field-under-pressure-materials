@@ -13,12 +13,14 @@ Reprodukowalny obraz Docker z bazą danych MongoDB odtwarzaną automatycznie z n
 - `JobLog`
 - `ManualControl`
 
-## Uruchomienie przez Docker Compose (zalecane)
+Analiza pikseli tworzy kolekcję `TreePixelAnalysis` przy pierwszym zapisie.
+
+## Uruchomienie MongoDB
 
 Z katalogu głównego repozytorium:
 
 ```bash
-docker compose up -d --build
+docker compose up -d mongodb
 ```
 
 Przy pierwszym uruchomieniu (pusty wolumen `mongodb_data`) skrypt `/docker-entrypoint-initdb.d/01-restore-latest.sh` automatycznie odtworzy bazę z najnowszego archiwum z katalogu `db/backups/`.
@@ -32,11 +34,22 @@ Domyślne dane połączenia (można nadpisać zmiennymi środowiskowymi lub plik
 | `MONGO_ROOT_PASSWORD` | `admin123` |
 | `MONGO_DB` | `field_under_pressure` |
 
-Przykładowy connection string:
+Adres do MongoDB Compass i lokalnych skryptów:
 
 ```text
 mongodb://admin:admin123@localhost:27017/field_under_pressure?authSource=admin
 ```
+
+### Import przykładowej geometrii pól
+
+Zainstaluj [zależności ML](../ML/soil_moisture/README.md) i uruchom w PowerShellu z katalogu repozytorium.
+
+```powershell
+$env:MONGO_URI = "mongodb://admin:admin123@localhost:27017/field_under_pressure?authSource=admin"
+python -m ML.soil_moisture.import_fields
+```
+
+Skrypt wczytuje `ML/soil_moisture/data/fields.geojson` i dodaje pola do `Orchard`. Ponowne uruchomienie pomija wcześniejszy import.
 
 ## Uruchomienie samego obrazu Docker (bez Docker Compose)
 
@@ -79,6 +92,37 @@ Oba skrypty działają również z zewnętrzną instancją MongoDB po ustawieniu
 MONGO_URI="mongodb://admin:admin123@localhost:27017/?authSource=admin" ./db/scripts/backup.sh
 MONGO_URI="mongodb://admin:admin123@localhost:27017/?authSource=admin" ./db/scripts/restore.sh
 ```
+
+## Obserwacje satelitarne drzew
+
+W Compass otwórz kolekcję `Tree` i dodaj dokument z `orchardId` wskazującym rzeczywiste `Orchard._id`, gatunkiem oraz położeniem. Poniższy dokument w formacie Extended JSON pokazuje strukturę. Zastąp przykładowy identyfikator i współrzędne danymi swojego drzewa. Kolejność w `coordinates` to długość i szerokość geograficzna w WGS 84.
+
+```json
+{
+  "orchardId": {"$oid": "000000000000000000000001"},
+  "species": "jabłoń domowa",
+  "geometry": {"type": "Point", "coordinates": [21.01, 52.23]}
+}
+```
+
+Z katalogu repozytorium w aktywnym środowisku Python ustaw `MONGO_URI` jak w Compass. Ustaw `MONGO_ORCHARD_ID`, żeby eksport GEE objął tylko wybrane pole. Daty treningu i testu dopasuj do sceny, którą chcesz analizować.
+
+```powershell
+$env:MONGO_ORCHARD_ID = "ID_Z_ORCHARD"
+python -m ML.soil_moisture.earth_engine --start 2025-04-01 --test-start 2025-07-01 --end 2025-08-01 --export-tree-raster
+```
+
+Pobierz z Dysku Google wyeksportowany `tree_pixels_*.tif`. Z komunikatu `Tree raster` skopiuj identyfikator sceny (fragment nazwy między `tree_pixels_` a `.tif`) i czas UTC. Trzy pasma TIFF zawierają kolejno VV, VH i estymację wilgotności gleby. Skrypt przyjmuje także jednopasmowy TIFF wilgotności z dotychczasowego eksportu.
+
+```powershell
+python -m ML.soil_moisture.tree_pixel_analysis --raster "C:\dane\tree_pixels_SCENA.tif" --scene-id "ID_SCENY" --acquired-at "2025-07-28T16:40:00Z"
+```
+
+Dodaj `--forecast-days 3`, żeby dla świeżej sceny wyliczyć trzy kolejne dni prognozy wilgotności od chwili uruchomienia. Domyślną dobą pogody i nasłonecznienia jest dzień przed akwizycją w strefie Europe/Warsaw. Opcja `--date YYYY-MM-DD` ustawia inną zakończoną dobę.
+
+Wynik znajdziesz w `TreePixelAnalysis`. Dokument łączy drzewo i jego gatunek z pikselem, sceną, estymacją wilgotności, prognozą (jeśli uruchomiona) oraz pogodą i nasłonecznieniem dla pola. Te dwie ostatnie wartości pochodzą z reprezentatywnego punktu w polu i mają własne pola w `context`. Gdy danych zabraknie, skrypt zapisze status i poda podsumowanie zamiast wstawiać wartości zastępcze.
+
+Do analizy drzew grupuj po `tree_id` lub `species`. Przy agregacji wartości satelitarnych wybierz jedną obserwację z każdego `pixel_id` w analizowanej scenie i dobie. Ponowne wykonanie dla tego samego drzewa, sceny i doby aktualizuje jego obserwację. Uruchomienie bez prognozy zachowuje zapisaną wcześniej prognozę.
 
 ## Weryfikacja kolekcji
 

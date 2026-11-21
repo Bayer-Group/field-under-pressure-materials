@@ -15,6 +15,9 @@ export const API_ENDPOINTS = {
   soilMoisture: {
     analysis: '/api/soil-moisture',
     task: (id: string) => `/api/soil-moisture/tasks/${encodeURIComponent(id)}`,
+    rasters: (id: string) => `/api/soil-moisture/tasks/${encodeURIComponent(id)}/rasters`,
+    raster: (id: string, fileId: string) =>
+      `/api/soil-moisture/tasks/${encodeURIComponent(id)}/rasters/${encodeURIComponent(fileId)}`,
     forecast: '/api/soil-moisture/forecast',
   },
   weather: {

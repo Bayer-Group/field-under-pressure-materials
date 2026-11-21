@@ -22,25 +22,15 @@ import type {
   SaveOrchardLayoutResponse,
   TemperatureSeriesResponse,
   TimeRange,
-  TreeUpdatePayload,
 } from '../types/orchard';
 import { httpClient } from './httpClient';
 
-/**
- * Orchard & Weather API transfer layer.
- *
- * Every endpoint is wired to send/receive typed payloads against `apiConfig.baseUrl`.
- * While `apiConfig.usePlaceholders` is enabled (no backend running yet), failed or skipped
- * calls fall back cleanly to `src/placeholders/` and return `source: 'placeholder'`.
- */
-
-async function withPlaceholderFallback<T>(
+async function fetchWidgetData<T>(
   endpoint: string,
   liveRequest: () => Promise<T>,
   placeholderFactory: () => T,
 ): Promise<ApiResult<T>> {
   if (apiConfig.usePlaceholders) {
-    // Still keep the live endpoint contract explicit without throwing console errors when offline
     return {
       data: placeholderFactory(),
       source: 'placeholder',
@@ -62,7 +52,7 @@ export async function fetchTemperatureSeries(
   signal?: AbortSignal,
 ): Promise<ApiResult<TemperatureSeriesResponse>> {
   const endpoint = API_ENDPOINTS.weather.temperature;
-  return withPlaceholderFallback(
+  return fetchWidgetData(
     endpoint,
     () => httpClient.get<TemperatureSeriesResponse>(endpoint, { params: { orchardId, range }, signal }),
     () => getPlaceholderTemperatureSeries(orchardId, range),
@@ -74,7 +64,7 @@ export async function fetchOrchardHealth(
   signal?: AbortSignal,
 ): Promise<ApiResult<OrchardHealthSummary>> {
   const endpoint = API_ENDPOINTS.orchard.health;
-  return withPlaceholderFallback(
+  return fetchWidgetData(
     endpoint,
     () => httpClient.get<OrchardHealthSummary>(endpoint, { params: { orchardId }, signal }),
     () => getPlaceholderOrchardHealth(orchardId),
@@ -86,7 +76,7 @@ export async function fetchOrchardScene(
   signal?: AbortSignal,
 ): Promise<ApiResult<OrchardSceneResponse>> {
   const endpoint = API_ENDPOINTS.orchard.scene;
-  return withPlaceholderFallback(
+  return fetchWidgetData(
     endpoint,
     () => httpClient.get<OrchardSceneResponse>(endpoint, { params: { orchardId }, signal }),
     () => getPlaceholderOrchardScene(orchardId),

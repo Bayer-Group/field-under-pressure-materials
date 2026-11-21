@@ -1,23 +1,158 @@
-import { CalendarDays, Droplets } from 'lucide-react';
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { CalendarDays, Droplets, Map as MapIcon } from 'lucide-react';
+import { lazy, Suspense, useEffect, useRef, useState, type Dispatch, type FormEvent, type SetStateAction } from 'react';
 import { ApiError } from '../../api/httpClient';
 import {
+  fetchRaster,
+  fetchRasters,
   fetchSoilMoistureForecast,
   fetchTaskStatus,
   partialSubmission,
   submitAnalysis,
   type AnalysisDates,
   type SoilMoistureForecast,
+  type SoilMoistureRaster,
   type SoilMoistureTask,
   type SoilMoistureTaskStatus,
 } from '../../api/soilMoistureApi';
+import { apiConfig } from '../../config/apiConfig';
 import { useLanguage } from '../../contexts/LanguageContext';
 
-const TERMINAL_STATES = new Set(['COMPLETED', 'FAILED', 'CANCELLED']);
+const TERMINAL_STATES = new Set(['COMPLETED', 'FAILED', 'CANCELLED', 'UNKNOWN']);
 const TASK_POLL_INTERVAL_MS = 5_000;
+const RASTER_TASK_NAME = 'sentinel1_soil_moisture';
+const TASK_HISTORY_KEY = `soil-moisture-tasks:${apiConfig.baseUrl}`;
+const TASK_HISTORY_LIMIT = 15;
+const SoilRasterMap = lazy(() => import('./SoilRasterMap'));
 
 interface TrackedTask extends SoilMoistureTask {
   dates: AnalysisDates;
+}
+
+function readTaskHistory(): TrackedTask[] {
+  try {
+    const data: unknown = JSON.parse(localStorage.getItem(TASK_HISTORY_KEY) ?? '[]');
+    if (!Array.isArray(data)) return [];
+    return data.filter((task) => task && typeof task.id === 'string' && typeof task.name === 'string' &&
+      typeof task.dates?.start === 'string' && typeof task.dates?.test_start === 'string' &&
+      typeof task.dates?.end === 'string').slice(0, TASK_HISTORY_LIMIT);
+  } catch {
+    return [];
+  }
+}
+
+function RasterPanel({ taskId, hasPendingRaster }: { taskId?: string; hasPendingRaster: boolean }) {
+  const { t: { soilMoisture: { raster: labels } } } = useLanguage();
+  const [selection, setSelection] = useState<{ file: File; id: number } | null>(null);
+  const [rasterList, setRasterList] = useState<{ taskId: string; files: SoilMoistureRaster[] } | null>(null);
+  const [selectedRaster, setSelectedRaster] = useState('');
+  const [automatic, setAutomatic] = useState<'idle' | 'waiting' | 'downloading' | 'error'>('idle');
+  const [automaticError, setAutomaticError] = useState('');
+  const [retry, setRetry] = useState(0);
+  const files = rasterList?.taskId === taskId ? rasterList?.files : undefined;
+  const raster = files?.find((file) => file.id === selectedRaster) ?? files?.[0];
+
+  useEffect(() => {
+    if (!taskId) return;
+    const id = taskId;
+    const controller = new AbortController();
+    let timer: number | undefined;
+    let attempts = 0;
+    setAutomatic('waiting');
+    setAutomaticError('');
+    setRasterList(null);
+    setSelectedRaster('');
+
+    async function findFiles() {
+      try {
+        const result = await fetchRasters(id, controller.signal);
+        if (controller.signal.aborted) return;
+        if (result.length) {
+          setRasterList({ taskId: id, files: result });
+        } else if (++attempts < 18) {
+          timer = window.setTimeout(findFiles, TASK_POLL_INTERVAL_MS);
+        } else {
+          setAutomatic('error');
+        }
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        if (error instanceof ApiError) setAutomaticError(error.message);
+        setAutomatic('error');
+      }
+    }
+
+    void findFiles();
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [taskId, retry]);
+
+  useEffect(() => {
+    if (!taskId || !raster) return;
+    const controller = new AbortController();
+    setAutomatic('downloading');
+    setAutomaticError('');
+    void fetchRaster(taskId, raster, controller.signal).then((file) => {
+      if (controller.signal.aborted) return;
+      setSelection((previous) => ({ file, id: (previous?.id ?? 0) + 1 }));
+      setAutomatic('idle');
+    }).catch((error: unknown) => {
+      if (controller.signal.aborted) return;
+      if (error instanceof ApiError) setAutomaticError(error.message);
+      setAutomatic('error');
+    });
+    return () => controller.abort();
+  }, [taskId, raster]);
+
+  return (
+    <section className="card soil-panel" aria-labelledby="soil-raster-title">
+      <div className="card-title-row">
+        <span className="card-icon"><MapIcon size={18} aria-hidden="true" /></span>
+        <div>
+          <h2 className="card-title" id="soil-raster-title">{labels.title}</h2>
+          <p className="card-subtitle" id="soil-raster-description">{labels.description}</p>
+        </div>
+      </div>
+      {hasPendingRaster && <p className="soil-feedback" role="status">{labels.exportPending}</p>}
+      {automatic === 'waiting' && <p className="soil-feedback" role="status">{labels.waitingForFile}</p>}
+      {automatic === 'downloading' && <p className="soil-feedback" role="status">{labels.downloading}</p>}
+      {automatic === 'error' && (
+        <div>
+          <p className="soil-feedback soil-error" role="alert">{automaticError || labels.automaticError}</p>
+          <button type="button" className="soil-map-reset" onClick={() => setRetry((previous) => previous + 1)}>
+            {labels.retry}
+          </button>
+        </div>
+      )}
+      {files && files.length > 1 && (
+        <label className="soil-input">
+          <span>{labels.choosePart}</span>
+          <select value={raster?.id ?? ''} onChange={(event) => setSelectedRaster(event.currentTarget.value)}>
+            {files.map((file, index) => (
+              <option key={file.id} value={file.id}>{labels.part} {index + 1}</option>
+            ))}
+          </select>
+        </label>
+      )}
+      <label className="soil-input soil-raster-file">
+        <span>{labels.open}</span>
+        <input
+          type="file"
+          accept=".tif,.tiff,image/tiff"
+          aria-describedby="soil-raster-description"
+          onChange={(event) => {
+            const file = event.currentTarget.files?.[0];
+            if (file) setSelection((previous) => ({ file, id: (previous?.id ?? 0) + 1 }));
+          }}
+        />
+      </label>
+      {selection && (
+        <Suspense fallback={<p className="soil-feedback" role="status">{labels.loading}</p>}>
+          <SoilRasterMap key={selection.id} file={selection.file} />
+        </Suspense>
+      )}
+    </section>
+  );
 }
 
 function ForecastPanel() {
@@ -125,11 +260,18 @@ function ForecastPanel() {
   );
 }
 
-function AnalysisPanel() {
+type TaskStatuses = Record<string, SoilMoistureTaskStatus>;
+
+function AnalysisPanel({
+  tasks, setTasks, statuses, setStatuses,
+}: {
+  tasks: TrackedTask[];
+  setTasks: Dispatch<SetStateAction<TrackedTask[]>>;
+  statuses: TaskStatuses;
+  setStatuses: Dispatch<SetStateAction<TaskStatuses>>;
+}) {
   const { t: { soilMoisture: labels } } = useLanguage();
   const [dates, setDates] = useState<AnalysisDates>({ start: '', test_start: '', end: '' });
-  const [tasks, setTasks] = useState<TrackedTask[]>([]);
-  const [statuses, setStatuses] = useState<Record<string, SoilMoistureTaskStatus>>({});
   const [statusError, setStatusError] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -145,7 +287,14 @@ function AnalysisPanel() {
 
     async function poll() {
       const results = await Promise.allSettled(
-        [...activeIds].map((id) => fetchTaskStatus(id, controller.signal)),
+        [...activeIds].map(async (id) => {
+          try {
+            return await fetchTaskStatus(id, controller.signal);
+          } catch (error) {
+            if (error instanceof ApiError && error.status === 404) return { id, state: 'UNKNOWN', error: null };
+            throw error;
+          }
+        }),
       );
       if (controller.signal.aborted) return;
 
@@ -166,14 +315,14 @@ function AnalysisPanel() {
       controller.abort();
       window.clearTimeout(timer);
     };
-  }, [tasks]);
+  }, [tasks, setStatuses]);
 
   function rememberTasks(submitted: SoilMoistureTask[], submittedDates: AnalysisDates) {
     if (!submitted.length) return;
     setTasks((previous) => [
       ...submitted.map((task) => ({ ...task, dates: submittedDates })),
       ...previous.filter((task) => !submitted.some(({ id }) => task.id === id)),
-    ]);
+    ].slice(0, TASK_HISTORY_LIMIT));
   }
 
   async function runAnalysis(event: FormEvent<HTMLFormElement>) {
@@ -283,6 +432,21 @@ function AnalysisPanel() {
 
 export function SoilMoisturePage() {
   const { t } = useLanguage();
+  const [tasks, setTasks] = useState(readTaskHistory);
+  const [statuses, setStatuses] = useState<TaskStatuses>({});
+  const mapTasks = tasks.filter((task) => task.name === RASTER_TASK_NAME);
+  const latestRaster = mapTasks.find((task) => statuses[task.id]?.state === 'COMPLETED');
+  const newestRaster = mapTasks[0];
+  const hasPendingRaster = Boolean(newestRaster && !TERMINAL_STATES.has(statuses[newestRaster.id]?.state ?? ''));
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(TASK_HISTORY_KEY, JSON.stringify(tasks));
+    } catch {
+      // Task tracking continues in memory when browser storage is unavailable.
+    }
+  }, [tasks]);
+
   return (
     <div className="dashboard-page">
       <div className="page-intro">
@@ -291,8 +455,9 @@ export function SoilMoisturePage() {
           <p className="page-subtitle">{t.soilMoisture.subtitle}</p>
         </div>
       </div>
+      <RasterPanel taskId={latestRaster?.id} hasPendingRaster={hasPendingRaster} />
       <ForecastPanel />
-      <AnalysisPanel />
+      <AnalysisPanel tasks={tasks} setTasks={setTasks} statuses={statuses} setStatuses={setStatuses} />
     </div>
   );
 }

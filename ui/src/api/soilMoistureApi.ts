@@ -18,6 +18,11 @@ export interface SoilMoistureTaskStatus {
   error: string | null;
 }
 
+export interface SoilMoistureRaster {
+  id: string;
+  name: string;
+}
+
 interface AnalysisSubmission {
   dates: AnalysisDates;
   tasks: SoilMoistureTask[];
@@ -53,6 +58,22 @@ export function fetchTaskStatus(id: string, signal?: AbortSignal) {
     signal,
     timeoutMs: 15_000,
   });
+}
+
+export async function fetchRasters(taskId: string, signal?: AbortSignal) {
+  const result = await httpClient.get<{ files: SoilMoistureRaster[] }>(
+    API_ENDPOINTS.soilMoisture.rasters(taskId),
+    { signal, timeoutMs: 30_000 },
+  );
+  return result.files;
+}
+
+export async function fetchRaster(taskId: string, raster: SoilMoistureRaster, signal?: AbortSignal) {
+  const data = await httpClient.getBlob(API_ENDPOINTS.soilMoisture.raster(taskId, raster.id), {
+    signal,
+    timeoutMs: 180_000,
+  });
+  return new File([data], raster.name, { type: data.type });
 }
 
 export function fetchSoilMoistureForecast(signal?: AbortSignal) {

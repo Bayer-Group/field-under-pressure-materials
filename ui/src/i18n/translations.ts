@@ -29,6 +29,26 @@ export interface Translations {
   };
   soilMoisture: {
     subtitle: string;
+    raster: {
+      title: string;
+      description: string;
+      open: string;
+      exportPending: string;
+      waitingForFile: string;
+      downloading: string;
+      automaticError: string;
+      retry: string;
+      choosePart: string;
+      part: string;
+      loading: string;
+      error: string;
+      inspect: string;
+      noData: string;
+      pixelError: string;
+      pixelValue: string;
+      legend: string;
+      reset: string;
+    };
     forecastTitle: string;
     forecastDescription: string;
     loadForecast: string;
@@ -209,6 +229,26 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     },
     soilMoisture: {
       subtitle: 'Prognoza dla pól i analiza historycznych scen Sentinel‑1.',
+      raster: {
+        title: 'Mapa wilgotności gleby',
+        description: 'Mapa wczyta się automatycznie po zakończeniu analizy.',
+        open: 'Otwórz zapisany plik GeoTIFF',
+        exportPending: 'Earth Engine przygotowuje raster…',
+        waitingForFile: 'Eksport zakończony. Czekam na plik z Dysku Google…',
+        downloading: 'Pobieranie rastra…',
+        automaticError: 'Nie udało się pobrać rastra. Spróbuj ponownie.',
+        retry: 'Ponów pobieranie',
+        choosePart: 'Fragment mapy',
+        part: 'Fragment',
+        loading: 'Wczytywanie mapy…',
+        error: 'Nie udało się wyświetlić rastra. Wybierz GeoTIFF wilgotności z eksportu GEE w przeglądarce z obsługą WebGL.',
+        inspect: 'Kliknij piksel, aby odczytać oszacowaną wilgotność.',
+        noData: 'Brak danych w tym miejscu.',
+        pixelError: 'Nie udało się odczytać tego piksela.',
+        pixelValue: 'Oszacowana wilgotność w tym pikselu',
+        legend: 'Wilgotność objętościowa',
+        reset: 'Pokaż cały raster',
+      },
       forecastTitle: 'Prognoza do następnego przelotu',
       forecastDescription: 'Oszacowanie z najnowszej sceny SAR, aktualizowane prognozą pogody.',
       loadForecast: 'Pobierz prognozę',
@@ -242,6 +282,7 @@ export const TRANSLATIONS: Record<Language, Translations> = {
       driveLabel: 'Znajdź eksporty na Dysku Google',
       states: {
         UNCONFIRMED: 'Sprawdzanie',
+        UNKNOWN: 'Nie znaleziono',
         UNSUBMITTED: 'Oczekuje na wysłanie',
         READY: 'W kolejce',
         RUNNING: 'W trakcie',
@@ -403,6 +444,26 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     },
     soilMoisture: {
       subtitle: 'Field forecasts and historical Sentinel‑1 analysis.',
+      raster: {
+        title: 'Soil moisture map',
+        description: 'The map loads automatically when the analysis finishes.',
+        open: 'Open a saved GeoTIFF',
+        exportPending: 'Earth Engine is preparing the raster…',
+        waitingForFile: 'Export complete. Waiting for the file on Google Drive…',
+        downloading: 'Downloading raster…',
+        automaticError: 'Could not download the raster. Try again.',
+        retry: 'Retry download',
+        choosePart: 'Map part',
+        part: 'Part',
+        loading: 'Loading map…',
+        error: 'The raster could not be displayed. Choose a soil moisture GeoTIFF from GEE in a browser with WebGL support.',
+        inspect: 'Click a pixel to read its estimated moisture.',
+        noData: 'No data at this location.',
+        pixelError: 'Could not read this pixel.',
+        pixelValue: 'Estimated moisture at this pixel',
+        legend: 'Volumetric soil moisture',
+        reset: 'Fit raster to map',
+      },
       forecastTitle: 'Forecast until the next overpass',
       forecastDescription: 'An estimate from the latest SAR scene, updated using the weather forecast.',
       loadForecast: 'Load forecast',
@@ -436,6 +497,7 @@ export const TRANSLATIONS: Record<Language, Translations> = {
       driveLabel: 'Find exports in Google Drive',
       states: {
         UNCONFIRMED: 'Checking',
+        UNKNOWN: 'Not found',
         UNSUBMITTED: 'Awaiting submission',
         READY: 'Queued',
         RUNNING: 'Running',

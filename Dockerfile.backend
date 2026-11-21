@@ -1,0 +1,14 @@
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+WORKDIR /app
+
+COPY backend/requirements.txt ./backend/requirements.txt
+COPY ML/soil_moisture/requirements-core.txt ./ML/soil_moisture/requirements-core.txt
+RUN pip install --no-cache-dir -r backend/requirements.txt
+
+COPY backend/main.py backend/raster_exports.py ./backend/
+COPY ML/soil_moisture/earth_engine.py ML/soil_moisture/forecast.py ML/soil_moisture/field_geometry.py ML/soil_moisture/open_meteo.py ML/soil_moisture/project_config.py ./ML/soil_moisture/
+
+EXPOSE 8000
+CMD ["python", "-m", "uvicorn", "backend.main:my_app", "--host", "0.0.0.0", "--port", "8000"]

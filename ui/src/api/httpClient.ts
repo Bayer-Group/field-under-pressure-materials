@@ -33,7 +33,13 @@ function buildUrl(path: string, params?: Record<string, string | number | undefi
   return url.toString();
 }
 
-async function request<T>(method: 'GET' | 'POST' | 'PATCH' | 'DELETE', path: string, options: RequestOptions = {}): Promise<T> {
+async function request<T>(
+  method: 'GET' | 'POST',
+  path: string,
+  options: RequestOptions = {},
+  decode: (response: Response) => Promise<T> = (response) => response.json() as Promise<T>,
+  accept = 'application/json',
+): Promise<T> {
   const controller = new AbortController();
   const timeout = window.setTimeout(
     () => controller.abort(new DOMException('Request timed out', 'TimeoutError')),
@@ -51,7 +57,7 @@ async function request<T>(method: 'GET' | 'POST' | 'PATCH' | 'DELETE', path: str
     const response = await fetch(buildUrl(path, options.params), {
       method,
       headers: {
-        Accept: 'application/json',
+        Accept: accept,
         ...(options.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
       },
       body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
@@ -70,7 +76,7 @@ async function request<T>(method: 'GET' | 'POST' | 'PATCH' | 'DELETE', path: str
       throw new ApiError(message, response.status, path, detail);
     }
 
-    return (await response.json()) as T;
+    return await decode(response);
   } finally {
     window.clearTimeout(timeout);
     options.signal?.removeEventListener('abort', onExternalAbort);
@@ -79,9 +85,8 @@ async function request<T>(method: 'GET' | 'POST' | 'PATCH' | 'DELETE', path: str
 
 export const httpClient = {
   get: <T>(path: string, options?: Omit<RequestOptions, 'body'>) => request<T>('GET', path, options),
+  getBlob: (path: string, options?: Omit<RequestOptions, 'body'>) =>
+    request('GET', path, options, (response) => response.blob(), 'image/tiff'),
   post: <T>(path: string, body: unknown, options?: Omit<RequestOptions, 'body'>) =>
     request<T>('POST', path, { ...options, body }),
-  patch: <T>(path: string, body: unknown, options?: Omit<RequestOptions, 'body'>) =>
-    request<T>('PATCH', path, { ...options, body }),
-  delete: <T>(path: string, options?: Omit<RequestOptions, 'body'>) => request<T>('DELETE', path, options),
 };

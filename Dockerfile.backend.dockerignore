@@ -1,0 +1,13 @@
+**
+!backend/
+!backend/main.py
+!backend/raster_exports.py
+!backend/requirements.txt
+!ML/
+!ML/soil_moisture/
+!ML/soil_moisture/earth_engine.py
+!ML/soil_moisture/forecast.py
+!ML/soil_moisture/field_geometry.py
+!ML/soil_moisture/open_meteo.py
+!ML/soil_moisture/project_config.py
+!ML/soil_moisture/requirements-core.txt

@@ -1,12 +1,13 @@
-# Field Under Pressure — UI (TypeScript Web App)
+# Frontend Field Under Pressure
 
-Web dashboard for orchard monitoring, microclimate analytics, tree health diagnostics, and 3D point-cloud + individual tree visualization.
+Dashboard pokazuje mapę wilgotności gleby, stan eksportów GEE i prognozy do kolejnego przelotu. Temperatury, zdrowie sadu i widok 3D w trybie demonstracyjnym korzystają z danych przykładowych.
 
-## Running locally
+## Uruchamianie
 
-```bash
-cd ui
-npm install
+Pełny stos znajdziesz w [README projektu](../README.md#uruchomienie-z-docker-compose). Przy pracy nad samym frontendem uruchom w katalogu `ui`:
+
+```powershell
+npm ci
 npm run dev
 ```
 

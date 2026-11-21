@@ -1009,6 +1009,87 @@ input {
   min-width: 0;
 }
 
+.soil-raster-file {
+  width: min(100%, 28rem);
+}
+
+.soil-raster {
+  display: grid;
+  gap: 10px;
+}
+
+.soil-raster-bar {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.soil-map-reset {
+  flex-shrink: 0;
+  padding: 7px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.soil-map-reset:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.soil-raster-map {
+  height: clamp(280px, 55vh, 560px);
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--bg-surface-muted);
+}
+
+.soil-raster-map:focus-visible {
+  outline: 2px solid var(--temp-min);
+  outline-offset: 2px;
+}
+
+.soil-raster-map .ol-viewport {
+  cursor: crosshair;
+}
+
+.soil-raster-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px 16px;
+  font-size: 13px;
+}
+
+.soil-raster-scale {
+  width: min(100%, 20rem);
+}
+
+.soil-raster-gradient {
+  height: 9px;
+  border-radius: 5px;
+}
+
+.soil-raster-ticks {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  margin-top: 4px;
+  text-align: center;
+  font-size: 11px;
+}
+
+.soil-raster-ticks span:first-child {
+  text-align: left;
+}
+
+.soil-raster-ticks span:last-child {
+  text-align: right;
+}
+
 .soil-date-form,
 .soil-meta {
   display: grid;
