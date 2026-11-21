@@ -161,6 +161,20 @@
         return { parcels: copy(results), data_status: 'mock' };
       },
       async getCrops() { requireService(); return { crops: copy(crops), data_status: 'mock' }; },
+      async getCropSuggestions(parcelId) {
+        requireService();
+        const sample = initialFields.find(field => field.parcel.parcel_id === parcelId);
+        let areas = sample ? sample.crop_areas.map((area, index) => ({
+          crop_area_id: `suggestion-${parcelId}-${index + 1}`,
+          geometry: area.geometry,
+          map_crop_id: area.crop.map_crop_id || area.crop.farmer_crop_id
+        })) : [];
+        if (parcelId === 'parcel-demo-4') areas = [
+          { crop_area_id: 'suggestion-parcel-demo-4-1', geometry: polygon(20.78, 52.17, 20.785, 52.18), map_crop_id: 'wheat' },
+          { crop_area_id: 'suggestion-parcel-demo-4-2', geometry: polygon(20.785, 52.17, 20.79, 52.18), map_crop_id: 'soy' }
+        ];
+        return { areas: copy(areas), data_status: 'mock' };
+      },
       async listFields() { requireService(); return { fields: copy([...fields.values()]), data_status: 'mock' }; },
       async getField(id) {
         requireService();
@@ -211,6 +225,7 @@
         return request(`/parcels?${params}`);
       },
       getCrops: () => request('/crops'),
+      getCropSuggestions: parcelId => request(`/parcels/${encodeURIComponent(parcelId)}/crop-suggestions`),
       listFields: () => request('/fields'),
       getField: id => request(`/fields/${encodeURIComponent(id)}`),
       saveField: (id, field) => request(`/fields/${encodeURIComponent(id)}`, {
