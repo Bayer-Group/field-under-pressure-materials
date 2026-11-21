@@ -1272,9 +1272,7 @@
       const summary = el('div', 'crop-selection-summary');
       const count = draft.parcels.length;
       const parcelWord = count === 1 ? 'parcel' : 'parcels';
-      const known = draft.parcels.every(parcel => Number.isFinite(parcel.area_ha) && parcel.area_ha >= 0);
-      const total = known ? draft.parcels.reduce((sum, parcel) => sum + parcel.area_ha, 0) : null;
-      const line = `${count} ${parcelWord}${known ? ` · ${total.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ha` : ''}`;
+      const line = `${count} ${parcelWord}`;
       summary.append(el('strong', '', line));
       const list = el('div', 'crop-selection-parcels');
       draft.parcels.forEach(parcel => list.append(el('span', '', [parcel.parcel_number, parcel.locality].filter(Boolean).join(' · '))));

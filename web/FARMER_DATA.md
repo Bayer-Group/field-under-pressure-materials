@@ -2,7 +2,7 @@
 
 For the team workflow and backend integration checklist, see [Mock API guide](../MOCK_API_GUIDE.md). For the deployed sandbox and its differences from this mock, see [Live sandbox integration](../LIVE_SANDBOX_INTEGRATION.md).
 
-`farmer-data.js` exposes `FarmerData.createProvider(options)` to browser scripts. It implements the frontend mock for the contract in [`../FARMER_INPUT_CONTRACT.md`](../FARMER_INPUT_CONTRACT.md). No backend server or extra package is required for mock mode. The farmer-facing map viewer loads the provider.
+`farmer-data.js` exposes `FarmerData.createProvider(options)` to browser scripts. It implements the frontend mock for the contract in [`../FARMER_INPUT_CONTRACT.md`](../FARMER_INPUT_CONTRACT.md). No backend server or extra package is required for mock mode. The farmer-facing map viewer (`index.html`) no longer loads it: it always uses the farm service through `sandbox-client.js`. The mock remains for `mock-qgis-server.cjs` and for development against the contract.
 
 ```js
 const data = FarmerData.createProvider({ mode: 'mock' });
