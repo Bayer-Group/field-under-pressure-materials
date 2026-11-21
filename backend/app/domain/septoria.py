@@ -89,6 +89,19 @@ def classify(h: int, rules: Rules) -> str:
     return "low"
 
 
+def risk_index(h: Optional[int], rules: Rules) -> Optional[float]:
+    """H on a continuous 0-1 scale aligned with the classes (PROPOSAL, issue #49): 0 at 0 h, 0.5 at the medium threshold,
+    1 at the high threshold and above, linear in between. So index < 0.5 is low, 0.5 to < 1 is medium and 1 is high, the same
+    as classify(h). It adds no rule: it only keeps the information the three classes round away (for a smooth map)."""
+    if h is None:
+        return None
+    if h >= rules.threshold_high:
+        return 1.0
+    if h >= rules.threshold_medium:
+        return round(0.5 + 0.5 * (h - rules.threshold_medium) / (rules.threshold_high - rules.threshold_medium), 4)
+    return round(0.5 * h / rules.threshold_medium, 4)
+
+
 def zone(gdd: Optional[float], rules: Rules) -> Optional[str]:
     """A / B / C from the degree-days since the vegetation resumed; None when unknown."""
     if gdd is None:
