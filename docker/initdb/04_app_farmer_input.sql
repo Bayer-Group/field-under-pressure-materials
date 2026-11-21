@@ -50,8 +50,18 @@ CREATE TABLE IF NOT EXISTS crop_area (
     geom           geometry(Geometry, 4326) NOT NULL,
     farmer_crop_id text NOT NULL,                            -- id from GET /crops (see curated.crop_mapping)
     sowing_date    date NOT NULL,                            -- calendar day, no time
+    bbch_override  integer,                                  -- optional growth stage tile given by the farmer
     CONSTRAINT crop_area_geom_polygonal CHECK (GeometryType(geom) IN ('POLYGON', 'MULTIPOLYGON'))
 );
+-- bbch_override is not in FARMER_INPUT_CONTRACT.md yet: the curated contract (growth_stage_source = 'override') needs it.
+ALTER TABLE crop_area ADD COLUMN IF NOT EXISTS bbch_override integer;
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'crop_area_bbch_override_check') THEN
+        ALTER TABLE crop_area ADD CONSTRAINT crop_area_bbch_override_check
+            CHECK (bbch_override IS NULL OR bbch_override IN (31, 37, 39, 51, 59));
+    END IF;
+END $$;
 CREATE INDEX IF NOT EXISTS crop_area_geom_gix ON crop_area USING gist (geom);
 CREATE INDEX IF NOT EXISTS crop_area_field_idx ON crop_area (field_id);
 

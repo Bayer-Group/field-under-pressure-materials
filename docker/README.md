@@ -125,7 +125,7 @@ From [`FARMER_INPUT_CONTRACT.md`](../FARMER_INPUT_CONTRACT.md); DDL in [`initdb/
 | `app.field` | a working plot | `field_id` | `owner_id` (isolation: open), `data_status` (`mock` / `replay` / `live`), `created_at`, `updated_at`; `geom` is an optional outline |
 | `app.parcel` | a cadastral parcel from the lookup | `parcel_id` | `parcel_number`, `source`, `geom` (polygon, EPSG:4326) |
 | `app.field_parcel` | a parcel selected for a field | `(field_id, parcel_id)` | a working association, not proof of ownership |
-| `app.crop_area` | an area drawn over the parcels | `crop_area_id` | `farmer_crop_id` and `sowing_date` are required; `geom` is a polygon |
+| `app.crop_area` | an area drawn over the parcels | `crop_area_id` | `farmer_crop_id` and `sowing_date` are required; `geom` is a polygon; optional `bbch_override` (31, 37, 39, 51, 59; not in the farmer contract yet) |
 | `app.spray` | a past spray of a crop area | `spray_id` | `spray_date` and `protection_duration_days` (> 0); no rows = no sprays |
 
 The crop reported by the crop map is **not** stored here: it is derived into the curated layer, so the farmer's value is never
