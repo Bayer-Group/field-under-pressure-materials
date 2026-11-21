@@ -105,7 +105,9 @@ high on the check day.)
 north, null outside the data), max_distance_km, class_thresholds, index_scale, class_note, model_version}`. Pixels farther than 4 km
 from every cell centre are empty. A day computed once is kept in memory (the default surface takes about 0.3 s the first time).
 `method=smooth` costs seconds of CPU, so only one runs at a time per process (another one gets 503 at once; `interpolate` is instant and
-more accurate); 60 surface requests per minute per analyst (429).
+more accurate); about 90 surface requests per minute per analyst in total (429; the limit is 30 a minute in each of the 3 worker
+processes). Measured on the VM: an analyst asking for the surface every second does not change the p95 of 100 people on the
+platform (0.42 s, as without it); eight parallel clients hammering it do (the limit exists for that).
 
 **How to mark the classes on it.** The classes belong to the cells (`GET /grid/risk`, `septoria.classify`); a pixel is a continuous
 estimate between two cell centres, not a cell. `class_thresholds` gives the landmarks: `{hours: {medium: 10, high: 20}, index:

@@ -60,7 +60,7 @@ def _collection(rows) -> dict:
 
 _RULES: Optional[septoria.Rules] = None
 _SMOOTH_SLOT = threading.BoundedSemaphore(1)      # the Gaussian method costs seconds of CPU: one at a time per process
-_surface_limit = RateLimiter(60, 60)                # surface requests per minute and analyst
+_surface_limit = RateLimiter(30, 60)                # surface requests per minute and analyst, per worker process (3 workers: 90 a minute)
 
 
 def _rules() -> septoria.Rules:
