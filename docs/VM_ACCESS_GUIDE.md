@@ -22,25 +22,82 @@ fix** that your feature depends on.
 
 1. A **Google account** (Gmail is fine). Give its e-mail to the project owner: access is granted to that exact address. No card, no
    separate "GCP account".
-2. A terminal: Linux, macOS, or Windows with **WSL2** (use the Linux steps inside WSL).
+2. A terminal: Linux or macOS, or on Windows **WSL2** (section 2.3: the scripts of the repo are bash) or, with nothing to install,
+   **Cloud Shell** in the browser (section 2.3).
 3. The repo cloned (`git clone https://github.com/geoearth-junction/field-under-pressure-materials.git`).
 
 ## 2. Install and set up gcloud (once, about 10 minutes)
 
-Install ([official guide](https://cloud.google.com/sdk/docs/install)):
+### 2.1 Linux
 
 ```bash
-# Linux / WSL2
 curl https://sdk.cloud.google.com | bash && exec -l $SHELL
-# macOS
+```
+
+### 2.2 macOS
+
+```bash
 brew install --cask google-cloud-sdk
 ```
 
-Log in with the account the owner granted (a browser opens; on a machine without a browser add `--no-launch-browser`):
+### 2.3 Windows
+
+The scripts of the repo (`scripts/provision_vm.sh`) are bash and the guide assumes a Linux shell, so on Windows use **WSL2** (a real
+Ubuntu inside Windows). Native Windows works for `gcloud` alone, but not for the scripts. Nobody on the team tested the native
+route, so it is described only as a fallback.
+
+**Option A (recommended): WSL2 with Ubuntu.** Needs Windows 10 (version 2004 or newer) or Windows 11 and virtualisation enabled in
+the BIOS (it usually is).
+
+1. Open **PowerShell as administrator** and run:
+   ```powershell
+   wsl --install -d Ubuntu
+   ```
+   Restart the computer when asked, then open **Ubuntu** from the Start menu and create a Linux user name and password (a new one, it
+   is not your Windows password). If the command only prints a help text, WSL is already there: `wsl --install -d Ubuntu` still
+   works, and `wsl -l -v` must show `VERSION 2`.
+2. **From now on everything happens inside the Ubuntu terminal.** Install the tools:
+   ```bash
+   sudo apt update && sudo apt install -y git curl ca-certificates gnupg python3 python3-venv postgresql-client
+   # gcloud from the official Google repository
+   curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg
+   echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" \
+     | sudo tee /etc/apt/sources.list.d/google-cloud-sdk.list
+   sudo apt update && sudo apt install -y google-cloud-cli
+   gcloud --version
+   ```
+3. **Keep the repo inside the Linux filesystem**, not under `/mnt/c/...` (that is slow and breaks file permissions and line endings):
+   ```bash
+   git config --global core.autocrlf input
+   mkdir -p ~/repos && cd ~/repos
+   git clone https://github.com/geoearth-junction/field-under-pressure-materials.git
+   cd field-under-pressure-materials
+   ```
+   Log in to GitHub the same way you push today, but inside WSL (`gh auth login`, or an SSH key made in WSL). Windows credentials are not
+   shared with it. You can open the folder from Windows at `\\wsl$\Ubuntu\home\<you>\repos` and edit with VS Code ("WSL" extension).
+4. Continue with the login below. `gcloud auth login` normally opens the browser of Windows. If it does not, copy the printed link
+   into the browser by hand (if your gcloud asks for it, use `gcloud auth login --no-launch-browser` or `--no-browser`).
+5. The tunnel works for Windows programs too: with WSL2 the port opened in Ubuntu (`scripts/provision_vm.sh tunnel`, port 5433) is
+   reachable from QGIS on Windows at `localhost:5433` (WSL2 forwards localhost by default).
+
+**Option B (nothing to install): Cloud Shell.** Open `https://console.cloud.google.com` with the granted account, choose the project
+`geo-earth-junction` and click the terminal icon at the top right. `gcloud` and `git` are there, signed in already:
 
 ```bash
-gcloud auth login
+gcloud config set project geo-earth-junction
+gcloud config set compute/zone europe-central2-a
+git clone https://github.com/geoearth-junction/field-under-pressure-materials.git && cd field-under-pressure-materials
+GCLOUD_CONFIG=default scripts/provision_vm.sh status      # Cloud Shell has the "default" configuration only
 ```
+
+Good for looking at logs, deploying and running `psql` on the VM. Not for QGIS and not for a tunnel to your laptop, and the session is
+temporary (your home directory is kept). Use `GCLOUD_CONFIG=default` in front of every `scripts/provision_vm.sh` command there.
+
+**Option C (fallback): native Windows.** Install `gcloud` with the installer from
+`https://cloud.google.com/sdk/docs/install#windows` (it opens a "Google Cloud SDK Shell"). `gcloud compute ssh` then needs the OpenSSH
+client (Settings, System, Optional features, add "OpenSSH Client"; the SDK can also use PuTTY). `scripts/provision_vm.sh` does not run
+in PowerShell: use Git Bash, or type the `gcloud` commands of section 4 by hand. In PowerShell set the configuration with
+`$env:CLOUDSDK_ACTIVE_CONFIG_NAME = "geoearth"`. If something odd happens here, switch to option A.
 
 Create a **separate configuration** for this project, so that your other GCP projects stay untouched. Use exactly the name
 `geoearth`: `scripts/provision_vm.sh` uses it by default.
@@ -73,7 +130,7 @@ The first `ssh` creates an SSH key for you (leave the passphrase empty) and may 
 | `Required 'compute.instances.get' permission` or `403` | the owner has not granted your account yet, or you logged in with another e-mail (`gcloud auth list`) |
 | `Permission denied (publickey)` right after the first try | wait a minute and retry; if it persists, tell the owner |
 | `Could not fetch resource` / wrong project | `gcloud config list --configuration=geoearth` must show your account and `geo-earth-junction` |
-| `gcloud: command not found` | restart the terminal; on WSL2 install gcloud inside WSL, not in Windows |
+| `gcloud: command not found` | restart the terminal; on Windows install gcloud inside WSL (Ubuntu), not only in Windows, and run it there |
 | the VM is `TERMINATED` | **do not start it on your own initiative without telling the team**; see section 6 |
 
 ## 4. Everyday use
