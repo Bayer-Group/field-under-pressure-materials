@@ -8,25 +8,28 @@ from __future__ import annotations
 
 import json
 import threading
-from datetime import date
+import time
+from datetime import date, datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
 from pydantic import BaseModel
 
 from backend.app.core.cache import TtlCache
 from backend.app.core.config import AUTH_SECRET, TOKEN_TTL_SECONDS
 from backend.app.core.db import get_db
-from backend.app.core.limits import RateLimiter, enforce
-from backend.app.core.security import hash_password, make_token, read_token, verify_password
+from backend.app.core.limits import RateLimiter, client_ip, enforce
+from backend.app.core.security import make_token, read_token
 from backend.app.domain import septoria
-from backend.app.services import risk_surface
+from backend.app.services import accounts, risk_surface
 from backend.app.services.crop_area_refresh import load_rules
 
 router = APIRouter()
 
-# Verified when the login does not exist, so the answer takes as long as for a wrong password.
-_DUMMY_HASH = hash_password("not-a-real-password")
+# Limits of the login (the counters are per worker process): attempts per address (high, a room shares one address behind a NAT) and per
+# login (low: it stops guessing a password).
+_login_ip_limit = RateLimiter(60, 60)
+_login_account_limit = RateLimiter(10, 60)
 
 
 class LoginIn(BaseModel):
@@ -94,16 +97,45 @@ def _add_index(p: dict, h_key: str = "h_hours", low_key: Optional[str] = None, h
     return p
 
 
-@router.post("/login", summary="Log in (demo)")
-def login(body: LoginIn, con=Depends(get_db)):
-    row = con.execute("SELECT login, password_hash, owner_id, role, display_name FROM app.demo_user WHERE login = %s",
-                      (body.login,)).fetchone()
-    ok = verify_password(body.password, row["password_hash"] if row else _DUMMY_HASH)
-    if not (row and ok):
-        raise HTTPException(status_code=401, detail="wrong login or password")
-    token = make_token({"sub": row["login"], "owner_id": row["owner_id"], "role": row["role"]}, AUTH_SECRET, TOKEN_TTL_SECONDS)
-    return {"token": token, "owner_id": row["owner_id"], "role": row["role"], "display_name": row["display_name"],
+def session(user: dict) -> dict:
+    """The token and the description of a session for an authenticated user (shared by /login and /register)."""
+    claims = {"sub": user["id"], "owner_id": user["owner_id"], "role": user["role"]}
+    if user["kind"] == "account":
+        claims["account"] = True                       # an account owns farms that can be edited; an example farmer's login does not
+    return {"token": make_token(claims, AUTH_SECRET, TOKEN_TTL_SECONDS), "kind": user["kind"], "login": user["id"],
+            "owner_id": user["owner_id"], "role": user["role"], "display_name": user["display_name"],
             "expires_in": TOKEN_TTL_SECONDS}
+
+
+@router.post("/login", summary="Log in with a login and a password (a mock for switching users)")
+def login(body: LoginIn, request: Request, con=Depends(get_db)):
+    ident = body.login.strip()
+    if not ident or len(ident) > accounts.MAX_LOGIN or len(body.password) > accounts.MAX_PASSWORD:
+        raise HTTPException(status_code=422, detail="give a login and a password")
+    enforce(_login_ip_limit, client_ip(request))
+    enforce(_login_account_limit, accounts.normalize_login(ident))
+    user = accounts.authenticate(con, ident, body.password)
+    if user is None:
+        raise HTTPException(status_code=401, detail="wrong login or password")        # the same for an unknown login
+    return session(user)
+
+
+@router.get("/me", summary="Who is logged in (an account, an example farmer or a sandbox visitor)")
+def me(user=Depends(current_user), con=Depends(get_db)):
+    kind = "account" if user.get("account") else ("sandbox" if user.get("sandbox") else "example")
+    name = "Visitor" if kind == "sandbox" else None
+    if kind == "account":
+        row = con.execute("SELECT display_name FROM app.user_account WHERE owner_id = %s", (user["owner_id"],)).fetchone()
+        name = row["display_name"] if row else None
+    elif kind == "example":
+        row = con.execute("SELECT display_name FROM app.demo_user WHERE login = %s", (user.get("sub"),)).fetchone()
+        name = row["display_name"] if row else None
+    exp = user.get("exp")
+    return {"kind": kind, "login": None if kind == "sandbox" else user.get("sub"), "owner_id": user["owner_id"],
+            "role": user.get("role"), "display_name": name,
+            "can_write": bool(user.get("role") == "farmer" and (user.get("account") or user.get("sandbox"))),
+            "expires_at": datetime.fromtimestamp(exp, tz=timezone.utc).isoformat() if exp else None,
+            "expires_in": max(0, int(exp - time.time())) if exp else None}
 
 
 @router.get("/clock", summary="The shown 'today'")

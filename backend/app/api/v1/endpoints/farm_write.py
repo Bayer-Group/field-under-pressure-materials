@@ -66,8 +66,9 @@ def _require_writes(user: dict) -> None:
         raise HTTPException(status_code=503, detail="the demo is read-only now")
     if user.get("role") != "farmer":
         raise HTTPException(status_code=403, detail="only a farmer can save crop areas")
-    if not user["owner_id"].startswith("sbx-") and not ALLOW_EXAMPLE_FARM_WRITES:
-        raise HTTPException(status_code=403, detail="an example farm is read-only: start a sandbox (POST /sandbox) and edit your copy")
+    if not (user.get("account") or user.get("sandbox")) and not ALLOW_EXAMPLE_FARM_WRITES:
+        raise HTTPException(status_code=403, detail="an example farm is read-only: log in with your account (POST /login) or start a "
+                                                    "sandbox (POST /sandbox) and edit your own copy")
     enforce(_write_limit, user["owner_id"])
 
 
