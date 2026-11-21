@@ -1,5 +1,6 @@
 """Serve the stored orchard temperature series consumed by the UI."""
 
+import os
 from datetime import datetime, timedelta, timezone
 from itertools import groupby
 from math import isfinite
@@ -69,9 +70,13 @@ def create_app(db: Database, *, lifespan=None) -> FastAPI:
         label_timezone = _UTC
 
     app = FastAPI(title="Orchard API", lifespan=lifespan)
+    origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
+    ui_port = os.environ.get("ORCHARD_UI_PORT", "")
+    if ui_port.isdecimal() and 1 <= int(ui_port) <= 65535:
+        origins.extend((f"http://localhost:{ui_port}", f"http://127.0.0.1:{ui_port}"))
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+        allow_origins=origins,
         allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Content-Type", "Accept"],
     )

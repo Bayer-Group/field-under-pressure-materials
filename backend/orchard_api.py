@@ -93,6 +93,11 @@ def _status(score: float | None) -> str | None:
     return next(label for limit, label in ((15, "dead"), (45, "poor"), (72, "moderate"), (100, "healthy")) if score <= limit)
 
 
+def _health_score(tree: dict) -> float | None:
+    value = tree.get("healthIndex")
+    return value if type(value) in (float, int) and 0 <= value <= 100 else None
+
+
 def _render_trees(db: Database, orchard: dict) -> list[dict]:
     trees = trees_in_layout(db, orchard)
     if not trees:
@@ -111,8 +116,7 @@ def _render_trees(db: Database, orchard: dict) -> list[dict]:
         geo = tree["coordinates"]
         easting, northing = _TO_LAS.transform(geo["lng"], geo["lat"])
         row_id, label, index = placements.get(identifier, ("", "", 0))
-        value = tree.get("healthIndex")
-        score = value if type(value) in (float, int) and 0 <= value <= 100 else None
+        score = _health_score(tree)
         result.append(
             {
                 "id": identifier,
@@ -164,7 +168,7 @@ def create_orchard_router(db: Database) -> APIRouter:
             except HTTPException:
                 center = {"lat": 0.0, "lng": 0.0}
             geom = orchard.get("geometry", {})
-            area = orchard.get("shapeAreaM2") or geom.get("shapeArea")
+            area = orchard.get("shapeAreaM2") or orchard.get("shapeArea") or geom.get("shapeArea")
             if not area:
                 try:
                     _, area, _ = _boundary(orchard)
@@ -188,13 +192,11 @@ def create_orchard_router(db: Database) -> APIRouter:
         distribution = {"dead": 0, "poor": 0, "moderate": 0, "healthy": 0, "unrated": 0}
         rated_scores: list[float] = []
         for tree in trees:
-            value = tree.get("healthIndex")
-            score = float(value) if type(value) in (float, int) and 0 <= value <= 100 else None
-            status = _status(score)
-            if status is None:
+            score = _health_score(tree)
+            if score is None:
                 distribution["unrated"] += 1
             else:
-                distribution[status] += 1
+                distribution[_status(score)] += 1
                 rated_scores.append(score)
         avg_score = round(sum(rated_scores) / len(rated_scores)) if rated_scores else None
         return {
