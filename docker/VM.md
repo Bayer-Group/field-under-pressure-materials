@@ -112,12 +112,19 @@ the internal compose network, so the database port stays closed. The owner deplo
 first deploy, apply the database migrations (`docker/migrations/003`-`005`) and, for the demo logins, run
 `scripts/generate_mock_farmers.py`. Endpoints and logins: `docs/serve_read_contract.md`; interactive documentation at `/docs`.
 
-Two ways to reach the API (the plain HTTP API carries the demo password, so it is not for anything real):
+The API is served over **HTTPS** by the compose service `caddy` (automatic certificate for `PUBLIC_HOST`, which `deploy` sets to
+`<external-ip-with-dashes>.nip.io`; a custom domain in `.env` is kept). Two ways to reach it:
+- **Open ports 80 and 443** (the demo): `API_SOURCE_RANGES=0.0.0.0/0 scripts/provision_vm.sh firewall` (rule `fup-allow-web`, no default
+  range on purpose; the database port is never opened). Then use `https://<PUBLIC_HOST>/api/v1`; it also works from a page on another
+  host and from `http://localhost` (CORS allows any origin, no cookies are used).
 - **SSH tunnel** (no firewall change, needs access to the project): `scripts/provision_vm.sh api-tunnel`, then use
-  `http://localhost:8000/api/v1` and `http://localhost:8000/docs`.
-- **Open the port for chosen addresses**: `API_SOURCE_RANGES=<cidr,...> scripts/provision_vm.sh firewall` (a rule for the API port
-  only, with no default range on purpose; the database port is never opened). Then use `http://<VM external IP>:8000/api/v1`.
-  A page served over HTTPS cannot call a plain HTTP API (mixed content): for that the API needs HTTPS in front of it.
+  `http://localhost:8000/api/v1` (the backend listens only on the VM's localhost).
+
+The external IP of the VM is ephemeral: after a stop and start the address changes (and the certificate is requested again). Do not
+stop the VM before a demo; reserve a static IP or use a domain to make the address permanent. Switches in the VM's `.env`:
+`DEMO_READONLY=1` (nobody saves anything, visitors get a read-only view), `SANDBOX_TTL_HOURS`, `SANDBOX_MAX_OWNERS`,
+`MAX_AREAS_SANDBOX`, `MAX_AREA_HA`, `WEB_CONCURRENCY`; apply with `scripts/provision_vm.sh deploy`. Load test:
+`python scripts/load_test_api.py --base https://<PUBLIC_HOST> --users 100 --ramp 15` (100 people in 15 s: p95 0.4 s, no errors).
 
 ## Who needs the tunnel (and who does not)
 
