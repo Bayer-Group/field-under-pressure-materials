@@ -7,6 +7,7 @@
 model_version = "spray-window-v1"
 horizon_hours = 72                 # the next 72 hours (note 5)
 min_window_hours = 4               # 2 h to spray + 2 h without rain after it (note 5.3, team assumption)
+rain_free_after_hours = 2          # hours without rain needed after the spray (note 5.1): latest start = end of window - this
 max_windows = 3                    # up to three windows (note 1 and 6)
 indicative_after_hours = 48        # windows starting later are marked indicative (note 6, point 4)
 source_label = "replay"            # demo: the "forecast" is the actual weather of the next 72 h from raw.weather_hourly
@@ -27,6 +28,7 @@ temperature_min_c = "team_assumption"
 temperature_max_c = "team_assumption"
 precipitation_max_mm = "team_assumption"
 min_window_hours = "team_assumption"
+rain_free_after_hours = "team_assumption"
 
 [spray_window.texts]
 disclaimer = "The tool does not check the label of the product or whether it is approved for the crop. The choice of the product and compliance with the label are the farmer's."
