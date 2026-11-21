@@ -121,12 +121,12 @@ function Body({ data, plotId, unit, crop, across, setAcross, picked, pick }: {
   return (
     <>
       <p className="risk-note">
-        Each cell is the crop risk index of a plot. Colour compares plots within each crop: <span className="key good">green</span> = lower
+        Each cell is the crop risk index of a plot. Colour compares crops within each plot: <span className="key good">green</span> = lower
         risk, <span className="key bad">red</span> = higher risk, stronger colour = further from the middle. Relative index, not a probability of disease.
         {data.notes.filter((n) => n.startsWith('Light mode')).map((n) => <strong key={n}> {n}</strong>)}
       </p>
       <Choice label="Shading">
-        <button aria-pressed={!across} onClick={() => setAcross(false)}>Shade within each crop</button>
+        <button aria-pressed={!across} onClick={() => setAcross(false)}>Shade within each plot</button>
         <button aria-pressed={across} onClick={() => setAcross(true)}>Shade across all crops</button>
       </Choice>
       {sel && (
