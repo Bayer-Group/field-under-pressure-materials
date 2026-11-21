@@ -15,8 +15,15 @@ from pymongo.database import Database
 from pyproj import Geod, Transformer
 
 from .orchard_layout import (
-    OrchardLayout, layout_rows, object_id, orchard_document, polygons, save_layout, trees_in_layout,
+    OrchardLayout,
+    layout_rows,
+    object_id,
+    orchard_document,
+    polygons,
+    save_layout,
+    trees_in_layout,
 )
+from .tree_health import health_status, tree_health
 
 _ROOT = Path(__file__).resolve().parents[1]
 _DEMO_ORCHARD = "6b01933c1dc02a368703a020"
@@ -87,17 +94,6 @@ def _projection_origin(orchard: dict, path: Path | None) -> tuple[float, float]:
     return _TO_LAS.transform(center["lng"], center["lat"])
 
 
-def _status(score: float | None) -> str | None:
-    if score is None:
-        return None
-    return next(label for limit, label in ((15, "dead"), (45, "poor"), (72, "moderate"), (100, "healthy")) if score <= limit)
-
-
-def _health_score(tree: dict) -> float | None:
-    value = tree.get("healthIndex")
-    return value if type(value) in (float, int) and 0 <= value <= 100 else None
-
-
 def _render_trees(db: Database, orchard: dict) -> list[dict]:
     trees = trees_in_layout(db, orchard)
     if not trees:
@@ -110,13 +106,15 @@ def _render_trees(db: Database, orchard: dict) -> list[dict]:
     order = {identifier: index for index, identifier in enumerate(placements)}
     trees.sort(key=lambda tree: order.get(str(tree["_id"]), len(order)))
     origin_x, origin_y = _projection_origin(orchard, _las_file(orchard["_id"]))
+    health = tree_health(db, orchard, trees)
     result = []
     for tree in trees:
         identifier = str(tree["_id"])
         geo = tree["coordinates"]
         easting, northing = _TO_LAS.transform(geo["lng"], geo["lat"])
         row_id, label, index = placements.get(identifier, ("", "", 0))
-        score = _health_score(tree)
+        assessment = health[identifier]
+        score = assessment["healthScore"]
         result.append(
             {
                 "id": identifier,
@@ -129,7 +127,7 @@ def _render_trees(db: Database, orchard: dict) -> list[dict]:
                 "canopyRadiusMeters": tree.get("canopyRadiusMeters", 1.0),
                 "healthIndex": score,
                 "healthScore": score,
-                "healthStatus": _status(score),
+                **assessment,
                 "species": str(tree["species"]),
             }
         )
@@ -189,22 +187,26 @@ def create_orchard_router(db: Database) -> APIRouter:
     def orchard_health(orchard_id: str | None = Query(default=None, alias="orchardId")) -> dict:
         orchard = orchard_document(db, object_id(orchard_id, "orchardId"))
         trees = trees_in_layout(db, orchard)
+        health = tree_health(db, orchard, trees)
         distribution = {"dead": 0, "poor": 0, "moderate": 0, "healthy": 0, "unrated": 0}
         rated_scores: list[float] = []
         for tree in trees:
-            score = _health_score(tree)
+            assessment = health[str(tree["_id"])]
+            score = assessment["healthScore"]
             if score is None:
                 distribution["unrated"] += 1
             else:
-                distribution[_status(score)] += 1
+                distribution[assessment["healthStatus"]] += 1
                 rated_scores.append(score)
         avg_score = round(sum(rated_scores) / len(rated_scores)) if rated_scores else None
         return {
             "orchardId": str(orchard["_id"]),
             "updatedAt": datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
             "averageScore": avg_score,
-            "overallStatus": _status(avg_score),
+            "overallStatus": health_status(avg_score, estimated=any(h["healthSource"] == "estimate" for h in health.values())),
             "totalTrees": len(trees),
+            "assessedTrees": len(rated_scores),
+            "estimatedTrees": sum(h["healthSource"] == "estimate" for h in health.values()),
             "distribution": distribution,
         }
 

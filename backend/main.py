@@ -30,7 +30,7 @@ def _read_point(document: dict, field: str) -> tuple[float, float]:
         point = point.get(key) if isinstance(point, dict) else None
 
     if not isinstance(point, dict):
-        raise ValueError(f"{field} must contain an orchard center")
+        raise ValueError(f"{field} must contain an orchard center")  # noqa: TRY004
 
     if point.get("type") == "Point":
         coordinates = point.get("coordinates")
@@ -134,7 +134,7 @@ def _serve(db: Database, args: argparse.Namespace, workers: WeatherWorkers) -> N
             stop.set()
             scheduler.join()
 
-    uvicorn.run(create_app(db, lifespan=lifespan), host="127.0.0.1", port=args.port, workers=1)
+    uvicorn.run(create_app(db, lifespan=lifespan), host=args.host, port=args.port, workers=1)
 
 
 def main() -> int:
@@ -144,6 +144,7 @@ def main() -> int:
     parser.add_argument("--timezone", default="auto", help="Open-Meteo timezone for each request")
     parser.add_argument("--history-days", type=int, help="History window for backfill, daily or run")
     parser.add_argument("--port", type=int, default=8000, help="Local HTTP port for run")
+    parser.add_argument("--host", default="127.0.0.1", help="HTTP bind address")
     args = parser.parse_args()
     if args.history_days is not None and not 1 <= args.history_days <= 92:
         parser.error("--history-days must be between 1 and 92")
@@ -152,7 +153,14 @@ def main() -> int:
 
     mongo_uri = os.environ.get("MONGO_URI")
     if not mongo_uri:
-        parser.error("Set MONGO_URI to the MongoDB connection string")
+        from urllib.parse import quote
+        host = os.environ.get("MONGO_HOST", "127.0.0.1")
+        port = os.environ.get("MONGO_PORT", "27017")
+        user = os.environ.get("MONGO_ROOT_USER", "")
+        password = os.environ.get("MONGO_ROOT_PASSWORD", "")
+        auth = f"{quote(user, safe='')}:{quote(password, safe='')}@" if user else ""
+        mongo_uri = f"mongodb://{auth}{host}:{port}/?authSource=admin"
+        os.environ["MONGO_URI"] = mongo_uri
     database_name = os.environ.get("MONGO_DB", "field_under_pressure")
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     worker_options = {
@@ -181,6 +189,10 @@ def main() -> int:
             ):
                 workers = WeatherWorkers(current=current, hourly=hourly)
                 if args.mode == "run":
+                    if db.Orchard.find_one({"environmentalData.history.0": {"$exists": False}}, {"_id": 1}):
+                        pending = _submit_cycle(db, args, workers, "backfill")
+                        if not _report("backfill", pending):
+                            log.warning("Some histories are unavailable; scheduled updates will retry")
                     _serve(db, args, workers)
                 else:
                     pending = _submit_cycle(db, args, workers, args.mode)

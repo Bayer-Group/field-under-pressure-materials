@@ -1,0 +1,15 @@
+services:
+  backend:
+    volumes:
+      - type: bind
+        source: ./earthengine.json
+        target: /app/earthengine.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: "${EARTHENGINE_CREDENTIALS_FILE:-${USERPROFILE:-${HOME:-.}}/.config/earthengine/credentials}"
+        target: /root/.config/earthengine/credentials
+        read_only: true
+        bind:
+          create_host_path: false

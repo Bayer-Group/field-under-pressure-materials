@@ -1,5 +1,6 @@
-# Field Under Pressure — starter environment (Python 3.10+)
-# pip install -r requirements.txt
+# Runtime for the API and the geospatial scripts.
+-r backend/requirements.txt
+-r ML/soil_moisture/requirements.txt
 
 # Parquet / tabular data (weather, soil, …)
 pandas>=2.0
@@ -15,16 +16,6 @@ h3>=3.7
 
 # Sentinel-2 Earth Search starter notebook
 pystac-client>=0.8
-rasterio>=1.3
 matplotlib>=3.8
-numpy>=1.26
 tqdm>=4.66
 pyproj>=3.6
-
-# Google Earth Engine (optional — personal GEE account required)
-# After install: earthengine authenticate
-# earthengine-api is enough to create/use EE assets (Export.*.toAsset, ee.data, …)
-earthengine-api>=1.1
-geemap>=0.32
-# Uncomment if you Export.*.toCloudStorage and need to list/download GCS objects in Python:
-# google-cloud-storage>=2.14

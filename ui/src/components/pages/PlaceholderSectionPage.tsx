@@ -2,16 +2,17 @@ import { ArrowLeft, Construction } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
 import type { NavSectionId } from '../layout/Sidebar';
 
+type PlaceholderSection = Exclude<NavSectionId, 'dashboard' | 'row-editor' | 'analytics'>;
+
 interface PlaceholderSectionPageProps {
-  section: Exclude<NavSectionId, 'dashboard' | 'row-editor'>;
+  section: PlaceholderSection;
   onBackToDashboard: () => void;
 }
 
 export function PlaceholderSectionPage({ section, onBackToDashboard }: PlaceholderSectionPageProps) {
   const { t } = useLanguage();
 
-  const titles: Record<Exclude<NavSectionId, 'dashboard' | 'row-editor'>, string> = {
-    analytics: t.nav.analytics,
+  const titles: Record<PlaceholderSection, string> = {
     layers: t.nav.layers,
     settings: t.nav.settings,
   };

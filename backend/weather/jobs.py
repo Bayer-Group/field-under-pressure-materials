@@ -1,7 +1,8 @@
 """Blocking sync functions executed in the child processes."""
 
 import atexit
-from datetime import datetime, timezone as dt_timezone
+from datetime import datetime
+from datetime import timezone as dt_timezone
 
 from bson import ObjectId
 from pymongo import MongoClient

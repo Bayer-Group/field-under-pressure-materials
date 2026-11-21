@@ -387,3 +387,11 @@ Główny endpoint zapisu z **Edytora Linii Rzędów**. Przyjmuje narysowane rzę
   ]
 }
 ```
+
+## Analityka i wspólna ocena kondycji
+
+`/api/analytics/orchards/{orchardId}` używa rzeczywistego identyfikatora sadu wybranego w panelu. Metody zadań i dziennej prognozy są opisane w [integracji ML](../docs/ML_INTEGRATION.md). Formularz `POST /api/soil-moisture` wymaga `orchardId` w JSON, a `GET /api/soil-moisture/forecast` parametru `orchardId`.
+
+Drzewo w scenie, liście i analityce ma wspólne `healthScore` i `healthStatus` oraz `healthSource` (`field`, `estimate` lub `null`), `healthAssessedAt` i `healthCoverage`. `healthIndex` w scenie zachowuje alias wartości oceny. Szacunek z aktualnej analizy jest oznaczony jako ML i wymaga zgodności wersji układu oraz daty danych. Modelowy najniższy wynik ma status `poor`, a stan `dead` pochodzi z oceny terenowej. Mapa analityki domyślnie używa palety kondycji i pozwala przełączyć osobną paletę ryzyka.
+
+Podsumowanie `GET /api/v1/orchard/health` dodaje `assessedTrees` i `estimatedTrees`. Średnia obejmuje aktywne drzewa z dostępną oceną, a `distribution.unrated` obejmuje pozostałe. Brak danych zachowuje wartości `null`.

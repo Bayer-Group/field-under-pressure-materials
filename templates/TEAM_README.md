@@ -32,6 +32,19 @@ pip install -r requirements.txt
 jupyter notebook notebooks/
 ```
 
+## Set up Git hooks
+
+Run these commands from the repository root in your Python environment after cloning.
+
+```bash
+python -m pip install pre-commit
+python -m pre_commit install --install-hooks
+```
+
+Ruff checks Python files and notebooks before each commit. The `commit-msg` hook checks Conventional Commits messages such as `chore(git): ignore local W&B logs`.
+
+Run `python -m pre_commit run ruff-check --all-files` to check the repository before committing.
+
 ## Demo notes (Sunday)
 - What to show (1–2 screens / maps):
 - Key result / insight:

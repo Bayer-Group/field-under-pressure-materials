@@ -1,0 +1,12 @@
+**
+!backend/
+!backend/**
+!ML/
+!ML/soil_moisture/
+!ML/soil_moisture/**
+!ui/
+!ui/public/
+!ui/public/las/
+!ui/public/las/**
+**/__pycache__/
+**/*.pyc

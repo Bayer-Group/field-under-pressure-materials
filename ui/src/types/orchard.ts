@@ -58,6 +58,8 @@ export interface HealthDistribution {
 }
 
 export interface OrchardHealthSummary {
+  assessedTrees?: number;
+  estimatedTrees?: number;
   orchardId: string;
   updatedAt: string;
   /** Averaged orchard health score on a 0-100 scale, or null when no trees are rated yet */
@@ -94,6 +96,9 @@ export interface RowLineRecord extends RowLineInput {
 }
 
 export interface OrchardTree3D {
+  healthSource?: 'field' | 'estimate' | null;
+  healthAssessedAt?: string | null;
+  healthCoverage?: number;
   id: string;
   rowId: string;
   rowLabel: string;

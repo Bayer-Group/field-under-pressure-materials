@@ -8,10 +8,12 @@ data/**
 *.nc
 *.zip
 *.SAFE/
-
+wandb/
 # Secrets / local config
 .env
 .env.*
+!.env.example
+/earthengine.json
 *.pem
 
 # Python
@@ -20,8 +22,23 @@ venv/
 __pycache__/
 *.egg-info/
 .ipynb_checkpoints/
+.ruff_cache/
+.pytest_cache/
+
+# Frontend
+node_modules/
+/ui/dist/
+/ui/dist-ssr/
+/ui/*.local
 
 # OS / IDE
 .DS_Store
 .idea/
 .vscode/
+
+# Node / UI (Vite)
+node_modules/
+.vite/
+dist/
+dist-ssr/
+*.local

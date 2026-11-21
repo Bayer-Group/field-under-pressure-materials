@@ -1,6 +1,7 @@
 """Serve the stored orchard temperature series consumed by the UI."""
 
 import os
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from itertools import groupby
 from math import isfinite
@@ -37,7 +38,7 @@ def _temperature_samples(documents):
 
         valid_at = document["valid_at"]
         if valid_at.tzinfo is None:
-            # PyMongo decodes dates as naive UTC unless tz_aware is enabled.
+            # PyMongo decodes dates as naive timezone.utc unless tz_aware is enabled.
             valid_at = valid_at.replace(tzinfo=_UTC)
         yield valid_at.astimezone(_UTC), temperature
 
@@ -46,9 +47,10 @@ def _points(documents, step: timedelta, label_format: str, label_timezone) -> li
     points = []
     samples = _temperature_samples(documents)
     for _, group in groupby(samples, key=lambda sample: (sample[0] - _EPOCH) // step):
-        first_time, first_temperature = next(group)
+        bucket = iter(list(group))
+        first_time, first_temperature = next(bucket)
         low = high = first_temperature
-        for _, temperature in group:
+        for _, temperature in bucket:
             low = min(low, temperature)
             high = max(high, temperature)
         points.append(
@@ -69,7 +71,23 @@ def create_app(db: Database, *, lifespan=None) -> FastAPI:
     except ZoneInfoNotFoundError:
         label_timezone = _UTC
 
-    app = FastAPI(title="S.A.G.E. API — Smart Agricultural Guidance Engine", lifespan=lifespan)
+    from .analytics import router as analytics_router
+    from .soil_moisture_api import lifespan as analysis_lifespan
+    from .soil_moisture_api import router as soil_router
+
+    @asynccontextmanager
+    async def combined_lifespan(app):
+        async with analysis_lifespan(app):
+            if lifespan is None:
+                yield
+            else:
+                async with lifespan(app):
+                    yield
+
+    app = FastAPI(title="S.A.G.E. API — Smart Agricultural Guidance Engine", lifespan=combined_lifespan)
+    app.state.database = db
+    app.state.gee_error = "Skonfiguruj projekt i poświadczenia Earth Engine, aby uruchomić analizę."
+    app.state.gee_credentials = None
     origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
     ui_port = os.environ.get("ORCHARD_UI_PORT", "")
     if ui_port.isdecimal() and 1 <= int(ui_port) <= 65535:
@@ -81,6 +99,8 @@ def create_app(db: Database, *, lifespan=None) -> FastAPI:
         allow_headers=["Content-Type", "Accept"],
     )
     app.include_router(create_orchard_router(db))
+    app.include_router(analytics_router)
+    app.include_router(soil_router)
 
     @app.get("/api/v1/weather/temperature")
     def temperature_series(

@@ -1,0 +1,2 @@
+-r requirements-analysis.txt
+geemap>=0.32
