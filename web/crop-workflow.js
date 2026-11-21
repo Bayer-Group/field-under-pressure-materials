@@ -30,11 +30,14 @@
     return `${d} ${monthShortPl[m - 1]} ${y}`;
   }
 
-  function create({ map, provider, selected, panel, status, setDrawer, fitParcelPreview, animateDrawerResize, onParcelChange }) {
+  function create({ map, provider, selected, panel, status, setDrawer, fitParcelPreview, animateDrawerResize, onParcelChange, onSaved }) {
     let draft = null;
     let crops = [];
     let editing = false;
     let drawing = false;
+    let partition = null;
+    let partitionFrame = null;
+    let partitionUndo = null;
     let drawPoints = [];
     let geometryArea = null;
     let explicitGeometryEdit = false;
@@ -336,13 +339,6 @@
         const area = draft.areas.find(item => item.crop_area_id === id);
         if (area) offerFix(`Remove overlap from ${cropName(area)}`, area, 'subtract');
       });
-      if (['invalid', 'error'].includes(finding.kind)) {
-        const area = draft.areas.find(item => item.crop_area_id === finding.cropAreaId);
-        if (area?.geometry?.type === 'Polygon') {
-          const button = el('button', 'crop-outline geometry-nearby-candidate', 'Adjust boundary'); button.type = 'button';
-          button.addEventListener('click', () => editGeometry(area)); actions.append(button);
-        }
-      }
       if (actions.childElementCount) content.append(actions);
       if (offersMultipart) content.append(el('p', 'geometry-popup-message', 'Multiple-part areas can be displayed, but their points cannot yet be edited.'));
       const token = finding.id ? `${finding.kind}:${finding.id}` : null;
@@ -441,8 +437,17 @@
         validation = { response, fingerprint, accepted: new Set() };
         showFindings(response);
         return true;
-      } catch (_) {
+      } catch (error) {
         if (draft && editing && fingerprint === geometryFingerprint()) {
+          if (error?.status === 422) {
+            const detail = error.detail;
+            const invalidParcelId = typeof detail === 'string' && detail.includes('id must be') && request.parcel_ids.some(id => id.includes('/'));
+            const message = invalidParcelId ? 'The service cannot currently validate parcel numbers containing a slash. Your selection is still here.' :
+              typeof detail === 'string' ? detail : typeof detail?.message === 'string' ? detail.message :
+              Array.isArray(detail) ? detail.map(item => item.msg).filter(Boolean).join('; ') : '';
+            showError(message || 'The service rejected the boundary validation request. Your selection is still here.');
+            return false;
+          }
           if (!localPreview || previewFingerprint !== fingerprint) {
             try { localPreview = GeometryPreview.inspect(draft.parcels, draft.areas, window.turf); }
             catch (_) { localPreview = { error: true }; }
@@ -532,12 +537,6 @@
       const area = draft.areas.find(item => item.crop_area_id === id);
       if (!area) return;
       activeAreaId = id;
-      if (area.geometry?.type === 'Polygon' && !drawing) {
-        geometryArea = area;
-        explicitGeometryEdit = false;
-        const points = area.geometry.coordinates[0].slice(0, -1).map(point => [...point]);
-        showVertexHandles(points, area);
-      }
       if (splitByParcel && area.parcel_id && draft.currentParcel !== area.parcel_id) {
         draft.currentParcel = area.parcel_id;
         render();
@@ -566,6 +565,10 @@
     }
 
     function stopDrawing() {
+      if (partitionFrame !== null) { cancelAnimationFrame(partitionFrame); partitionFrame = null; }
+      if (partition?.undoButton) partition.undoButton.remove();
+      partition = null; partitionPointer = null; map.dragPan.enable();
+      map.getSource('partition-preview')?.setData({ type: 'FeatureCollection', features: [] });
       hideGuides();
       geometryArea = null;
       explicitGeometryEdit = false;
@@ -674,6 +677,7 @@
     }
 
     function addPoint(lngLat) {
+      if (partition) return true;
       if (!drawing) return false;
       hideGuides();
       vertexNotice.textContent = '';
@@ -687,7 +691,7 @@
     }
 
     function addEditPoint(lngLat) {
-      if (!geometryArea) return false;
+      if (partition || !geometryArea) return false;
       hideGuides();
       const points = geometryArea.geometry.coordinates[0].slice(0, -1).map(point => [...point]);
       const edge = closestEdge(points, lngLat);
@@ -723,6 +727,7 @@
     }
 
     finish.addEventListener('click', () => {
+      if (partition) { applyPartition(); return; }
       if (!draft || drawPoints.length < 3) return;
       const ring = [...drawPoints.map(point => [...point]), [...drawPoints[0]]];
       const geometry = GeometryPreview.removeRedundantVertices({ type: 'Polygon', coordinates: [ring] });
@@ -735,7 +740,7 @@
         crop_area_id: id,
         parcel_id: null,
         geometry,
-        crop: { farmer_crop_id: null, map_crop_id: null },
+        crop: { farmer_crop_id: 'wheat', map_crop_id: null },
         sowing_date: null,
         past_sprays: [],
         spray_choice: null
@@ -1021,21 +1026,105 @@
       return wrap;
     }
 
-    function createCropDropdown(value, onChange) {
-      const select = el('select', 'crop-input crop-select');
-      select.setAttribute('aria-label', 'Crop');
-      select.required = true;
-      const placeholder = el('option', '', 'Select a crop');
-      placeholder.value = '';
-      select.append(placeholder);
-      crops.forEach(crop => {
-        const option = el('option', '', crop.label);
-        option.value = crop.id;
-        select.append(option);
-      });
-      select.value = value || '';
-      select.addEventListener('change', () => onChange(select.value || null));
-      return select;
+    /** Recompute all cuts from the original geometry so endpoint edits stay reversible. */
+    function updatePartition() {
+      if (!partition) return false;
+      try {
+        let parts = [partition.area.geometry];
+        for (const cut of partition.cuts) {
+          let split = false;
+          const next = [];
+          for (const geometry of parts) {
+            try { next.push(...GeometryPreview.splitByLine(geometry, cut.points, window.turf)); split = true; }
+            catch (_) { next.push(geometry); }
+          }
+          if (!split) throw new Error('Each cut must cross an area. Move the endpoints or undo the cut.');
+          if (draft.areas.length - 1 + next.length > 20) throw new Error('You can have at most 20 areas. Move or undo the last cut.');
+          parts = next;
+        }
+        partition.parts = parts;
+        vertexNotice.textContent = partition.cuts.length ? `${parts.length} areas · draw another cut or drag an endpoint.` : 'Drag across the area to draw a cut.';
+        finish.disabled = !partition.cuts.length;
+        partition.valid = true;
+      } catch (error) {
+        partition.valid = false;
+        vertexNotice.textContent = error.message;
+        finish.disabled = true;
+      }
+      const features = partition.parts.map((geometry, index) => ({ type: 'Feature', geometry, properties: { color: palette[index % palette.length] } }));
+      partition.cuts.forEach(cut => features.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: cut.points }, properties: {} }));
+      map.getSource('partition-preview')?.setData({ type: 'FeatureCollection', features });
+      partition.undoButton.disabled = !partition.cuts.length;
+      return partition.valid;
+    }
+
+    function queuePartitionUpdate() {
+      if (partitionFrame !== null) return;
+      partitionFrame = requestAnimationFrame(() => { partitionFrame = null; updatePartition(); });
+    }
+
+    function showCutHandles() {
+      clearMarkers();
+      partition.cuts.forEach((cut, cutIndex) => cut.points.forEach((point, index) => {
+        const handle = el('button', 'crop-vertex'); handle.type = 'button';
+        handle.setAttribute('aria-label', `Move endpoint ${index + 1} of cut ${cutIndex + 1}`);
+        handle.addEventListener('click', event => event.stopPropagation());
+        const marker = new maplibregl.Marker({ element: handle, draggable: true }).setLngLat(point).addTo(map);
+        marker.on('drag', () => { if (!partition) return; const p = marker.getLngLat(); cut.points[index] = [p.lng, p.lat]; queuePartitionUpdate(); });
+        marker.on('dragend', () => updatePartition());
+        markers.push(marker);
+      }));
+    }
+
+    function startPartition(area) {
+      if (!window.turf) { showError('Geometry tools are unavailable. Please reload and try again.'); return; }
+      if (draft.areas.length >= 20) { showError('You can have at most 20 areas.'); return; }
+      closeFinding(); stopDrawing();
+      activeAreaId = area.crop_area_id;
+      const undoButton = el('button', 'crop-link partition-undo', 'Undo last cut'); undoButton.type = 'button'; undoButton.disabled = true;
+      partition = { area, cuts: [], parts: [area.geometry], valid: true, undoButton };
+      undoButton.addEventListener('click', () => { partition.cuts.pop(); updatePartition(); showCutHandles(); });
+      toolbar.insertBefore(undoButton, toolbar.querySelector('.crop-draw-actions'));
+      drawing = true; toolbar.hidden = false; finish.hidden = false; finish.disabled = true;
+      finish.textContent = 'Apply cuts'; cancel.textContent = 'Cancel';
+      vertexNotice.textContent = 'Drag across the area to draw a cut.';
+      mapData(); setDrawer(false); fitParcelPreview({ geometry: area.geometry });
+    }
+
+    const partitionCanvas = map.getCanvas();
+    let partitionPointer = null;
+    partitionCanvas.addEventListener('pointerdown', event => {
+      if (!partition || event.button !== 0 || partitionPointer !== null) return;
+      event.preventDefault(); event.stopImmediatePropagation();
+      partitionPointer = event.pointerId; partitionCanvas.setPointerCapture(event.pointerId); map.dragPan.disable();
+      clearMarkers();
+      const rect = partitionCanvas.getBoundingClientRect(), p = map.unproject([event.clientX - rect.left, event.clientY - rect.top]);
+      partition.cuts.push({ points: [[p.lng, p.lat], [p.lng, p.lat]] }); updatePartition();
+    }, true);
+    partitionCanvas.addEventListener('pointermove', event => {
+      if (partitionPointer !== event.pointerId || !partition) return;
+      event.preventDefault(); event.stopImmediatePropagation();
+      const rect = partitionCanvas.getBoundingClientRect(), p = map.unproject([event.clientX - rect.left, event.clientY - rect.top]);
+      partition.cuts[partition.cuts.length - 1].points[1] = [p.lng, p.lat]; queuePartitionUpdate();
+    }, true);
+    function endPartitionPointer(event) {
+      if (partitionPointer !== event.pointerId) return;
+      event.preventDefault(); event.stopImmediatePropagation(); partitionPointer = null; map.dragPan.enable();
+      if (!partition) return;
+      if (event.type === 'pointercancel') partition.cuts.pop();
+      updatePartition(); showCutHandles();
+    }
+    partitionCanvas.addEventListener('pointerup', endPartitionPointer, true);
+    partitionCanvas.addEventListener('pointercancel', endPartitionPointer, true);
+
+    function applyPartition() {
+      if (!partition?.valid || !partition.cuts.length || !draft.areas.includes(partition.area)) return;
+      const before = copy(draft.areas);
+      const original = partition.area, index = draft.areas.indexOf(original);
+      const parts = partition.parts.map((geometry, i) => ({ ...copy(original), crop_area_id: i ? newId() : original.crop_area_id, geometry: copy(geometry) }));
+      draft.areas.splice(index, 1, ...parts); activeAreaId = parts[0].crop_area_id;
+      partitionUndo = { before, after: JSON.stringify(draft.areas) };
+      validation = null; stopDrawing(); status.textContent = ''; setDrawer(true); render();
     }
 
     function revealSection(element) {
@@ -1067,26 +1156,12 @@
       identify.append(marker, title);
       identify.addEventListener('click', () => focusArea(area.crop_area_id, { preview: true }));
       header.append(identify);
-      const actions = el('div', 'crop-area-actions');
-      const outline = el('button', 'crop-edit-icon');
-      outline.type = 'button';
-      outline.setAttribute('aria-label', `Edit the boundary of area ${globalIndex + 1} on the map`);
-      outline.title = 'Edit boundary on the map';
-      outline.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 5.5 10 4 4 7v9l7 4 7-4v-4"/><path d="m13 10 6-6 2 2-6 6-3 1Z"/></svg>';
-      outline.addEventListener('click', () => editGeometry(area));
-      actions.append(outline);
       const currentAreas = draft.areas;
-      header.append(actions);
+      header.append(el('span', 'crop-area-spacer'));
       card.append(header);
 
-      const cropLabel = el('label', 'crop-label');
-      cropLabel.append(requiredLabel('What grows here?'), createCropDropdown(area.crop.farmer_crop_id, value => {
-        area.crop.farmer_crop_id = value;
-        const chosen = crops.find(item => item.id === value);
-        title.querySelector('strong').textContent = chosen ? chosen.label : 'Select a crop';
-        mapData();
-      }));
-      card.append(cropLabel);
+      const cut = el('button', 'crop-outline crop-action', 'Cut area'); cut.type = 'button';
+      cut.addEventListener('click', () => startPartition(area)); card.append(cut);
       card.append(createDatePicker({
         value: area.sowing_date,
         labelText: 'When was it sown?',
@@ -1145,6 +1220,7 @@
           durationWrap.hidden = !spray.date;
           const duration = el('input', 'crop-input');
           duration.type = 'number'; duration.required = true; duration.min = '1'; duration.step = '1'; duration.inputMode = 'numeric';
+          if (provider.mode === 'backend') duration.max = '60';
           duration.placeholder = 'Number of days';
           duration.value = spray.protection_duration_days ?? '';
           duration.addEventListener('input', () => { spray.protection_duration_days = duration.value === '' ? null : Number(duration.value); });
@@ -1201,7 +1277,7 @@
       const line = `${count} ${parcelWord}${known ? ` · ${total.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ha` : ''}`;
       summary.append(el('strong', '', line));
       const list = el('div', 'crop-selection-parcels');
-      draft.parcels.forEach(parcel => list.append(el('span', '', `${parcel.parcel_number} · ${parcel.locality || 'locality'}`)));
+      draft.parcels.forEach(parcel => list.append(el('span', '', [parcel.parcel_number, parcel.locality].filter(Boolean).join(' · '))));
       summary.append(list);
       return summary;
     }
@@ -1263,30 +1339,31 @@
       const visibleAreas = splitByParcel ? draft.areas.filter(area => !area.parcel_id || area.parcel_id === draft.currentParcel) : draft.areas;
       visibleAreas.forEach((area, index) => panel.append(renderArea(area, index)));
 
-      const areaActions = el('div', 'crop-area-actions-row');
-      const addAreaBtn = el('button', 'crop-outline crop-action');
-      addAreaBtn.innerHTML = '<svg viewBox="0 0 28 24" aria-hidden="true"><defs><mask id="add-area-cutout"><rect width="28" height="24" fill="white" stroke="none"/><circle cx="20" cy="6" r="6.5" fill="black" stroke="none"/></mask></defs><path d="M13 3 3 6v11l9 4 8-5V9Z" mask="url(#add-area-cutout)"/><circle cx="20" cy="6" r="4.5"/><path d="M20 3.8v4.4m-2.2-2.2h4.4"/></svg><span>Add area</span>';
-      addAreaBtn.type = 'button';
-      addAreaBtn.addEventListener('click', startDrawing);
-      areaActions.append(addAreaBtn);
-      const importArea = el('button', 'crop-outline crop-action');
-      importArea.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3m-4 4 4-4 4 4M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg><span>Import</span>';
-      importArea.type = 'button';
-      importArea.addEventListener('click', () => {
-        const dialog = document.getElementById('import-dialog');
-        document.getElementById('import-title').textContent = 'Import crop boundaries';
-        document.getElementById('import-note').textContent = 'Choose a file to see a preview.';
-        document.getElementById('import-file').value = '';
-        document.getElementById('use-import').hidden = true;
-        dialog.showModal();
-      });
-      areaActions.append(importArea);
-      panel.append(areaActions);
-
-
-      const saveBtn = el('button', 'primary', 'Save crop details');
+      if (partitionUndo) {
+        const undo = el('button', 'crop-link', 'Undo last split'); undo.type = 'button';
+        undo.addEventListener('click', () => {
+          if (JSON.stringify(draft.areas) !== partitionUndo.after) { showError('The area details changed after the split. Undo is no longer available.'); return; }
+          draft.areas = partitionUndo.before; partitionUndo = null; activeAreaId = null;
+          validation = null; closeFinding(); render();
+        });
+        panel.append(undo);
+      }
+      if (draft.saved && provider.mode === 'backend') {
+        const resultsButton = el('button', 'crop-outline', 'View saved analysis'); resultsButton.type = 'button';
+        resultsButton.addEventListener('click', async () => {
+          resultsButton.disabled = true;
+          try { if (!await onSaved()) showError('Your details were saved, but the analysis could not be loaded. Try again.'); }
+          finally { resultsButton.disabled = false; }
+        });
+        panel.append(resultsButton);
+      }
+      const saveBtn = el('button', 'primary', provider.mode === 'backend' ? 'Save and view analysis' : 'Save crop details');
       saveBtn.type = 'button';
-      saveBtn.addEventListener('click', save);
+      saveBtn.addEventListener('click', async () => {
+        if (saveBtn.disabled) return;
+        saveBtn.disabled = true;
+        try { await save(); } finally { saveBtn.disabled = false; }
+      });
       panel.append(saveBtn);
 
       mapData();
@@ -1307,17 +1384,16 @@
           provider.listFields(),
           provider.listCropGroups ? provider.listCropGroups() : Promise.resolve({ groups: [] })
         ]);
-        crops = cropResponse.crops;
+        crops = cropResponse.crops.filter(crop => crop.id === 'wheat');
+        if (!crops.length) throw new Error('WHEAT_UNAVAILABLE');
 
-        const suggestions = await Promise.all(
-          parcels.map(parcel => provider.getCropSuggestions(parcel.parcel_id))
-        );
+        const suggestions = parcels.map(() => ({ areas: [] }));
 
         const areas = [];
         const fieldIds = {};
         let isSuggested = false;
         parcels.forEach((parcel, index) => {
-          const saved = fieldResponse.fields.find(field => field.parcel.parcel_id === parcel.parcel_id);
+          const saved = fieldResponse.fields.find(field => field.parcel?.parcel_id === parcel.parcel_id);
           if (saved && Array.isArray(saved.crop_areas) && saved.crop_areas.length) {
             fieldIds[parcel.parcel_id] = saved.field_id;
             copy(saved.crop_areas).forEach(area => {
@@ -1334,14 +1410,14 @@
                 crop_area_id: suggestion.crop_area_id,
                 parcel_id: parcel.parcel_id,
                 geometry: copy(suggestion.geometry),
-                crop: { farmer_crop_id: crops.some(crop => crop.id === suggestion.map_crop_id) ? suggestion.map_crop_id : null, map_crop_id: suggestion.map_crop_id || null },
+                crop: { farmer_crop_id: 'wheat', map_crop_id: suggestion.map_crop_id || null },
                 sowing_date: null, past_sprays: [], spray_choice: null
               }));
             } else {
               areas.push({
                 crop_area_id: newId(), parcel_id: parcel.parcel_id,
                 geometry: copy(parcel.geometry),
-                crop: { farmer_crop_id: null, map_crop_id: null },
+                crop: { farmer_crop_id: 'wheat', map_crop_id: null },
                 sowing_date: null, past_sprays: [], spray_choice: null
               });
             }
@@ -1360,7 +1436,15 @@
             areas.push(area);
           });
         }
-        draft = { parcels: copy(parcels), areas, fieldIds, currentParcel: parcels[0].parcel_id, saved: Boolean(savedGroup), suggested: isSuggested };
+        if (!savedGroup && !isSuggested && !Object.keys(fieldIds).length && areas.length > 1 && window.turf) {
+          const union = window.turf.union(window.turf.featureCollection(areas.map(area => window.turf.feature(area.geometry))));
+          if (!union?.geometry) throw new Error('Could not combine the selected parcels.');
+          areas.splice(0, areas.length, { ...areas[0], parcel_id: null, geometry: union.geometry });
+        }
+        if (areas.some(area => area.crop?.farmer_crop_id && area.crop.farmer_crop_id !== 'wheat')) throw new Error('NON_WHEAT_AREA');
+        areas.forEach(area => { area.crop = { ...area.crop, farmer_crop_id: 'wheat' }; });
+        partitionUndo = null;
+        draft = { parcels: copy(parcels), areas, fieldIds, fieldId: savedGroup?.field_id || null, currentParcel: parcels[0].parcel_id, saved: Boolean(savedGroup), suggested: isSuggested };
         splitByParcel = false;
         activeAreaId = null;
 
@@ -1383,7 +1467,7 @@
         };
         fitParcelPreview(compositeBounds);
       } catch (error) {
-        showError(error?.message === 'GROUP_SELECTION_MISMATCH' ? 'Some parcels belong to a saved group. Select the entire group to preserve its crop data.' : 'Could not load crop details. Please try again.');
+        showError(error?.message === 'GROUP_SELECTION_MISMATCH' ? 'Some parcels belong to a saved group. Select the entire group to preserve its crop data.' : error?.message === 'NON_WHEAT_AREA' ? 'This saved selection contains a crop other than wheat and cannot be edited here.' : error?.message === 'WHEAT_UNAVAILABLE' ? 'Wheat is unavailable in the crop catalog. Please try again later.' : 'Could not load crop details. Please try again.');
       }
     }
 
@@ -1410,8 +1494,8 @@
             card.scrollIntoView({ behavior: 'smooth', block: 'start' });
           }
         };
-        if (!area.crop.farmer_crop_id) {
-          invalid('Choose a crop from the list.');
+        if (area.crop.farmer_crop_id !== 'wheat') {
+          invalid('Only wheat areas are supported.');
           return;
         }
         if (!area.sowing_date) {
@@ -1435,6 +1519,10 @@
             }
             if (!Number.isInteger(spray.protection_duration_days) || spray.protection_duration_days < 1) {
               invalid(`Spray ${s + 1}: enter the number of days of protection (at least 1).`);
+              return;
+            }
+            if (provider.mode === 'backend' && spray.protection_duration_days > 60) {
+              invalid(`Spray ${s + 1}: the current service supports at most 60 days of protection.`);
               return;
             }
           }
@@ -1462,19 +1550,28 @@
       }
       try {
         if (typeof provider.saveCropGroup !== 'function') throw new Error('Group save is not available');
+        if (!draft.fieldId) draft.fieldId = `field-${crypto.randomUUID()}`;
         await provider.saveCropGroup({
-          ...geometryRequest(), validation_id: result.validation_id,
+          ...geometryRequest(), field_id: draft.fieldId, validation_id: result.validation_id,
           confirmations: [...validation.accepted],
           crop_areas: draft.areas.map(({ parcel_id, spray_choice, ...area }) => copy(area))
         });
-        draft.saved = true; closeFinding();
-        render(); showError('Crop details saved.');
-      } catch (_) { showError('Could not save the data. Your drawing is still here.'); }
+        draft.saved = true; partitionUndo = null; closeFinding();
+      } catch (error) {
+        const detail = error?.detail;
+        const message = typeof detail === 'string' ? detail : typeof detail?.message === 'string' ? detail.message : '';
+        showError(message || 'Could not save the data. Your drawing is still here.'); return;
+      }
+      if (provider.mode === 'backend' && onSaved) {
+        try { if (await onSaved()) return; } catch (_) { /* The save has already succeeded. */ }
+        render(); showError('Your details were saved, but the analysis could not be loaded. Try again.');
+      } else { render(); showError('Crop details saved.'); }
 
     }
 
     return {
       open,
+      close: closeEditor,
       isEditing: () => editing,
       isDrawing: () => drawing,
       addPoint,
@@ -1484,7 +1581,7 @@
           if (!item.geometry || !['Polygon', 'MultiPolygon'].includes(item.geometry.type)) return;
           draft.areas.push({
             crop_area_id: newId(), parcel_id: null, geometry: copy(item.geometry),
-            crop: { farmer_crop_id: crops.some(crop => crop.id === item.map_crop_id) ? item.map_crop_id : null, map_crop_id: item.map_crop_id || null },
+            crop: { farmer_crop_id: 'wheat', map_crop_id: item.map_crop_id || null },
             sowing_date: null, past_sprays: [], spray_choice: null
           });
         });

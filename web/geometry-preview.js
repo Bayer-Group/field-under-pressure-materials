@@ -73,6 +73,27 @@
     if (!result?.geometry || !['Polygon', 'MultiPolygon'].includes(result.geometry.type)) throw new Error('This change would leave no crop area.');
     return result.geometry;
   }
-  root.GeometryPreview = { inspect, propose, removeRedundantVertices };
-  if (typeof module !== 'undefined' && module.exports) module.exports = { inspect, propose, removeRedundantVertices };
+  /** Partition an area along the infinite line through two user-controlled points. */
+  function splitByLine(geometry, points, turf) {
+    if (!turf || !geometry || points.length !== 2) throw new Error('Draw a line across the area.');
+    const [a, b] = points;
+    const dx = b[0] - a[0], dy = b[1] - a[1], length = Math.hypot(dx, dy);
+    if (length < 1e-12) throw new Error('Draw a longer line across the area.');
+    const bounds = turf.bbox(turf.feature(geometry));
+    const span = Math.max(bounds[2] - bounds[0], bounds[3] - bounds[1], length) * 8;
+    const ux = dx / length, uy = dy / length, nx = -uy, ny = ux;
+    const center = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+    const at = (along, across) => [center[0] + (ux * along + nx * across) * span, center[1] + (uy * along + ny * across) * span];
+    if (!turf.booleanIntersects(turf.lineString(points), turf.feature(geometry))) throw new Error('The line must touch the area.');
+    const longLine = turf.lineString([at(-1, 0), at(1, 0)]);
+    if (turf.lineIntersect(longLine, turf.polygonToLine(turf.feature(geometry))).features.length < 2) throw new Error('The line must cross the area.');
+    const half = sign => turf.polygon([[at(-1, 0), at(1, 0), at(1, sign), at(-1, sign), at(-1, 0)]]);
+    const original = turf.feature(geometry);
+    const result = [1, -1].map(sign => turf.intersect(turf.featureCollection([original, half(sign)])));
+    if (result.some(part => !part || turf.area(part) <= 0)) throw new Error('The line must divide the area into two parts.');
+    return result.map(part => part.geometry);
+  }
+
+  root.GeometryPreview = { inspect, propose, removeRedundantVertices, splitByLine };
+  if (typeof module !== 'undefined' && module.exports) module.exports = { inspect, propose, removeRedundantVertices, splitByLine };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

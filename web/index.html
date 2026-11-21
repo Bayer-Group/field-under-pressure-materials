@@ -8,10 +8,10 @@
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" />
   <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
   <script src="https://unpkg.com/@turf/turf@7.1.0/turf.min.js"></script>
-  <script src="geometry-preview.js?v=redundant-vertices-3"></script>
-  <script src="sandbox-client.js?v=1"></script>
-  <script src="farmer-data.js?v=crop-deselect-after-fix-11"></script>
-  <script src="crop-workflow.js?v=crop-deselect-after-fix-11"></script>
+  <script src="geometry-preview.js?v=multicut-2"></script>
+  <script src="sandbox-client.js?v=error-detail-2"></script>
+  <script src="farmer-data.js?v=wheat-only-14"></script>
+  <script src="crop-workflow.js?v=validation-errors-4"></script>
   <style>
     :root { color-scheme: light; --green: #176544; --ink: #15221b; --muted: #66766d; --line: rgba(32,62,45,.10); --paper: rgba(248,251,247,.93); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-kerning: normal; }
     * { box-sizing: border-box; }
@@ -22,6 +22,8 @@
     svg { width: 21px; height: 21px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
     .app { position: relative; height: 100vh; height: 100dvh; overflow: hidden; isolation: isolate; }
     #map { position: absolute; inset: 0; background: #e6ede3; }
+    .zoom-hint { position: absolute; z-index: 2; top: calc(max(16px, env(safe-area-inset-top)) + 62px); left: 16px; max-width: calc(100% - 32px); padding: 8px 12px; border-radius: 12px; background: rgba(248,251,247,.88); color: #385244; box-shadow: 0 3px 12px rgba(24,50,35,.1); backdrop-filter: blur(12px); font-size: 12px; pointer-events: none; }
+    .app:has(.results.visible) .zoom-hint, .app:has(.top.searching) .zoom-hint, .app.cropping .zoom-hint, .app.sandbox-mode .zoom-hint { display: none; }
     .top { position: absolute; top: max(16px, env(safe-area-inset-top)); left: 16px; right: 16px; display: flex; gap: 8px; z-index: 2; }
     .app.cropping .top { justify-content: flex-end; }
     .app.cropping .top .search { display: none; }
@@ -59,6 +61,18 @@
     .parcel-popup .maplibregl-popup-content { min-width: 235px; max-width: min(80vw, 310px); padding: 16px; border: 1px solid rgba(255,255,255,.85); border-radius: 16px; background: rgba(248,251,247,.96); box-shadow: 0 8px 28px rgba(24,50,35,.2); color: var(--ink); }
     .parcel-popup .maplibregl-popup-close-button { width: 36px; height: 36px; font-size: 22px; color: #61766a; border-radius: 0 16px 0 10px; }
     .app.sandbox-mode .search[hidden] { display: none; }
+    dialog.journey-dialog { width: min(520px, calc(100vw - 32px)); max-width: none; padding: clamp(24px, 6vw, 38px); border: 1px solid rgba(255,255,255,.85); border-radius: 28px; color: var(--ink); background: rgba(241,248,242,.96); box-shadow: 0 22px 70px rgba(20,50,33,.25); }
+    dialog.journey-dialog::backdrop { background: rgba(27,48,36,.30); backdrop-filter: blur(9px); }
+    .journey-eyebrow { margin: 0 0 12px; color: var(--green); font-size: 11px; font-weight: 750; letter-spacing: .1em; text-transform: uppercase; }
+    .journey-dialog h2 { margin: 0; font-size: clamp(27px, 7vw, 34px); line-height: 1.08; letter-spacing: -.04em; }
+    .journey-intro { margin: 10px 0 22px; color: #5a6e60; font-size: 15px; line-height: 1.45; }
+    .journey-choices { display: grid; gap: 10px; }
+    .journey-choice { width: 100%; min-height: 80px; padding: 16px; display: flex; align-items: center; justify-content: space-between; gap: 14px; text-align: left; color: var(--ink); background: rgba(255,255,255,.82); border: 1px solid rgba(33,75,47,.1); border-radius: 17px; }
+    .journey-choice:active { transform: scale(.99); }
+    .journey-choice strong, .journey-choice small { display: block; }
+    .journey-choice strong { font-size: 16px; letter-spacing: -.02em; }
+    .journey-choice small { margin-top: 4px; color: #627568; font-size: 13px; line-height: 1.35; }
+    .journey-choice svg { color: #759080; width: 18px; }
     .sandbox-panel { display: grid; gap: 12px; }
     .sandbox-panel[hidden] { display: none; }
     .sandbox-list { display: grid; gap: 7px; max-height: 38dvh; overflow-y: auto; }
@@ -69,6 +83,26 @@
     .sandbox-detail h2 { margin: 0 0 7px; font-size: 17px; }
     .sandbox-detail p { margin: 5px 0; font-size: 13px; line-height: 1.4; }
     .sandbox-detail input[type=range] { width: 100%; accent-color: var(--green); }
+    .risk-eyebrow { margin: 3px 0 -7px; color: var(--green); font-size: 11px; font-weight: 750; letter-spacing: .08em; }
+    .sheet .risk-heading { margin: 0; font-size: 25px; letter-spacing: -.04em; }
+    .risk-intro, .risk-note { margin: -5px 0 0; color: #607266; font-size: 13px; line-height: 1.4; }
+    .sandbox-detail { padding: 17px; border: 1px solid rgba(255,255,255,.9); border-radius: 19px; background: rgba(255,255,255,.8); box-shadow: 0 4px 18px rgba(20,50,33,.05); }
+    .risk-detail-head, .risk-list-heading { display: flex; justify-content: space-between; align-items: center; color: #53685b; font-size: 12px; font-weight: 700; }
+    .risk-detail-date { color: #6a7c6f; font-size: 10px; letter-spacing: .08em; }
+    .sandbox-detail h2 { margin: 10px 0 2px; color: var(--ink); font-size: 20px; letter-spacing: -.03em; }
+    .sandbox-detail .risk-selected-date { margin: 0 0 11px; color: #708074; font-size: 12px; font-variant-numeric: tabular-nums; }
+    .risk-reading { min-height: 40px; }
+    .risk-badge { display: inline-flex; align-items: center; max-width: 180px; padding: 6px 9px; border-radius: 10px; font-size: 11px; font-weight: 750; line-height: 1.25; }
+    .risk-low { background: #e0f1e3; color: #21623a; } .risk-medium { background: #fff0d3; color: #85530d; } .risk-high { background: #fbe3df; color: #a23730; } .risk-unknown { background: #edf0ed; color: #52635a; }
+    .risk-explanation { color: #405648; } .sandbox-detail .risk-meta, .risk-loading { color: #64776a; font-size: 12px; }
+    .risk-slider-label { display: grid; gap: 6px; margin-top: 15px; color: #425a49; font-size: 12px; font-weight: 700; }
+    .risk-slider-label input { margin: 3px 0; } .risk-slider-ticks { display: flex; justify-content: space-between; color: #7a8a7d; font-size: 11px; font-weight: 500; }
+    .risk-list-heading { margin: 4px 1px -5px; color: #344f3d; font-size: 13px; }
+    .sandbox-list { max-height: 170px; overscroll-behavior: contain; }
+    .sandbox-area { min-height: 56px; padding: 9px 12px; } .sandbox-area.active { border-color: #6b9b79; background: #fff; box-shadow: 0 0 0 1px #6b9b79; }
+    .risk-area-name { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 13px; }
+    .risk-area-dot { width: 9px; height: 9px; flex: none; border-radius: 50%; background: #89928c; } .risk-dot-low { background: #328250; } .risk-dot-medium { background: #d2932b; } .risk-dot-high { background: #c7463e; }
+    .risk-note { margin: 0 2px; font-size: 11px; } .risk-empty { color: #607266; font-size: 13px; line-height: 1.4; }
     .sandbox-choice { display: grid; gap: 8px; }
     .sandbox-choice .crop-outline { text-align: left; }
     .geometry-popup-message { margin: 8px 0 0; color: #5c7062; font-size: 13px; line-height: 1.4; }
@@ -309,6 +343,7 @@
 
     /* --- Toolbar & Snapping Magnet --- */
     .crop-draw-toolbar { position: absolute; z-index: 4; left: 16px; right: 16px; bottom: calc(var(--drawer-height, 61px) + 12px); padding: 12px; border: 1px solid rgba(255,255,255,.9); border-radius: 16px; background: rgba(248,251,247,.96); box-shadow: 0 8px 28px rgba(24,50,35,.18); }
+    .partition-undo { min-height: 38px; padding: 0 3px; }
     .crop-vertex-notice { margin: 0 0 8px; color: #345643; font-size: 13px; line-height: 1.35; }
     .crop-vertex-notice:empty { display: none; }
     .crop-draw-actions { display: flex; gap: 8px; }
@@ -316,7 +351,7 @@
     .crop-draw-actions button#crop-draw-finish { background: #14221a; color: #fff; }
     .crop-draw-actions button:disabled { opacity: .45; }
     .locate.crop-magnet-btn { display: none; transition: all 160ms cubic-bezier(.22,1,.36,1); }
-    .app.cropping .locate.crop-magnet-btn { display: grid; }
+    .app.cropping .locate.crop-magnet-btn { display: none; }
     .locate.crop-magnet-btn.active { background: var(--green); color: #ffffff; border-color: var(--green); box-shadow: 0 4px 18px rgba(23,101,68,.35); }
     .locate.crop-magnet-btn:active { transform: scale(.96); }
     .crop-snap-indicator { position: absolute; width: 22px; height: 22px; border-radius: 50%; border: 2.5px solid #fff; background: rgba(23,101,68,.88); box-shadow: 0 0 14px rgba(23,101,68,.8); pointer-events: none; transform: translate(-50%, -50%); animation: snap-pulse 450ms ease-out forwards; }
@@ -420,7 +455,7 @@
     .maplibregl-ctrl-group button { width: 52px !important; height: 52px !important; background: rgba(248,251,247,.94) !important; }
 
     .results { display: none; position: absolute; z-index: 3; top: calc(max(16px, env(safe-area-inset-top)) + 58px); left: 16px; right: 76px; padding: 6px; border-radius: 14px; background: rgba(250,252,249,.97); box-shadow: 0 5px 20px rgba(24,50,35,.15); backdrop-filter: blur(18px); }
-    .results.visible { display: grid; }
+    .results.visible { display: grid; max-height: min(45dvh, 320px); overflow-y: auto; }
     .results button { display: grid; gap: 3px; width: 100%; text-align: left; min-height: 52px; border: 0; border-radius: 9px; background: transparent; color: var(--ink); padding: 8px 10px; }
     .result-title { font-size: 14px; font-weight: 700; }
     .result-meta { color: #596d60; font-size: 12px; }
@@ -506,6 +541,7 @@
       </form>
     </div>
     <div id="results" class="results" aria-label="Search results"></div>
+    <div id="zoom-hint" class="zoom-hint" hidden>Zoom in to see parcel boundaries.</div>
     <aside id="crop-draw-toolbar" class="crop-draw-toolbar" hidden>
       <p id="crop-vertex-notice" class="crop-vertex-notice" role="status" aria-live="polite"></p>
       <div class="crop-draw-actions">
@@ -532,6 +568,22 @@
       <div id="crop-panel" class="crop-panel" hidden></div>
       <div id="sandbox-panel" class="sandbox-panel" hidden></div>
     </section>
+    <dialog id="journey-dialog" class="journey-dialog" aria-labelledby="journey-title" aria-describedby="journey-intro">
+      <p class="journey-eyebrow">Field Under Pressure</p>
+      <h2 id="journey-title">Where would you like to start?</h2>
+      <p class="journey-intro" id="journey-intro">View your farm or set up a new one.</p>
+      <div class="journey-choices">
+        <button class="journey-choice" id="journey-farmer" type="button"><span><strong>Farmer view</strong><small>See your crop areas and their conditions.</small></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>
+        <button class="journey-choice" id="journey-new" type="button"><span><strong>New view</strong><small>Choose parcels and set up crops in a separate sandbox.</small></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>
+      </div>
+    </dialog>
+    <dialog id="setup-dialog" aria-labelledby="setup-title">
+      <h2 id="setup-title">Preparing your map</h2>
+      <p id="setup-message" role="status" aria-live="polite">Connecting…</p>
+      <button id="setup-retry" class="primary" type="button" hidden>Try again</button>
+      <button id="setup-restart" class="primary" type="button" hidden>Start a new sandbox</button>
+      <button id="setup-back" class="crop-outline" type="button" hidden>Back</button>
+    </dialog>
     <dialog id="sandbox-dialog" aria-labelledby="sandbox-title">
       <h2 id="sandbox-title">Choose your farm</h2>
       <p>Start with an example farm or an empty one. Your farm session is saved in this browser for up to 8 hours.</p>
@@ -558,8 +610,12 @@
   <script>
     'use strict';
     // Set mode to 'backend' and provide baseUrl when the real search API is ready.
-    const provider = FarmerData.createProvider({ mode: 'mock' });
-    const sandboxClient = SandboxClient.create();
+    let dataProvider = FarmerData.createProvider({ mode: 'mock' });
+    const provider = new Proxy({}, { get: (_, name) => dataProvider[name] });
+    const farmerClient = SandboxClient.create();
+    const newViewClient = SandboxClient.create({ storageKey: `${SandboxClient.STORAGE_KEY}.new-view` });
+    let sandboxClient = farmerClient;
+    let pendingJourney = 'farmer';
     let sandboxActive = false;
     const selected = new Map();
     const input = document.getElementById('parcel-number');
@@ -695,10 +751,10 @@
     searchBackdrop.addEventListener('click', () => setSearch(false));
     document.addEventListener('keydown', event => { if (event.key === 'Escape' && topControls.classList.contains('searching')) setSearch(false); });
     const map = new maplibregl.Map({
-      container: 'map', center: [20.773, 52.175], zoom: 12.8,
+      container: 'map', center: [20.773, 52.175], zoom: 12.8, fadeDuration: 100,
       style: { version: 8, sources: { osm: { type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256, attribution: '&copy; OpenStreetMap contributors' } }, layers: [{ id: 'osm', type: 'raster', source: 'osm' }] }
     });
-    const cropWorkflow = CropWorkflow.create({ map, provider, selected, panel: document.getElementById('crop-panel'), status, setDrawer, fitParcelPreview, animateDrawerResize, onParcelChange: renderSelection });
+    const cropWorkflow = CropWorkflow.create({ map, provider, selected, panel: document.getElementById('crop-panel'), status, setDrawer, fitParcelPreview, animateDrawerResize, onParcelChange: renderSelection, onSaved: () => sandboxOpen({ afterSave: true }) });
     /** Fit the complete geometry in the visible map area after the drawer finishes resizing. */
     async function fitParcelPreview(parcel, options = {}) {
       const request = ++previewRequest;
@@ -709,7 +765,7 @@
         if (drawerResizeAnimation === animation) break;
       }
       await new Promise(resolve => requestAnimationFrame(resolve));
-      if (request !== previewRequest || !selected.has(parcel.parcel_id)) return;
+      if (request !== previewRequest || (parcel.parcel_id && !selected.has(parcel.parcel_id))) return;
       const bounds = new maplibregl.LngLatBounds();
       const polygons = parcel.geometry.type === 'MultiPolygon' ? parcel.geometry.coordinates : [parcel.geometry.coordinates];
       polygons.forEach(polygon => polygon[0].forEach(point => bounds.extend(point)));
@@ -726,7 +782,7 @@
         }));
         if (visible) return;
       }
-      map.fitBounds(bounds, { padding, maxZoom: 15, duration: 450 });
+      map.fitBounds(bounds, { padding, maxZoom: 17, duration: 450 });
     }
     map.on('dragstart', event => { if (event.originalEvent) { previewParcel = null; previewRequest++; } });
     /** Render the selected parcels and their removable labels. */
@@ -818,7 +874,7 @@
       const button = document.createElement('button');
       const title = document.createElement('span'); title.className = 'result-title'; title.textContent = `Parcel ${parcel.parcel_number}`;
       const meta = document.createElement('span'); meta.className = 'result-meta';
-      meta.textContent = `${parcel.locality || 'Locality'} · municipality ${parcel.commune || 'municipality'} · ${Number(parcel.area_ha || 0).toFixed(2)} ha`;
+      meta.textContent = [parcel.locality, parcel.commune ? `municipality ${parcel.commune}` : null, Number.isFinite(parcel.area_ha) ? `${parcel.area_ha.toFixed(2)} ha` : null].filter(Boolean).join(' · ') || 'Parcel details unavailable';
       const id = document.createElement('span'); id.className = 'result-id'; id.textContent = parcel.cadastral_id || parcel.parcel_id;
       button.type = 'button'; button.append(title, meta, id);
       button.addEventListener('click', () => { clearTimeout(suggestionTimer); searchVersion++; setSearch(false); resetLocality(); input.value = ''; input.blur(); selectParcel(parcel, options); });
@@ -837,7 +893,7 @@
     function showSearchParcels(parcels) {
       results.replaceChildren();
       const hint = document.createElement('div'); hint.className = 'results-hint';
-      hint.textContent = !parcels.length ? 'No parcel found. Check the village, municipality or number.' : searchLocality ? `Enter the parcel number in ${searchLocality.locality}, municipality ${searchLocality.commune}.` : 'Select a parcel and check the village and municipality.';
+      hint.textContent = !parcels.length ? 'No parcel found. Check the village, municipality or number.' : provider.mode === 'backend' ? 'Select a parcel to continue.' : searchLocality ? `Enter the parcel number in ${searchLocality.locality}, municipality ${searchLocality.commune}.` : 'Select a parcel and check the village and municipality.';
       results.appendChild(hint);
       parcels.forEach(parcel => addParcelSuggestion(parcel, { focus: true }));
       results.classList.add('visible');
@@ -865,6 +921,28 @@
       });
       results.classList.add('visible');
     }
+    /** Fly to a locality returned by the farm service. */
+    function showPlaces(places) {
+      results.replaceChildren();
+      const hint = document.createElement('div'); hint.className = 'results-hint';
+      hint.textContent = places.length ? 'Select a place to see parcels on the map.' : 'No results found.';
+      results.appendChild(hint);
+      places.forEach(place => {
+        if (!Number.isFinite(place.lon) || !Number.isFinite(place.lat)) return;
+        const button = document.createElement('button'); button.type = 'button';
+        const title = document.createElement('span'); title.className = 'result-title'; title.textContent = place.label || place.name;
+        button.appendChild(title);
+        button.addEventListener('click', () => {
+          clearTimeout(suggestionTimer); searchVersion++;
+          results.classList.remove('visible');
+          if (topControls.classList.contains('searching')) setSearch(false);
+          input.value = place.label || place.name; input.blur();
+          map.flyTo({ center: [place.lon, place.lat], zoom: Number.isFinite(place.zoom) ? Math.max(16, place.zoom) : 16 });
+        });
+        results.appendChild(button);
+      });
+      results.classList.add('visible');
+    }
     /** Search a full identifier, a locality and number, a bare number, or a locality prefix. */
     async function lookupParcelSearch() {
       const term = (searchLocality ? parcelStepInput.value : input.value).trim();
@@ -876,6 +954,20 @@
         return;
       }
       try {
+        if (provider.mode === 'backend') {
+          if (!searchLocality && !/^[\d]/.test(term)) {
+            if (term.length < 2) { results.replaceChildren(); results.classList.remove('visible'); return; }
+            const response = await sandboxClient.places(term);
+            if (version !== searchVersion) return;
+            if (!Array.isArray(response?.places)) throw new Error('Invalid place response');
+            showPlaces(response.places); return;
+          }
+          if (term.length < 3) { results.replaceChildren(); results.classList.remove('visible'); return; }
+          const response = await provider.findParcels({ number: term });
+          if (version !== searchVersion) return;
+          showSearchParcels(response.parcels);
+          return;
+        }
         if (searchLocality && /^\d+(?:\/\d*)?$/.test(term)) {
           const response = await provider.findParcels({ number: term, locality: `${searchLocality.locality} ${searchLocality.commune}` });
           if (version !== searchVersion) return;
@@ -888,13 +980,21 @@
         if (version !== searchVersion) return;
         if (isId || isNumber || isCombined) showSearchParcels(response.parcels);
         else showLocalitySuggestions(response.parcels);
-      } catch (_) { if (version !== searchVersion) return; results.replaceChildren(); const hint = document.createElement('div'); hint.className = 'results-hint'; hint.textContent = 'Could not search for parcels. Please try again.'; results.appendChild(hint); results.classList.add('visible'); }
+      } catch (_) { if (version !== searchVersion) return; results.replaceChildren(); const hint = document.createElement('div'); hint.className = 'results-hint'; hint.textContent = 'Could not search. Please try again.'; results.appendChild(hint); results.classList.add('visible'); }
     }
     new ResizeObserver(() => document.documentElement.style.setProperty('--drawer-height', `${sheet.offsetHeight}px`)).observe(sheet);
     let compassNorthSelected = false;
     const compassControl = {
       onAdd(mapInstance) {
         this.element = document.createElement('div'); this.element.className = 'maplibregl-ctrl maplibregl-ctrl-group';
+        ['pointerdown', 'pointerup', 'click', 'dblclick'].forEach(type => this.element.addEventListener(type, event => event.stopPropagation()));
+        for (const [label, symbol, change] of [['Zoom in', '+', 1], ['Zoom out', '−', -1]]) {
+          const zoomButton = document.createElement('button'); zoomButton.type = 'button';
+          zoomButton.setAttribute('aria-label', label); zoomButton.title = label;
+          zoomButton.textContent = symbol; zoomButton.style.fontSize = '24px';
+          zoomButton.addEventListener('click', () => mapInstance.zoomTo(mapInstance.getZoom() + change));
+          this.element.appendChild(zoomButton);
+        }
         const button = document.createElement('button'); button.type = 'button'; button.className = 'maplibregl-ctrl-compass';
         button.setAttribute('aria-label', 'Face north; press again for a top-down view');
         button.title = 'Face north and view from above';
@@ -911,7 +1011,14 @@
       onRemove() { this.element.remove(); }
     };
     map.addControl(compassControl, 'top-right');
+    const zoomHint = document.getElementById('zoom-hint');
+    function updateZoomHint() { zoomHint.hidden = provider.mode !== 'backend' || map.getZoom() >= 15; }
+    map.on('zoom', updateZoomHint);
     map.on('load', async () => {
+      map.addSource('gugik-dzialki', { type: 'raster', tileSize: 128, minzoom: 15, maxzoom: 20,
+        attribution: '© GUGiK', tiles: ['https://integracja01.gugik.gov.pl/cgi-bin/KrajowaIntegracjaEwidencjiGruntow?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=dzialki,numery_dzialek&STYLES=&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256&FORMAT=image/png&TRANSPARENT=TRUE'] });
+      map.addLayer({ id: 'gugik-dzialki', type: 'raster', source: 'gugik-dzialki', minzoom: 15, paint: { 'raster-opacity': 0.9 } });
+      updateZoomHint();
       const selectionColor = getComputedStyle(document.documentElement).getPropertyValue('--green').trim();
       map.addSource('selected-parcels', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
       map.addLayer({ id: 'selected-fill', type: 'fill', source: 'selected-parcels', paint: { 'fill-color': selectionColor, 'fill-opacity': .25 } });
@@ -919,6 +1026,9 @@
       map.addSource('crop-areas', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
       map.addLayer({ id: 'crop-fill', type: 'fill', source: 'crop-areas', filter: ['==', ['geometry-type'], 'Polygon'], paint: { 'fill-color': ['coalesce', ['get', 'color'], '#4e8c5c'], 'fill-opacity': ['case', ['boolean', ['get', 'selected'], false], .62, .35] } });
       map.addLayer({ id: 'crop-outline', type: 'line', source: 'crop-areas', paint: { 'line-color': ['case', ['boolean', ['get', 'selected'], false], '#ffffff', '#176544'], 'line-width': ['case', ['boolean', ['get', 'selected'], false], 5, 3] } });
+      map.addSource('partition-preview', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      map.addLayer({ id: 'partition-preview-fill', type: 'fill', source: 'partition-preview', filter: ['==', ['geometry-type'], 'Polygon'], paint: { 'fill-color': ['get', 'color'], 'fill-opacity': .55, 'fill-outline-color': '#fff' } });
+      map.addLayer({ id: 'partition-preview-line', type: 'line', source: 'partition-preview', filter: ['==', ['geometry-type'], 'LineString'], paint: { 'line-color': '#fff', 'line-width': 4, 'line-dasharray': [2, 1] } });
       map.addSource('geometry-findings', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
       map.addLayer({ id: 'geometry-findings-fill', type: 'fill', source: 'geometry-findings', paint: { 'fill-color': '#d33737', 'fill-opacity': .45 } });
       map.addLayer({ id: 'geometry-findings-outline', type: 'line', source: 'geometry-findings', paint: { 'line-color': '#ad2424', 'line-width': 3 } });
@@ -1088,17 +1198,17 @@
     });
     document.getElementById('search-form').addEventListener('submit', event => { event.preventDefault(); clearTimeout(suggestionTimer); lookupParcelSearch(); });
     document.getElementById('parcel-step-form').addEventListener('submit', event => { event.preventDefault(); clearTimeout(suggestionTimer); lookupParcelSearch(); });
-    input.addEventListener('focus', () => { if (!searchLocality && input.value.trim() && !topControls.classList.contains('searching')) lookupParcelSearch(); });
+    input.addEventListener('focus', () => { if (!searchLocality && input.value.trim() && !topControls.classList.contains('searching')) { clearTimeout(suggestionTimer); suggestionTimer = setTimeout(lookupParcelSearch, 250); } });
     input.addEventListener('input', () => {
       clearTimeout(suggestionTimer);
       resetLocality();
       searchVersion++;
-      suggestionTimer = setTimeout(lookupParcelSearch, 220);
+      suggestionTimer = setTimeout(lookupParcelSearch, 250);
     });
     parcelStepInput.addEventListener('input', () => {
       clearTimeout(suggestionTimer);
       searchVersion++;
-      suggestionTimer = setTimeout(lookupParcelSearch, 220);
+      suggestionTimer = setTimeout(lookupParcelSearch, 250);
     });
     document.getElementById('search-option').addEventListener('click', () => setSearch(true));
     document.getElementById('map-option').addEventListener('click', () => {
@@ -1106,7 +1216,7 @@
       if (selected.size) {
         const bounds = new maplibregl.LngLatBounds();
         selected.forEach(parcel => parcel.geometry.coordinates[0].forEach(point => bounds.extend(point)));
-        map.fitBounds(bounds, { padding: 80, maxZoom: 15, duration: 450 });
+        map.fitBounds(bounds, { padding: 80, maxZoom: 17, duration: 450 });
       }
     });
     let importPreview = null;
@@ -1152,7 +1262,7 @@
     document.getElementById('locate').addEventListener('click', () => {
       if (!navigator.geolocation) { status.textContent = 'Location is not available on this device.'; return; }
       status.textContent = 'Finding your location…';
-      navigator.geolocation.getCurrentPosition(position => { map.flyTo({ center: [position.coords.longitude, position.coords.latitude], zoom: 15 }); status.textContent = 'Location found. Tap a parcel on the map.'; }, () => { status.textContent = 'Could not find your location. Search for a parcel or select one on the map.'; });
+      navigator.geolocation.getCurrentPosition(position => { map.flyTo({ center: [position.coords.longitude, position.coords.latitude], zoom: 16 }); status.textContent = 'Location found. Tap a parcel on the map.'; }, () => { status.textContent = 'Could not find your location. Search for a parcel or select one on the map.'; });
     });
     next.addEventListener('click', () => cropWorkflow.open());
 
@@ -1161,6 +1271,7 @@
     let sandboxToday = null;
     let sandboxSelected = null;
     let sandboxRequest = 0;
+    let sandboxHistoryRequest = 0;
     let sandboxOpenVersion = 0;
     const sandboxDialog = document.getElementById('sandbox-dialog');
     const sandboxPanel = document.getElementById('sandbox-panel');
@@ -1178,86 +1289,135 @@
     }
     function sandboxLabel(id) { return sandboxCrops.find(item => item.farmer_crop_id === id)?.label || id || 'Crop unavailable'; }
     function sandboxSummary(properties) {
-      if (properties.status !== 'ok') return String(properties.status || 'unavailable').replaceAll('_', ' ');
-      return properties.risk_class ? `${properties.risk_class} risk` : 'Risk unavailable';
+      const labels = { protected: 'Protected by treatment', out_of_window: 'Outside growth window', insufficient_data: 'Not enough data', stage_unknown: 'Growth stage unavailable', uncertain: 'Uncertain assessment' };
+      if (properties.status !== 'ok') return labels[properties.status] || 'Assessment unavailable';
+      return ({ low: 'Low risk', medium: 'Moderate risk', high: 'High risk' })[properties.risk_class] || 'Risk unavailable';
+    }
+    function sandboxTone(properties) {
+      return properties.status === 'ok' && ['low', 'medium', 'high'].includes(properties.risk_class) ? properties.risk_class : 'unknown';
+    }
+    function sandboxRiskBadge(properties) {
+      return sandboxElement('span', `risk-badge risk-${sandboxTone(properties)}`, sandboxSummary(properties));
     }
     function sandboxRender() {
       sandboxPanel.replaceChildren();
-      const heading = sandboxElement('h1', '', 'Your crop areas'); heading.id = 'sandbox-heading';
-      const description = sandboxElement('p', 'sandbox-risk', 'Select an area to see its conditions. Risk indicates favourable conditions, not a diagnosis.');
+      const eyebrow = sandboxElement('p', 'risk-eyebrow', 'SEPTORIA · WHEAT');
+      const heading = sandboxElement('h1', 'risk-heading', 'Field conditions'); heading.id = 'sandbox-heading';
+      const description = sandboxElement('p', 'risk-intro', 'Explore conditions on each area of your field.');
+      sandboxPanel.append(eyebrow, heading, description);
+      if (sandboxSelected) {
+        const detail = sandboxElement('section', 'sandbox-detail'); detail.id = 'sandbox-detail';
+        detail.append(sandboxElement('p', 'sandbox-risk', 'Loading area…')); sandboxPanel.append(detail);
+      }
+      const listTitle = sandboxElement('div', 'risk-list-heading');
+      listTitle.append(sandboxElement('strong', '', 'Your areas'), sandboxElement('span', '', `${sandboxFeatures.length}`));
       const list = sandboxElement('div', 'sandbox-list');
-      if (!sandboxFeatures.length) list.append(sandboxElement('p', 'sandbox-risk', 'This farm has no crop areas yet. Adding areas is not available in this view.'));
+      if (!sandboxFeatures.length) list.append(sandboxElement('p', 'risk-empty', 'There are no crop areas yet. Select parcels to get started.'));
       sandboxFeatures.forEach((feature, index) => {
         const p = feature.properties || {};
         const button = sandboxElement('button', 'sandbox-area'); button.type = 'button';
         button.classList.toggle('active', p.crop_area_id === sandboxSelected);
-        button.append(sandboxElement('strong', '', `${index + 1} · ${sandboxLabel(p.farmer_crop_id)}`), sandboxElement('span', 'sandbox-risk', sandboxSummary(p)));
-        button.addEventListener('click', () => sandboxSelect(p.crop_area_id)); list.append(button);
+        button.setAttribute('aria-pressed', String(p.crop_area_id === sandboxSelected));
+        const name = sandboxElement('span', 'risk-area-name');
+        name.append(sandboxElement('span', `risk-area-dot risk-dot-${sandboxTone(p)}`), sandboxElement('strong', '', `Area ${index + 1} · ${sandboxLabel(p.farmer_crop_id)}`));
+        button.append(name, sandboxRiskBadge(p));
+        button.addEventListener('click', () => sandboxSelect(p.crop_area_id, { focus: true })); list.append(button);
       });
-      const switchButton = sandboxElement('button', 'crop-outline', 'Switch farm or open parcel preview');
-      switchButton.type = 'button';
-      switchButton.addEventListener('click', () => { sandboxError.textContent = ''; if (!sandboxDialog.open) sandboxDialog.showModal(); });
-      sandboxPanel.append(heading, description, list, switchButton);
-      if (sandboxSelected) {
-        const detail = sandboxElement('section', 'sandbox-detail'); detail.id = 'sandbox-detail';
-        detail.append(sandboxElement('p', '', 'Loading crop area…')); sandboxPanel.append(detail);
-      }
+      const note = sandboxElement('p', 'risk-note', 'The map shows today’s conditions. Risk indicates favourable conditions for septoria, not a diagnosis.');
+      const manage = sandboxElement('button', 'crop-outline', 'Manage parcels'); manage.type = 'button';
+      manage.addEventListener('click', enterParcelSetup);
+      sandboxPanel.append(listTitle, list, note, manage);
     }
-    async function sandboxShowRisk(id, offset, target, version) {
+    async function sandboxShowRisk(id, offset, target, version, sequence) {
       const day = sandboxDate(offset);
-      target.textContent = 'Loading conditions…';
+      target.replaceChildren(sandboxElement('p', 'risk-loading', 'Loading conditions…'));
       try {
         const rows = await sandboxClient.risk(id, day, day);
-        if (version !== sandboxRequest || id !== sandboxSelected || !target.isConnected) return;
+        if (version !== sandboxRequest || sequence !== sandboxHistoryRequest || id !== sandboxSelected || !target.isConnected) return;
         if (!Array.isArray(rows)) throw new Error('Invalid conditions response');
         const row = rows.find(item => item.date === day);
-        target.textContent = row ? `${day} · ${sandboxSummary(row)}${Number.isFinite(row.h_hours) ? ` · ${row.h_hours} h favourable conditions` : ''}` : `${day} · No conditions data`;
-      } catch (_) { if (version === sandboxRequest && target.isConnected) target.textContent = 'Could not load conditions. Please try again.'; }
+        target.replaceChildren();
+        if (!row) { target.append(sandboxElement('p', 'risk-loading', 'No assessment is available for this date.')); return; }
+        target.append(sandboxRiskBadge(row));
+        if (row.status === 'ok' && typeof row.conditions_met === 'boolean') {
+          target.append(sandboxElement('p', 'risk-explanation', row.conditions_met ? 'Conditions favourable for septoria were identified.' : 'Conditions favourable for septoria were not identified.'));
+        }
+        if (Number.isFinite(row.h_hours)) target.append(sandboxElement('p', 'risk-meta', `${row.h_hours} h of favourable conditions`));
+        if (row.status === 'protected' && row.protected_until) target.append(sandboxElement('p', 'risk-meta', `Protection until ${row.protected_until}`));
+      } catch (_) {
+        if (version === sandboxRequest && sequence === sandboxHistoryRequest && target.isConnected) target.replaceChildren(sandboxElement('p', 'risk-loading', 'Could not load conditions. Change the date or select the area to try again.'));
+      }
     }
-    async function sandboxSelect(id) {
+    async function sandboxSelect(id, options = {}) {
       const feature = sandboxFeatures.find(item => item.properties?.crop_area_id === id);
       if (!feature) return;
       sandboxSelected = id; const version = ++sandboxRequest;
       map.setFilter('sandbox-highlight', ['==', ['get', 'crop_area_id'], id]);
       sandboxRender(); setDrawer(true);
+      if (options.focus && feature.geometry) fitParcelPreview({ geometry: feature.geometry });
+      const target = document.getElementById('sandbox-detail');
+      const index = sandboxFeatures.indexOf(feature);
+      const header = sandboxElement('div', 'risk-detail-head');
+      header.append(sandboxElement('div', '', `Area ${index + 1}`), sandboxElement('span', 'risk-detail-date', 'TODAY'));
+      const title = sandboxElement('h2', '', 'Septoria conditions');
+      const dateText = sandboxElement('p', 'risk-selected-date', sandboxToday);
+      const value = sandboxElement('div', 'risk-reading'); value.setAttribute('aria-live', 'polite');
+      const sliderLabel = sandboxElement('label', 'risk-slider-label', 'Explore the past 30 days');
+      const range = document.createElement('input'); range.type = 'range'; range.min = '-30'; range.max = '0'; range.step = '1'; range.value = '0'; range.setAttribute('aria-label', 'Conditions date, up to 30 days before today');
+      const ticks = sandboxElement('div', 'risk-slider-ticks'); ticks.append(sandboxElement('span', '', '30 days ago'), sandboxElement('span', '', 'Today'));
+      sliderLabel.append(range, ticks);
+      const details = sandboxElement('p', 'risk-meta', '');
+      target.replaceChildren(header, title, dateText, value, sliderLabel, details);
+      let timer = null;
+      const load = () => {
+        const offset = Number(range.value), day = sandboxDate(offset), sequence = ++sandboxHistoryRequest;
+        dateText.textContent = day;
+        header.lastChild.textContent = offset === 0 ? 'TODAY' : 'HISTORY';
+        value.replaceChildren(sandboxElement('p', 'risk-loading', 'Loading conditions…'));
+        clearTimeout(timer);
+        timer = setTimeout(() => sandboxShowRisk(id, offset, value, version, sequence), 150);
+      };
+      range.addEventListener('input', load); load();
       try {
-        const details = await sandboxClient.area(id);
-        if (version !== sandboxRequest || id !== sandboxSelected) return;
-        const target = document.getElementById('sandbox-detail'); if (!target) return;
-        const props = details?.properties || {};
-        target.replaceChildren(sandboxElement('h2', '', sandboxLabel(props.farmer_crop_id)),
-          sandboxElement('p', '', props.sowing_date ? `Sown: ${props.sowing_date}` : 'Sowing date unavailable'));
-        const label = sandboxElement('label', 'sandbox-risk', 'Conditions by date');
-        const range = document.createElement('input'); range.type = 'range'; range.min = '-30'; range.max = '0'; range.step = '1'; range.value = '0'; range.setAttribute('aria-label', 'Conditions date, up to 30 days before today');
-        const value = sandboxElement('p', 'sandbox-risk'); value.setAttribute('aria-live', 'polite');
-        let timer = null;
-        range.addEventListener('input', () => { clearTimeout(timer); value.textContent = `${sandboxDate(Number(range.value))} · Loading…`; timer = setTimeout(() => sandboxShowRisk(id, Number(range.value), value, version), 150); });
-        label.append(range); target.append(label, value);
-        if (sandboxToday) sandboxShowRisk(id, 0, value, version); else value.textContent = 'Farm date unavailable.';
-      } catch (_) {
-        const target = document.getElementById('sandbox-detail');
-        if (version === sandboxRequest && target) target.textContent = 'Could not load crop area details. Select it again to retry.';
-      }
+        const result = await sandboxClient.area(id);
+        if (version !== sandboxRequest || id !== sandboxSelected || !details.isConnected) return;
+        const props = result?.properties || {};
+        details.textContent = props.sowing_date ? `Sown ${props.sowing_date}` : '';
+      } catch (_) { if (version === sandboxRequest && details.isConnected) details.textContent = 'Sowing date unavailable.'; }
     }
     function sandboxSelectAt(point) {
       if (!map.getLayer('sandbox-fill')) return;
       const feature = map.queryRenderedFeatures(point, { layers: ['sandbox-fill'] })[0];
-      if (feature?.properties?.crop_area_id) sandboxSelect(feature.properties.crop_area_id);
+      if (feature?.properties?.crop_area_id) sandboxSelect(feature.properties.crop_area_id, { focus: true });
     }
     function sandboxSource() {
       if (map.getSource('sandbox-areas')) return;
       map.addSource('sandbox-areas', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
       map.addLayer({ id: 'sandbox-fill', type: 'fill', source: 'sandbox-areas', paint: { 'fill-color': ['case', ['!=', ['get', 'status'], 'ok'], '#89928c', ['match', ['get', 'risk_class'], 'low', '#328250', 'medium', '#d2932b', 'high', '#c7463e', '#89928c']], 'fill-opacity': .55 } });
-      map.addLayer({ id: 'sandbox-outline', type: 'line', source: 'sandbox-areas', paint: { 'line-color': '#31493a', 'line-width': ['case', ['boolean', ['get', 'uncertain'], false], 3, 1.5] } });
+      map.addLayer({ id: 'sandbox-outline', type: 'line', source: 'sandbox-areas', paint: { 'line-color': '#31493a', 'line-width': ['case', ['==', ['get', 'status'], 'uncertain'], 3, 1.5] } });
       map.addLayer({ id: 'sandbox-highlight', type: 'line', source: 'sandbox-areas', filter: ['==', ['get', 'crop_area_id'], ''], paint: { 'line-color': '#fff', 'line-width': 4 } });
     }
-    async function sandboxOpen() {
+    function enterParcelSetup() {
+        sandboxOpenVersion++; sandboxActive = false; sandboxRequest++; sandboxPanel.hidden = true;
+        dataProvider = sandboxClient.farmerProvider(); selected.clear();
+        document.getElementById('drawer-content').hidden = false; document.getElementById('search-form').hidden = false;
+        document.querySelector('.app').classList.remove('sandbox-mode'); document.querySelector('.sheet').setAttribute('aria-labelledby', 'heading');
+        ['sandbox-fill', 'sandbox-outline', 'sandbox-highlight'].forEach(layer => { if (map.getLayer(layer)) map.setLayoutProperty(layer, 'visibility', 'none'); });
+        ['selected-fill', 'selected-outline'].forEach(layer => map.setLayoutProperty(layer, 'visibility', 'visible'));
+        input.placeholder = 'Search for a place or parcel number';
+        updateZoomHint();
+        document.getElementById('open-sandbox').hidden = true;
+        document.getElementById('import-option').disabled = true; document.getElementById('import-option').title = 'File import is not available in the backend yet.';
+        renderSelection(); status.textContent = ''; setDrawer(true);
+    }
+    async function sandboxOpen(options = {}) {
       const openVersion = ++sandboxOpenVersion;
       sandboxError.textContent = 'Loading farm…';
       try {
         const [collection, crops, clock] = await Promise.all([sandboxClient.areas(), sandboxClient.crops(), sandboxClient.clock()]);
         if (openVersion !== sandboxOpenVersion) return;
         if (collection?.type !== 'FeatureCollection' || !Array.isArray(collection.features) || !Array.isArray(crops) || !/^\d{4}-\d{2}-\d{2}$/.test(clock?.today || '')) throw new Error('The farm service returned incomplete data.');
+        if (options.afterSave && cropWorkflow.isEditing()) cropWorkflow.close();
         sandboxFeatures = collection.features; sandboxCrops = crops; sandboxToday = clock.today; sandboxSelected = null; sandboxRequest++;
         sandboxSource();
         map.getSource('sandbox-areas').setData(collection);
@@ -1269,20 +1429,24 @@
         document.querySelector('.app').classList.add('sandbox-mode'); document.querySelector('.sheet').setAttribute('aria-labelledby', 'sandbox-heading');
         document.getElementById('drawer-summary').textContent = 'Your crop areas'; status.textContent = '';
         sandboxRender(); setDrawer(true); sandboxError.textContent = ''; if (sandboxDialog.open) sandboxDialog.close();
+        if (pendingJourney === 'setup') { pendingJourney = 'farmer'; enterParcelSetup(); return true; }
         if (sandboxFeatures.length) {
           const bounds = new maplibregl.LngLatBounds();
           const extendCoordinates = value => { if (Array.isArray(value) && typeof value[0] === 'number' && typeof value[1] === 'number') bounds.extend(value); else if (Array.isArray(value)) value.forEach(extendCoordinates); };
           sandboxFeatures.forEach(feature => { if (feature.geometry) extendCoordinates(feature.geometry.coordinates); });
-          if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: { top: 90, right: 50, bottom: 170, left: 50 }, maxZoom: 14, duration: 500 });
+          if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: { top: 90, right: 50, bottom: 170, left: 50 }, maxZoom: 16, duration: 500 });
         }
+        if (sandboxFeatures.length && sandboxFeatures[0].properties?.crop_area_id) sandboxSelect(sandboxFeatures[0].properties.crop_area_id);
+        return true;
       } catch (error) {
-        if (openVersion !== sandboxOpenVersion) return;
+        if (openVersion !== sandboxOpenVersion || options.afterSave) return false;
         sandboxError.textContent = error.message || 'Could not load the farm. Please try again.';
         if (!sandboxDialog.open) sandboxDialog.showModal();
+        return false;
       }
     }
     function setupSandbox() {
-      document.getElementById('open-sandbox').addEventListener('click', () => { sandboxError.textContent = ''; if (!sandboxDialog.open) sandboxDialog.showModal(); });
+      document.getElementById('open-sandbox').addEventListener('click', () => { if (provider.mode === 'backend' && sandboxClient.hasSession()) { sandboxOpen(); return; } sandboxError.textContent = ''; if (!sandboxDialog.open) sandboxDialog.showModal(); });
       for (const mode of ['mock', 'empty']) document.getElementById(`sandbox-${mode}`).addEventListener('click', async () => {
         if (sandboxClient.hasSession() && !window.confirm('Start a new farm? This browser will no longer hold the current farm token.')) return;
         const buttons = sandboxDialog.querySelectorAll('button'); buttons.forEach(button => button.disabled = true);
@@ -1291,7 +1455,9 @@
         finally { buttons.forEach(button => button.disabled = false); }
       });
       document.getElementById('sandbox-local').addEventListener('click', () => {
-        sandboxOpenVersion++; sandboxActive = false; sandboxRequest++; sandboxPanel.hidden = true; document.getElementById('drawer-content').hidden = false;
+        sandboxOpenVersion++; sandboxActive = false; sandboxRequest++; sandboxPanel.hidden = true; dataProvider = FarmerData.createProvider({ mode: 'mock' }); selected.clear(); document.getElementById('drawer-content').hidden = false;
+        input.placeholder = 'Village, parcel number or identifier'; document.getElementById('open-sandbox').hidden = false; document.getElementById('open-sandbox').textContent = 'Open a farm';
+        document.getElementById('import-option').disabled = false; document.getElementById('import-option').title = '';
         document.getElementById('search-form').hidden = false; document.querySelector('.app').classList.remove('sandbox-mode');
         document.querySelector('.sheet').setAttribute('aria-labelledby', 'heading');
         if (map.getLayer('sandbox-fill')) ['sandbox-fill', 'sandbox-outline', 'sandbox-highlight'].forEach(layer => map.setLayoutProperty(layer, 'visibility', 'none'));
@@ -1304,7 +1470,68 @@
       const observer = new MutationObserver(updateResume);
       observer.observe(sandboxDialog, { attributes: true, attributeFilter: ['open'] });
       updateResume();
-      if (sandboxClient.hasSession()) sandboxOpen(); else sandboxDialog.showModal();
+      const journey = document.getElementById('journey-dialog');
+      const setupDialog = document.getElementById('setup-dialog');
+      const setupMessage = document.getElementById('setup-message');
+      const setupRetry = document.getElementById('setup-retry');
+      const setupRestart = document.getElementById('setup-restart');
+      const setupBack = document.getElementById('setup-back');
+      journey.addEventListener('cancel', event => event.preventDefault());
+      setupDialog.addEventListener('cancel', event => event.preventDefault());
+      function fitFields(fields) {
+        const bounds = new maplibregl.LngLatBounds();
+        const extend = value => { if (Array.isArray(value) && typeof value[0] === 'number' && typeof value[1] === 'number') bounds.extend(value); else if (Array.isArray(value)) value.forEach(extend); };
+        fields.forEach(field => {
+          const geometries = [...(field.parcels || []), ...(field.parcel ? [field.parcel] : []), ...(field.crop_areas || [])];
+          geometries.forEach(item => { if (item.geometry?.coordinates) extend(item.geometry.coordinates); });
+        });
+        if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: { top: 90, right: 50, bottom: 170, left: 50 }, maxZoom: 16, duration: 500 });
+      }
+      let newSetupReady = false;
+      const startSetup = async (renewed = false) => {
+        sandboxClient = newViewClient;
+        if (!setupDialog.open) setupDialog.showModal();
+        setupMessage.textContent = 'Connecting…';
+        setupRetry.hidden = true; setupRestart.hidden = true; setupBack.hidden = true;
+        try {
+          if (!newSetupReady) { await sandboxClient.start('empty'); newSetupReady = true; }
+          const response = await sandboxClient.fields();
+          if (!Array.isArray(response?.fields)) throw new Error('The farm service returned incomplete field data.');
+          setupDialog.close();
+          enterParcelSetup();
+          fitFields(response.fields);
+        } catch (error) {
+          if (error.status === 401) {
+            if (!renewed) { newSetupReady = false; await startSetup(true); return; }
+            setupMessage.textContent = 'Could not start a new sandbox. Please try again.';
+            setupRetry.hidden = false;
+          } else {
+            setupMessage.textContent = error.message || 'Could not connect. Please try again.';
+            setupRetry.hidden = false;
+          }
+          setupBack.hidden = false;
+        }
+      };
+      setupRetry.addEventListener('click', () => startSetup());
+      setupRestart.addEventListener('click', () => { newSetupReady = false; startSetup(); });
+      setupBack.addEventListener('click', () => { setupDialog.close(); journey.showModal(); });
+      const startJourney = async setup => {
+        if (setup) { newSetupReady = false; journey.close(); await startSetup(); return; }
+        sandboxClient = farmerClient;
+        pendingJourney = setup ? 'setup' : 'farmer';
+        sandboxError.textContent = '';
+        journey.close();
+        if (sandboxClient.hasSession()) { await sandboxOpen(); return; }
+        updateResume(); sandboxDialog.showModal();
+        const buttons = sandboxDialog.querySelectorAll('button');
+        buttons.forEach(button => button.disabled = true);
+        try { sandboxError.textContent = 'Preparing your farm…'; await sandboxClient.start(setup ? 'empty' : 'mock'); await sandboxOpen(); }
+        catch (error) { sandboxError.textContent = error.message || 'Could not create a farm.'; }
+        finally { buttons.forEach(button => button.disabled = false); }
+      };
+      document.getElementById('journey-farmer').addEventListener('click', () => startJourney(false));
+      document.getElementById('journey-new').addEventListener('click', () => startJourney(true));
+      journey.showModal();
     }
 
   </script>

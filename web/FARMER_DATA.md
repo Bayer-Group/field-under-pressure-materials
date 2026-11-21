@@ -18,16 +18,17 @@ await data.saveField(field.field_id, field);
 All methods return promises. `findParcels` accepts `{number}`, `{number, locality}`, or `{lon, lat}`. `getField` and `saveField` accept a field ID; save accepts the complete contract field object as its second argument. To create a field on one of the two empty example plots, construct a valid field with a new ID, the selected parcel, and at least one complete crop area, then call `saveField(id, field)`. `past_sprays: []` means no sprays yet. Crop options and geometries come from the provider. Responses contain `data_status: 'mock'`.
 
 The crop editor uses `getCrops()`, `listFields()` and `getCropSuggestions(parcelId)`
-to display existing or proposed areas. A crop-map value is preselected when it matches an available crop; farmers can change it. If no available crop is provided, the crop remains unselected. Existing saved farmer choices take precedence.
+to display existing or proposed areas. In live sandbox mode, the adapter reads and
+saves parcel groups through the deployed fields endpoints; see the live integration notes. A crop-map value is preselected when it matches an available crop; farmers can change it. If no available crop is provided, the crop remains unselected. Existing saved farmer choices take precedence.
 Drawn areas can span the selected parcels. The old `saveField()` operation remains
 available for the original single-parcel mock, but the crop editor now requires a valid
-geometry validation response and atomic group save. Neither is available in the mock,
-so the editor intentionally cannot save yet. The separately served QGIS fixture is still
+geometry validation response and atomic group save. Neither is available in the local mock, so the local preview cannot save a group; the live sandbox uses the backend operations. The separately served QGIS fixture is still
 read-only and does not receive edits.
 
 `importGeometry(file, {context, parcelIds})` uses a sample polygon in mock mode and does
-not read the file. The interface labels the sample clearly. Backend mode sends the file
-as multipart form data. The adapter's optional `geometryImportPath`,
+not read the file. The interface labels the sample clearly. The legacy backend adapter can send a file
+as multipart form data when configured; the deployed sandbox does not yet expose this
+operation. The legacy adapter's optional `geometryImportPath`,
 `geometryValidationPath`, `geometryGroupLoadPath` and `geometryGroupSavePath` must be
 configured once the backend team agrees and implements the operations. Group save is
 available only when both save and load paths are configured. No endpoint paths or backend

@@ -7,9 +7,7 @@
   'use strict';
 
   const crops = [
-    { id: 'wheat', label: 'Wheat' },
-    { id: 'soy', label: 'Soy' },
-    { id: 'maize', label: 'Maize' }
+    { id: 'wheat', label: 'Wheat' }
   ];
   const copy = value => JSON.parse(JSON.stringify(value));
   const polygon = (west, south, east, north) => ({
@@ -32,7 +30,7 @@
     crop_areas: [{
       crop_area_id: `area-demo-${i + 1}`,
       geometry: parcel.geometry,
-      crop: { farmer_crop_id: i === 1 ? 'soy' : 'wheat', map_crop_id: i === 0 ? 'maize' : null },
+      crop: { farmer_crop_id: 'wheat', map_crop_id: null },
       sowing_date: '2024-09-15',
       past_sprays: i === 0 ? [{ date: '2024-10-10', protection_duration_days: 14 }] : []
     }],
@@ -42,7 +40,7 @@
   initialFields[0].crop_areas[0].geometry = polygon(20.75, 52.17, 20.755, 52.18);
   initialFields[0].crop_areas.push({
     crop_area_id: 'area-demo-1b', geometry: polygon(20.755, 52.17, 20.76, 52.18),
-    crop: { farmer_crop_id: 'soy', map_crop_id: null }, sowing_date: '2024-09-20', past_sprays: []
+    crop: { farmer_crop_id: 'wheat', map_crop_id: null }, sowing_date: '2024-09-20', past_sprays: []
   });
 
   /** Return explicit synthetic examples, not validation of a caller's drawing. */
@@ -227,7 +225,7 @@
         })) : [];
         if (parcelId === 'parcel-demo-4') areas = [
           { crop_area_id: 'suggestion-parcel-demo-4-1', geometry: polygon(20.78, 52.17, 20.785, 52.18), map_crop_id: 'wheat' },
-          { crop_area_id: 'suggestion-parcel-demo-4-2', geometry: polygon(20.785, 52.17, 20.79, 52.18), map_crop_id: 'soy' }
+          { crop_area_id: 'suggestion-parcel-demo-4-2', geometry: polygon(20.785, 52.17, 20.79, 52.18), map_crop_id: 'wheat' }
         ];
         return { areas: copy(areas), data_status: 'mock' };
       },
