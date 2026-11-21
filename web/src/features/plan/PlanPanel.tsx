@@ -10,6 +10,9 @@ const BASIS_LABEL: Record<ProductRecommendation['basis'], string> = {
 }
 const TIMING_LABEL: Record<ProductTiming, string> = { before_planting: 'Before planting', during_growth: 'During growth' }
 const DEFAULT_CROP = 'corn'
+const BUY_URL = 'https://www.cropscience.bayer.us/' // where "Buy now" goes
+/** Entries that are advice rather than something to buy get no "Buy now". */
+const NOT_FOR_SALE = new Set(['no_product', 'caution', 'note'])
 
 function Item({ r, testsHref }: { r: ProductRecommendation; testsHref: string }) {
   return (
@@ -18,7 +21,13 @@ function Item({ r, testsHref }: { r: ProductRecommendation; testsHref: string })
         <span className={`test-tag ${r.category}`}>{r.category_label}</span>
         {r.trigger !== 'soil_signal' && <span className={`test-tag ${r.trigger}`}>{r.trigger_label}</span>}
       </div>
-      <b className="plan-class">{r.product_class}</b>
+      <div className="plan-class-row">
+        <b className="plan-class">{r.product_class}</b>
+        {!NOT_FOR_SALE.has(r.category) && (
+          <a className="buy-now" href={BUY_URL} target="_blank" rel="noopener noreferrer"
+            aria-label={`Buy now: ${r.product_class} (opens Bayer Crop Science in a new tab)`}>Buy now</a>
+        )}
+      </div>
       <p>{r.reason}</p>
       <dl>
         {r.stage && <><dt>When</dt><dd>{r.stage}</dd></>}

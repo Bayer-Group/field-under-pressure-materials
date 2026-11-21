@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import type { AerialPhoto, EventSummary, GreennessMap, GreennessPoint } from '../../api'
+import type { AerialPhoto, EventSummary, GreennessMap, GreennessPoint, MicrobiomeSample } from '../../api'
 import { formatDate, toTime } from '../../format'
-import { eventHref } from '../../router'
+import { eventHref, microbesHref } from '../../router'
 
 /** What is laid over the map. */
 export type MapLayer = 'photo' | 'greenness' | 'none'
@@ -12,10 +12,12 @@ export interface TimelineChoice {
 }
 
 interface Props {
+  plotId: string
   points: GreennessPoint[]
   events: EventSummary[]
   photos: AerialPhoto[] // oldest first
   maps: GreennessMap[] // oldest first
+  metagenomes: MicrobiomeSample[] // soil DNA (metagenome) samples of the plot
   layer: MapLayer
   photoId: string | null // the chosen photo (kept while another layer is shown)
   mapId: string | null // the chosen greenness map
@@ -60,16 +62,19 @@ function slider(xs: number[], index: number, pick: (i: number) => void) {
 /** One time axis for a plot, and a control for what the map shows.
  *  Top row: soil sampling visits (links to their details). Middle: dot plot of satellite greenness; pointing at it
  *  reads the nearest observation, dragging across it chooses the day whose greenness map is on the map. Bottom row:
- *  aerial photos; dragging along it chooses the photo. A line marks the chosen date. Future time-based data gets
+ *  aerial photos; dragging along it chooses the photo. A line marks the chosen date. Dashed lines mark the days
+ *  soil DNA was sequenced (metagenomics); their markers on the axis open that sample's microbes. Future time-based data gets
  *  a row here. */
-export function PlotTimeline({ points, events, photos, maps, layer, photoId, mapId, onChange }: Props) {
+export function PlotTimeline({ plotId, points, events, photos, maps, metagenomes, layer, photoId, mapId, onChange }: Props) {
   const [ref, width] = useWidth()
   const [hoverAt, setHoverAt] = useState<number | null>(null) // index into points
   const photoAt = Math.max(0, photos.findIndex((p) => p.photo_id === photoId))
   const mapAt = Math.max(0, maps.findIndex((m) => m.map_id === mapId))
   const photo = photos[photoAt], gmap = maps[mapAt]
 
-  const times = [...points, ...events, ...photos].map((d) => toTime(d.date))
+  // one mark per day with a metagenome (a day can have more than one)
+  const dna = metagenomes.filter((m, i, all) => all.findIndex((o) => o.date === m.date) === i)
+  const times = [...points, ...events, ...photos, ...dna].map((d) => toTime(d.date))
   const first = points[0], last = points.at(-1)
   let body = null
   if (times.length === 0) {
@@ -99,7 +104,7 @@ export function PlotTimeline({ points, events, photos, maps, layer, photoId, map
       onPointerLeave: () => setHoverAt(null),
     }
     body = (
-      <svg width={width} height={bottom + YEARS_H + LANE_H} role="group" aria-label="Greenness, sampling visits and aerial photos over time">
+      <svg width={width} height={bottom + YEARS_H + LANE_H} role="group" aria-label="Greenness, sampling visits, metagenomics and aerial photos over time">
         {[0, 0.25, 0.5, 0.75, 1].map((v) => (
           <g key={v}>
             <line className={v === 0 ? 'baseline' : 'grid'} x1={M.left} x2={width - M.right} y1={y(v)} y2={y(v)} />
@@ -120,6 +125,10 @@ export function PlotTimeline({ points, events, photos, maps, layer, photoId, map
         <text className="row-name" x={M.left - 8} y={M.top - 13} textAnchor="end" dominantBaseline="middle">Visits</text>
         {layer === 'photo' && photo && <line className="cursor photo" x1={photoX[photoAt]} x2={photoX[photoAt]} y1={M.top} y2={laneY} />}
         {layer === 'greenness' && gmap && <line className="cursor greenness" x1={mapX[mapAt]} x2={mapX[mapAt]} y1={M.top} y2={bottom} />}
+        {dna.map((m) => {
+          const mx = x(toTime(m.date))
+          return <line key={m.sample_id} className="dna-line" x1={mx} x2={mx} y1={M.top} y2={bottom} />
+        })}
         {maps.length > 0 ? (
           <g
             className="map-scrub" aria-label="Day of the greenness map shown on the map"
@@ -149,6 +158,16 @@ export function PlotTimeline({ points, events, photos, maps, layer, photoId, map
               <line className="visit-line" x1={ex} x2={ex} y1={M.top - 4} y2={bottom} />
               <rect x={ex - 7} y={M.top - 24} width={14} height={20} className="hit" />
               <path d={`M${ex},${M.top - 19} l6,6 l-6,6 l-6,-6 z`} />
+            </a>
+          )
+        })}
+        {dna.map((m) => {
+          const mx = x(toTime(m.date))
+          return (
+            <a key={m.sample_id} href={microbesHref(plotId, m.sample_id)} className="dna" aria-label={`Soil DNA sequenced (metagenomics), sampled ${formatDate(m.date)}: open its microbes`}>
+              <title>{`Metagenomics: soil sampled ${formatDate(m.date)}. Click to see its microbes`}</title>
+              <rect x={mx - 7} y={bottom - 8} width={14} height={16} className="hit" />
+              <path d={`M${mx},${bottom - 2} l5,8 l-10,0 z`} />
             </a>
           )
         })}
@@ -193,6 +212,7 @@ export function PlotTimeline({ points, events, photos, maps, layer, photoId, map
       <div className="legend">
         <span><i className="key-dot" />Satellite reading</span>
         {events.length > 0 && <span><i className="key-visit" />Soil sampling visit ({events.length}): point to see its date, click for details</span>}
+        {dna.length > 0 && <span><i className="key-dna" />Metagenomics, soil DNA sequenced ({dna.length}): click the marker for its microbes</span>}
         {photos.length > 0 && <span><i className="key-photo" />Aerial photo ({photos.length})</span>}
       </div>
       <p className="readout" aria-live="polite">

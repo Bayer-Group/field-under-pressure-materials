@@ -9,7 +9,7 @@ import { PlotTimeline, type MapLayer, type TimelineChoice } from './features/tim
 import { formatDate } from './format'
 import { PlanPanel } from './features/plan/PlanPanel'
 import { RiskPanel } from './features/risk/RiskPanel'
-import { functionsHref, microbesHref, navigate, planHref, plotHref, riskHref, type MicrobeView, type PlotTab } from './router'
+import { functionsHref, greennessHref, microbesHref, navigate, planHref, plotHref, riskHref, type MicrobeView, type PlotTab } from './router'
 import { bySite, formatLatLon, shortId, siteName } from './sites'
 import { useFetch } from './useFetch'
 
@@ -19,7 +19,7 @@ const CONTEXT_M: Record<MapLayer, number> = { photo: 130, greenness: 1050, none:
 /** Map of all plots beside a panel. With no plot chosen the panel lists the plots by site; once one is chosen
  *  it has one tab per kind of plot data: the timeline (greenness, visits, aerial photos; the image chosen on it
  *  is laid over the map), the soil microbiome, the soil characteristics, the crop disease risk and the products to consider. Panels for future backend results become further tabs. */
-const tabHref = (tab: PlotTab, id: string) => (tab === 'microbes' ? microbesHref(id) : tab === 'risk' ? riskHref(id) : tab === 'plan' ? planHref(id) : tab === 'functions' ? functionsHref(id) : plotHref(id))
+const tabHref = (tab: PlotTab, id: string) => (tab === 'microbes' ? microbesHref(id) : tab === 'risk' ? riskHref(id) : tab === 'plan' ? planHref(id) : tab === 'functions' ? functionsHref(id) : tab === 'greenness' ? greennessHref(id) : plotHref(id))
 
 export function Explorer({ plotId, tab, sampleId, unit, crop, view }: {
   plotId: string | null; tab: PlotTab; sampleId: string | null; unit: string | null; crop: string | null; view: MicrobeView
@@ -29,6 +29,7 @@ export function Explorer({ plotId, tab, sampleId, unit, crop, view }: {
   const maps = useFetch(plotId, (s) => api.greennessMaps(plotId!, s))
   const greenness = useFetch(plotId, (s) => api.greenness(plotId!, s))
   const events = useFetch(plotId, (s) => api.plotEvents(plotId!, s))
+  const microbiome = useFetch(plotId, (s) => api.microbiome(plotId!, s)) // optional: marks metagenomics on the timeline
   const [focusSite, setFocusSite] = useState<string | null>(null)
   const [highlight, setHighlight] = useState<string | null>(null)
 
@@ -96,7 +97,8 @@ export function Explorer({ plotId, tab, sampleId, unit, crop, view }: {
               <p className="message">Loading…</p>
             ) : (
               <PlotTimeline
-                points={greenness.data ?? []} events={events.data ?? []} photos={photoList} maps={mapList}
+                plotId={selected.plot_id} points={greenness.data ?? []} events={events.data ?? []} photos={photoList} maps={mapList}
+                metagenomes={(microbiome.data ?? []).filter((m) => m.kind === 'bacteria')}
                 layer={layer} photoId={photo?.photo_id ?? null} mapId={gmap?.map_id ?? null} onChange={choose}
               />
             )}
@@ -196,7 +198,7 @@ function PlotHead({ plot, plots, tab, onOpen }: { plot: Plot; plots: Plot[]; tab
       <h1>Plot {plot.plot_id}</h1>
       <p className="muted plot-sub">{siteName(plot.site)} · {formatLatLon(plot.lat, plot.lon)} · {plot.half_m * 2} × {plot.half_m * 2} m (yellow square on the map)</p>
       <nav className="tabs" ref={tabs} aria-label="What to show for this plot">
-        <a href={plotHref(plot.plot_id)} aria-current={tab === 'greenness' ? 'page' : undefined}>Greenness over time</a>
+        <a href={greennessHref(plot.plot_id)} aria-current={tab === 'greenness' ? 'page' : undefined}>Greenness over time</a>
         <a href={microbesHref(plot.plot_id)} aria-current={tab === 'microbes' ? 'page' : undefined}>Soil microbes</a>
         <a href={functionsHref(plot.plot_id)} aria-current={tab === 'functions' ? 'page' : undefined}>Soil characteristics</a>
         <a href={riskHref(plot.plot_id)} aria-current={tab === 'risk' ? 'page' : undefined}>Crop disease risk</a>
