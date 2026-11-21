@@ -37,3 +37,5 @@ metodyki/
 *.tif
 *.tiff
 *.zip
+
+app/data/moje_gospodarstwo.json
