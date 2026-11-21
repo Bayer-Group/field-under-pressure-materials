@@ -1,0 +1,4 @@
+﻿rule_id;uprawa;zagrozenie;temp_min_c;temp_max_c;wilgotnosc_min_pct;opad_24h_min_mm;wiatr_max_ms;ndvi_prog;decyzja;poziom_ryzyka;komunikat;ph_min;ph_max;soc_max_g_kg;zalecany_nawoz;nawozy_eko
+R-001;WSZYSTKIE;Zbyt silny wiatr do oprysku;;;;;4.0;;CZEKAJ;WYSOKI;Wstrzymaj oprysk: wiatr przekracza 4 m/s;;;;;TAK
+R-002;WSZYSTKIE;Zakwaszenie gleby (pH < 5.6);2.0;26.0;;;4.5;;NAWOŹ;ŚREDNI;Zalecane wapnowanie EKO w celu podniesienia pH gleby;;5.6;;Wapno kredowe / Dolomit (EKO);TAK (wykaz IUNG)
+R-003;Pszenica ozima;Presja chorób grzybowych / dokarmianie;8.0;24.0;55.0;0.0;4.0;0.45;PRYSKAJ TERAZ;ŚREDNI;Optymalne okno pogodowe na zabieg biologiczny EKO;;;;Preparat biologiczny / Siarka (EKO);TAK (rozp. UE 2018/848)

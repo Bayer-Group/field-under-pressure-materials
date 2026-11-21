@@ -55,132 +55,138 @@ def normalize_decision(value: str) -> str:
 
 
 def load_static_fields() -> pd.DataFrame:
-    df = pd.read_parquet(DATA_DIR / "fields_static_33uxr.parquet").copy()
-    if "field_uid" not in df.columns:
-        df["field_uid"] = [f"P-{i+1:03d}" for i in range(len(df))]
-    return df
+    active_path = DATA_DIR / "active_fields.parquet"
+    if active_path.exists():
+        df = pd.read_parquet(active_path)
+        if "field_uid" not in df.columns and "h3_index" in df.columns:
+            df["field_uid"] = [f"{h3}_{i+1:03d}" for i, h3 in enumerate(df["h3_index"].astype(str))]
+        return df
+    return pd.DataFrame(
+        columns=[
+            "field_uid", "h3_index", "lat", "lon", "grid_id",
+            "crop_code", "crop_name", "ndvi", "soil_ph", "soil_soc",
+            "soil_texture", "area_ha", "polygon_json", "sentinel_date",
+        ]
+    )
 
 
 def load_weather_timeseries() -> pd.DataFrame:
-    w_path = DATA_DIR / "weather_timeseries_33uxr.parquet"
-    f_path = DATA_DIR / "fields_static_33uxr.parquet"
+    w_path = DATA_DIR / "active_weather.parquet"
+    f_path = DATA_DIR / "active_fields.parquet"
+    if not w_path.exists():
+        return pd.DataFrame(
+            columns=["grid_id", "timestamp", "temp_c", "humidity_pct", "wind_ms", "precip_24h_mm", "soil_moisture"]
+        )
     df = pd.read_parquet(w_path)
     df["timestamp"] = pd.to_datetime(df["timestamp"])
 
-    # Automatyczne odświeżenie pogody LIVE z Open-Meteo, jeśli dane nie obejmują bieżącej godziny
     now_pl = pd.Timestamp.now(tz="Europe/Warsaw").tz_localize(None)
-    if df.empty or df["timestamp"].max() < now_pl + pd.Timedelta(hours=12) or df["timestamp"].min() > now_pl:
+    if f_path.exists() and (df.empty or df["timestamp"].max() < now_pl + pd.Timedelta(hours=12) or df["timestamp"].min() > now_pl):
         try:
-            import json
             import ssl
             import urllib.request
             import numpy as np
 
             fields_df = pd.read_parquet(f_path)
-            c_lat, c_lon = float(fields_df["lat"].mean()), float(fields_df["lon"].mean())
-            url = (
-                f"https://api.open-meteo.com/v1/forecast?latitude={c_lat:.4f}&longitude={c_lon:.4f}"
-                "&past_days=5&forecast_days=5"
-                "&hourly=temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,soil_moisture_0_to_7cm"
-                "&wind_speed_unit=ms&timezone=Europe%2FWarsaw"
-            )
-            ctx = ssl._create_unverified_context()
-            with urllib.request.urlopen(url, context=ctx, timeout=12) as resp:
-                h = json.loads(resp.read().decode("utf-8"))["hourly"]
-            w_base = pd.DataFrame({
-                "timestamp": pd.to_datetime(h["time"]),
-                "temp_c": pd.Series(h["temperature_2m"]).ffill().bfill().round(1).astype("float32"),
-                "humidity_pct": pd.Series(h["relative_humidity_2m"]).ffill().bfill().round(1).astype("float32"),
-                "wind_ms": pd.Series(h["wind_speed_10m"]).ffill().bfill().round(1).astype("float32"),
-                "precip_1h": pd.Series(h["precipitation"]).fillna(0.0).clip(lower=0.0),
-                "soil_moisture": pd.Series(h["soil_moisture_0_to_7cm"]).ffill().bfill().fillna(0.25).round(3).astype("float32"),
-            })
-            w_base["precip_24h_mm"] = w_base["precip_1h"].rolling(24, min_periods=1).sum().round(1).astype("float32")
-            w_base = w_base[w_base["timestamp"] >= w_base["timestamp"].min() + pd.Timedelta(hours=24)].copy()
-            out = []
-            for gid in fields_df["grid_id"].unique():
-                sub = w_base[["timestamp", "temp_c", "humidity_pct", "wind_ms", "precip_24h_mm", "soil_moisture"]].copy()
-                sub.insert(0, "grid_id", np.int32(gid))
-                out.append(sub)
-            df = pd.concat(out, ignore_index=True)
-            df.to_parquet(w_path, index=False)
+            if not fields_df.empty:
+                c_lat, c_lon = float(fields_df["lat"].mean()), float(fields_df["lon"].mean())
+                url = (
+                    f"https://api.open-meteo.com/v1/forecast?latitude={c_lat:.4f}&longitude={c_lon:.4f}"
+                    "&past_days=5&forecast_days=5"
+                    "&hourly=temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,soil_moisture_0_to_7cm"
+                    "&wind_speed_unit=ms&timezone=Europe%2FWarsaw"
+                )
+                ctx = ssl._create_unverified_context()
+                with urllib.request.urlopen(url, context=ctx, timeout=12) as resp:
+                    h = json.loads(resp.read().decode("utf-8"))["hourly"]
+                w_base = pd.DataFrame({
+                    "timestamp": pd.to_datetime(h["time"]),
+                    "temp_c": pd.Series(h["temperature_2m"]).ffill().bfill().round(1).astype("float32"),
+                    "humidity_pct": pd.Series(h["relative_humidity_2m"]).ffill().bfill().round(1).astype("float32"),
+                    "wind_ms": pd.Series(h["wind_speed_10m"]).ffill().bfill().round(1).astype("float32"),
+                    "precip_1h": pd.Series(h["precipitation"]).fillna(0.0).clip(lower=0.0),
+                    "soil_moisture": pd.Series(h["soil_moisture_0_to_7cm"]).ffill().bfill().fillna(0.25).round(3).astype("float32"),
+                })
+                w_base["precip_24h_mm"] = w_base["precip_1h"].rolling(24, min_periods=1).sum().round(1).astype("float32")
+                w_base = w_base[w_base["timestamp"] >= w_base["timestamp"].min() + pd.Timedelta(hours=24)].copy()
+                out = []
+                for gid in fields_df["grid_id"].unique():
+                    sub = w_base[["timestamp", "temp_c", "humidity_pct", "wind_ms", "precip_24h_mm", "soil_moisture"]].copy()
+                    sub.insert(0, "grid_id", np.int32(gid))
+                    out.append(sub)
+                df = pd.concat(out, ignore_index=True)
+                df.to_parquet(w_path, index=False)
         except Exception:
             pass
     return df
 
 
 def ensure_base_reference_data() -> dict[str, bool]:
-    """Gwarantuje obecność plików bazowych (gminy Polski + reguły) nawet bez folderu data_local."""
+    """Gwarantuje obecność pełnej listy 16 województw i reguł bez folderu data_local."""
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     gminy_path = DATA_DIR / "gminy_polska.parquet"
     rules_path = DATA_DIR / "reguly_agronomiczne.csv"
 
-    if not gminy_path.exists():
+    need_gminy = True
+    if gminy_path.exists():
         try:
-            import json
+            chk = pd.read_parquet(gminy_path, columns=["wojewodztwo"])
+            if chk["wojewodztwo"].nunique() >= 16:
+                need_gminy = False
+        except Exception:
+            pass
+
+    if need_gminy:
+        alt_gminy = Path(__file__).parent / "data_app" / "gminy_polska.parquet"
+        if alt_gminy.exists():
+            try:
+                chk2 = pd.read_parquet(alt_gminy, columns=["wojewodztwo"])
+                if chk2["wojewodztwo"].nunique() >= 16:
+                    import shutil
+                    shutil.copy2(alt_gminy, gminy_path)
+                    need_gminy = False
+            except Exception:
+                pass
+
+    if need_gminy:
+        try:
             import ssl
             import urllib.request
-            from shapely.geometry import shape
+            import geopandas as gpd
 
             ctx = ssl._create_unverified_context()
-            url = "https://github.com/wmgeolab/geoBoundaries/raw/main/releaseData/gbOpen/POL/ADM2/geoBoundaries-POL-ADM2_simplified.geojson"
-            with urllib.request.urlopen(url, context=ctx, timeout=25) as resp:
-                geo = json.loads(resp.read().decode("utf-8"))
-            rows = []
-            for feat in geo.get("features", []):
-                props = feat.get("properties", {})
-                geom = shape(feat["geometry"])
-                minx, miny, maxx, maxy = geom.bounds
-                c = geom.centroid
-                name = str(props.get("shapeName", "Gmina")).strip()
-                rows.append({
-                    "wojewodztwo": "Polska",
-                    "powiat": name,
-                    "gmina": name,
-                    "typ_gminy": "Jednostka ADM2",
-                    "min_lon": round(minx, 5),
-                    "min_lat": round(miny, 5),
-                    "max_lon": round(maxx, 5),
-                    "max_lat": round(maxy, 5),
-                    "center_lat": round(c.y, 5),
-                    "center_lon": round(c.x, 5),
-                })
-            if rows:
-                pd.DataFrame(rows).to_parquet(gminy_path, index=False)
+            tmp_zip = Path("/tmp/gminy_pol.zip")
+            url = "https://geodata.ucdavis.edu/gadm/gadm4.1/json/gadm41_POL_3.json.zip"
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, context=ctx, timeout=45) as resp:
+                tmp_zip.write_bytes(resp.read())
+            gdf = gpd.read_file(tmp_zip)
+            b = gdf.geometry.bounds
+            c = gdf.to_crs("EPSG:2180").geometry.centroid.to_crs("EPSG:4326")
+            pd.DataFrame({
+                "wojewodztwo": gdf["NAME_1"].astype(str).str.strip(),
+                "powiat": gdf["NAME_2"].astype(str).str.strip(),
+                "gmina": gdf["NAME_3"].astype(str).str.strip(),
+                "typ_gminy": "Gmina",
+                "min_lon": b["minx"].round(5), "min_lat": b["miny"].round(5),
+                "max_lon": b["maxx"].round(5), "max_lat": b["maxy"].round(5),
+                "center_lat": c.y.round(5), "center_lon": c.x.round(5),
+            }).drop_duplicates(subset=["wojewodztwo", "powiat", "gmina"]).to_parquet(gminy_path, index=False)
         except Exception:
             pass
 
     if not rules_path.exists():
-        default_rules = pd.DataFrame([
+        pd.DataFrame([
             {
                 "rule_id": "R-001", "uprawa": "WSZYSTKIE", "zagrozenie": "Zbyt silny wiatr do oprysku",
                 "temp_min_c": "", "temp_max_c": "", "wilgotnosc_min_pct": "", "opad_24h_min_mm": "",
                 "wiatr_max_ms": 4.0, "ndvi_prog": "", "decyzja": "CZEKAJ", "poziom_ryzyka": "WYSOKI",
                 "komunikat": "Wstrzymaj oprysk: wiatr przekracza 4 m/s", "ph_min": "", "ph_max": "",
                 "soc_max_g_kg": "", "zalecany_nawoz": "", "nawozy_eko": "TAK",
-            },
-            {
-                "rule_id": "R-002", "uprawa": "WSZYSTKIE", "zagrozenie": "Zakwaszenie gleby (pH < 5.6)",
-                "temp_min_c": 2.0, "temp_max_c": 26.0, "wilgotnosc_min_pct": "", "opad_24h_min_mm": "",
-                "wiatr_max_ms": 4.5, "ndvi_prog": "", "decyzja": "NAWOŹ", "poziom_ryzyka": "ŚREDNI",
-                "komunikat": "Zalecane wapnowanie EKO w celu podniesienia pH gleby", "ph_min": "", "ph_max": 5.6,
-                "soc_max_g_kg": "", "zalecany_nawoz": "Wapno kredowe / Dolomit (EKO)", "nawozy_eko": "TAK (wykaz IUNG)",
-            },
-            {
-                "rule_id": "R-003", "uprawa": "Pszenica ozima", "zagrozenie": "Presja chorób grzybowych / dokarmianie",
-                "temp_min_c": 8.0, "temp_max_c": 24.0, "wilgotnosc_min_pct": 55.0, "opad_24h_min_mm": 0.0,
-                "wiatr_max_ms": 4.0, "ndvi_prog": 0.45, "decyzja": "PRYSKAJ TERAZ", "poziom_ryzyka": "ŚREDNI",
-                "komunikat": "Optymalne okno pogodowe na zabieg biologiczny EKO", "ph_min": "", "ph_max": "",
-                "soc_max_g_kg": "", "zalecany_nawoz": "Preparat biologiczny / Siarka (EKO)", "nawozy_eko": "TAK (rozp. UE 2018/848)",
-            },
-        ])
-        default_rules.to_csv(rules_path, sep=";", index=False, encoding="utf-8-sig")
+            }
+        ]).to_csv(rules_path, sep=";", index=False, encoding="utf-8-sig")
 
-    return {
-        "gminy_ok": gminy_path.exists(),
-        "rules_ok": rules_path.exists(),
-        "has_data_local": (Path(__file__).resolve().parents[1] / "data_local").exists(),
-    }
+    return {"gminy_ok": gminy_path.exists(), "rules_ok": rules_path.exists()}
 
 
 def load_admin_hierarchy() -> dict[str, dict[str, list[dict]]]:
@@ -214,30 +220,28 @@ def load_admin_hierarchy() -> dict[str, dict[str, list[dict]]]:
 
 
 def load_farm_profile() -> dict:
+    default_profile = {
+        "farm_name": "Moje Gospodarstwo",
+        "wojewodztwo": "",
+        "powiat": "",
+        "gmina": "",
+        "area_configured": False,
+        "only_my_farm": False,
+        "eco_mode": False,
+        "fields": {},
+    }
     if FARM_PROFILE_PATH.exists():
         try:
             with open(FARM_PROFILE_PATH, "r", encoding="utf-8") as f:
                 data = json.load(f)
             if isinstance(data, dict):
-                data.setdefault("farm_name", "Moje Gospodarstwo")
-                data.setdefault("wojewodztwo", "Małopolskie")
-                data.setdefault("powiat", "proszowicki")
-                data.setdefault("gmina", "Wszystkie gminy (33UXR)")
-                data.setdefault("only_my_farm", False)
-                data.setdefault("eco_mode", False)
-                data.setdefault("fields", {})
-                return data
+                if "33UXR" in str(data.get("gmina", "")):
+                    data["gmina"] = ""
+                    data["area_configured"] = False
+                default_profile.update(data)
         except Exception:
             pass
-    return {
-        "farm_name": "Moje Gospodarstwo",
-        "wojewodztwo": "Małopolskie",
-        "powiat": "proszowicki",
-        "gmina": "Wszystkie gminy (33UXR)",
-        "only_my_farm": False,
-        "eco_mode": False,
-        "fields": {},
-    }
+    return default_profile
 
 
 def save_farm_profile(profile: dict) -> None:

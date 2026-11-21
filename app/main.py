@@ -8,6 +8,7 @@ import pydeck as pdk
 import streamlit as st
 
 from silnik_regul import (
+    DATA_DIR,
     FALLOW_LABEL,
     KNOWN_CROPS,
     apply_farm_profile,
@@ -24,7 +25,7 @@ from silnik_regul import (
 )
 
 st.set_page_config(
-    page_title="FieldGuard 33UXR — Prace polowe i pogoda",
+    page_title="FieldGuard — Monitoring pól i rolnictwo EKO",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -339,7 +340,7 @@ mode_badge = "Rolnictwo EKO" if (eco_active or eco_fields_count > 0) else "Tryb 
 loc_summary = (
     f"{farm_profile.get('wojewodztwo', 'Małopolskie')} · "
     f"pow. {farm_profile.get('powiat', 'proszowicki')} · "
-    f"gm. {farm_profile.get('gmina', 'Wszystkie gminy (33UXR)')}"
+    f"gm. {farm_profile.get('gmina', 'Nie wybrano obszaru')}"
 )
 
 st.markdown(
@@ -357,6 +358,105 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
+if st.session_state.get("fetch_banner"):
+    st.success(st.session_state.pop("fetch_banner"))
+
+active_fields_file = DATA_DIR / "active_fields.parquet"
+has_active_area = (
+    bool(st.session_state.get("session_area_selected", False))
+    and active_fields_file.exists()
+    and not raw_fields_df.empty
+    and not weather_df.empty
+)
+
+if not has_active_area:
+    st.markdown(
+        """
+        <div class="soft-card" style="margin-top:12px;">
+            <div class="soft-card-title">Określ obszar swojego gospodarstwa na start</div>
+            <div class="soft-card-sub" style="margin-bottom:0;">
+                Wybierz województwo, powiat oraz gminę, a następnie załaduj kafel pól satelitarnych,
+                najświeższe zobrazowanie Sentinel-2 (&lt;20% zachmurzenia), glebę SoilGrids oraz pogodę LIVE.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    ob_c1, ob_c2, ob_c3, ob_c4 = st.columns([1.3, 1.1, 1.1, 1.2])
+    with ob_c1:
+        ob_farm_name = st.text_input(
+            "Nazwa gospodarstwa:",
+            value=farm_profile.get("farm_name", "Moje Gospodarstwo"),
+            key="ob_farm_name",
+        )
+    woj_list = sorted(admin_hierarchy.keys())
+    saved_woj = farm_profile.get("wojewodztwo", "")
+    def_w_idx = woj_list.index(saved_woj) if saved_woj in woj_list else (woj_list.index("Małopolskie") if "Małopolskie" in woj_list else 0)
+    with ob_c2:
+        ob_woj = st.selectbox("Województwo:", woj_list, index=def_w_idx, key="ob_woj")
+
+    pow_list = sorted(admin_hierarchy[ob_woj].keys())
+    saved_pow = farm_profile.get("powiat", "")
+    def_p_idx = pow_list.index(saved_pow) if saved_pow in pow_list else 0
+    with ob_c3:
+        ob_pow = st.selectbox("Powiat:", pow_list, index=def_p_idx, key="ob_pow")
+
+    gm_entries = admin_hierarchy[ob_woj][ob_pow]
+    gm_list = sorted({g["gmina"] for g in gm_entries})
+    saved_gm = farm_profile.get("gmina", "")
+    def_g_idx = gm_list.index(saved_gm) if saved_gm in gm_list else 0
+    with ob_c4:
+        ob_gmina = st.selectbox("Gmina:", gm_list, index=def_g_idx, key="ob_gmina")
+
+    ob_force = st.checkbox(
+        "Wymuś ponowne pobranie świeżych danych z satelity (pomiń lokalny cache)",
+        value=False,
+        key="ob_force_refresh",
+    )
+
+    if st.button(
+        f"Załaduj kafel pól i pogodę LIVE dla gminy {ob_gmina}",
+        type="primary",
+        key="btn_onboarding_fetch",
+    ):
+        with st.status(f"Przygotowywanie kafla dla gminy {ob_gmina} ({ob_woj})...", expanded=True) as status:
+            try:
+                import sys
+                sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+                from src_geo.pobierz_gmine import build_gmina_dataset
+
+                st.write("1. Pobieranie / wczytywanie kafla pól, gleby oraz Sentinel-2 (<20% chmur)...")
+                g_fields, g_weather = build_gmina_dataset(
+                    ob_woj, ob_pow, ob_gmina, max_fields=120, force_refresh=ob_force
+                )
+                st.write(f"2. Aktywowanie {len(g_fields)} pól i pogody LIVE na mapie...")
+                DATA_DIR.mkdir(parents=True, exist_ok=True)
+                g_fields.to_parquet(DATA_DIR / "active_fields.parquet", index=False)
+                g_weather.to_parquet(DATA_DIR / "active_weather.parquet", index=False)
+
+                same_area = (
+                    farm_profile.get("wojewodztwo") == ob_woj
+                    and farm_profile.get("powiat") == ob_pow
+                    and farm_profile.get("gmina") == ob_gmina
+                )
+                farm_profile["farm_name"] = ob_farm_name.strip() or "Moje Gospodarstwo"
+                farm_profile["wojewodztwo"] = ob_woj
+                farm_profile["powiat"] = ob_pow
+                farm_profile["gmina"] = ob_gmina
+                if not same_area:
+                    farm_profile["fields"] = {}
+                save_farm_profile(farm_profile)
+                st.session_state.farm_profile = farm_profile
+                st.session_state["session_area_selected"] = True
+                st.session_state["fetch_banner"] = f"Wczytano {len(g_fields)} pól i pogodę LIVE dla gminy {ob_gmina} ({ob_woj})!"
+                st.cache_data.clear()
+                status.update(label=f"Gotowe! Wczytano {len(g_fields)} pól w gminie {ob_gmina}.", state="complete")
+                st.rerun()
+            except Exception as exc:
+                status.update(label="Błąd pobierania kafla", state="error")
+                st.error(f"Nie udało się pobrać danych dla gminy {ob_gmina}: {exc}")
+    st.stop()
 
 fields_df = apply_farm_profile(raw_fields_df, farm_profile, crop_dict_df=crop_dict_df)
 
@@ -593,7 +693,7 @@ with tab_pola:
                 },
             },
         )
-        st.pydeck_chart(deck, use_container_width=True)
+        st.pydeck_chart(deck, use_container_width=True, key=f"main_map_{farm_profile.get('gmina', 'init')}_{len(result_df)}")
         s_info = str(result_df["sentinel_date"].iloc[0]) if ("sentinel_date" in result_df.columns and not result_df.empty) else "najświeższy (<20% chmur)"
         st.caption(
             f"Satelita Sentinel-2 L2A: {s_info} | "
@@ -840,32 +940,43 @@ with tab_gosp:
         sel_gmina = st.selectbox("Gmina:", gmina_names, index=gmina_names.index(default_gmina))
 
     active_bbox = next(g["bbox"] for g in gmina_entries if g["gmina"] == sel_gmina)
-    if st.button("Pobierz świeże pola i pogodę LIVE dla wybranej gminy", key="btn_fetch_gmina_live"):
-        with st.spinner(f"Pobieranie danych satelitarnych i pogodowych dla gminy {sel_gmina}..."):
+    if st.button("Pobierz świeże pola i pogodę LIVE dla wybranej gminy", type="primary", key="btn_fetch_gmina_live"):
+        with st.spinner(f"Pobieranie danych satelitarnych (<20% chmur), gleby i pogody LIVE dla gminy {sel_gmina}..."):
             try:
                 import sys
                 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
                 from src_geo.pobierz_gmine import build_gmina_dataset
-                g_fields, g_weather = build_gmina_dataset(sel_woj, sel_pow, sel_gmina, max_fields=120)
+                g_fields, g_weather = build_gmina_dataset(sel_woj, sel_pow, sel_gmina, max_fields=120, force_refresh=True)
+                DATA_DIR.mkdir(parents=True, exist_ok=True)
                 if not g_fields.empty:
-                    g_fields.to_parquet(Path(__file__).parent / "data_app" / "fields_static_33uxr.parquet", index=False)
+                    g_fields.to_parquet(DATA_DIR / "active_fields.parquet", index=False)
                 if not g_weather.empty:
-                    g_weather.to_parquet(Path(__file__).parent / "data_app" / "weather_timeseries_33uxr.parquet", index=False)
+                    g_weather.to_parquet(DATA_DIR / "active_weather.parquet", index=False)
+                farm_profile["wojewodztwo"] = sel_woj
+                farm_profile["powiat"] = sel_pow
+                farm_profile["gmina"] = sel_gmina
+                farm_profile["area_configured"] = True
+                farm_profile["fields"] = {}
+                save_farm_profile(farm_profile)
+                st.session_state.farm_profile = farm_profile
+                st.session_state["fetch_banner"] = f"Pobrano {len(g_fields)} pól i pogodę LIVE dla gminy {sel_gmina} ({sel_woj})!"
                 st.cache_data.clear()
-                st.success(f"Wczytano {len(g_fields)} pól i aktualną pogodę dla gminy {sel_gmina}!")
                 st.rerun()
             except Exception as exc:
                 st.error(f"Nie udało się pobrać danych gminy: {exc}")
 
-    candidates_df = raw_fields_df[
-        (raw_fields_df["lon"] >= active_bbox[0])
-        & (raw_fields_df["lon"] <= active_bbox[2])
-        & (raw_fields_df["lat"] >= active_bbox[1])
-        & (raw_fields_df["lat"] <= active_bbox[3])
-    ].copy()
-    if candidates_df.empty:
-        st.info("Dla wybranej gminy nie ma jeszcze dociętych poligonów w lokalnym kaflu — pokazuję wszystkie dostępne pola z 33UXR.")
+    if sel_gmina == farm_profile.get("gmina"):
         candidates_df = raw_fields_df.copy()
+    else:
+        candidates_df = raw_fields_df[
+            (raw_fields_df["lon"] >= active_bbox[0])
+            & (raw_fields_df["lon"] <= active_bbox[2])
+            & (raw_fields_df["lat"] >= active_bbox[1])
+            & (raw_fields_df["lat"] <= active_bbox[3])
+        ].copy()
+        if candidates_df.empty:
+            st.info(f"Kliknij przycisk powyżej, aby pobrać kafel działek bezpośrednio dla gminy {sel_gmina}.")
+            candidates_df = raw_fields_df.copy()
 
     saved_map = farm_profile.get("fields", {})
 
@@ -956,7 +1067,7 @@ with tab_gosp:
                 "style": {"backgroundColor": "#1F2924", "color": "#FFFFFF", "borderRadius": "8px"},
             },
         )
-        st.pydeck_chart(prev_deck, use_container_width=True)
+        st.pydeck_chart(prev_deck, use_container_width=True, key=f"prev_map_{sel_gmina}_{len(preview_df)}")
         st.caption("Zielony — działki zapisane jako EKO | Niebieski — pozostałe zapisane działki | Szary — nieprzypisane.")
 
     with table_cfg_col:
