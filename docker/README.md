@@ -1,162 +1,163 @@
-# Baza PostGIS (schemat `fup`)
+# PostGIS database (schema `fup`)
 
-Baza obsługująca backend (FastAPI) dla danych pogodowych, pól i upraw. PostgreSQL 15 + PostGIS 3.3 w Dockerze.
-Źródło prawdy dla struktury: [`initdb/02_schema.sql`](initdb/02_schema.sql). Zasady modułu: [`AGENTS.md`](AGENTS.md).
+The database behind the backend (FastAPI) for weather data, fields and crops. PostgreSQL 15 + PostGIS 3.3 in Docker.
+Source of truth for the structure: [`initdb/02_schema.sql`](initdb/02_schema.sql). Module rules: [`AGENTS.md`](AGENTS.md).
 
-## Uruchomienie
+## Start
 
-Z rootu repo:
+From the repo root:
 
 ```bash
-cp example.env .env        # ustaw własne wartości, w szczególności hasło (.env jest w .gitignore)
+cp example.env .env        # set your own values, in particular the password (.env is in .gitignore)
 docker compose --env-file .env -f docker/docker-compose.yml up -d postgis
 ```
 
-Schemat tworzy się sam **tylko przy pierwszym starcie na pustym wolumenie**. Po zmianie plików w `initdb/` trzeba
-odtworzyć bazę (`down -v`, patrz niżej). Pierwszy start trwa kilka sekund; gotowość sprawdzisz tak:
+The schema is created automatically **only on the first start with an empty volume**. After changing files in `initdb/`
+the database has to be recreated (`down -v`, see below). The first start takes a few seconds; check readiness with:
 
 ```bash
 set -a; source .env; set +a
-docker exec spatial_postgis psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c '\dt fup.*'   # 6 tabel
+docker exec spatial_postgis psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c '\dt fup.*'   # 6 tables
 ```
 
-## Połączenie
+## Connection
 
-| Parametr | Wartość |
+| Parameter | Value |
 | --- | --- |
-| host | `localhost` (lub adres serwera) |
-| port | `POSTGRES_PORT` z `.env` (domyślnie 5432) |
-| baza | `POSTGRES_DB` z `.env` |
-| użytkownik / hasło | `POSTGRES_USER` / `POSTGRES_PASSWORD` z `.env` |
-| schemat | `fup` |
+| host | `localhost` (or the server address) |
+| port | `POSTGRES_PORT` from `.env` (default 5432) |
+| database | `POSTGRES_DB` from `.env` |
+| user / password | `POSTGRES_USER` / `POSTGRES_PASSWORD` from `.env` |
+| schema | `fup` |
 
 - psql: `docker exec -it spatial_postgis psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"`
-- QGIS: Warstwa → Dodaj warstwę PostGIS, schemat `fup` (np. `grid_cell`, `field`).
-- Na współdzielonym serwerze nie wystawiaj portu bazy do internetu (tunel SSH / VPN) i ustaw własne hasło.
+- QGIS: Layer → Add PostGIS layer, schema `fup` (e.g. `grid_cell`, `field`).
+- On a shared server do not expose the database port to the internet (SSH tunnel / VPN) and set your own password.
 
-## Zasady przyjęte w schemacie
+## Rules adopted in the schema
 
-- Zakres MVP: pogoda **godzinowa**, siatka **4 km**, okno 1–2 miesięcy, rok źródłowy 2024.
-- Współrzędne w **EPSG:4326**.
-- Brak interpolacji: pole dostaje wartość komórki, w której leży jego centroid (widok `v_field_grid`).
-- Brakujące wartości ze źródła zostają `NULL` (nigdy 0). Źródło ustawia `null` dla wartości poza zakresem.
-- Dane ładujemy z oryginalnymi datami. Przesunięcie czasu robimy **po załadowaniu** (osobne zadanie) i zapisujemy
-  w `ingest_log.time_shift`.
+- MVP scope: **hourly** weather, **4 km** grid, a window of 1–2 months, source year 2024.
+- Coordinates in **EPSG:4326**.
+- No interpolation: a field gets the value of the cell its centroid falls into (view `v_field_grid`).
+- Missing source values stay `NULL` (never 0). The source sets `null` for out-of-range values.
+- Data is loaded with its original dates. The time shift is done **after loading** (a separate task) and recorded in
+  `ingest_log.time_shift`.
 
-## Tabele
+## Tables
 
-### `fup.grid_cell`: siatka pogodowa 4 km
-Źródło: `grid_table` z `weather_grids.zip`. Źródło ma tylko punkty (środki komórek), bez wielokątów.
+### `fup.grid_cell`: 4 km weather grid
+Source: `grid_table` from `weather_grids.zip`. The source has points only (cell centres), no polygons.
 
-| Kolumna | Typ | Uwagi |
+| Column | Type | Notes |
 | --- | --- | --- |
-| `grid_id` | text, **PK** | identyfikator komórki |
+| `grid_id` | text, **PK** | cell identifier |
 | `lat`, `lon` | double precision | WGS84 |
-| `geom` | geometry(Point, 4326) | budowana z `lon`/`lat`: `ST_SetSRID(ST_MakePoint(lon, lat), 4326)` |
-| `geohash4` | text | pomocnicze, opcjonalne |
-| `time_zone` | text | w dokumentacji źródła „STRING / FLOAT”: sprawdzić faktyczny typ |
+| `geom` | geometry(Point, 4326) | built from `lon`/`lat`: `ST_SetSRID(ST_MakePoint(lon, lat), 4326)` |
+| `geohash4` | text | helper, optional |
+| `time_zone` | text | documented as "STRING / FLOAT" in the source: check the actual type |
 
-### `fup.weather_hourly`: pogoda godzinowa
-Źródło: `hourly_table` (parquet per województwo i rok). Kolumny **1:1 z [`data/weather.md`](../data/weather.md)**, jednostki
-metryczne, wartości `real`. Klucz `(grid_id, utc_time)`, plus indeks po samym `utc_time`.
+### `fup.weather_hourly`: hourly weather
+Source: `hourly_table` (parquet per voivodeship and year). Columns **1:1 with [`data/weather.md`](../data/weather.md)**, metric
+units, `real` values. Key `(grid_id, utc_time)`, plus an index on `utc_time` alone.
 
-| Kolumna | Typ | Uwagi |
+| Column | Type | Notes |
 | --- | --- | --- |
-| `grid_id` | text, **PK**, FK → `grid_cell` | komórka musi istnieć wcześniej |
-| `date` | date | lokalna data kalendarzowa |
-| `utc_time` | timestamptz, **PK** | wczytywać jako UTC |
-| `local_time` | timestamp | czas lokalny, bez strefy |
+| `grid_id` | text, **PK**, FK → `grid_cell` | the cell must exist beforehand |
+| `date` | date | local calendar date |
+| `utc_time` | timestamptz, **PK** | load as UTC |
+| `local_time` | timestamp | local time, no time zone |
 | `temperature`, `dew_point_temperature` | real | °C, 2 m |
-| `precipitation` | real | mm w godzinie |
+| `precipitation` | real | mm per hour |
 | `wind_speed`, `wind_gust`, `wind_speed_2m` | real | km/h |
-| `wind_direction` | real | ° azymut |
+| `wind_direction` | real | degrees azimuth |
 | `relative_humidity` | real | % |
 | `downward_solar_radiation`, `net_solar_radiation` | real | MJ/m²/h |
 | `atmospheric_pressure` | real | mbar |
-| `total_cloud_cover` | real | ułamek 0–1 |
-| `snow_depth` | real | mm ekwiwalentu wodnego |
+| `total_cloud_cover` | real | fraction 0–1 |
+| `snow_depth` | real | mm water equivalent |
 | `snow_density` | real | kg/m³ |
-| `soil_temperature_level_1`…`_4` | real | °C; warstwy 0–7, 7–28, 28–100, 100–289 cm |
+| `soil_temperature_level_1`…`_4` | real | °C; layers 0–7, 7–28, 28–100, 100–289 cm |
 | `soil_moisture_level_1`…`_4` | real | m³/m³ |
 | `eto`, `etr` | real | mm/h |
 
-### `fup.crop_class`: legenda klas upraw CLMS CTY
-Wypełniona w schemacie (`code` → `name`, np. `1110` = Wheat). Źródło: [`data/cropland.md`](../data/cropland.md).
+### `fup.crop_class`: CLMS CTY crop class legend
+Filled in by the schema (`code` → `name`, e.g. `1110` = Wheat). Source: [`data/cropland.md`](../data/cropland.md).
 
-### `fup.field`: pola (np. pola jednego rolnika)
+### `fup.field`: fields (e.g. one farmer's fields)
 
-| Kolumna | Typ | Uwagi |
+| Column | Type | Notes |
 | --- | --- | --- |
 | `field_id` | text, **PK** | |
 | `name` | text | |
-| `source` | text | skąd pochodzi geometria (np. `geojson`, `uldk`) |
-| `geom` | geometry(Geometry, 4326) | tylko POLYGON lub MULTIPOLYGON (ograniczenie w bazie) |
+| `source` | text | where the geometry comes from (e.g. `geojson`, `uldk`) |
+| `geom` | geometry(Geometry, 4326) | POLYGON or MULTIPOLYGON only (constraint in the database) |
 
-**Widok `fup.v_field_grid`** `(field_id, grid_id)`: reguła „centroid pola → najbliższa komórka”, liczona w metrach.
+**View `fup.v_field_grid`** `(field_id, grid_id)`: the rule "field centroid → nearest cell", computed in metres.
 
-### `fup.field_crop_share`: udział klas upraw w polu
-Liczone z rastra CTY 10 m (np. statystyki strefowe) przy ładowaniu.
+### `fup.field_crop_share`: share of crop classes in a field
+Computed from the 10 m CTY raster (e.g. zonal statistics) at load time.
 
-| Kolumna | Typ | Uwagi |
+| Column | Type | Notes |
 | --- | --- | --- |
 | `field_id` | text, **PK**, FK → `field` | |
-| `year` | integer, **PK** | rok rastra CTY |
+| `year` | integer, **PK** | CTY raster year |
 | `class_code` | integer, **PK**, FK → `crop_class` | |
 | `pixel_count` | bigint | |
-| `share` | real | 0–1 (ograniczenie w bazie) |
+| `share` | real | 0–1 (constraint in the database) |
 
-### `fup.ingest_log`: pochodzenie danych
-Jeden wpis na załadowany zbiór/plik: `dataset`, `source_file`, `source_year`, `row_count`, `time_shift`, `note`
-(`id` i `loaded_at` wypełniają się same).
+### `fup.ingest_log`: data provenance
+One row per loaded dataset/file: `dataset`, `source_file`, `source_year`, `row_count`, `time_shift`, `note`
+(`id` and `loaded_at` are filled automatically).
 
-## Ładowanie danych (dla loadera)
+## Loading data (for the loader)
 
-Kolejność (klucze obce): `grid_cell` → `weather_hourly` → `field` → `field_crop_share` → wpis w `ingest_log`.
-`crop_class` jest już wypełniona.
+Order (foreign keys): `grid_cell` → `weather_hourly` → `field` → `field_crop_share` → an `ingest_log` row.
+`crop_class` is already filled in.
 
-- Nazwy kolumn w `weather_hourly` i `grid_cell` są takie jak w parquet, poza `geom` (budowana z `lat`/`lon`).
-- Czas wczytywać w UTC (`SET TIME ZONE 'UTC'` w sesji, jeśli narzędzie tego nie robi).
-- Nie zamieniać `NULL` na 0 i nie wypełniać braków; braki mają zostać widoczne.
-- Do ładowania dużych plików nadaje się dowolne narzędzie (np. DuckDB czytające parquet i zapisujące do Postgresa, `COPY`).
-  Wybór narzędzia należy do osoby piszącej loader.
-- Po każdym załadowanym zbiorze dopisać wiersz do `ingest_log`.
-- Dane i dumpy nie trafiają do Gita (`data/**` jest ignorowane).
+- Column names in `weather_hourly` and `grid_cell` match the parquet files, except `geom` (built from `lat`/`lon`).
+- Load time as UTC (`SET TIME ZONE 'UTC'` in the session if the tool does not do it).
+- Do not turn `NULL` into 0 and do not fill gaps; missing values must stay visible.
+- Any tool is fine for large files (e.g. DuckDB reading parquet and writing to Postgres, `COPY`).
+  The choice of tool is up to whoever writes the loader.
+- After each loaded dataset add a row to `ingest_log`.
+- Data and dumps do not go into Git (`data/**` is ignored).
 
-## Kontrole po załadowaniu
+## Checks after loading
 
 ```sql
 SELECT count(*) FROM fup.grid_cell;
 SELECT count(*) FROM fup.weather_hourly;
 SELECT min(utc_time), max(utc_time) FROM fup.weather_hourly;
-SELECT * FROM fup.v_field_grid;                -- pole -> komórka
+SELECT * FROM fup.v_field_grid;                -- field -> cell
 SELECT utc_time, temperature FROM fup.weather_hourly
- WHERE grid_id = '<id>' AND utc_time BETWEEN '<od>' AND '<do>' ORDER BY 1;   -- szereg dla komórki
+ WHERE grid_id = '<id>' AND utc_time BETWEEN '<from>' AND '<to>' ORDER BY 1;   -- series for a cell
 ```
 
-## Serwer (VM na GCP)
+## Server (VM on GCP)
 
-Maszynę z bazą stawia i obsługuje [`../scripts/provision_vm.sh`](../scripts/provision_vm.sh) (wymaga `gcloud`
-i konfiguracji z kontem oraz projektem, domyślnie `geoearth`):
+The machine with the database is created and operated by [`../scripts/provision_vm.sh`](../scripts/provision_vm.sh)
+(requires `gcloud` and a configuration with an account and a project, `geoearth` by default):
 
 ```bash
-scripts/provision_vm.sh create     # utworzenie VM (płatne, pyta o potwierdzenie; DRY_RUN=1 tylko wypisuje komendy)
-scripts/provision_vm.sh setup      # Docker, klon repo, .env z losowym hasłem, start PostGIS
-scripts/provision_vm.sh tunnel     # tunel SSH: localhost:5433 -> baza na VM
+scripts/provision_vm.sh create     # create the VM (billable, asks for confirmation; DRY_RUN=1 only prints the commands)
+scripts/provision_vm.sh setup      # Docker, repo clone, .env with a random password, start PostGIS
+scripts/provision_vm.sh tunnel     # SSH tunnel: localhost:5433 -> database on the VM
 scripts/provision_vm.sh status|start|stop
 ```
 
-- Port bazy (5432) **nie jest** otwarty w zaporze GCP; dostęp tylko tunelem SSH.
-- Hasło bazy jest losowane na VM i zostaje w `.env` na VM (nie trafia do repo ani na ekran).
-- `setup` klonuje gałąź `BRANCH` (domyślnie `team/geoearth-junction`), więc `docker/initdb/` musi już w niej być.
-- Dane przenosimy dumpem (patrz niżej) zamiast ładować od zera.
+- The database port (5432) is **not** open in the GCP firewall; access only through an SSH tunnel.
+- The database password is generated on the VM and stays in `.env` there (it does not go into the repo or onto the screen).
+- `setup` clones branch `BRANCH` (default `team/geoearth-junction`), so `docker/initdb/` must already be in it.
+- Data is moved with a dump (see below) instead of loading from scratch.
+- How to log in, start and stop the machine, SSH in and use the tunnel: [`VM.md`](VM.md).
 
-## Reset i kopia
+## Reset and backup
 
 ```bash
-# Reset (KASUJE dane w bazie); wymagany po zmianie initdb/
+# Reset (DELETES the data in the database); required after changing initdb/
 docker compose --env-file .env -f docker/docker-compose.yml down -v
 
-# Kopia i odtworzenie (np. przeniesienie na serwer zamiast ponownego ładowania)
+# Backup and restore (e.g. moving to a server instead of loading again)
 docker exec spatial_postgis pg_dump -U "$POSTGRES_USER" -Fc "$POSTGRES_DB" > fup.dump
 docker exec -i spatial_postgis pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists < fup.dump
 ```

@@ -45,12 +45,23 @@ Repozytorium zorganizowane jest w architekturze modułowej. Każdy podkatalog po
 
 ---
 
+## 🌐 Language: English
+
+All new and edited project text is written in **English**: documentation, code comments, docstrings, SQL and shell
+comments, script messages, issues, commit messages and pull requests. This also applies to AI agents.
+
+* When you edit an existing file that is still in Polish, write the new or changed parts in English. Do not translate
+  the rest of the file as a side effect of another task (keep the diff minimal).
+* Names of Polish institutions, registers, places and legal terms stay in their original form.
+
+---
+
 ## 📋 Standard Pracy z Kodem dla Agenta AI
 
 Zanim zgłosisz człowiekowi ukończenie zadania, upewnij się, że:
 1. **Kod działa i nie powoduje błędów składniowych (`SyntaxError`) ani importu (`ImportError`).**
 2. **Nie złamano konwencji nazewnictwa i konwencji commitów opisanej w [`CONTRIBUTING.md`](CONTRIBUTING.md).**
-3. **Wszystkie nowe funkcje posiadają type hints oraz zwięzłe docstringi w języku polskim.**
+3. **Wszystkie nowe funkcje posiadają type hints oraz zwięzłe docstringi w języku angielskim.**
 4. **Wszelkie ścieżki do plików są relatywne lub tworzone za pomocą `os.path.join()`, aby zachować pełną niezależność od systemu operacyjnego (Windows, macOS, Linux).**
 
 ---
