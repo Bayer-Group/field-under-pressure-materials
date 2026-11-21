@@ -54,9 +54,10 @@ WANTED = {
     "Annotation Enzyme Commission": "ec.tsv",
     "Annotation Statistics": "annotation_stats.tsv",
     "QC Statistics": "qc_filterStats.txt",
+    "Gene Phylogeny tsv": "gene_phylogeny.tsv",   # closest reference lineage per annotated gene (up to ~0.5 GB)
 }
 
-# --types keys -> data_object_type (EC / Centrifuge are selectable but off by default)
+# --types keys -> data_object_type (EC / Centrifuge / gene phylogeny are selectable but off by default)
 TYPE_KEYS = {
     "kraken2": "Kraken2 Classification Report",
     "gottcha2": "GOTTCHA2 Report Full",
@@ -65,6 +66,7 @@ TYPE_KEYS = {
     "ec": "Annotation Enzyme Commission",
     "annotation_stats": "Annotation Statistics",
     "qc": "QC Statistics",
+    "gene_phylogeny": "Gene Phylogeny tsv",
 }
 DEFAULT_TYPES = ["kraken2", "gottcha2", "ko", "annotation_stats", "qc"]
 

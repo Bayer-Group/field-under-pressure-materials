@@ -86,6 +86,8 @@ Pipeline order (what produces what):
 | Microbe roles: export | `scripts/17_export_microbe_taxa.py` (offline, after 02b and 05) | `data/processed/microbe_taxa.csv` (2,358 genera: 1,095 bacteria, 96 archaea, 1,167 fungi) |
 | Microbe roles: annotation | Manual step: LLM agents write the chunks by hand, following `rules/microbe_annotation_prompt.md` (no script) | `data/annotation_chunks/` (gitignored) |
 | Microbe roles: merge | `scripts/18_merge_microbe_annotations.py` (offline, after the chunks exist) | Validates the chunks and `review_*` overrides, merges them into `rules/microbe_annotations.csv` and `rules/microbe_genera.csv`, prints coverage and the blind agreement with FUNGuild (saved to `data/processed/microbe_roles_agreement_blind.csv`) |
+| KEGG modules | `scripts/19_build_kegg_modules.py` (network once for KEGG REST, cached; then offline, after 05) | `kegg_modules`, `kegg_module_completeness` (see 3.15) |
+| Who carries which function | `scripts/20_build_gene_taxa.py` (offline; needs the NMDC gene phylogeny files, see 3.15) | `ko_taxa` (see 3.15) |
 
 Note: `03_build_plots.py` takes its plots from the event registry (the 29 plots that were actually sampled). `04_build_fields.py` still carries the two windows of `config/regions.yaml`. The site list is defined once, as the keys of `windows` in `config/regions.yaml` (`config.sites()`); only the standalone NMDC pull script has its own `--sites` default.
 
@@ -495,6 +497,19 @@ For a quick start (or a small laptop), switch light mode on **before** downloadi
   - `GET /api/microbiome/{sample_id}/roles`: the Roles view (`RoleComposition`).
   - `Taxon.description`: hover text at genus rank in the composition.
   - `/api/functions/{id}`: gains `carriers` ("who may carry it by name", per gene-backed role, with an agreement status) and a `bacteria_pathogens` card.
+
+### 3.15 KEGG modules and who carries which function (all KEGG genes, not only the panel)
+
+- **Why:** `ko_panel` keeps 41 hand-picked KOs; a deep metagenome has about 6,000 distinct KOs (STER 2022: median 6,174 per metagenome, 8,205 over the site-year). These two tables use all of them.
+- **KEGG modules** (`src/cropfit/kegg.py`, `scripts/19_build_kegg_modules.py`): 583 module definitions and the BRITE hierarchy `br:ko00002` from KEGG REST (free for academic use; cached in `data/cache/kegg/`). Each DEFINITION is parsed (space = step, `,` = alternative, `+` = complex member, `-` = optional member, `--` = step without a KO, `Mxxxxx` = another module) and scored per metagenome: completeness = steps with at least one KO copy / steps.
+  - `kegg_modules.parquet`: `module, name, class_a, class_b, class_c, definition, n_steps`.
+  - `kegg_module_completeness.parquet` (33,814 rows, 58 metagenomes): `metagenome_key, module, steps_found, n_steps, completeness, missing_steps, via_alias`.
+  - Measured: deep STER 2022 metagenomes have a median of 197 complete modules; shallow ones 5-85, mostly a depth effect (check `metagenomes.ko_depth_ok`).
+  - **KEGG renumbering:** NMDC annotated with the old K10944 "pmoA-amoA"; current KEGG uses K10944 for methane monooxygenase and K28504 for ammonia monooxygenase (`M00528`, `M00804`). `kegg.KO_ALIASES` lets K10944 satisfy K28504 and `via_alias` flags it; use `ko_taxa` to tell the two apart.
+- **Gene phylogeny** (NMDC "Gene Phylogeny tsv", one per annotation run, same gene IDs as `ko.tsv`): closest reference genome, its lineage and % protein identity for every annotated gene. 58 files, 2.6 GB (deep 2022 files up to ~0.5 GB each). Download with `scripts/pull_nmdc_cropland.py --types kraken2 gottcha2 ko annotation_stats qc gene_phylogeny` (**keep the default types in the list**: `nmdc.object_paths()` only sees the types selected in the last pull).
+  - `ko_taxa.parquet` (`src/cropfit/gene_taxa.py`, `scripts/20_build_gene_taxa.py`; 2.3 M rows, 58 metagenomes, ~1.5 min): `metagenome_key, ko, domain, phylum, class, order, family, genus, n_genes, identity_median`.
+  - **Read the lineage as the closest known relative**, not the organism: median identity is ~70 %, so phylum or class is reliable and genus is a hint unless identity is high (e.g. nosZ matched to *Bradyrhizobium* at 97 %).
+  - Example (STER_006, 2022): about 75 % of K10944 copies match ammonia-oxidising archaea (*Nitrososphaerota*, ~97 % identity) or *Nitrosomonadaceae*; the rest are actinobacterial monooxygenases (~72 %): mostly true nitrifiers.
 
 ## 4. Quick recipes
 
