@@ -207,6 +207,8 @@
     let suggestionTimer = null;
     let searchVersion = 0;
     let drawerResizeAnimation = null;
+    let previewParcel = null;
+    let previewRequest = 0;
     /** Animate between measured panel heights without showing temporary scrollbars. */
     function animateDrawerResize(previousHeight) {
       if (drawerResizeAnimation) { drawerResizeAnimation.cancel(); drawerResizeAnimation = null; }
@@ -249,13 +251,36 @@
     function showMapGuide() { mapGuide.classList.add('visible'); mapGuide.setAttribute('aria-hidden', 'false'); }
     /** Dismiss the map-selection hint and remove it from the accessibility tree. */
     function hideMapGuide() { mapGuide.classList.remove('visible'); mapGuide.setAttribute('aria-hidden', 'true'); }
-    drawerToggle.addEventListener('click', () => { hideMapGuide(); setDrawer(sheet.classList.contains('collapsed')); });
+    drawerToggle.addEventListener('click', () => { hideMapGuide(); setDrawer(sheet.classList.contains('collapsed')); if (previewParcel) fitParcelPreview(previewParcel); });
     searchBackdrop.addEventListener('click', () => setSearch(false));
     document.addEventListener('keydown', event => { if (event.key === 'Escape' && topControls.classList.contains('searching')) setSearch(false); });
     const map = new maplibregl.Map({
       container: 'map', center: [20.773, 52.175], zoom: 12.8,
       style: { version: 8, sources: { osm: { type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256, attribution: '&copy; OpenStreetMap contributors' } }, layers: [{ id: 'osm', type: 'raster', source: 'osm' }] }
     });
+    /** Fit the complete geometry in the visible map area after the drawer finishes resizing. */
+    async function fitParcelPreview(parcel) {
+      const request = ++previewRequest;
+      while (drawerResizeAnimation) {
+        const animation = drawerResizeAnimation;
+        try { await animation.finished; } catch (_) { /* The next resize replaces an interrupted animation. */ }
+        if (request !== previewRequest) return;
+        if (drawerResizeAnimation === animation) break;
+      }
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      if (request !== previewRequest || !selected.has(parcel.parcel_id)) return;
+      const bounds = new maplibregl.LngLatBounds();
+      const polygons = parcel.geometry.type === 'MultiPolygon' ? parcel.geometry.coordinates : [parcel.geometry.coordinates];
+      polygons.forEach(polygon => polygon[0].forEach(point => bounds.extend(point)));
+      const mapRect = map.getContainer().getBoundingClientRect();
+      const drawerRect = sheet.getBoundingClientRect();
+      const mobile = window.matchMedia('(max-width: 719px)').matches;
+      const padding = { top: 85, right: 24, bottom: 24, left: 24 };
+      if (mobile) padding.bottom = Math.max(24, mapRect.bottom - Math.max(mapRect.top, drawerRect.top) + 20);
+      else if (drawerRect.right > mapRect.left && drawerRect.left < mapRect.right) padding.left = Math.max(24, drawerRect.right - mapRect.left + 20);
+      map.fitBounds(bounds, { padding, maxZoom: 15, duration: 450 });
+    }
+    map.on('dragstart', event => { if (event.originalEvent) { previewParcel = null; previewRequest++; } });
     /** Render the selected parcels and their removable labels. */
     function renderSelection() {
       const previousHeight = sheet.getBoundingClientRect().height;
@@ -282,7 +307,7 @@
         button.append(name, id); button.addEventListener('click', () => showParcelDetails(parcel, { focus: true }));
         const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'parcel-remove'; remove.textContent = '×';
         remove.setAttribute('aria-label', `Usuń działkę ${parcel.parcel_number}, ${parcel.locality || ''}`);
-        remove.addEventListener('click', () => { selected.delete(parcel.parcel_id); if (popupParcelId === parcel.parcel_id && parcelPopup) parcelPopup.remove(); renderSelection(); });
+        remove.addEventListener('click', () => { selected.delete(parcel.parcel_id); if (previewParcel?.parcel_id === parcel.parcel_id) { previewParcel = null; previewRequest++; } if (popupParcelId === parcel.parcel_id && parcelPopup) parcelPopup.remove(); renderSelection(); });
         row.append(button, remove); list.appendChild(row);
       });
       next.disabled = items.length === 0;
@@ -310,23 +335,19 @@
       parcelPopup.getElement().querySelector('.maplibregl-popup-close-button').setAttribute('aria-label', 'Zamknij szczegóły działki');
       parcelPopup.on('close', () => { popupParcelId = null; });
       if (options.focus) {
-        const mobile = window.matchMedia('(max-width: 719px)').matches;
-        if (mobile) setDrawer(false);
-        map.easeTo({ center, offset: mobile ? [0, -40] : [180, 0], duration: 450 });
+        previewParcel = parcel;
+        fitParcelPreview(parcel);
       }
     }
     /** Add a selected result without claiming ownership. */
     function selectParcel(parcel, options = {}) {
       if (options.toggle && selected.has(parcel.parcel_id)) {
-        selected.delete(parcel.parcel_id); if (popupParcelId === parcel.parcel_id && parcelPopup) parcelPopup.remove(); status.textContent = 'Działka odznaczona.'; renderSelection(); return;
+        selected.delete(parcel.parcel_id); if (previewParcel?.parcel_id === parcel.parcel_id) { previewParcel = null; previewRequest++; } if (popupParcelId === parcel.parcel_id && parcelPopup) parcelPopup.remove(); status.textContent = 'Działka odznaczona.'; renderSelection(); return;
       }
       selected.set(parcel.parcel_id, parcel); results.classList.remove('visible'); status.textContent = ''; renderSelection();
       if (!options.focus) return;
-      const bounds = parcel.geometry.coordinates[0].reduce((box, point) => box.extend(point), new maplibregl.LngLatBounds());
-      const panel = document.querySelector('.sheet');
-      const mobile = window.matchMedia('(max-width: 719px)').matches;
-      const bottom = mobile ? Math.min(panel.offsetHeight + 20, Math.max(20, map.getContainer().clientHeight - 140)) : 40;
-      map.fitBounds(bounds, { padding: { top: 100, bottom, left: mobile ? 35 : 430, right: 35 }, maxZoom: 15, duration: 450 });
+      previewParcel = parcel;
+      fitParcelPreview(parcel);
     }
     /** Add a human-readable parcel suggestion with the cadastral ID as secondary detail. */
     function addParcelSuggestion(parcel, options = {}) {
@@ -406,7 +427,26 @@
       } catch (_) { if (version !== searchVersion) return; results.replaceChildren(); const hint = document.createElement('div'); hint.className = 'results-hint'; hint.textContent = 'Nie można wyszukać działki. Spróbuj ponownie.'; results.appendChild(hint); results.classList.add('visible'); }
     }
     new ResizeObserver(() => document.documentElement.style.setProperty('--drawer-height', `${sheet.offsetHeight}px`)).observe(sheet);
-    map.addControl(new maplibregl.NavigationControl({ showZoom: false, showCompass: true }), 'top-right');
+    let compassNorthSelected = false;
+    const compassControl = {
+      onAdd(mapInstance) {
+        this.element = document.createElement('div'); this.element.className = 'maplibregl-ctrl maplibregl-ctrl-group';
+        const button = document.createElement('button'); button.type = 'button'; button.className = 'maplibregl-ctrl-compass';
+        button.setAttribute('aria-label', 'Ustaw północ; naciśnij ponownie, aby spojrzeć z góry');
+        button.title = 'Ustaw północ i widok z góry';
+        const icon = document.createElement('span'); icon.className = 'maplibregl-ctrl-icon'; icon.setAttribute('aria-hidden', 'true'); button.appendChild(icon);
+        button.addEventListener('click', () => {
+          if (compassNorthSelected) { compassNorthSelected = false; mapInstance.easeTo({ bearing: 0, pitch: 0, duration: 400 }); }
+          else { compassNorthSelected = true; mapInstance.resetNorth({ duration: 400 }); }
+        });
+        mapInstance.on('rotate', () => { icon.style.transform = `rotate(${-mapInstance.getBearing()}deg)`; });
+        mapInstance.on('rotatestart', event => { if (event.originalEvent) compassNorthSelected = false; });
+        mapInstance.on('pitchstart', event => { if (event.originalEvent) compassNorthSelected = false; });
+        this.element.appendChild(button); return this.element;
+      },
+      onRemove() { this.element.remove(); }
+    };
+    map.addControl(compassControl, 'top-right');
     map.on('load', async () => {
       const selectionColor = getComputedStyle(document.documentElement).getPropertyValue('--green').trim();
       map.addSource('selected-parcels', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
