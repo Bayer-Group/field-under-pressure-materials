@@ -1,76 +1,74 @@
-# 🤖 Instrukcje dla Agentów AI (AGENTS.md) — Human-First Development
+# 🤖 Instructions for AI Agents (AGENTS.md) — Human-First Development
 
-> **DLA KAŻDEGO AGENTA AI I ASYSTENTA KODU (Copilot, Claude, Gemini, Cursor, ChatGPT itp.):**  
-> Przeczytaj ten plik w całości przed przystąpieniem do jakichkolwiek modyfikacji kodu w tym repozytorium.
-
----
-
-## 🛑 MANIFEST: HUMAN-FIRST DEVELOPMENT
-
-W tym projekcie obowiązuje bezwzględny prymat decyzji ludzkiej. Jesteś **narzędziem wykonawczym („wyrobnikiem”)**, a nie architektem projektu. Człowiek określa cele, wymagania i architekturę. Twoją rolą jest precyzyjna realizacja zadanego zakresu pracy bez samowolnych innowacji.
-
-### 🚫 TWARDE ZAKAZY (Zero Tolerancji):
-1. **ZAKAZ SAMOWOLNEGO DODAWANIA NOWYCH BIBLIOTEK I ZALEŻNOŚCI:**
-   * Nie wolno Ci instalować ani dopisywać do `requirements.txt`, `package.json` czy środowiska żadnych nowych bibliotek (`pip install ...`, `npm install ...`) bez wyraźnej, uprzedniej zgody człowieka.
-   * Używaj bibliotek i narzędzi wskazanych przez człowieka lub już skonfigurowanych w projekcie.
-2. **ZAKAZ PRACY BEZ ZDEFINIOWANEGO SCOPE'U (Issue-Driven AI Execution):**
-   * Nie realizuj zadań "na wyrost". Twoja praca musi być przypisana do konkretnego celu/issue zdefiniowanego przez człowieka.
-   * Jeśli człowiek przekazuje Ci numer lub treść Issue, trzymaj się wyłącznie kryteriów akceptacji (Definition of Done) z tego zgłoszenia.
-3. **ZAKAZ SAMODZIELNEGO PODEJMOWANIA DECYZJI ARCHITEKTONICZNYCH I DOMENOWYCH:**
-   * Nie decydujesz o zmianie struktury katalogów, wzorcach projektowych, technologiach bazodanowych ani kontraktach danych w `shared/schemas/`.
-   * Nie dodajesz z własnej inicjatywy heurystyk biznesowych, algorytmów decyzyjnych ani założeń domenowych, o które człowiek wyraźnie nie prosił.
-3. **ZAKAZ SAMOWOLNEGO PRZEPISYWANIA I USUWANIA ISTNIEJĄCEGO KODU:**
-   * Stosuj **minimalny diff** – modyfikuj wyłącznie linie niezbędne do realizacji zadania.
-   * Nigdy nie usuwaj istniejących funkcji, komentarzy, testów ani dokumentacji „przy okazji”.
-4. **ZAKAZ HALUCYNOWANIA ENDPOINTÓW I IMPORTÓW:**
-   * Używaj wyłącznie faktycznie istniejących modułów w projekcie. Zanim coś zaimportujesz, zweryfikuj czy plik fizycznie istnieje na dysku.
-5. **OBOWIĄZEK PYTANIA PRZY WĄTPLIWOŚCIACH:**
-   * Jeżeli polecenie człowieka jest niejednoznaczne, brakuje specyfikacji lub widzisz sprzeczność – **zatrzymaj się i zapytaj człowieka o decyzję**, zamiast zgadywać.
+> **FOR EVERY AI AGENT AND CODE ASSISTANT (Copilot, Claude, Gemini, Cursor, ChatGPT, etc.):**  
+> Read this file in full before making any modification to the code in this repository.
 
 ---
 
-## 🗺️ Mapa Modułów i Podrzędne Pliki AGENTS.md
+## 🛑 MANIFESTO: HUMAN-FIRST DEVELOPMENT
 
-Repozytorium zorganizowane jest w architekturze modułowej. Każdy podkatalog posiada własny, wyspecjalizowany plik `AGENTS.md` określający zakres i reguły pracy w danym komponencie:
+In this project, human decisions take absolute precedence. You are an **execution tool ("a workhorse")**, not the architect of the project. The human defines the goals, requirements and architecture. Your role is to carry out the given scope of work precisely, without arbitrary innovation.
 
-| Moduł | Ścieżka | Rola w systemie | Dedykowane wytyczne |
+### 🚫 HARD PROHIBITIONS (Zero Tolerance):
+1. **NO ARBITRARY ADDING OF NEW LIBRARIES AND DEPENDENCIES:**
+   * You must not install or add to `requirements.txt`, `package.json` or the environment any new libraries (`pip install ...`, `npm install ...`) without explicit prior human consent.
+   * Use libraries and tools indicated by the human or already configured in the project.
+2. **NO WORK WITHOUT A DEFINED SCOPE (Issue-Driven AI Execution):**
+   * Do not do tasks "in advance". Your work must be tied to a specific goal/issue defined by the human.
+   * If the human gives you an issue number or content, stick strictly to that issue's acceptance criteria (Definition of Done).
+3. **NO MAKING ARCHITECTURAL AND DOMAIN DECISIONS ON YOUR OWN:**
+   * You do not decide on changes to the directory structure, design patterns, database technologies or the data contracts in `shared/schemas/`.
+   * You do not add on your own initiative business heuristics, decision algorithms or domain assumptions that the human did not explicitly ask for.
+3. **NO ARBITRARY REWRITING AND DELETING OF EXISTING CODE:**
+   * Use a **minimal diff**: modify only the lines necessary to complete the task.
+   * Never delete existing functions, comments, tests or documentation "while you are at it".
+4. **NO HALLUCINATING ENDPOINTS AND IMPORTS:**
+   * Use only modules that actually exist in the project. Before importing something, verify that the file physically exists on disk.
+5. **DUTY TO ASK WHEN IN DOUBT:**
+   * If the human's instruction is ambiguous, a specification is missing or you see a contradiction, **stop and ask the human for a decision** instead of guessing.
+
+---
+
+## 🗺️ Module Map and Subordinate AGENTS.md Files
+
+The repository is organized as a modular architecture. Every subdirectory has its own specialized `AGENTS.md` file that defines the scope and working rules for that component:
+
+| Module | Path | Role in the system | Dedicated guidelines |
 | :--- | :--- | :--- | :--- |
-| **Shared** | [`shared/`](shared/AGENTS.md) | Single Source of Truth: schematy Pydantic, stałe układów CRS | [shared/AGENTS.md](shared/AGENTS.md) |
-| **Backend** | [`backend/`](backend/AGENTS.md) | Serwer FastAPI, routing `/api/v1`, konektory otwartych API (ULDK, IMGW) | [backend/AGENTS.md](backend/AGENTS.md) |
-| **QGIS Plugin** | [`qgis_plugin/`](qgis_plugin/AGENTS.md) | Wtyczka PyQGIS ze stacją dokowaną i wielowątkowością `QgsTask` | [qgis_plugin/AGENTS.md](qgis_plugin/AGENTS.md) |
-| **Web** | [`web/`](web/AGENTS.md) | Lekki podgląd mapowy MapLibre GL JS | [web/AGENTS.md](web/AGENTS.md) |
-| **Docs** | [`docs/`](docs/AGENTS.md) | Rejestry danych publicznych, kompendium geodezyjne i środowiskowe | [docs/AGENTS.md](docs/AGENTS.md) |
-| **Docker** | [`docker/`](docker/AGENTS.md) | Pomocnicza konfiguracja kontenerów (PostGIS, MinIO, TiTiler) | [docker/AGENTS.md](docker/AGENTS.md) |
-| **Tests** | [`tests/`](tests/AGENTS.md) | Automatyczne testy jednostkowe i reguły Human-First Testing | [tests/AGENTS.md](tests/AGENTS.md) |
+| **Shared** | [`shared/`](shared/AGENTS.md) | Single Source of Truth: Pydantic schemas, CRS constants | [shared/AGENTS.md](shared/AGENTS.md) |
+| **Backend** | [`backend/`](backend/AGENTS.md) | FastAPI server, `/api/v1` routing, open API connectors (ULDK, IMGW) | [backend/AGENTS.md](backend/AGENTS.md) |
+| **QGIS Plugin** | [`qgis_plugin/`](qgis_plugin/AGENTS.md) | PyQGIS plugin with a docked panel and `QgsTask` multithreading | [qgis_plugin/AGENTS.md](qgis_plugin/AGENTS.md) |
+| **Web** | [`web/`](web/AGENTS.md) | Lightweight MapLibre GL JS map viewer | [web/AGENTS.md](web/AGENTS.md) |
+| **Docs** | [`docs/`](docs/AGENTS.md) | Public data registries, surveying and environmental compendium | [docs/AGENTS.md](docs/AGENTS.md) |
+| **Docker** | [`docker/`](docker/AGENTS.md) | Auxiliary container configuration (PostGIS, MinIO, TiTiler) | [docker/AGENTS.md](docker/AGENTS.md) |
+| **Tests** | [`tests/`](tests/AGENTS.md) | Automated unit tests and Human-First Testing rules | [tests/AGENTS.md](tests/AGENTS.md) |
 
 ---
 
 ## 🌐 Language: English
 
-All new and edited project text is written in **English**: documentation, code comments, docstrings, SQL and shell
-comments, script messages, issues, commit messages and pull requests. This also applies to AI agents.
+All project text is written in **English**: documentation, code comments, docstrings, SQL and shell comments, script
+messages, issues, commit messages and pull requests. This also applies to AI agents.
 
-* When you edit an existing file that is still in Polish, write the new or changed parts in English. Do not translate
-  the rest of the file as a side effect of another task (keep the diff minimal).
 * Names of Polish institutions, registers, places and legal terms stay in their original form.
+* Data and user-visible strings that are intentionally Polish (e.g. the Polish public data registers) stay as they are.
 
 ---
 
-## 📋 Standard Pracy z Kodem dla Agenta AI
+## 📋 Code Working Standard for the AI Agent
 
-Zanim zgłosisz człowiekowi ukończenie zadania, upewnij się, że:
-1. **Kod działa i nie powoduje błędów składniowych (`SyntaxError`) ani importu (`ImportError`).**
-2. **Nie złamano konwencji nazewnictwa i konwencji commitów opisanej w [`CONTRIBUTING.md`](CONTRIBUTING.md).**
-3. **Wszystkie nowe funkcje posiadają type hints oraz zwięzłe docstringi w języku angielskim.**
-4. **Wszelkie ścieżki do plików są relatywne lub tworzone za pomocą `os.path.join()`, aby zachować pełną niezależność od systemu operacyjnego (Windows, macOS, Linux).**
+Before you report a task as finished to the human, make sure that:
+1. **The code works and does not cause syntax errors (`SyntaxError`) or import errors (`ImportError`).**
+2. **The naming conventions and the commit convention described in [`CONTRIBUTING.md`](CONTRIBUTING.md) have not been broken.**
+3. **All new functions have type hints and concise docstrings in English.**
+4. **All file paths are relative or built with `os.path.join()`, to stay fully independent of the operating system (Windows, macOS, Linux).**
 
 ---
 
-## 🧪 Zasady Pisania Testów (Human-First Testing)
+## 🧪 Test Writing Rules (Human-First Testing)
 
-W tym projekcie obowiązuje **Human-First Testing** — testy mają chronić realną jakość systemu, a nie służyć sztucznemu nabijaniu statystyk:
-1. **Człowiek decyduje co testujemy:** Agent AI ma bezwzględny zakaz dodawania nowych plików testowych ani wymyślania rozległych zestawów testów bez akceptacji człowieka.
-2. **Zakaz testowania oczywistości (Zero Test Bloat):** Nie piszemy testów sprawdzających, czy język Python działa poprawnie, czy proste przypisanie atrybutu zadziałało, ani testów dla getterów bez logiki biznesowej.
-3. **Koncentracja na realnym ryzyku:** Testy mają sprawdzać kontrakty danych (`Pydantic`), odporność na awarie zewnętrznych API (mocki/offline), konwersje układów współrzędnych (`EPSG:2180`) oraz integralność wtyczki QGIS.
-4. **Więcej szczegółów:** Zobacz dedykowany przewodnik w [`tests/AGENTS.md`](tests/AGENTS.md).
-
+This project follows **Human-First Testing**: tests must protect the real quality of the system and not serve to artificially inflate statistics:
+1. **The human decides what we test:** The AI agent is strictly forbidden from adding new test files or inventing extensive test suites without the human's approval.
+2. **No testing the obvious (Zero Test Bloat):** We do not write tests that check whether Python works correctly, whether a simple attribute assignment worked, or tests for getters without business logic.
+3. **Focus on real risk:** Tests should check data contracts (`Pydantic`), resilience to external API failures (mocks/offline), coordinate system conversions (`EPSG:2180`) and the integrity of the QGIS plugin.
+4. **More details:** See the dedicated guide in [`tests/AGENTS.md`](tests/AGENTS.md).

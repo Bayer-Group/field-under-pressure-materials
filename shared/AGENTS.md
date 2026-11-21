@@ -1,39 +1,39 @@
-# 🤖 Instrukcje dla Agenta AI: Moduł Współdzielony (`shared/`)
+# 🤖 AI Agent Instructions: Shared Module (`shared/`)
 
-> Przed edycją plików w tym folderze zapoznaj się z nadrzędnym plikiem [`/AGENTS.md`](../AGENTS.md) oraz [`/CONTRIBUTING.md`](../CONTRIBUTING.md).
-
----
-
-## 🎯 Zakres i Rola Modułu (`Scope`)
-Katalog `shared/` to **Single Source of Truth (Pojedyncze Źródło Prawdy)** dla całego repozytorium. Zawiera:
-1. Wspólne modele danych **Pydantic** (`schemas/geo_models.py`) używane jednocześnie przez:
-   * Backend FastAPI (jako walidatory zapytań i schematy odpowiedzi `response_model`),
-   * Wtyczkę QGIS (jako typy zwracane przez klienta API),
-   * Frontend Webowy (jako definicje struktur JSON).
-2. Stałe układów współrzędnych i definicje przestrzenne (`constants/poland_crs.py`).
+> Before editing files in this folder, read the parent [`/AGENTS.md`](../AGENTS.md) and [`/CONTRIBUTING.md`](../CONTRIBUTING.md).
 
 ---
 
-## 📂 Struktura Katalogu
+## 🎯 Module Scope and Role (`Scope`)
+The `shared/` directory is the **Single Source of Truth** for the whole repository. It contains:
+1. Common **Pydantic** data models (`schemas/geo_models.py`) used at the same time by:
+   * The FastAPI backend (as request validators and `response_model` response schemas),
+   * The QGIS plugin (as types returned by the API client),
+   * The web frontend (as definitions of JSON structures).
+2. Coordinate system constants and spatial definitions (`constants/poland_crs.py`).
+
+---
+
+## 📂 Directory Structure
 ```text
 shared/
 ├── constants/
-│   ├── poland_crs.py       # Kody EPSG (2180, 4326, 3857) i BBOX Polski
+│   ├── poland_crs.py       # EPSG codes (2180, 4326, 3857) and the BBOX of Poland
 │   └── __init__.py
 └── schemas/
-    ├── geo_models.py       # Modele: GeoFeatureRequest, SpatialMetric, GeoAnalysisResponse
+    ├── geo_models.py       # Models: GeoFeatureRequest, SpatialMetric, GeoAnalysisResponse
     └── __init__.py
 ```
 
 ---
 
-## 🛑 Zasady Specyficzne dla Shared (`Twarde Reguły`)
+## 🛑 Shared-Specific Rules (`Hard Rules`)
 
-1. **BEZWZGLĘDNY ZAKAZ SAMOWOLNEJ ZMIANY KONTRAKTÓW:**
-   * Modyfikacja pól w `geo_models.py` natychmiast wpływa na backend, wtyczkę QGIS i frontend.
-   * **Nie wolno Ci dodać, usunąć ani zmienić nazwy żadnego pola** w modelach Pydantic bez jednoznacznego polecenia człowieka.
-2. **Czystość zależności:**
-   * Moduł `shared/` musi być całkowicie niezależny od środowiska QGIS (`qgis.core`) oraz od frameworka FastAPI.
-   * Może korzystać wyłącznie ze standardowych bibliotek Pythona oraz `pydantic`.
-3. **Kompatybilność wsteczna:**
-   * Wszystkie nowe pola opcjonalne w modelach Pydantic muszą posiadać wartości domyślne (`= None`, `= {}`, `= []`), aby nie powodować błędów deserializacji w innych komponentach.
+1. **ABSOLUTE BAN ON ARBITRARY CHANGES TO CONTRACTS:**
+   * Modifying fields in `geo_models.py` immediately affects the backend, the QGIS plugin and the frontend.
+   * **You must not add, remove or rename any field** in the Pydantic models without an unambiguous human instruction.
+2. **Dependency cleanliness:**
+   * The `shared/` module must be completely independent of the QGIS environment (`qgis.core`) and of the FastAPI framework.
+   * It may use only the Python standard library and `pydantic`.
+3. **Backward compatibility:**
+   * All new optional fields in Pydantic models must have default values (`= None`, `= {}`, `= []`), so they do not cause deserialization errors in other components.

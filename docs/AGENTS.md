@@ -1,33 +1,33 @@
-# 🤖 Instrukcje dla Agenta AI: Moduł Dokumentacji (`docs/`)
+# 🤖 AI Agent Instructions: Documentation Module (`docs/`)
 
-> Przed edycją plików w tym folderze zapoznaj się z nadrzędnym plikiem [`/AGENTS.md`](../AGENTS.md) oraz [`/CONTRIBUTING.md`](../CONTRIBUTING.md).
-
----
-
-## 🎯 Zakres i Rola Modułu (`Scope`)
-Katalog `docs/` stanowi centralną bazę wiedzy geoprzestrzennej projektu. Zawiera:
-1. Rejestr otwartych polskich i europejskich usług danych przestrzennych (WMS, WFS, WCS, STAC API, REST).
-2. Taryfikatory i opisy techniczne państwowych zbiorów danych (GUGiK, IMGW, IUNG, GIOŚ, PIG, Copernicus).
-3. Instrukcje techniczne i specyfikacje integracyjne.
+> Before editing files in this folder, read the parent [`/AGENTS.md`](../AGENTS.md) and [`/CONTRIBUTING.md`](../CONTRIBUTING.md).
 
 ---
 
-## 📂 Struktura Katalogu
+## 🎯 Module Scope and Role (`Scope`)
+The `docs/` directory is the central geospatial knowledge base of the project. It contains:
+1. A register of open Polish and European spatial data services (WMS, WFS, WCS, STAC API, REST).
+2. Catalogues and technical descriptions of national datasets (GUGiK, IMGW, IUNG, GIOŚ, PIG, Copernicus).
+3. Technical instructions and integration specifications.
+
+---
+
+## 📂 Directory Structure
 ```text
 docs/
-├── polskie_rejestry_publiczne_gis.csv   # Tabela ze źródłami, formatami i adresami URL (46 usług)
-└── polskie_rejestry_publiczne_gis.md    # Szczegółowy opis z podziałem na kategorie
+├── polskie_rejestry_publiczne_gis.csv   # Table with sources, formats and URLs (46 services)
+└── polskie_rejestry_publiczne_gis.md    # Detailed description divided into categories
 ```
 
 ---
 
-## 🛑 Zasady Specyficzne dla Dokumentacji (`Twarde Reguły`)
+## 🛑 Documentation-Specific Rules (`Hard Rules`)
 
-1. **Zasada spójności dwukierunkowej:**
-   * Każda zmiana lub dodanie nowego źródła danych **musi** zostać odzwierciedlona w obu plikach naraz:
-     * W pliku maszynowym `polskie_rejestry_publiczne_gis.csv` (rozdzielnik: średnik `;`),
-     * W pliku czytelnym dla człowieka `polskie_rejestry_publiczne_gis.md` (tabela Markdown).
-2. **Neutralność technologiczna:**
-   * Utrzymuj neutralny, ogólnogeograficzny i inżynieryjny charakter opisów jako uniwersalnej bazy wiedzy GIS.
-3. **Prawdziwość linków:**
-   * Dodawaj wyłącznie zweryfikowane, oficjalne adresy państwowe i unijne (domeny `.gov.pl`, `.imgw.pl`, `.europa.eu`).
+1. **Two-way consistency rule:**
+   * Every change or addition of a new data source **must** be reflected in both files at the same time:
+     * In the machine-readable file `polskie_rejestry_publiczne_gis.csv` (delimiter: semicolon `;`),
+     * In the human-readable file `polskie_rejestry_publiczne_gis.md` (Markdown table).
+2. **Technological neutrality:**
+   * Keep the descriptions neutral, general-geographic and engineering in character, as a universal GIS knowledge base.
+3. **Truthfulness of links:**
+   * Add only verified, official national and EU addresses (domains `.gov.pl`, `.imgw.pl`, `.europa.eu`).

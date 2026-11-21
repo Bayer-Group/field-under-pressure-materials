@@ -1,126 +1,126 @@
-# 🗺️ Rejestr Polskich i Europejskich Publicznych Danych Przestrzennych (GIS)
+# 🗺️ Register of Polish and European Public Spatial Data (GIS)
 
-> Kompletne repozytorium wiedzy o oficjalnych, otwartych rejestrach państwowych, usługach sieciowych (WMS, WFS, WCS, REST API) oraz źródłach teledetekcyjnych przydatnych w zaawansowanych analizach przestrzennych, środowiskowych, infrastrukturalnych i hydrologicznych w Polsce.  
-> Źródłowy plik tabelaryczny: [`polskie_rejestry_publiczne_gis.csv`](polskie_rejestry_publiczne_gis.csv).
-
----
-
-## 📑 Spis Treści i Kategorie Źródeł
-
-1. [Kataster, Granice Administracyjne i Ewidencja Gruntów](#1-kataster-granice-administracyjne-i-ewidencja-gruntów)
-2. [Numeryczne Modele Terenu, LiDAR i Fotogrametria](#2-numeryczne-modele-terenu-lidar-i-fotogrametria)
-3. [Topografia, Sieci i Infrastruktura](#3-topografia-sieci-i-infrastruktura)
-4. [Meteorologia, Klimat i Radary Pogodowe](#4-meteorologia-klimat-i-radary-pogodowe)
-5. [Wody, Hydrografia i Zagrożenie Powodziowe](#5-wody-hydrografia-i-zagrożenie-powodziowe)
-6. [Gleboznawstwo, Geologia i Ruchy Masowe Ziemi](#6-gleboznawstwo-geologia-i-ruchy-masowe-ziemi)
-7. [Ochrona Środowiska i Monitorowanie Jakości Powietrza](#7-ochrona-środowiska-i-monitorowanie-jakości-powietrza)
-8. [Teledetekcja Satelitarna (Copernicus & Landsat)](#8-teledetekcja-satelitarna)
-9. [Statystyka Społeczno-Gospodarcza (GUS BDL)](#9-statystyka-społeczno-gospodarcza)
+> A complete knowledge base of official, open national registers, network services (WMS, WFS, WCS, REST API) and remote sensing sources useful in advanced spatial, environmental, infrastructure and hydrological analyses in Poland.  
+> Source table file: [`polskie_rejestry_publiczne_gis.csv`](polskie_rejestry_publiczne_gis.csv).
 
 ---
 
-## 1. Kataster, Granice Administracyjne i Ewidencja Gruntów
+## 📑 Table of Contents and Source Categories
 
-| Rejestr / Usługa | Protokół & Format | Endpoint / Źródło | Zastosowanie w analizach GIS |
+1. [Cadastre, Administrative Boundaries and Land Records](#1-cadastre-administrative-boundaries-and-land-records)
+2. [Digital Terrain Models, LiDAR and Photogrammetry](#2-digital-terrain-models-lidar-and-photogrammetry)
+3. [Topography, Networks and Infrastructure](#3-topography-networks-and-infrastructure)
+4. [Meteorology, Climate and Weather Radars](#4-meteorology-climate-and-weather-radars)
+5. [Water, Hydrography and Flood Hazard](#5-water-hydrography-and-flood-hazard)
+6. [Soil Science, Geology and Mass Ground Movements](#6-soil-science-geology-and-mass-ground-movements)
+7. [Environmental Protection and Air Quality Monitoring](#7-environmental-protection-and-air-quality-monitoring)
+8. [Satellite Remote Sensing (Copernicus & Landsat)](#8-satellite-remote-sensing)
+9. [Socio-Economic Statistics (GUS BDL)](#9-socio-economic-statistics)
+
+---
+
+## 1. Cadastre, Administrative Boundaries and Land Records
+
+| Register / Service | Protocol & Format | Endpoint / Source | Use in GIS analyses |
 | :--- | :--- | :--- | :--- |
-| **ULDK GUGiK** *(Lokalizacja Działek Katastralnych)* | REST API (WKT, GeoJSON, GML) | `https://uldk.gugik.gov.pl/` | Błyskawiczne pobieranie geometrii i granic działek ewidencyjnych w układzie EPSG:2180 po identyfikatorze TERYT lub klikniętym punkcie XY. |
-| **KIEG** *(Krajowa Integracja Ewidencji Gruntów)* | WMS, WFS | `https://integracja.gugik.gov.pl/.../KrajowaIntegracjaEwidencjiGruntow` | Zagregowane granice działek, numery ewidencyjne, kontury klasyfikacyjne i użytki gruntowe ze wszystkich powiatów w Polsce. |
-| **PRG** *(Państwowy Rejestr Granic)* | WFS, GML, SHP, GeoPackage | `https://geoportal.gov.pl`, WFS GUGiK | Oficjalny podział terytorialny Polski: granice państwa, województw, powiatów, gmin i obrębów ewidencyjnych. |
-| **EMUiA** *(Adresy i Ulice)* | WMS, WFS, CSV | `https://integracja.gugik.gov.pl/.../KrajowaIntegracjaNumeracjiAdresowej` | Punktowa baza wszystkich numerów porządkowych adresów oraz osie ulic w Polsce (geokodowanie). |
-| **PRNG** *(Rejestr Nazw Geograficznych)* | GML, SHP, GeoPackage, CSV | `https://dane.gov.pl` | Standaryzowane nazwy miejscowości, rzek, jezior, pasm górskich i lasów. |
-| **BDOO** *(Baza Obiektów Ogólnogeograficznych)* | Shapefile, GeoPackage | `https://dane.gov.pl` | Wektorowa mapa ogólnogeograficzna w skali 1:250 000 dla obszaru całego kraju. |
-| **LPIS / Działki Referencyjne ARiMR** | WMS, WFS, SHP, GPKG | `https://geoportal.gov.pl`, `https://dane.gov.pl` | Granice bloków i działek referencyjnych w ewidencji gruntów i płatności powierzchniowych. |
-| **Corine Land Cover (CLC 2018/2024)** | GeoPackage, SHP, GeoTIFF | `https://clc.gios.gov.pl` | Europejska klasyfikacja pokrycia i użytkowania terenu (44 klasy) dla całej Polski. |
-| **Urban Atlas (Copernicus CLMS)** | Shapefile, GeoPackage | `https://land.copernicus.eu` | Wysokorozdzielcza klasyfikacja użytkowania gruntów dla miejskich obszarów funkcjonalnych (FUA). |
+| **ULDK GUGiK** *(Cadastral Parcel Location Service)* | REST API (WKT, GeoJSON, GML) | `https://uldk.gugik.gov.pl/` | Instant retrieval of cadastral parcel geometries and boundaries in EPSG:2180 by TERYT code or clicked XY point. |
+| **KIEG** *(National Integration of Land Records)* | WMS, WFS | `https://integracja.gugik.gov.pl/.../KrajowaIntegracjaEwidencjiGruntow` | Aggregated parcel boundaries, cadastral numbers, classification contours and land use types from all counties in Poland. |
+| **PRG** *(National Boundary Register)* | WFS, GML, SHP, GeoPackage | `https://geoportal.gov.pl`, WFS GUGiK | Official territorial division of Poland: boundaries of the country, voivodeships, counties, municipalities and cadastral districts. |
+| **EMUiA** *(Addresses and Streets)* | WMS, WFS, CSV | `https://integracja.gugik.gov.pl/.../KrajowaIntegracjaNumeracjiAdresowej` | Point database of all address numbers and street centrelines in Poland (geocoding). |
+| **PRNG** *(Register of Geographical Names)* | GML, SHP, GeoPackage, CSV | `https://dane.gov.pl` | Standardized names of localities, rivers, lakes, mountain ranges and forests. |
+| **BDOO** *(General Geographic Objects Database)* | Shapefile, GeoPackage | `https://dane.gov.pl` | Vector general-geographic map at 1:250,000 scale for the whole country. |
+| **LPIS / ARiMR Reference Parcels** | WMS, WFS, SHP, GPKG | `https://geoportal.gov.pl`, `https://dane.gov.pl` | Boundaries of reference blocks and parcels in the land records and area-based payments. |
+| **Corine Land Cover (CLC 2018/2024)** | GeoPackage, SHP, GeoTIFF | `https://clc.gios.gov.pl` | European land cover and land use classification (44 classes) for the whole of Poland. |
+| **Urban Atlas (Copernicus CLMS)** | Shapefile, GeoPackage | `https://land.copernicus.eu` | High-resolution land use classification for urban functional areas (FUA). |
 
 ---
 
-## 2. Numeryczne Modele Terenu, LiDAR i Fotogrametria
+## 2. Digital Terrain Models, LiDAR and Photogrammetry
 
-| Rejestr / Usługa | Protokół & Format | Endpoint / Źródło | Zastosowanie w analizach GIS |
+| Register / Service | Protocol & Format | Endpoint / Source | Use in GIS analyses |
 | :--- | :--- | :--- | :--- |
-| **NMT GUGiK (Siatka 1 m)** | WCS, WMS, GeoTIFF, ASCII GRID | `https://mapy.geoportal.gov.pl/.../DigitalTerrainModel` | Wysokorozdzielczy model wysokościowy z lotniczego skaningu laserowego (LiDAR 1x1 m): spadki, ekspozycje, bezodpływowe zagłębienia terenu, wskaźnik TWI (*Topographic Wetness Index*). |
-| **NMPT GUGiK (Pokrycie Terenu)** | WCS, WMS, GeoTIFF | `https://mapy.geoportal.gov.pl/.../DigitalSurfaceModel` | Model wysokościowy uwzględniający obiekty nad terenem: budynki, lasy, zadrzewienia (barierowość wiatrowa, zacienienie, korytarze przewietrzania). |
-| **Chmury Punktów LiDAR (LAS/LAZ)** | LAS, LAZ | `https://geoportal.gov.pl` (skorowidze PZGiK) | Prawdziwe chmury punktów ze skaningu lotniczego (gęstość 4–12 pkt/m²) z klasyfikacją gruntu, budynków i niskiej/średniej/wysokiej wegetacji. |
-| **Copernicus DEM (GLO-30)** | Cloud Optimized GeoTIFF (COG) | AWS Open Data, Copernicus Space Data | Jednolity raster wysokościowy 30 m dla całej Europy do analiz makroregionalnych. |
-| **Ortofotomapa Lotnicza GUGiK (RGB/CIR)** | WMS, WMTS, WCS, GeoTIFF | `https://mapy.geoportal.gov.pl/.../StandardResolution` | Fotogrametria lotnicza o pikselu 5–25 cm w barwach naturalnych i bliskiej podczerwieni. |
+| **NMT GUGiK (1 m grid)** | WCS, WMS, GeoTIFF, ASCII GRID | `https://mapy.geoportal.gov.pl/.../DigitalTerrainModel` | High-resolution elevation model from airborne laser scanning (LiDAR 1x1 m): slopes, aspects, closed terrain depressions, the TWI index (*Topographic Wetness Index*). |
+| **NMPT GUGiK (Land Cover Surface)** | WCS, WMS, GeoTIFF | `https://mapy.geoportal.gov.pl/.../DigitalSurfaceModel` | Elevation model including objects above the terrain: buildings, forests, tree cover (wind barrier effect, shading, ventilation corridors). |
+| **LiDAR Point Clouds (LAS/LAZ)** | LAS, LAZ | `https://geoportal.gov.pl` (PZGiK indexes) | True point clouds from airborne scanning (density 4–12 points/m²) with classification of ground, buildings and low/medium/high vegetation. |
+| **Copernicus DEM (GLO-30)** | Cloud Optimized GeoTIFF (COG) | AWS Open Data, Copernicus Space Data | Uniform 30 m elevation raster for the whole of Europe for macro-regional analyses. |
+| **GUGiK Aerial Orthophotomap (RGB/CIR)** | WMS, WMTS, WCS, GeoTIFF | `https://mapy.geoportal.gov.pl/.../StandardResolution` | Aerial photogrammetry with a 5–25 cm pixel in natural colours and near infrared. |
 
 ---
 
-## 3. Topografia, Sieci i Infrastruktura
+## 3. Topography, Networks and Infrastructure
 
-| Rejestr / Usługa | Protokół & Format | Endpoint / Źródło | Zastosowanie w analizach GIS |
+| Register / Service | Protocol & Format | Endpoint / Source | Use in GIS analyses |
 | :--- | :--- | :--- | :--- |
-| **BDOT10k (Obiekty Topograficzne)** | WFS, GML, GeoPackage, SHP | `https://geoportal.gov.pl`, WFS GUGiK | Odpowiednik mapy topograficznej 1:10 000: sieć dróg, cieków, budynków, rowów melioracyjnych, ogrodzeń. |
-| **GESUT (Sieci Uzbrojenia Terenu)** | WMS | `https://integracja.gugik.gov.pl/.../KrajowaIntegracjaUzbrojeniaTerenu` | Przebiegi sieci wodociągowych, kanalizacyjnych, gazowych, energetycznych i telekomunikacyjnych. |
-| **OpenStreetMap Polska (Geofabrik)** | PBF, Shapefile (SHP) | `https://download.geofabrik.de/europe/poland.html` | Pełna baza wektorowa OpenStreetMap dla Polski z codzienną aktualizacją. |
-| **GDDKiA (Średni Dobowy Ruch SDR)** | Shapefile, WMS, CSV | `https://www.gov.pl/web/gddkia` | Geometria dróg krajowych i autostrad wraz z natężeniem ruchu pojazdów (Generalny Pomiar Ruchu). |
+| **BDOT10k (Topographic Objects)** | WFS, GML, GeoPackage, SHP | `https://geoportal.gov.pl`, WFS GUGiK | Equivalent of the 1:10,000 topographic map: network of roads, watercourses, buildings, drainage ditches, fences. |
+| **GESUT (Utility Networks)** | WMS | `https://integracja.gugik.gov.pl/.../KrajowaIntegracjaUzbrojeniaTerenu` | Routes of water supply, sewage, gas, power and telecommunications networks. |
+| **OpenStreetMap Poland (Geofabrik)** | PBF, Shapefile (SHP) | `https://download.geofabrik.de/europe/poland.html` | Full OpenStreetMap vector database for Poland with daily updates. |
+| **GDDKiA (Average Daily Traffic)** | Shapefile, WMS, CSV | `https://www.gov.pl/web/gddkia` | Geometry of national roads and motorways together with vehicle traffic intensity (General Traffic Measurement). |
 
 ---
 
-## 4. Meteorologia, Klimat i Radary Pogodowe
+## 4. Meteorology, Climate and Weather Radars
 
-| Rejestr / Usługa | Protokół & Format | Endpoint / Źródło | Zastosowanie w analizach GIS |
+| Register / Service | Protocol & Format | Endpoint / Source | Use in GIS analyses |
 | :--- | :--- | :--- | :--- |
-| **IMGW-PIB Dane Synoptyczne** | REST API (JSON, CSV, XML) | `https://danepubliczne.imgw.pl/api/data/synop` | Bieżące (co 1h) odczyty ze stacji synoptycznych w Polsce: temperatura powietrza, opad, wilgotność, wiatr, ciśnienie. |
-| **IMGW-PIB Dane Meteorologiczne** | REST API (JSON, CSV) | `https://danepubliczne.imgw.pl/api/data/meteo` | Telemetria 10-minutowa ze stacji automatycznych: temperatura gruntu (5 cm), opad 10-minutowy. |
-| **IMGW-PIB Ostrzeżenia Meteo/Hydro** | REST API (JSON, GeoJSON) | `https://danepubliczne.imgw.pl/api/data/warnings/meteo` | Aktywne alerty meteorologiczne dla powiatów (przymrozki, burze, grad, upały, wichury). |
-| **IMGW-PIB Dane Historyczne** | CSV (paczki ZIP) | `https://danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjne/` | Wielodekadowe archiwa dobowe i terminowe do kalibracji modeli klimatycznych i analiz trendów. |
-| **POLRAD IMGW (Sieć Radarowa)** | WMS, GeoTIFF, HDF5 | `https://danepubliczne.imgw.pl`, WMS IMGW | Mapy odbiciowości radarowej i natężenia opadu co 5–10 minut (detekcja komórek burzowych i gradu). |
-| **Open-Meteo Weather & Soil API** | REST API (JSON, CSV) | `https://api.open-meteo.com/v1/forecast` | Darmowe prognozy godzinowe o rozdzielczości 2 km: temperatura, wiatr, wilgotność profilu gleby (0–54 cm). |
-| **ERA5-Land Reanalysis (ECMWF)** | NetCDF, GRIB | `https://cds.climate.copernicus.eu` | Globalna reanaliza parametrów lądowych i hydrometeorologicznych w siatce 9 km od 1950 r. |
+| **IMGW-PIB Synoptic Data** | REST API (JSON, CSV, XML) | `https://danepubliczne.imgw.pl/api/data/synop` | Current (hourly) readings from synoptic stations in Poland: air temperature, precipitation, humidity, wind, pressure. |
+| **IMGW-PIB Meteorological Data** | REST API (JSON, CSV) | `https://danepubliczne.imgw.pl/api/data/meteo` | 10-minute telemetry from automatic stations: ground temperature (5 cm), 10-minute precipitation. |
+| **IMGW-PIB Meteo/Hydro Warnings** | REST API (JSON, GeoJSON) | `https://danepubliczne.imgw.pl/api/data/warnings/meteo` | Active meteorological alerts for counties (frost, storms, hail, heat waves, gales). |
+| **IMGW-PIB Historical Data** | CSV (ZIP packages) | `https://danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjne/` | Multi-decade daily and term archives for calibrating climate models and trend analyses. |
+| **POLRAD IMGW (Radar Network)** | WMS, GeoTIFF, HDF5 | `https://danepubliczne.imgw.pl`, WMS IMGW | Maps of radar reflectivity and precipitation intensity every 5–10 minutes (detection of storm cells and hail). |
+| **Open-Meteo Weather & Soil API** | REST API (JSON, CSV) | `https://api.open-meteo.com/v1/forecast` | Free hourly forecasts at 2 km resolution: temperature, wind, soil profile moisture (0–54 cm). |
+| **ERA5-Land Reanalysis (ECMWF)** | NetCDF, GRIB | `https://cds.climate.copernicus.eu` | Global reanalysis of land and hydrometeorological parameters on a 9 km grid since 1950. |
 
 ---
 
-## 5. Wody, Hydrografia i Zagrożenie Powodziowe
+## 5. Water, Hydrography and Flood Hazard
 
-| Rejestr / Usługa | Protokół & Format | Endpoint / Źródło | Zastosowanie w analizach GIS |
+| Register / Service | Protocol & Format | Endpoint / Source | Use in GIS analyses |
 | :--- | :--- | :--- | :--- |
-| **MPHP (Mapa Podziału Hydrograficznego)** | WFS, Shapefile, GeoPackage | `https://dane.gov.pl`, Wody Polskie | Podstawowy podział hydrograficzny kraju: granice zlewni, działy wodne, osie rzek i jeziora. |
-| **Hydroportal / ISOK (Mapy Powodziowe)** | WMS, WFS, Shapefile | `https://wody.isok.gov.pl` | Strefy zalewowe dla prawdopodobieństwa powodzi 10% (raz na 10 lat), 1% (raz na 100 lat) oraz 0.2%. |
-| **IMGW-PIB Dane Hydrologiczne** | REST API (JSON, CSV) | `https://danepubliczne.imgw.pl/api/data/hydro` | Stany wód i przepływy na wodowskazach rzecznych w całej Polsce w czasie rzeczywistym. |
-| **GIOŚ Monitoring Jakości Wód** | REST API, CSV, Shapefile | `https://wody.gios.gov.pl` | Pomiary fizykochemiczne i biologiczne wód powierzchniowych i podziemnych. |
+| **MPHP (Hydrographic Division Map)** | WFS, Shapefile, GeoPackage | `https://dane.gov.pl`, Wody Polskie | Basic hydrographic division of the country: catchment boundaries, watersheds, river axes and lakes. |
+| **Hydroportal / ISOK (Flood Maps)** | WMS, WFS, Shapefile | `https://wody.isok.gov.pl` | Flood zones for flood probabilities of 10% (once in 10 years), 1% (once in 100 years) and 0.2%. |
+| **IMGW-PIB Hydrological Data** | REST API (JSON, CSV) | `https://danepubliczne.imgw.pl/api/data/hydro` | Water levels and flows at river gauging stations across Poland in real time. |
+| **GIOŚ Water Quality Monitoring** | REST API, CSV, Shapefile | `https://wody.gios.gov.pl` | Physicochemical and biological measurements of surface and groundwater. |
 
 ---
 
-## 6. Gleboznawstwo, Geologia i Ruchy Masowe Ziemi
+## 6. Soil Science, Geology and Mass Ground Movements
 
-| Rejestr / Usługa | Protokół & Format | Endpoint / Źródło | Zastosowanie w analizach GIS |
+| Register / Service | Protocol & Format | Endpoint / Source | Use in GIS analyses |
 | :--- | :--- | :--- | :--- |
-| **SMSR IUNG-PIB (Monitoring Suszy)** | WMS, CSV, Tabele | `https://susza.iung.pulawy.pl/` | Dekadowy Klimatyczny Bilans Wodny (KBW) oraz wskaźniki deficytu wodnego w podziale na gminy. |
-| **Mapy Glebowo-Rolnicze (IUNG/WODGiK)** | WMS, WFS, SHP, GPKG | `https://geoportal.gov.pl` | Kompleksy przydatności rolniczej gleb (1:25 000 / 1:100 000), typy genetyczne, skład granulometryczny i retencja wodna. |
-| **Monitoring Chemizmu Gleb Ornych (GIOŚ)** | CSV, XLS, Shapefile | `https://www.gios.gov.pl/chemizm_gleb/` | Pomiary odczynu pH, zawartości węgla organicznego, próchnicy, makro- i mikroelementów w 216 stałych punktach. |
-| **SMGP i Mapa Hydrogeologiczna (PIG-PIB)** | WMS, WFS, Shapefile | `https://geologia.pgi.gov.pl` | Szczegółowa Mapa Geologiczna Polski (1:50 000), głębokość zwierciadła wód podziemnych i wodoprzepuszczalność. |
-| **MIDAS (Baza Złóż Kopalin PIG-PIB)** | WMS, WFS, Shapefile | `http://midas.pgi.gov.pl` | Lokalizacje złóż kopalin, obszary i tereny górnicze w Polsce. |
-| **SOPO (Osłona Przeciwosuwiskowa PIG)** | WMS, WFS, Shapefile | `https://osuwiska.pgi.gov.pl` | Rejestr aktywnych i nieaktywnych osuwisk oraz terenów zagrożonych ruchami masowymi ziemi. |
-| **SoilGrids 2.0 (ISRIC / ESDAC)** | WCS, COG (GeoTIFF) | `https://rest.isric.org` | Globalne rastry właściwości gleby 250 m (zawartość piasku, iłu, węgla organicznego, gęstość). |
+| **SMSR IUNG-PIB (Drought Monitoring)** | WMS, CSV, Tables | `https://susza.iung.pulawy.pl/` | Ten-day Climatic Water Balance (KBW) and water deficit indicators by municipality. |
+| **Soil and Agricultural Maps (IUNG/WODGiK)** | WMS, WFS, SHP, GPKG | `https://geoportal.gov.pl` | Soil agricultural suitability complexes (1:25,000 / 1:100,000), genetic types, particle size composition and water retention. |
+| **Arable Soil Chemistry Monitoring (GIOŚ)** | CSV, XLS, Shapefile | `https://www.gios.gov.pl/chemizm_gleb/` | Measurements of pH, organic carbon, humus, macro- and micronutrients at 216 permanent points. |
+| **SMGP and Hydrogeological Map (PIG-PIB)** | WMS, WFS, Shapefile | `https://geologia.pgi.gov.pl` | Detailed Geological Map of Poland (1:50,000), groundwater table depth and water permeability. |
+| **MIDAS (Mineral Deposits Database, PIG-PIB)** | WMS, WFS, Shapefile | `http://midas.pgi.gov.pl` | Locations of mineral deposits, mining areas and mining grounds in Poland. |
+| **SOPO (Landslide Counteraction System, PIG)** | WMS, WFS, Shapefile | `https://osuwiska.pgi.gov.pl` | Register of active and inactive landslides and areas at risk of mass ground movements. |
+| **SoilGrids 2.0 (ISRIC / ESDAC)** | WCS, COG (GeoTIFF) | `https://rest.isric.org` | Global 250 m soil property rasters (sand and clay content, organic carbon, density). |
 
 ---
 
-## 7. Ochrona Środowiska i Monitorowanie Jakości Powietrza
+## 7. Environmental Protection and Air Quality Monitoring
 
-| Rejestr / Usługa | Protokół & Format | Endpoint / Źródło | Zastosowanie w analizach GIS |
+| Register / Service | Protocol & Format | Endpoint / Source | Use in GIS analyses |
 | :--- | :--- | :--- | :--- |
-| **CRFOP GDOŚ (Formy Ochrony Przyrody)** | WFS, WMS, SHP, GPKG | `https://sdi.gdos.gov.pl/wfs` | Granice obszarów Natura 2000, parków narodowych, rezerwatów i parków krajobrazowych (strefy buforowe). |
-| **GIOŚ Jakość Powietrza (Portal Powietrze)** | REST API (JSON) | `https://powietrze.gios.gov.pl/pjp/current/api` | Bieżące dane telemetryczne ze stacji monitoringu powietrza (PM10, PM2.5, NO₂, SO₂, O₃, indeks AQI). |
+| **CRFOP GDOŚ (Forms of Nature Protection)** | WFS, WMS, SHP, GPKG | `https://sdi.gdos.gov.pl/wfs` | Boundaries of Natura 2000 areas, national parks, nature reserves and landscape parks (buffer zones). |
+| **GIOŚ Air Quality (Portal Powietrze)** | REST API (JSON) | `https://powietrze.gios.gov.pl/pjp/current/api` | Current telemetry data from air quality monitoring stations (PM10, PM2.5, NO₂, SO₂, O₃, AQI index). |
 
 ---
 
-## 8. Teledetekcja Satelitarna
+## 8. Satellite Remote Sensing
 
-| Rejestr / Usługa | Protokół & Format | Endpoint / Źródło | Zastosowanie w analizach GIS |
+| Register / Service | Protocol & Format | Endpoint / Source | Use in GIS analyses |
 | :--- | :--- | :--- | :--- |
-| **Sentinel-2 L2A (Copernicus CDSE)** | STAC API, COG, S3 | `https://catalogue.dataspace.copernicus.eu/stac` | Zobrazowania multispektralne (10–20 m, co 2–5 dni): pasma Red-Edge, NIR, SWIR (wskaźniki NDVI, NDRE, NDMI, chlorofil, wilgotność biomasy). |
-| **Sentinel-1 SAR (Copernicus CDSE)** | STAC API, GeoTIFF, S3 | `https://catalogue.dataspace.copernicus.eu/stac` | Radar z syntetyczną aperturą (SAR): niezależne od zachmurzenia pomiary szorstkości, wilgotności przypowierzchniowej i deformacji. |
-| **Sentinel-3 SLSTR / OLCI (CDSE)** | STAC API, NetCDF, GeoTIFF | `https://catalogue.dataspace.copernicus.eu/stac` | Codzienne pomiary temperatury powierzchni lądu (LST, 1 km) do wykrywania anomalii termicznych. |
-| **Landsat 8/9 Collection 2** | STAC API, COG (GeoTIFF) | `https://earth-search.aws.element84.com/v1` | Pomiary optyczne (30 m) i termalne TIRS (100 m) do bilansów radiacyjnych. |
-| **CLMS High Resolution Vegetation (HR-VPP)** | COG, WMS | `https://land.copernicus.eu` | Gotowe rastry 10 m dynamiki wegetacji: start, szczyt i długość sezonu produktywności biomasy. |
-| **CLMS Soil Water Index (SWI)** | NetCDF, GeoTIFF | `https://land.copernicus.eu` | Wskaźnik wilgotności profilu glebowego w cyklu dobowym wyliczany z danych radarowych. |
+| **Sentinel-2 L2A (Copernicus CDSE)** | STAC API, COG, S3 | `https://catalogue.dataspace.copernicus.eu/stac` | Multispectral imagery (10–20 m, every 2–5 days): Red-Edge, NIR, SWIR bands (NDVI, NDRE, NDMI indices, chlorophyll, biomass moisture). |
+| **Sentinel-1 SAR (Copernicus CDSE)** | STAC API, GeoTIFF, S3 | `https://catalogue.dataspace.copernicus.eu/stac` | Synthetic aperture radar (SAR): cloud-independent measurements of roughness, near-surface moisture and deformation. |
+| **Sentinel-3 SLSTR / OLCI (CDSE)** | STAC API, NetCDF, GeoTIFF | `https://catalogue.dataspace.copernicus.eu/stac` | Daily land surface temperature measurements (LST, 1 km) for detecting thermal anomalies. |
+| **Landsat 8/9 Collection 2** | STAC API, COG (GeoTIFF) | `https://earth-search.aws.element84.com/v1` | Optical (30 m) and thermal TIRS (100 m) measurements for radiation balances. |
+| **CLMS High Resolution Vegetation (HR-VPP)** | COG, WMS | `https://land.copernicus.eu` | Ready-made 10 m rasters of vegetation dynamics: start, peak and length of the biomass productivity season. |
+| **CLMS Soil Water Index (SWI)** | NetCDF, GeoTIFF | `https://land.copernicus.eu` | Soil profile moisture index on a daily cycle computed from radar data. |
 
 ---
 
-## 9. Statystyka Społeczno-Gospodarcza
+## 9. Socio-Economic Statistics
 
-| Rejestr / Usługa | Protokół & Format | Endpoint / Źródło | Zastosowanie w analizach GIS |
+| Register / Service | Protocol & Format | Endpoint / Source | Use in GIS analyses |
 | :--- | :--- | :--- | :--- |
-| **GUS BDL (Bank Danych Lokalnych)** | REST API (JSON, XML, CSV) | `https://bdl.stat.gov.pl/api/v1/` | Największa baza statystyczna dla gmin, powiatów i województw (demografia, gospodarka, środowisko, infrastruktura). |
+| **GUS BDL (Local Data Bank)** | REST API (JSON, XML, CSV) | `https://bdl.stat.gov.pl/api/v1/` | The largest statistical database for municipalities, counties and voivodeships (demography, economy, environment, infrastructure). |
