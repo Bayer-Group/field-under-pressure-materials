@@ -221,24 +221,26 @@ def create_crop_area(body: AreaIn, user=Depends(current_user), con=Depends(get_d
 @router.post("/crop-areas/{crop_area_id}/sprays", status_code=201, summary="Save a spray (recomputes the crop area)")
 def add_spray(crop_area_id: str, body: SprayIn, user=Depends(current_user), con=Depends(get_db_rw)):
     _require_writes(user)
-    _require_area(con, user, crop_area_id)
+    crop_area_id = _require_area(con, user, crop_area_id)               # the id of GET /fields or the stored one
     shift, today = _shift(con), _today(con)
     if body.spray_date > today:
         raise HTTPException(status_code=422, detail="the spray date cannot be in the future")
-    con.execute("INSERT INTO app.spray (crop_area_id, spray_date, protection_duration_days) VALUES (%s, %s, %s)",
-                (crop_area_id, body.spray_date - timedelta(days=shift), body.protection_duration_days))
+    spray_id = con.execute("INSERT INTO app.spray (crop_area_id, spray_date, protection_duration_days) VALUES (%s, %s, %s) "
+                           "RETURNING spray_id", (crop_area_id, body.spray_date - timedelta(days=shift),
+                                                  body.protection_duration_days)).fetchone()["spray_id"]
     con.execute("UPDATE app.crop_area SET sprays_confirmed = true WHERE crop_area_id = %s", (crop_area_id,))
     _recompute(con, crop_area_id, "spray", what="risk")       # a spray changes nothing in the crop map or the soil
     changed = con.execute("SELECT count(*) AS n FROM curated.risk_change WHERE crop_area_id = %s AND reason = 'spray' "
                           "AND computed_at = now()", (crop_area_id,)).fetchone()["n"]
     con.commit()
-    return {"crop_area": _feature(con, crop_area_id), "changed_days": changed}
+    return {"crop_area": _feature(con, crop_area_id), "changed_days": changed,
+            "spray": {"spray_id": spray_id, "date": body.spray_date, "protection_duration_days": body.protection_duration_days}}
 
 
 @router.delete("/crop-areas/{crop_area_id}", status_code=204, summary="Delete a crop area")
 def delete_crop_area(crop_area_id: str, user=Depends(current_user), con=Depends(get_db_rw)):
     _require_writes(user)
-    _require_area(con, user, crop_area_id)
+    crop_area_id = _require_area(con, user, crop_area_id)
     con.execute("DELETE FROM app.field WHERE field_id = (SELECT field_id FROM app.crop_area WHERE crop_area_id = %s)",
                 (crop_area_id,))
     con.commit()
