@@ -1,4 +1,4 @@
-> **GeoEarth Junction project:** See [PROJECT.md](PROJECT.md) for our product requirements, first iteration, team and open decisions. The merged bridge setup and its current limitations are in [README2.md](README2.md). The organizer materials below are retained for reference.
+> **GeoEarth Junction project:** See [PROJECT.md](PROJECT.md) for our product requirements, first iteration, team and open decisions. The merged bridge setup and its current limitations are in [README2.md](README2.md). See the [mock API guide](MOCK_API_GUIDE.md) for frontend and backend integration. The organizer materials below are retained for reference.
 
 # field-under-pressure-materials
 
