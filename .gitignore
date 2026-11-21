@@ -10,3 +10,9 @@ data/cache/
 outputs/
 web/node_modules/
 web/dist/
+
+# showcase: generated media (rebuild with the scripts in showcase/, see showcase/README.md)
+showcase/shots/
+showcase/stills/
+showcase/*.mp4
+showcase/*.wav

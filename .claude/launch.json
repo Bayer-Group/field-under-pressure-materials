@@ -18,6 +18,20 @@
         "8001"
       ],
       "port": 8001
+    },
+    {
+      "name": "deck",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8090",
+        "--bind",
+        "127.0.0.1",
+        "--directory",
+        "showcase"
+      ],
+      "port": 8090
     }
   ]
 }

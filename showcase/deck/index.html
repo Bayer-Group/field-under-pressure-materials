@@ -1,0 +1,212 @@
+<!doctype html>
+<!--
+  Field explorer presentation: reveal.js for navigation, GSAP for animation. See README.md.
+  Keys: →/Space next · ← back · S speaker notes · O overview · R replay slide animation · F fullscreen · B blank
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Field explorer</title>
+<link rel="stylesheet" href="vendor/reveal/reset.css">
+<link rel="stylesheet" href="vendor/reveal/reveal.css">
+<link rel="stylesheet" href="css/theme.css">
+</head>
+<body>
+<div id="bg"><div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div><div class="dots"></div><div class="vignette"></div></div>
+
+<div class="reveal"><div class="slides">
+
+  <!-- 1 · Title -->
+  <section data-anim="title" class="s-title">
+    <svg class="leaf" viewBox="0 0 120 120" aria-hidden="true">
+      <path d="M18,102 C18,46 56,16 106,14 C106,64 78,102 18,102 Z"/>
+      <path d="M18,102 C44,76 70,50 94,27"/>
+    </svg>
+    <div class="kicker rise">Project showcase</div>
+    <h1 class="title">Field explorer</h1>
+    <p class="sub rise">Satellite greenness, aerial photos and soil microbes for each sampled plot</p>
+    <div class="tags rise"><span class="tag">2 NEON farm sites</span><span class="tag">29 plots</span><span class="tag">2013 – 2026</span></div>
+    <aside class="notes">Open with the one-line pitch. Press R on any slide to replay its animation.</aside>
+  </section>
+
+  <!-- 2 · Why (plain reveal.js fragments, no custom animation) -->
+  <section data-anim="text">
+    <div class="todo">Write the problem statement in your own words.</div>
+    <div class="kicker"><b>00</b>Why</div>
+    <h2 class="heading">A soil sample is <span class="hl">one moment</span> in one spot</h2>
+    <ul class="points">
+      <li class="fragment fade-up">What lives in the soil comes from a lab, on the day the core was taken</li>
+      <li class="fragment fade-up">Weather, crops, greenness and terrain live in separate datasets</li>
+      <li class="fragment fade-up">Field explorer puts them side by side for every sampled plot</li>
+    </ul>
+    <aside class="notes">This slide shows reveal.js's own fragments: each bullet is one click.</aside>
+  </section>
+
+  <!-- 3 · Data sources -> sampling event -->
+  <section data-anim="sources" class="s-sources">
+    <div class="kicker"><b>01</b>The idea</div>
+    <h2 class="heading">Everything links to the <span class="hl">sampling event</span></h2>
+    <div class="hub-stage">
+      <svg aria-hidden="true"></svg>
+      <div class="hub"><div class="ring"></div><b>Sampling<br>event</b></div>
+    </div>
+    <p class="caption">Each dataset is attached to the plot and date where the soil was sampled.</p>
+    <i class="fragment step"></i><i class="fragment step"></i><i class="fragment step"></i>
+    <aside class="notes">Click 1: the sources. Click 2: lines draw in and the hub lands. Click 3: the caption. Sources are listed in js/data.js.</aside>
+  </section>
+
+  <!-- 4 · Sites and plots -->
+  <section data-anim="sites" class="s-sites">
+    <div class="kicker"><b>02</b>Where</div>
+    <h2 class="heading">Two NEON farm sites</h2>
+    <div class="total"><div class="n">0</div><div class="l">sampled plots</div></div>
+    <div class="sites"></div>
+    <i class="fragment step"></i>
+    <aside class="notes">Click: plots drop in, the total counts up.</aside>
+  </section>
+
+  <!-- 5 · GUI tour: overview -->
+  <section data-anim="gui">
+    <div class="gui-head"><div class="kicker"><b>03</b>Explore</div><h2 class="heading">Every plot on one screen</h2></div>
+    <div class="win"><div class="bar"><i></i><i></i><i></i><span class="url">127.0.0.1:8000</span></div>
+      <div class="vp"><img data-shot="overview" alt="Overview screen with both sites and the map"></div></div>
+    <i class="fragment step" data-focus="site:0" data-caption="Konza Prairie, KS <small>10 plots</small>"></i>
+    <i class="fragment step" data-focus="site:1" data-caption="North Sterling, CO <small>19 dryland plots</small>"></i>
+    <i class="fragment step" data-focus="map" data-caption="Every plot on the map"></i>
+    <i class="fragment step" data-focus="all"></i>
+    <aside class="notes">Each click zooms the real screenshot onto one element from shots/rects.json.</aside>
+  </section>
+
+  <!-- 6 · Greenness chart built in SVG -->
+  <section data-anim="greenness" class="s-green">
+    <div class="todo">Illustrative curve. Replace DeckData.greenness in js/data.js with a real plot-year.</div>
+    <div class="kicker"><b>04</b>Greenness over time</div>
+    <h2 class="heading">A growing season, read from space</h2>
+    <p class="sub">Plot KONA_001 alone has 556 cloud-free satellite readings from 2013 to 2026.</p>
+    <svg class="chart" aria-label="Greenness (NDVI) over one growing season"></svg>
+    <div class="legend">
+      <span class="k-read"><i></i>Satellite reading</span>
+      <span class="k-visit"><i></i>Soil sampling visit</span>
+    </div>
+    <i class="fragment step"></i><i class="fragment step"></i><i class="fragment step"></i>
+    <aside class="notes">Click 1: readings. Click 2: the season curve. Click 3: sampling visits.</aside>
+  </section>
+
+  <!-- 7 · GUI tour: greenness tab -->
+  <section data-anim="gui">
+    <div class="gui-head"><div class="kicker"><b>04</b>Greenness over time</div><h2 class="heading">The same thing, in the app</h2></div>
+    <div class="win"><div class="bar"><i></i><i></i><i></i><span class="url">127.0.0.1:8000</span></div>
+      <div class="vp"><img data-shot="greenness" alt="Greenness over time tab for plot KONA_001"></div></div>
+    <i class="fragment step" data-focus="chart" data-caption="556 readings <small>· 32 sampling visits · 11 aerial photos</small>"></i>
+    <i class="fragment step" data-focus="map" data-caption="Aerial photo of the plot"></i>
+    <i class="fragment step" data-focus="all"></i>
+    <aside class="notes">Numbers are for KONA_001 as captured in shots/greenness.png.</aside>
+  </section>
+
+  <!-- 8 · Wipe: aerial photo vs greenness map -->
+  <section data-anim="wipe" class="s-wipe">
+    <div class="todo">The two captures use different map zooms. Capture both layers at the same zoom in capture.mjs.</div>
+    <div class="gui-head"><div class="kicker"><b>05</b>On the map</div><h2 class="heading">Aerial photo or greenness, for any date</h2></div>
+    <div class="wipe" data-prevent-swipe data-under="greenness:map" data-over="greenness-map:map" data-height="820">
+      <div class="layer under"></div><div class="layer over"></div>
+      <div class="handle"><span>⇆</span></div>
+      <span class="tag left">Aerial photo</span><span class="tag right">Greenness</span>
+    </div>
+    <aside class="notes">Drag the handle live. It sweeps once on entry.</aside>
+  </section>
+
+  <!-- 9 · GUI tour: soil microbes -->
+  <section data-anim="gui">
+    <div class="gui-head"><div class="kicker"><b>06</b>Soil microbes</div><h2 class="heading">Who lives in the soil</h2></div>
+    <div class="win"><div class="bar"><i></i><i></i><i></i><span class="url">127.0.0.1:8000</span></div>
+      <div class="vp"><img data-shot="microbes" alt="Soil microbes tab"></div></div>
+    <i class="fragment step" data-focus="segBar" data-caption="Composition per plot, year and sample"></i>
+    <i class="fragment step" data-focus="compTable" data-caption="Every taxon, not only the top few"></i>
+    <i class="fragment step" data-focus="search" data-caption="Search any taxon"></i>
+    <i class="fragment step" data-focus="all"></i>
+    <aside class="notes"></aside>
+  </section>
+
+  <!-- 10 · GUI tour: soil functions -->
+  <section data-anim="gui">
+    <div class="gui-head"><div class="kicker"><b>07</b>Soil functions</div><h2 class="heading">What the microbes can do</h2></div>
+    <div class="win"><div class="bar"><i></i><i></i><i></i><span class="url">127.0.0.1:8000</span></div>
+      <div class="vp"><img data-shot="functions" alt="Soil functions tab with decision cards"></div></div>
+    <i class="fragment step" data-focus="cards" data-caption="Decision cards"></i>
+    <i class="fragment step" data-focus="ncycle" data-caption="Nitrogen cycle genes"></i>
+    <i class="fragment step" data-focus="all"></i>
+    <aside class="notes"></aside>
+  </section>
+
+  <!-- 11 · Nitrogen cycle -->
+  <section data-anim="ncycle" class="s-ncycle">
+    <div class="gui-head">
+      <div class="kicker"><b>07</b>Nitrogen cycle</div>
+      <h2 class="heading">Genes for every step of the loop</h2>
+      <p class="sub">Read from soil metagenomes as KEGG gene counts.</p>
+    </div>
+    <svg class="cycle" aria-label="Nitrogen cycle with marker genes"></svg>
+    <i class="fragment step"></i><i class="fragment step"></i><i class="fragment step"></i><i class="fragment step"></i><i class="fragment step"></i>
+    <aside class="notes">One click per process: fixation, nitrification, denitrification, N2O reduction, then the DNRA shortcut. Caveats per gene are in rules/ko_panel.csv (e.g. nifH is not detectable in the NMDC tables).</aside>
+  </section>
+
+  <!-- 12 · Sampling visit page -->
+  <section data-anim="gui">
+    <div class="gui-head"><div class="kicker"><b>08</b>Sampling visits</div><h2 class="heading">Every visit has its own page</h2></div>
+    <div class="win"><div class="bar"><i></i><i></i><i></i><span class="url">127.0.0.1:8000</span></div>
+      <div class="vp"><img data-shot="event" alt="Sampling visit page"></div></div>
+    <i class="fragment step" data-focus="evCard" data-caption="Everything known about one visit"></i>
+    <i class="fragment step" data-focus="all"></i>
+    <aside class="notes"></aside>
+  </section>
+
+  <!-- 13 · Live demo (falls back to the showcase video when the GUI is not running) -->
+  <section data-anim="demo" class="s-demo">
+    <div class="kicker"><b>09</b>Live</div>
+    <h2 class="heading">Try it</h2>
+    <div class="status"><span class="on">GUI running</span><span class="off">GUI not running: playing the recorded tour</span></div>
+    <div class="win"><div class="bar"><i></i><i></i><i></i><span class="url">127.0.0.1:8000</span></div>
+      <div class="vp">
+        <iframe data-url="http://127.0.0.1:8000" title="Field explorer, live"></iframe>
+        <video src="../field-explorer-showcase.mp4" preload="none" muted loop playsinline></video>
+      </div></div>
+    <aside class="notes">Start the GUI first (launch config "gui"). Click into the frame to use it; press Esc then → to move on.</aside>
+  </section>
+
+  <!-- 14 · Outro -->
+  <section data-anim="outro" class="s-outro">
+    <h2 class="heading">Thank you</h2>
+    <div class="stats">
+      <div class="stat"><div class="n" data-to="2">0</div><div class="l">farm sites</div></div>
+      <div class="stat"><div class="n" data-to="29">0</div><div class="l">sampled plots</div></div>
+      <div class="stat"><div class="n" data-to="8">0</div><div class="l">linked data sources</div></div>
+    </div>
+    <p class="links rise">TODO: repository link · contact</p>
+    <aside class="notes"></aside>
+  </section>
+
+</div></div>
+
+<script src="vendor/reveal/reveal.js"></script>
+<script src="vendor/reveal/plugin/notes.js"></script>
+<script src="vendor/gsap/gsap.min.js"></script>
+<script src="vendor/gsap/SplitText.min.js"></script>
+<script src="vendor/gsap/DrawSVGPlugin.min.js"></script>
+<script src="vendor/gsap/MotionPathPlugin.min.js"></script>
+<script src="vendor/gsap/Flip.min.js"></script>
+<script src="vendor/gsap/Draggable.min.js"></script>
+<script src="../shots/rects.js"></script>
+<script src="js/data.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/anims/basic.js"></script>
+<script src="js/anims/sources.js"></script>
+<script src="js/anims/sites.js"></script>
+<script src="js/anims/greenness.js"></script>
+<script src="js/anims/gui.js"></script>
+<script src="js/anims/wipe.js"></script>
+<script src="js/anims/ncycle.js"></script>
+<script src="js/anims/demo.js"></script>
+<script>Deck.start()</script>
+</body>
+</html>
