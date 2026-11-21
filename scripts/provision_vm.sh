@@ -183,6 +183,8 @@ case "$CUR" in
     echo "PUBLIC_HOST=$(echo "$IP" | tr . -).nip.io" >> .env ;;
 esac
 sudo docker compose --env-file .env -f docker/docker-compose.yml up -d --build backend caddy
+# Caddy does not re-read its Caddyfile by itself (the container is not recreated): reload it gracefully, without a break
+sudo docker exec spatial_caddy caddy reload --config /etc/caddy/Caddyfile >/dev/null 2>&1 || echo "WARN: caddy reload failed (check: sudo docker logs spatial_caddy)"
 for _ in $(seq 1 30); do
   if curl -fsS "http://127.0.0.1:${API_PORT}/health"; then
     echo; echo "API (HTTPS, needs the firewall rule): https://$(grep '^PUBLIC_HOST=' .env | cut -d= -f2-)/api/v1"
