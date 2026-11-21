@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   CheckCircle2,
-  Code2,
   CopyPlus,
   Magnet,
   Map as MapIcon,
@@ -62,7 +61,7 @@ export function RowLineEditorPage() {
   const [cropPrefsEndpoint, setCropPrefsEndpoint] = useState<string>('');
 
   // Drawing configuration & tools
-  const [backdropMode, setBackdropMode] = useState<CanvasBackdropMode>('blank');
+  const [backdropMode, setBackdropMode] = useState<CanvasBackdropMode>('satellite');
   const [toolMode, setToolMode] = useState<EditorToolMode>('draw');
   const [angleSnap, setAngleSnap] = useState<boolean>(true);
   const [activeSpeciesId, setActiveSpeciesId] = useState<ObjectIdString>('');
@@ -77,13 +76,12 @@ export function RowLineEditorPage() {
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
   const [selectedTreeKey, setSelectedTreeKey] = useState<{ rowId: string; indexInRow: number } | null>(null);
 
-  // Save & JSON payload inspection state
+  // Save confirmation state
   const [isSaving, setIsSaving] = useState(false);
   const [saveBanner, setSaveBanner] = useState<{
     response: SaveOrchardLayoutResponse;
     endpoint: string;
   } | null>(null);
-  const [showPayloadPreview, setShowPayloadPreview] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -418,15 +416,6 @@ export function RowLineEditorPage() {
               <span>{t.rowEditor.backdropSatellite}</span>
             </button>
           </div>
-
-          <button
-            type="button"
-            className={`secondary-btn${showPayloadPreview ? ' is-active' : ''}`}
-            onClick={() => setShowPayloadPreview((v) => !v)}
-          >
-            <Code2 size={15} />
-            <span>{t.rowEditor.previewPayload}</span>
-          </button>
 
           <button
             type="button"
@@ -895,41 +884,6 @@ export function RowLineEditorPage() {
           </section>
         </aside>
       </div>
-
-      {/* Collapsible MongoDB Payload Inspector (Orchard.rows + Tree[]) */}
-      {showPayloadPreview && layoutPayload && (
-        <section className="card payload-preview-card">
-          <div className="card-header">
-            <h2 className="card-title">{t.rowEditor.payloadPreviewTitle}</h2>
-            <code className="endpoint-tag">
-              POST /api/v1/orchards/{layoutPayload.orchardId}/layout
-            </code>
-          </div>
-
-          <div className="payload-columns">
-            <div className="payload-pane">
-              <div className="payload-pane-title">
-                Collection <code>Orchard.rows</code> ({layoutPayload.orchardRows.length})
-              </div>
-              <pre className="payload-json">
-                {JSON.stringify(layoutPayload.orchardRows, null, 2)}
-              </pre>
-            </div>
-
-            <div className="payload-pane">
-              <div className="payload-pane-title">
-                Collection <code>Tree</code> ({layoutPayload.trees.length})
-              </div>
-              <pre className="payload-json">
-                {JSON.stringify(layoutPayload.trees.slice(0, 12), null, 2)}
-                {layoutPayload.trees.length > 12
-                  ? `\n// ... +${layoutPayload.trees.length - 12} more Tree documents`
-                  : ''}
-              </pre>
-            </div>
-          </div>
-        </section>
-      )}
     </div>
   );
 }

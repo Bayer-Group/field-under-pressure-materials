@@ -21,12 +21,19 @@ export function Sidebar({ activeSection, onSelectSection }: SidebarProps) {
 
   return (
     <aside className="sidebar" aria-label="Main navigation">
-      <div className="sidebar-brand" title={`${t.app.name} — ${t.app.subtitle}`}>
-        {/* TODO: replace placeholder badge with final S.A.G.E. logo */}
-        <span className="sidebar-brand-mark" aria-hidden="true">
-          S
-        </span>
-      </div>
+      <button
+        type="button"
+        className="sidebar-brand"
+        onClick={() => onSelectSection('dashboard')}
+        title={`${t.app.name} — ${t.app.subtitle}`}
+        aria-label={t.app.name}
+      >
+        <img
+          src="/SAGE_logo_kwadrat.png"
+          alt={t.app.name}
+          className="sidebar-brand-logo"
+        />
+      </button>
 
       <nav className="sidebar-nav">
         {primaryItems.map((item) => {

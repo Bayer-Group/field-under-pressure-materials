@@ -77,6 +77,7 @@ export interface Translations {
     colorRgb: string;
     colorElevation: string;
     colorClass: string;
+    colorIntensity: string;
     reliefTooltip: string;
     viewOrbit: string;
     viewTop: string;
@@ -88,6 +89,7 @@ export interface Translations {
     treesStat: string;
     rowsStat: string;
     controlsHint: string;
+    zoomModifierHint: string;
     inspectorTitle: string;
     inspectorClose: string;
     inspectorRow: string;
@@ -228,7 +230,7 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     orchard3d: {
       title: 'Render 3D Sadu — Chmura Punktów i Drzewa',
       subtitle: 'Pojedyncze obiekty 3D wyliczone z linii rzędów nałożone na chmurę punktów terenu',
-      pointCloudLayer: 'Chmura .las',
+      pointCloudLayer: 'Teren 3D',
       treesLayer: 'Drzewa 3D',
       rowLinesLayer: 'Linie rzędów',
       boundaryLayer: 'Granica pola',
@@ -236,6 +238,7 @@ export const TRANSLATIONS: Record<Language, Translations> = {
       colorRgb: 'RGB',
       colorElevation: 'Wysokość',
       colorClass: 'Klasy',
+      colorIntensity: 'Intensywność',
       reliefTooltip: 'Przełącz skalę wysokości Z (×1 / ×1.8 / ×2.8)',
       viewOrbit: 'Widok 3D',
       viewTop: 'Z góry',
@@ -246,7 +249,8 @@ export const TRANSLATIONS: Record<Language, Translations> = {
       pointsStat: 'Punktów',
       treesStat: 'Drzew 3D',
       rowsStat: 'Rzędów',
-      controlsHint: 'LPM: obrót · PPM: przesuwanie · Scroll: zoom · Kliknij drzewo: szczegóły',
+      controlsHint: 'LPM: obrót · PPM: przesuwanie · {mod} + Scroll: zoom · Kliknij drzewo: szczegóły',
+      zoomModifierHint: 'Przytrzymaj {mod} + scroll, aby przybliżyć mapę',
       inspectorTitle: 'Wybrane drzewo',
       inspectorClose: 'Zamknij',
       inspectorRow: 'Rząd / Pozycja',
@@ -288,7 +292,7 @@ export const TRANSLATIONS: Record<Language, Translations> = {
       fitView: 'Dopasuj widok do sadu',
       emptyOrchardBadge: 'Pusty sad — brak rzędów',
       emptyOrchardGuide: 'Wybierz gatunek po prawej i kliknij dwa punkty (początek i koniec), aby narysować pierwszy rząd.',
-      hintDrawMode: 'Kliknij punkt początkowy rzędu · Scroll: zoom · PPM: przesuwanie',
+      hintDrawMode: 'Kliknij punkt początkowy rzędu · {mod} + Scroll: zoom · PPM: przesuwanie',
       hintFinishLine: 'Kliknij punkt końcowy rzędu · Esc lub PPM: anuluj · Shift: przyciąganie kąta',
       hintSelectMode: 'Kliknij rząd, aby przesuwać punkty A/B, lub kliknij drzewo, aby zmienić jego gatunek',
       hintPaintMode: 'Kliknij rząd albo przeciągnij po drzewach, aby przypisać aktywny gatunek (CropPref)',
@@ -387,7 +391,7 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     orchard3d: {
       title: '3D Orchard Render — Point Cloud & Trees',
       subtitle: 'Individual 3D tree objects placed from user-drawn row lines over the terrain point cloud',
-      pointCloudLayer: '.las Cloud',
+      pointCloudLayer: '3D Terrain',
       treesLayer: '3D Trees',
       rowLinesLayer: 'Row lines',
       boundaryLayer: 'Boundary',
@@ -395,6 +399,7 @@ export const TRANSLATIONS: Record<Language, Translations> = {
       colorRgb: 'RGB',
       colorElevation: 'Elevation',
       colorClass: 'Class',
+      colorIntensity: 'Intensity',
       reliefTooltip: 'Cycle vertical relief scale Z (×1 / ×1.8 / ×2.8)',
       viewOrbit: '3D Orbit',
       viewTop: 'Top Map',
@@ -405,7 +410,8 @@ export const TRANSLATIONS: Record<Language, Translations> = {
       pointsStat: 'Points',
       treesStat: '3D Trees',
       rowsStat: 'Rows',
-      controlsHint: 'Left-drag: rotate · Right-drag: pan · Scroll: zoom · Click tree: inspect',
+      controlsHint: 'Left-drag: rotate · Right-drag: pan · {mod} + Scroll: zoom · Click tree: inspect',
+      zoomModifierHint: 'Hold {mod} + scroll to zoom the map',
       inspectorTitle: 'Selected Tree',
       inspectorClose: 'Close',
       inspectorRow: 'Row / Slot',
@@ -447,7 +453,7 @@ export const TRANSLATIONS: Record<Language, Translations> = {
       fitView: 'Fit orchard parcel',
       emptyOrchardBadge: 'Empty orchard — no rows yet',
       emptyOrchardGuide: 'Pick a tree species on the right and click two points (start & end) to draw the first row.',
-      hintDrawMode: 'Click row start point · Scroll: zoom · Right-drag: pan',
+      hintDrawMode: 'Click row start point · {mod} + Scroll: zoom · Right-drag: pan',
       hintFinishLine: 'Click row end point · Esc or right-click: cancel · Shift: angle snap',
       hintSelectMode: 'Click a row to drag A/B handles, or click a tree to change its species',
       hintPaintMode: 'Click a row or drag across trees to assign the active species (CropPref)',

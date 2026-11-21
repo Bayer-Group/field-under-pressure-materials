@@ -59,7 +59,7 @@ export const PLACEHOLDER_ORCHARDS_CATALOG: PlaceholderOrchardCatalogEntry[] = [
   },
   {
     _id: '6b01933c1dc02a368703a01f',
-    name: 'Orchard …a01f',
+    name: 'Grojec B',
     locationLabel: 'Okolice Grójca · WGS 84 (EPSG:4326)',
     areaHectares: 3.56,
     shapeAreaM2: 35620.67,
@@ -125,7 +125,7 @@ export const PLACEHOLDER_ORCHARDS_CATALOG: PlaceholderOrchardCatalogEntry[] = [
   },
   {
     _id: '6b01933c1dc02a368703a023',
-    name: 'Orchard …a023',
+    name: 'Grojec C',
     locationLabel: 'Okolice Grójca · WGS 84 (EPSG:4326)',
     areaHectares: 5.59,
     shapeAreaM2: 55907.07,
@@ -150,8 +150,14 @@ export function findPlaceholderOrchard(orchardId: ObjectIdString): PlaceholderOr
   );
 }
 
+const DEMO_ORCHARD_IDS = [
+  '6b01933c1dc02a368703a020', // Grojec A
+  '6b01933c1dc02a368703a01f', // Grojec B
+  '6b01933c1dc02a368703a023', // Grojec C
+];
+
 export function getPlaceholderOrchardsList(): OrchardOption[] {
-  return PLACEHOLDER_ORCHARDS_CATALOG.map((o) => ({
+  return DEMO_ORCHARD_IDS.map((id) => findPlaceholderOrchard(id)).map((o) => ({
     _id: o._id,
     name: o.name,
     areaHectares: o.areaHectares,
@@ -170,9 +176,9 @@ export function getPlaceholderUserPreferences(): UserPreferencesDoc {
         parsed.theme === 'Light' || parsed.theme === 'Dark' || parsed.theme === 'OS'
           ? parsed.theme
           : 'OS';
-      const lang = parsed.lang === 'en' ? 'en' : 'pl';
+      const lang = parsed.lang === 'pl' ? 'pl' : 'en';
       const activeOrchardId =
-        typeof parsed.activeOrchardId === 'string' && parsed.activeOrchardId.length > 0
+        typeof parsed.activeOrchardId === 'string' && DEMO_ORCHARD_IDS.includes(parsed.activeOrchardId)
           ? parsed.activeOrchardId
           : PLACEHOLDER_ORCHARDS_CATALOG[0]._id;
       return { theme, lang, activeOrchardId };
@@ -183,7 +189,7 @@ export function getPlaceholderUserPreferences(): UserPreferencesDoc {
 
   return {
     theme: 'OS',
-    lang: 'pl',
+    lang: 'en',
     activeOrchardId: PLACEHOLDER_ORCHARDS_CATALOG[0]._id,
   };
 }

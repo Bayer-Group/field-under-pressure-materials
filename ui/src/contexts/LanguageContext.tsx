@@ -20,10 +20,7 @@ function detectInitialLanguage(): Language {
   } catch {
     // ignore
   }
-  if (typeof navigator !== 'undefined' && navigator.language.toLowerCase().startsWith('en')) {
-    return 'en';
-  }
-  return 'pl';
+  return 'en';
 }
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
