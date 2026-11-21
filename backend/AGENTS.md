@@ -1,49 +1,49 @@
-# 🤖 Instrukcje dla Agenta AI: Moduł Backend (`backend/`)
+# 🤖 AI Agent Instructions: Backend Module (`backend/`)
 
-> Przed edycją plików w tym folderze zapoznaj się z nadrzędnym plikiem [`/AGENTS.md`](../AGENTS.md) oraz [`/CONTRIBUTING.md`](../CONTRIBUTING.md).
-
----
-
-## 🎯 Zakres i Rola Modułu (`Scope`)
-Folder `backend/` stanowi rdzeń obliczeniowy i komunikacyjny systemu (FastAPI). Odpowiada za:
-1. Udostępnianie asynchronicznych endpointów REST API pod prefixem `/api/v1`.
-2. Pobieranie surowych danych przestrzennych i środowiskowych przez moduły konektorów (`app/ingestion/`).
-3. Wykonywanie obliczeń geometrycznych i analitycznych na żądanie (`app/domain/`).
-4. Zapewnienie pełnej dokumentacji interaktywnej Swagger UI pod adresem `/docs`.
+> Before editing files in this folder, read the parent [`/AGENTS.md`](../AGENTS.md) and [`/CONTRIBUTING.md`](../CONTRIBUTING.md).
 
 ---
 
-## 📂 Struktura Katalogu
+## 🎯 Module Scope and Role (`Scope`)
+The `backend/` folder is the computational and communication core of the system (FastAPI). It is responsible for:
+1. Exposing asynchronous REST API endpoints under the `/api/v1` prefix.
+2. Fetching raw spatial and environmental data through connector modules (`app/ingestion/`).
+3. Performing geometric and analytical computations on demand (`app/domain/`).
+4. Providing full interactive Swagger UI documentation at `/docs`.
+
+---
+
+## 📂 Directory Structure
 ```text
 backend/
 ├── app/
-│   ├── main.py                 # Inicjalizacja FastAPI, middleware CORS, routery
+│   ├── main.py                 # FastAPI initialization, CORS middleware, routers
 │   ├── core/
-│   │   └── config.py           # Zmienne środowiskowe, stałe adresy API
-│   ├── ingestion/              # KONEKTORY DANYCH (ULDK GUGiK, IMGW itp.)
-│   │   ├── uldk_connector.py   # Klient API ULDK GUGiK
-│   │   └── imgw_connector.py   # Klient danych IMGW-PIB
-│   ├── domain/                 # FUNKCJE ANALITYCZNE I OBLICZENIOWE
-│   │   └── geometry_metrics.py # Obliczenia obwiedni, pola, metryk
+│   │   └── config.py           # Environment variables, fixed API addresses
+│   ├── ingestion/              # DATA CONNECTORS (ULDK GUGiK, IMGW, etc.)
+│   │   ├── uldk_connector.py   # ULDK GUGiK API client
+│   │   └── imgw_connector.py   # IMGW-PIB data client
+│   ├── domain/                 # ANALYTICAL AND COMPUTATIONAL FUNCTIONS
+│   │   └── geometry_metrics.py # Bounding box, area and metrics calculations
 │   └── api/v1/
-│       ├── router.py           # Rejestracja routerów pod /api/v1
-│       └── endpoints/          # Pliki endpointów (cadastre.py, analysis.py)
-├── requirements.txt            # Minimalne zależności (FastAPI, uvicorn, pydantic)
-└── run_backend.py              # Jednoklikowy skrypt startowy serwera
+│       ├── router.py           # Router registration under /api/v1
+│       └── endpoints/          # Endpoint files (cadastre.py, analysis.py)
+├── requirements.txt            # Minimal dependencies (FastAPI, uvicorn, pydantic)
+└── run_backend.py              # One-click server start script
 ```
 
 ---
 
-## 🛑 Zasady Specyficzne dla Backend (`Twarde Reguły`)
+## 🛑 Backend-Specific Rules (`Hard Rules`)
 
-1. **Zależności pod kontrolą człowieka:**
-   * Nie instaluj dodatkowych bibliotek (`requests`, `httpx`, `aiohttp`, `geopandas`, `shapely`) bez wyraźnego polecenia człowieka w danym zadaniu.
-   * Używaj bibliotek już zadeklarowanych w `requirements.txt` lub wskaż człowiekowi potrzebę dodania nowej biblioteki.
-2. **Spójność z modelami Pydantic:**
-   * Wszystkie endpointy w `api/v1/endpoints/` **muszą** używać modeli z `shared/schemas/geo_models.py` jako `response_model`.
-   * Nie twórz lokalnych, zduplikowanych modeli Pydantic w backendzie – schematy są współdzielone z wtyczką QGIS i frontendem.
-3. **Obsługa błędów:**
-   * Każde zapytanie do zewnętrznych serwisów (ULDK, IMGW) musi być opakowane w blok `try-except` z obsługą timeoutów (`timeout=5`) i zwróceniem czytelnego statusu HTTP (`HTTPException`).
-4. **Czystość kodu:**
-   * Zachowaj asynchroniczność (`async def`) w funkcjach endpointów FastAPI.
-   * Nie umieszczaj w `app/domain/` żadnej logiki biznesowej, o którą człowiek nie poprosił.
+1. **Dependencies under human control:**
+   * Do not install additional libraries (`requests`, `httpx`, `aiohttp`, `geopandas`, `shapely`) without an explicit human instruction in the given task.
+   * Use libraries already declared in `requirements.txt` or tell the human that a new library needs to be added.
+2. **Consistency with Pydantic models:**
+   * All endpoints in `api/v1/endpoints/` **must** use models from `shared/schemas/geo_models.py` as `response_model`.
+   * Do not create local, duplicated Pydantic models in the backend: the schemas are shared with the QGIS plugin and the frontend.
+3. **Error handling:**
+   * Every request to external services (ULDK, IMGW) must be wrapped in a `try-except` block that handles timeouts (`timeout=5`) and returns a clear HTTP status (`HTTPException`).
+4. **Code cleanliness:**
+   * Keep the FastAPI endpoint functions asynchronous (`async def`).
+   * Do not put any business logic in `app/domain/` that the human did not ask for.

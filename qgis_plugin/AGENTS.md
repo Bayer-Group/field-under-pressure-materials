@@ -1,47 +1,47 @@
-# 🤖 Instrukcje dla Agenta AI: Wtyczka QGIS (`qgis_plugin/`)
+# 🤖 AI Agent Instructions: QGIS Plugin (`qgis_plugin/`)
 
-> Przed edycją plików w tym folderze zapoznaj się z nadrzędnym plikiem [`/AGENTS.md`](../AGENTS.md) oraz [`/CONTRIBUTING.md`](../CONTRIBUTING.md).
-
----
-
-## 🎯 Zakres i Rola Modułu (`Scope`)
-Folder `qgis_plugin/` zawiera kod wtyczki dla stacji roboczej **QGIS 3** (`PyQGIS`). Odpowiada za:
-1. Rejestrację akcji, menu i paska narzędzi w interfejsie QGIS (`plugin.py`, `metadata.txt`).
-2. Wyświetlanie bocznego panelu dokowanego (**QDockWidget**) zdefiniowanego w Qt Designerze.
-3. **Asynchroniczną komunikację z backendem FastAPI** w osobnym wątku za pośrednictwem `QgsTask` (`AsyncApiTask`).
-4. Bezpieczną interakcję z mapą QGIS (odczyt obiektów z warstw, transformacja współrzędnych do EPSG:4326/EPSG:2180, prezentacja wyników).
+> Before editing files in this folder, read the parent [`/AGENTS.md`](../AGENTS.md) and [`/CONTRIBUTING.md`](../CONTRIBUTING.md).
 
 ---
 
-## 📂 Struktura Katalogu
+## 🎯 Module Scope and Role (`Scope`)
+The `qgis_plugin/` folder contains the plugin code for the **QGIS 3** workstation (`PyQGIS`). It is responsible for:
+1. Registering actions, menus and the toolbar in the QGIS interface (`plugin.py`, `metadata.txt`).
+2. Displaying the side docked panel (**QDockWidget**) defined in Qt Designer.
+3. **Asynchronous communication with the FastAPI backend** in a separate thread through `QgsTask` (`AsyncApiTask`).
+4. Safe interaction with the QGIS map (reading objects from layers, transforming coordinates to EPSG:4326/EPSG:2180, presenting results).
+
+---
+
+## 📂 Directory Structure
 ```text
 qgis_plugin/
 └── pyqgis_fastapi_bridge/
-    ├── __init__.py           # classFactory(iface) - punkt startowy wtyczki QGIS
-    ├── metadata.txt          # Metadane QGIS Plugin Manager
-    ├── plugin.py             # Rejestracja akcji, menu i dokowania panelu
-    ├── icon.png              # Ikonka wtyczki
+    ├── __init__.py           # classFactory(iface) - entry point of the QGIS plugin
+    ├── metadata.txt          # QGIS Plugin Manager metadata
+    ├── plugin.py             # Registration of actions, menu and panel docking
+    ├── icon.png              # Plugin icon
     ├── gui/
-    │   ├── dockwidget.py     # Logika panelu: QgsTask, obsługa sygnałów i zdarzeń
-    │   └── dockwidget.ui     # Layout z Qt Designera (XML)
+    │   ├── dockwidget.py     # Panel logic: QgsTask, signal and event handling
+    │   └── dockwidget.ui     # Qt Designer layout (XML)
     ├── core/
-    │   └── api_client.py     # Klient HTTP odpytujący backend z trybem offline fallback
+    │   └── api_client.py     # HTTP client querying the backend, with an offline fallback mode
     └── styles/
-        └── categorized_style.qml # Szablony stylów warstw QGIS
+        └── categorized_style.qml # QGIS layer style templates
 ```
 
 ---
 
-## 🛑 Zasady Specyficzne dla PyQGIS (`Twarde Reguły`)
+## 🛑 PyQGIS-Specific Rules (`Hard Rules`)
 
-1. **BEZWZGLĘDNY ZAKAZ BLOKOWANIA WĄTKU GŁÓWNEGO GUI:**
-   * Żadne zapytanie sieciowe (`urllib.request`, `http`) ani ciężka operacja na geometrii **nie może** być wykonywana bezpośrednio w metodach obsługi przycisków (`clicked`).
-   * Zawsze używaj wzorca wielowątkowości `QgsTask` (tak jak w `AsyncApiTask`). Odpytanie sieciowe wykonuje się w metodzie `run()`, a aktualizacja GUI w metodzie `finished()`.
-2. **Dynamiczne ładowanie widoków UI (`loadUiType`):**
-   * Plik widoku `dockwidget.ui` edytujemy w Qt Designerze (za pomocą `open_designer.bat`).
-   * **Nigdy nie kompiluj pliku `.ui` do `.py`** za pomocą `pyuic5`. Plik `.ui` jest ładowany dynamicznie w locie przez `PyQt5.uic.loadUiType()`.
-3. **Ścieżki i powiązania:**
-   * Wszelkie odwołania do plików (np. `dockwidget.ui`, `icon.png`) muszą być budowane relatywnie za pomocą `os.path.join(os.path.dirname(__file__), ...)`.
-   * Wtyczka jest linkowana do profilu QGIS przez junction/symlink (`deploy.py`). Nie kopiuj plików ręcznie do katalogu `%APPDATA%`.
-4. **Bezpieczeństwo geometrii:**
-   * Zawsze sprawdzaj, czy warstwa jest poprawna (`layer.isValid()`) i czy geometria nie jest pusta (`not geom.isEmpty()`) przed próbą wyznaczenia centroidu lub transformacji układu.
+1. **ABSOLUTE BAN ON BLOCKING THE MAIN GUI THREAD:**
+   * No network request (`urllib.request`, `http`) or heavy geometry operation **may** be executed directly in button handler methods (`clicked`).
+   * Always use the `QgsTask` multithreading pattern (as in `AsyncApiTask`). The network query is done in the `run()` method and the GUI update in the `finished()` method.
+2. **Dynamic loading of UI views (`loadUiType`):**
+   * The `dockwidget.ui` view file is edited in Qt Designer (with `open_designer.bat`).
+   * **Never compile the `.ui` file to `.py`** with `pyuic5`. The `.ui` file is loaded dynamically on the fly by `PyQt5.uic.loadUiType()`.
+3. **Paths and links:**
+   * All references to files (e.g. `dockwidget.ui`, `icon.png`) must be built relatively with `os.path.join(os.path.dirname(__file__), ...)`.
+   * The plugin is linked into the QGIS profile through a junction/symlink (`deploy.py`). Do not copy files manually into the `%APPDATA%` directory.
+4. **Geometry safety:**
+   * Always check that the layer is valid (`layer.isValid()`) and that the geometry is not empty (`not geom.isEmpty()`) before trying to compute a centroid or transform the coordinate system.
