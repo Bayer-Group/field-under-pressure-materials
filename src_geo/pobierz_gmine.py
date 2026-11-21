@@ -1,7 +1,7 @@
-import io
 import json
+import ssl
 import urllib.request
-import zipfile
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import geopandas as gpd
 import numpy as np
@@ -14,6 +14,9 @@ from shapely.geometry import Polygon, shape
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 APP_DATA_DIR = ROOT_DIR / "app" / "data_app"
+
+# Kontekst SSL odporny na brak lokalnych certyfikatów w Pythonie na macOS
+SSL_CTX = ssl._create_unverified_context()
 
 CROP_NAMES = {
     1110: "Pszenica ozima",
@@ -33,10 +36,12 @@ CROP_NAMES = {
     2200: "Sady i uprawy trwałe",
 }
 
+
 def _h3_to_polygon(cell: str) -> Polygon:
     import h3
     pts = h3.cell_to_boundary(cell) if hasattr(h3, "cell_to_boundary") else h3.h3_to_geo_boundary(cell)
     return Polygon([(lon, lat) for lat, lon in pts])
+
 
 def _h3_to_latlon(h3_series: pd.Series):
     import h3
@@ -44,39 +49,160 @@ def _h3_to_latlon(h3_series: pd.Series):
     coords = [fn(c) for c in h3_series]
     return np.array([c[0] for c in coords]), np.array([c[1] for c in coords])
 
-def _fetch_open_meteo_fallback(grid_ids: list[int], lat: float, lon: float) -> pd.DataFrame:
-    """Awaryjny pobór godzinowej pogody (maj 2024) z Open-Meteo dla gmin spoza Małopolski."""
+
+def _fetch_latest_sentinel_ndvi(
+    bbox: tuple[float, float, float, float],
+    lons: list[float],
+    lats: list[float],
+    max_cloud_pct: float = 20.0,
+) -> tuple[np.ndarray, str]:
+    """
+    Wyszukuje w Earth Search STAC najświeższą scenę Sentinel-2 L2A dla bbox gminy
+    z zachmurzeniem < max_cloud_pct, sprawdza maskę chmur SCL nad polami i liczy NDVI.
+    """
+    stac_url = "https://earth-search.aws.element84.com/v1/search"
+    now_utc = datetime.now(timezone.utc)
+
+    for days_back in (60, 150):
+        start_dt = (now_utc - timedelta(days=days_back)).strftime("%Y-%m-%dT00:00:00Z")
+        end_dt = now_utc.strftime("%Y-%m-%dT23:59:59Z")
+        payload = {
+            "collections": ["sentinel-2-l2a"],
+            "bbox": list(bbox),
+            "datetime": f"{start_dt}/{end_dt}",
+            "limit": 8,
+            "query": {
+                "eo:cloud_cover": {"lt": max_cloud_pct},
+            },
+            "sortby": [{"field": "properties.datetime", "direction": "desc"}],
+        }
+        req = urllib.request.Request(
+            stac_url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, context=SSL_CTX, timeout=20) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+        except Exception as exc:
+            print(f"[Sentinel STAC] Błąd połączenia: {exc}")
+            break
+
+        features = data.get("features", [])
+        for feat in features:
+            assets = feat.get("assets", {})
+            red_href = assets.get("red", {}).get("href")
+            nir_href = assets.get("nir", {}).get("href")
+            scl_href = assets.get("scl", {}).get("href")
+            if not (red_href and nir_href and scl_href):
+                continue
+
+            scene_date = feat.get("properties", {}).get("datetime", "")[:10]
+            try:
+                with rasterio.Env(
+                    GDAL_HTTP_UNSAFESSL="YES",
+                    GDAL_DISABLE_READDIR_ON_OPEN="EMPTY_DIR",
+                    CPL_VSIL_CURL_ALLOWED_EXTENSIONS=".tif,.TIF",
+                ):
+                    with rasterio.open(scl_href) as src_scl:
+                        xs, ys = transform("EPSG:4326", src_scl.crs, lons, lats)
+                        pts = list(zip(xs, ys))
+                        scl_vals = np.array([v[0] for v in src_scl.sample(pts)], dtype="int16")
+
+                    # Klasy SCL bez chmur i cieni: 4=roślinność, 5=gleba, 6=woda, 7=niesklasyfikowane
+                    clear_mask = np.isin(scl_vals, [4, 5, 7])
+                    if np.mean(clear_mask) < 0.5:
+                        # Większość pól pod lokalną chmurą mimo niskiego cloud_cover kafla — sprawdzamy starszą scenę
+                        continue
+
+                    with rasterio.open(red_href) as src_red, rasterio.open(nir_href) as src_nir:
+                        red_vals = np.array([v[0] for v in src_red.sample(pts)], dtype="float32")
+                        nir_vals = np.array([v[0] for v in src_nir.sample(pts)], dtype="float32")
+
+                valid = clear_mask & ((nir_vals + red_vals) > 0)
+                ndvi = np.where(valid, (nir_vals - red_vals) / (nir_vals + red_vals + 1e-6), np.nan)
+                ndvi = np.clip(ndvi, -0.1, 0.95)
+                median_ndvi = float(np.nanmedian(ndvi)) if np.any(np.isfinite(ndvi)) else 0.55
+                ndvi = np.where(np.isfinite(ndvi), ndvi, median_ndvi).round(3).astype("float32")
+                print(f"[Sentinel-2] Pobrano świeże pasma z dnia {scene_date} (czyste piksele: {np.mean(clear_mask)*100:.0f}%).")
+                return ndvi, scene_date
+            except Exception as exc:
+                print(f"[Sentinel-2] Pominięto scenę {scene_date}: {exc}")
+                continue
+
+    # Fallback do lokalnej sceny Sentinel-2 w razie braku internetu
+    sent_dirs = sorted(ROOT_DIR.rglob("S2A_*_L2A"))
+    if sent_dirs:
+        sdir = sent_dirs[0]
+        with rasterio.open(sdir / "red.tif") as sr, rasterio.open(sdir / "nir.tif") as sn, rasterio.open(sdir / "scl.tif") as ss:
+            xs, ys = transform("EPSG:4326", sr.crs, lons, lats)
+            sb = sr.bounds
+            if any((sb.left <= x <= sb.right) and (sb.bottom <= y <= sb.top) for x, y in zip(xs, ys)):
+                pts = list(zip(xs, ys))
+                rv = np.array([v[0] for v in sr.sample(pts)], dtype="float32")
+                nv = np.array([v[0] for v in sn.sample(pts)], dtype="float32")
+                sv = np.array([v[0] for v in ss.sample(pts)], dtype="int16")
+                ok = np.isin(sv, [4, 5, 7]) & ((nv + rv) > 0)
+                ndvi_local = np.where(ok, (nv - rv) / (nv + rv + 1e-6), 0.55)
+                return np.clip(ndvi_local, 0.1, 0.92).round(3).astype("float32"), "2024-05-28 (lokalny)"
+
+    return np.full(len(lons), 0.58, dtype="float32"), "brak świeżej sceny"
+
+
+def _fetch_live_weather(grid_ids: list[int], lat: float, lon: float) -> pd.DataFrame:
+    """
+    Pobiera aktualną pogodę godzinową (ostatnie 5 dni + 4 dni prognozy) z Open-Meteo
+    dla wybranego kafla gminy wraz z wilgotnością gleby i kroczącym opadem 24h.
+    """
     url = (
-        f"https://archive-api.open-meteo.com/v1/archive?latitude={lat:.4f}&longitude={lon:.4f}"
-        "&start_date=2024-05-17&end_date=2024-05-30"
+        f"https://api.open-meteo.com/v1/forecast?latitude={lat:.4f}&longitude={lon:.4f}"
+        "&past_days=5&forecast_days=4"
         "&hourly=temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,soil_moisture_0_to_7cm"
         "&wind_speed_unit=ms&timezone=Europe%2FWarsaw"
     )
-    req = urllib.request.urlopen(url, timeout=15)
-    payload = json.loads(req.read().decode("utf-8"))
-    h = payload["hourly"]
-    df = pd.DataFrame({
-        "timestamp": pd.to_datetime(h["time"]),
-        "temp_c": np.round(h["temperature_2m"], 1).astype("float32"),
-        "humidity_pct": np.round(h["relative_humidity_2m"], 1).astype("float32"),
-        "wind_ms": np.round(h["wind_speed_10m"], 1).astype("float32"),
-        "precip_1h": np.fillna(pd.Series(h["precipitation"]), 0.0) if hasattr(np, "fillna") else pd.Series(h["precipitation"]).fillna(0.0),
-        "soil_moisture": np.round(pd.Series(h["soil_moisture_0_to_7cm"]).fillna(0.25), 3).astype("float32"),
-    })
-    df["precip_24h_mm"] = df["precip_1h"].rolling(24, min_periods=1).sum().round(1).astype("float32")
-    df = df[df["timestamp"] >= "2024-05-18 00:00:00"].copy()
+    try:
+        with urllib.request.urlopen(url, context=SSL_CTX, timeout=15) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+        h = payload["hourly"]
+        df = pd.DataFrame({
+            "timestamp": pd.to_datetime(h["time"]),
+            "temp_c": pd.Series(h["temperature_2m"]).ffill().bfill().round(1).astype("float32"),
+            "humidity_pct": pd.Series(h["relative_humidity_2m"]).ffill().bfill().round(1).astype("float32"),
+            "wind_ms": pd.Series(h["wind_speed_10m"]).ffill().bfill().round(1).astype("float32"),
+            "precip_1h": pd.Series(h["precipitation"]).fillna(0.0).clip(lower=0.0),
+            "soil_moisture": pd.Series(h["soil_moisture_0_to_7cm"]).ffill().bfill().fillna(0.25).round(3).astype("float32"),
+        })
+        df["precip_24h_mm"] = df["precip_1h"].rolling(24, min_periods=1).sum().round(1).astype("float32")
+        # Odrzucamy pierwsze 24h bufora kroczącego
+        cutoff = df["timestamp"].min() + pd.Timedelta(hours=24)
+        df = df[df["timestamp"] >= cutoff].copy()
 
-    out = []
-    for gid in grid_ids:
-        sub = df[["timestamp", "temp_c", "humidity_pct", "wind_ms", "precip_24h_mm", "soil_moisture"]].copy()
-        sub.insert(0, "grid_id", np.int32(gid))
-        out.append(sub)
-    return pd.concat(out, ignore_index=True)
+        out = []
+        for gid in grid_ids:
+            sub = df[["timestamp", "temp_c", "humidity_pct", "wind_ms", "precip_24h_mm", "soil_moisture"]].copy()
+            sub.insert(0, "grid_id", np.int32(gid))
+            out.append(sub)
+        print(f"[Pogoda Live] Pobrano {len(df)} godzin aktualnej pogody i prognozy dla ({lat:.3f}, {lon:.3f}).")
+        return pd.concat(out, ignore_index=True)
+    except Exception as exc:
+        print(f"[Pogoda Live] Błąd pobierania z Open-Meteo ({exc}), używam lokalnego zapasu.")
+        return pd.read_parquet(APP_DATA_DIR / "weather_timeseries_33uxr.parquet")
 
-def build_gmina_dataset(wojewodztwo: str, powiat: str, gmina: str, max_fields: int = 250) -> tuple[pd.DataFrame, pd.DataFrame]:
+
+def build_gmina_dataset(
+    wojewodztwo: str,
+    powiat: str,
+    gmina: str,
+    max_fields: int = 250,
+    max_cloud_pct: float = 20.0,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Wyciąga prawdziwe poligony pól, glebę SoilGrids, NDVI Sentinel-2 i pogodę
-    dla wybranej gminy z gminy_polska.parquet.
+    Dla wybranej gminy:
+    1. Wycina rzeczywiste poligony pól z rastra CLMS 10 m,
+    2. Łączy je z parametrami gleby ISRIC SoilGrids (pH, SOC, tekstura),
+    3. Pobiera najświeższe bezchmurne dane satelitarne Sentinel-2 L2A (NDVI + maska chmur SCL),
+    4. Pobiera aktualną pogodę godzinową i prognozę (Open-Meteo + wilgotność gleby).
     """
     gminy_df = pd.read_parquet(APP_DATA_DIR / "gminy_polska.parquet")
     row = gminy_df[
@@ -110,11 +236,13 @@ def build_gmina_dataset(wojewodztwo: str, powiat: str, gmina: str, max_fields: i
                     poly_records.append({"crop_code": int(val), "geometry": poly})
 
     if not poly_records:
-        # Jeśli lokalny raster nie pokrywa wybranej gminy, zwracamy domyślny zestaw 33UXR
-        return (
-            pd.read_parquet(APP_DATA_DIR / "fields_static_33uxr.parquet"),
-            pd.read_parquet(APP_DATA_DIR / "weather_timeseries_33uxr.parquet"),
+        fields_fallback = pd.read_parquet(APP_DATA_DIR / "fields_static_33uxr.parquet")
+        weather_live = _fetch_live_weather(
+            list(fields_fallback["grid_id"].unique()),
+            float(g["center_lat"]),
+            float(g["center_lon"]),
         )
+        return fields_fallback, weather_live
 
     fields_gdf = gpd.GeoDataFrame(poly_records, crs="EPSG:4326")
     fields_gdf["area_ha"] = (fields_gdf.to_crs("EPSG:2180").geometry.area / 10000.0).round(2)
@@ -155,7 +283,7 @@ def build_gmina_dataset(wojewodztwo: str, powiat: str, gmina: str, max_fields: i
                 fields_gdf = gpd.GeoDataFrame(agg, geometry="geometry", crs="EPSG:4326")
 
     if "h3_index_10" not in fields_gdf.columns:
-        fields_gdf["h3_index_10"] = [f"GMINA-{i:04d}" for i in range(len(fields_gdf))]
+        fields_gdf["h3_index_10"] = [f"{gmina[:4].upper()}-{i:04d}" for i in range(len(fields_gdf))]
         fields_gdf["ph"] = 6.2
         fields_gdf["soc_0_5cm_mean"] = 17.5
         fields_gdf["soilTexture"] = "Loam"
@@ -165,25 +293,17 @@ def build_gmina_dataset(wojewodztwo: str, powiat: str, gmina: str, max_fields: i
     fields_gdf["lon"] = centroids.x
     fields_gdf["crop_name"] = fields_gdf["crop_code"].map(CROP_NAMES)
 
-    # 3. NDVI z lokalnej sceny Sentinel-2 (jeśli gmina leży w zasięgu kafla)
-    fields_gdf["ndvi"] = np.float32(0.58)
-    sent_dirs = sorted(ROOT_DIR.rglob("S2A_*_L2A"))
-    if sent_dirs:
-        sdir = sent_dirs[0]
-        with rasterio.open(sdir / "red.tif") as sr, rasterio.open(sdir / "nir.tif") as sn, rasterio.open(sdir / "scl.tif") as ss:
-            xs, ys = transform("EPSG:4326", sr.crs, fields_gdf["lon"].tolist(), fields_gdf["lat"].tolist())
-            sb = sr.bounds
-            in_tile = [(sb.left <= x <= sb.right) and (sb.bottom <= y <= sb.top) for x, y in zip(xs, ys)]
-            if any(in_tile):
-                pts = list(zip(xs, ys))
-                rv = np.array([v[0] for v in sr.sample(pts)], dtype="float32")
-                nv = np.array([v[0] for v in sn.sample(pts)], dtype="float32")
-                sv = np.array([v[0] for v in ss.sample(pts)], dtype="int16")
-                ok = np.isin(sv, [4, 5, 7]) & ((nv + rv) > 0)
-                ndvi_calc = np.where(ok, (nv - rv) / (nv + rv + 1e-6), 0.55)
-                fields_gdf["ndvi"] = np.clip(ndvi_calc, 0.1, 0.92).round(3)
+    # 3. Najświeższe dane Sentinel-2 spełniające warunek zachmurzenia i maski SCL
+    ndvi_vals, sentinel_date = _fetch_latest_sentinel_ndvi(
+        bbox=bbox,
+        lons=fields_gdf["lon"].tolist(),
+        lats=fields_gdf["lat"].tolist(),
+        max_cloud_pct=max_cloud_pct,
+    )
+    fields_gdf["ndvi"] = ndvi_vals
+    fields_gdf["sentinel_date"] = sentinel_date
 
-    # 4. Siatka pogodowa + dane godzinowe
+    # 4. Dopasowanie grid_id i aktualna pogoda godzinowa dla kafla gminy
     grids_path = ROOT_DIR / "data_local" / "weather" / "weather_grids.parquet"
     if grids_path.exists():
         grids_df = pd.read_parquet(grids_path)
@@ -215,29 +335,9 @@ def build_gmina_dataset(wojewodztwo: str, powiat: str, gmina: str, max_fields: i
         "soil_texture": fields_gdf["soilTexture"].astype(str),
         "area_ha": fields_gdf["area_ha"].astype("float32"),
         "polygon_json": fields_gdf["polygon_json"].astype(str),
+        "sentinel_date": fields_gdf["sentinel_date"].astype(str),
     })
 
     used_gids = list(out_fields["grid_id"].unique())
-    w_local = ROOT_DIR / "data_local" / "weather" / "weather_hourly_2024_Maopolskie.parquet"
-    if w_local.exists():
-        w_df = pd.read_parquet(w_local)
-        w_df["grid_id"] = w_df["grid_id"].astype("int32")
-        w_sub = w_df[w_df["grid_id"].isin(used_gids)].copy()
-        if not w_sub.empty:
-            w_sub["local_time"] = pd.to_datetime(w_sub["local_time"])
-            w_sub = w_sub[(w_sub["local_time"] >= "2024-05-18 00:00:00") & (w_sub["local_time"] <= "2024-05-30 23:00:00")].copy()
-            sm_col = [c for c in w_sub.columns if "soil_moisture" in c.lower()]
-            sm_vals = w_sub[sm_col[0]].round(3).astype("float32") if sm_col else np.float32(0.26)
-            out_weather = pd.DataFrame({
-                "grid_id": w_sub["grid_id"].astype("int32"),
-                "timestamp": w_sub["local_time"],
-                "temp_c": w_sub["temperature"].round(1).astype("float32"),
-                "humidity_pct": w_sub["relative_humidity"].round(1).astype("float32"),
-                "wind_ms": w_sub["wind_speed"].round(1).astype("float32"),
-                "precip_24h_mm": np.float32(0.0),
-                "soil_moisture": sm_vals,
-            })
-            return out_fields, out_weather
-
-    out_weather = _fetch_open_meteo_fallback(used_gids, float(g["center_lat"]), float(g["center_lon"]))
+    out_weather = _fetch_live_weather(used_gids, float(g["center_lat"]), float(g["center_lon"]))
     return out_fields, out_weather
