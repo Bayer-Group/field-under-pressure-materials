@@ -1,0 +1,51 @@
+{
+  "run_timestamp": "20261121_180330",
+  "device": "cuda",
+  "gpu_name": "Tesla T4",
+  "train_mode": "pixel",
+  "entity_col": "pixel_id",
+  "anchor_stride": 2,
+  "tensors_on_device": true,
+  "tensor_mem_mb": 2622.56,
+  "loss_beta": 0.03,
+  "hist_noise_std": 0.04,
+  "lr_patience": 2,
+  "early_stop_patience": 7,
+  "epochs_ran": 12,
+  "n_train_windows": 657935,
+  "n_val_windows": 165403,
+  "best_epoch": 5,
+  "best_val_loss": 0.04782297330872068,
+  "best_val_metrics": {
+    "ndvi_mae": 0.0639743059873581,
+    "ndvi_rmse": 0.10428259521722794,
+    "ndmi_mae": 0.056597720831632614,
+    "ndmi_rmse": 0.0900881290435791,
+    "valid_points": 180869
+  },
+  "total_train_sec": 268.53,
+  "checkpoint_file": "vegetation_lstm_pixel.pt",
+  "model_config": {
+    "hist_input_size": 13,
+    "future_input_size": 9,
+    "static_input_size": 14,
+    "hidden_size": 96,
+    "num_layers": 2,
+    "dropout": 0.25,
+    "history_days": 56,
+    "forecast_days": 7
+  },
+  "train_config": {
+    "epochs": 25,
+    "batch_size": 512,
+    "lr": 0.001,
+    "weight_decay": 0.0005,
+    "val_ratio": 0.2,
+    "split_mode": "field",
+    "target_mode": "observed",
+    "max_interp_gap_days": 10,
+    "min_hist_obs": 2,
+    "seed": 42,
+    "grad_clip": 1.0
+  }
+}
