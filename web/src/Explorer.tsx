@@ -29,6 +29,7 @@ export function Explorer({ plotId, tab, sampleId, unit, crop, view }: {
   const maps = useFetch(plotId, (s) => api.greennessMaps(plotId!, s))
   const greenness = useFetch(plotId, (s) => api.greenness(plotId!, s))
   const events = useFetch(plotId, (s) => api.plotEvents(plotId!, s))
+  const microbiome = useFetch(plotId, (s) => api.microbiome(plotId!, s)) // optional: marks metagenomics on the timeline
   const [focusSite, setFocusSite] = useState<string | null>(null)
   const [highlight, setHighlight] = useState<string | null>(null)
 
@@ -96,7 +97,8 @@ export function Explorer({ plotId, tab, sampleId, unit, crop, view }: {
               <p className="message">Loading…</p>
             ) : (
               <PlotTimeline
-                points={greenness.data ?? []} events={events.data ?? []} photos={photoList} maps={mapList}
+                plotId={selected.plot_id} points={greenness.data ?? []} events={events.data ?? []} photos={photoList} maps={mapList}
+                metagenomes={(microbiome.data ?? []).filter((m) => m.kind === 'bacteria')}
                 layer={layer} photoId={photo?.photo_id ?? null} mapId={gmap?.map_id ?? null} onChange={choose}
               />
             )}

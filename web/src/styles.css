@@ -11,6 +11,7 @@
   --green-wash: #e7f1eb;
   --visit: #c2410c;
   --photo: #1d4ed8;
+  --dna: #7c3aed;
   --caution: #9a3412;
   --caution-wash: #fff4ea;
   --radius: 10px;
@@ -128,6 +129,7 @@ button { font: inherit; color: inherit; }
 /* ---------- greenness timeline ---------- */
 .key-dot { border-radius: 50%; background: var(--green); }
 .key-visit { background: var(--visit); transform: rotate(45deg) scale(0.85); }
+.key-dna { background: var(--dna); clip-path: polygon(50% 10%, 100% 90%, 0 90%); }
 .key-photo { border-radius: 50%; background: var(--surface); border: 2px solid var(--photo); }
 /* dragging across the chart chooses a date: it must not select the text around it */
 .chart { user-select: none; -webkit-user-select: none; }
@@ -143,6 +145,10 @@ button { font: inherit; color: inherit; }
 .chart .visit { cursor: pointer; outline: none; }
 .chart .visit path { fill: var(--visit); stroke: var(--surface); stroke-width: 1; }
 .chart .visit:hover path, .chart .visit:focus-visible path { stroke: var(--ink); stroke-width: 1.5; }
+.chart .dna-line { stroke: var(--dna); stroke-width: 1.25; stroke-dasharray: 4 3; stroke-opacity: 0.7; pointer-events: none; }
+.chart .dna { cursor: pointer; outline: none; }
+.chart .dna path { fill: var(--dna); stroke: var(--surface); stroke-width: 1; }
+.chart .dna:hover path, .chart .dna:focus-visible path { stroke: var(--ink); stroke-width: 1.5; }
 .chart .cursor { stroke-width: 2; pointer-events: none; }
 .chart .cursor.photo { stroke: var(--photo); stroke-opacity: 0.7; }
 .chart .cursor.greenness { stroke: var(--ink); stroke-opacity: 0.75; }
