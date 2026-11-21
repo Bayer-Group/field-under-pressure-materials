@@ -45,6 +45,29 @@
     .primary:disabled { opacity: .38; cursor: not-allowed; }
     .status { position: absolute; z-index: 3; top: calc(max(16px, env(safe-area-inset-top)) + 61px); left: 16px; right: 16px; margin: 0; padding: 10px 13px; border-radius: 12px; background: #fff; box-shadow: 0 5px 20px rgba(24,50,35,.12); font-size: 13px; line-height: 1.4; }
     .status:empty { display: none; }
+    .status { background: rgba(239,247,240,.84); border: 1px solid rgba(255,255,255,.7); backdrop-filter: blur(18px); color: #294c36; }
+    .sheet.collapsed { max-height: 53px; overflow: hidden; padding-bottom: 0; }
+    .drawer-toggle { display: block; width: 100%; border: 0; background: transparent; padding: 1px 0 10px; cursor: pointer; }
+    .drawer-toggle .handle { display: block; margin: 1px auto 4px; }
+    .drawer-toggle span:last-child { display: none; color: var(--green); font-size: 12px; font-weight: 700; }
+    .sheet.collapsed .drawer-toggle span:last-child { display: block; }
+    .sheet.collapsed > :not(.drawer-toggle) { display: none; }
+    .top.searching { position: absolute; z-index: 6; top: 35%; left: 50%; right: auto; width: min(90vw, 440px); transform: translate(-50%, -50%); }
+    .top.searching .locate { display: none; }
+    .top.searching .search { height: 60px; box-shadow: 0 12px 40px rgba(24,50,35,.24); }
+    .results.searching { position: absolute; z-index: 6; top: calc(35% + 34px); left: 50%; right: auto; width: min(90vw, 440px); transform: translateX(-50%); }
+    .search-backdrop { display: none; position: absolute; inset: 0; z-index: 5; background: rgba(16,35,24,.23); }
+    .search-backdrop.visible { display: block; }
+    dialog { width: min(90vw, 390px); padding: 24px; border: 1px solid rgba(255,255,255,.9); border-radius: 24px; color: var(--ink); background: rgba(242,249,243,.97); box-shadow: 0 16px 50px rgba(15,40,25,.22); }
+    dialog::backdrop { background: rgba(16,35,24,.32); }
+    dialog h2 { font-size: 22px; letter-spacing: -.035em; margin: 0 0 8px; }
+    dialog p { color: var(--muted); font-size: 14px; line-height: 1.45; }
+    dialog input { max-width: 100%; margin: 14px 0; font-size: 14px; }
+    dialog .close-dialog { border: 0; padding: 10px 16px; border-radius: 12px; background: #14221a; color: #fff; }
+    .maplibregl-ctrl-top-right { top: max(130px, calc(env(safe-area-inset-top) + 124px)); right: 16px; }
+    .maplibregl-ctrl-group { border-radius: 15px !important; overflow: hidden; box-shadow: 0 5px 22px rgba(24,50,35,.12) !important; }
+    .maplibregl-ctrl-group button { width: 46px !important; height: 46px !important; background: rgba(248,251,247,.94) !important; }
+
     .results { display: none; position: absolute; z-index: 3; top: calc(max(16px, env(safe-area-inset-top)) + 58px); left: 16px; right: 76px; padding: 6px; border-radius: 14px; background: #fff; box-shadow: 0 5px 20px rgba(24,50,35,.15); }
     .results.visible { display: grid; }
     .results button { text-align: left; min-height: 44px; border: 0; border-radius: 9px; background: transparent; color: var(--ink); padding: 8px 10px; }
@@ -58,7 +81,8 @@
 <body>
   <main class="app">
     <div id="map" aria-label="Mapa działek"></div>
-    <div class="top">
+    <div id="search-backdrop" class="search-backdrop"></div>
+    <div class="top" id="top-controls">
       <form class="search" id="search-form" role="search">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4 4"/></svg>
         <input id="parcel-number" aria-label="Numer działki" placeholder="Numer działki" autocomplete="off" />
@@ -68,7 +92,7 @@
     <div id="results" class="results" aria-label="Wyniki wyszukiwania"></div>
     <p id="status" class="status" role="status" aria-live="polite"></p>
     <section class="sheet" aria-labelledby="heading">
-      <div class="handle" aria-hidden="true"></div>
+      <button id="drawer-toggle" class="drawer-toggle" type="button" aria-label="Zwiń panel" aria-expanded="true"><span class="handle" aria-hidden="true"></span><span>Twoje działki</span></button>
       <p class="eyebrow">Twoje pola · 1 z 3</p>
       <h1 id="heading">Wybierz działkę</h1>
       <p class="subtitle">Znajdź swoje pole na mapie lub dodaj je z pliku.</p>
@@ -80,6 +104,13 @@
       </div>
       <button id="continue" class="primary" disabled type="button">Dalej</button>
     </section>
+    <dialog id="import-dialog" aria-labelledby="import-title">
+      <h2 id="import-title">Importuj plik</h2>
+      <p>Wybierz plik GeoJSON lub spakowany Shapefile (.zip).</p>
+      <input id="import-file" type="file" accept=".geojson,.json,.zip,application/geo+json,application/zip" aria-label="Wybierz plik GeoJSON lub ZIP" />
+      <p id="import-note">Import i odczyt pliku będą dostępne w kolejnym etapie.</p>
+      <button class="close-dialog" id="close-import" type="button">Zamknij</button>
+    </dialog>
   </main>
   <script>
     'use strict';
@@ -89,6 +120,28 @@
     const status = document.getElementById('status');
     const results = document.getElementById('results');
     const next = document.getElementById('continue');
+    const sheet = document.querySelector('.sheet');
+    const drawerToggle = document.getElementById('drawer-toggle');
+    const topControls = document.getElementById('top-controls');
+    const searchBackdrop = document.getElementById('search-backdrop');
+    const importDialog = document.getElementById('import-dialog');
+    /** Expand or collapse the selection panel. */
+    function setDrawer(open) {
+      sheet.classList.toggle('collapsed', !open);
+      drawerToggle.setAttribute('aria-expanded', String(open));
+      drawerToggle.setAttribute('aria-label', open ? 'Zwiń panel' : 'Otwórz panel');
+    }
+    /** Open or dismiss the centred parcel search. */
+    function setSearch(open) {
+      topControls.classList.toggle('searching', open);
+      results.classList.toggle('searching', open);
+      searchBackdrop.classList.toggle('visible', open);
+      if (open) { setDrawer(false); input.focus(); }
+      else { results.classList.remove('visible'); input.blur(); }
+    }
+    drawerToggle.addEventListener('click', () => setDrawer(sheet.classList.contains('collapsed')));
+    searchBackdrop.addEventListener('click', () => setSearch(false));
+    document.addEventListener('keydown', event => { if (event.key === 'Escape' && topControls.classList.contains('searching')) setSearch(false); });
     const map = new maplibregl.Map({
       container: 'map', center: [20.773, 52.175], zoom: 12.8,
       style: { version: 8, sources: { osm: { type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256, attribution: '&copy; OpenStreetMap contributors' } }, layers: [{ id: 'osm', type: 'raster', source: 'osm' }] }
@@ -114,8 +167,12 @@
       next.disabled = items.length === 0;
     }
     /** Add a selected result without claiming ownership. */
-    function selectParcel(parcel) {
+    function selectParcel(parcel, options = {}) {
+      if (options.toggle && selected.has(parcel.parcel_id)) {
+        selected.delete(parcel.parcel_id); status.textContent = 'Działka odznaczona.'; renderSelection(); return;
+      }
       selected.set(parcel.parcel_id, parcel); results.classList.remove('visible'); status.textContent = 'Działka dodana. Możesz wybrać kolejną.'; renderSelection();
+      if (!options.focus) return;
       const bounds = parcel.geometry.coordinates[0].reduce((box, point) => box.extend(point), new maplibregl.LngLatBounds());
       const panel = document.querySelector('.sheet');
       const mobile = window.matchMedia('(max-width: 719px)').matches;
@@ -123,14 +180,15 @@
       map.fitBounds(bounds, { padding: { top: 100, bottom, left: mobile ? 35 : 430, right: 35 }, maxZoom: 15, duration: 450 });
     }
     /** Offer one or more backend-provided matches for selection. */
-    function showMatches(parcels, autoSelect) {
+    function showMatches(parcels, autoSelect, options = {}) {
       results.replaceChildren(); results.classList.remove('visible');
       if (!parcels.length) { status.textContent = 'Nie znaleziono działki. Spróbuj ponownie.'; return; }
-      if (parcels.length === 1 && autoSelect) { selectParcel(parcels[0]); return; }
+      if (parcels.length === 1 && autoSelect) { setSearch(false); selectParcel(parcels[0], options); return; }
       status.textContent = parcels.length > 1 ? 'Znaleziono kilka działek. Wybierz właściwą.' : 'Wybierz działkę z wyników.';
-      parcels.forEach(parcel => { const button = document.createElement('button'); button.type = 'button'; button.textContent = parcel.parcel_number; button.addEventListener('click', () => selectParcel(parcel)); results.appendChild(button); });
+      parcels.forEach(parcel => { const button = document.createElement('button'); button.type = 'button'; button.textContent = parcel.parcel_number; button.addEventListener('click', () => { setSearch(false); selectParcel(parcel, options); }); results.appendChild(button); });
       results.classList.add('visible');
     }
+    map.addControl(new maplibregl.NavigationControl({ showZoom: false, showCompass: true }), 'top-right');
     map.on('load', async () => {
       const selectionColor = getComputedStyle(document.documentElement).getPropertyValue('--green').trim();
       map.addSource('selected-parcels', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
@@ -143,19 +201,77 @@
         map.addLayer({ id: 'sample-outline', type: 'line', source: 'sample-parcels', paint: { 'line-color': '#617b68', 'line-width': 1.1, 'line-opacity': .65 } }, 'selected-fill');
       } catch (_) { status.textContent = 'Nie można pobrać działek. Spróbuj ponownie.'; }
     });
+    let suppressMapClick = false;
+    // Hold still briefly, then trace across parcels to add them without a selection limit.
+    const canvas = map.getCanvas();
+    let holdTimer = null, drawing = false, startPoint = null, lastPoint = null, pointerId = null;
+    /** Add every mock parcel under one screen point during a selection drag. */
+    async function selectAt(point) {
+      const position = map.unproject(point);
+      try {
+        const found = await provider.findParcels({ lon: position.lng, lat: position.lat });
+        found.parcels.forEach(parcel => { if (!selected.has(parcel.parcel_id)) selectParcel(parcel); });
+      } catch (_) { status.textContent = 'Nie można pobrać działek. Spróbuj ponownie.'; }
+    }
+    canvas.addEventListener('pointerdown', event => {
+      if (event.button !== 0 || pointerId !== null) return;
+      pointerId = event.pointerId;
+      const rect = canvas.getBoundingClientRect();
+      startPoint = [event.clientX - rect.left, event.clientY - rect.top];
+      lastPoint = startPoint;
+      holdTimer = setTimeout(() => {
+        drawing = true; suppressMapClick = true; map.dragPan.disable();
+        canvas.setPointerCapture(pointerId); status.textContent = 'Przeciągnij po działkach, aby je dodać.';
+        selectAt(startPoint);
+      }, 450);
+    });
+    canvas.addEventListener('pointermove', event => {
+      if (event.pointerId !== pointerId || !startPoint) return;
+      const rect = canvas.getBoundingClientRect();
+      const point = [event.clientX - rect.left, event.clientY - rect.top];
+      if (!drawing && Math.hypot(point[0] - startPoint[0], point[1] - startPoint[1]) > 10) { clearTimeout(holdTimer); holdTimer = null; return; }
+      if (!drawing) return;
+      event.preventDefault();
+      const distance = Math.hypot(point[0] - lastPoint[0], point[1] - lastPoint[1]);
+      const steps = Math.min(40, Math.max(1, Math.ceil(distance / 12)));
+      for (let i = 1; i <= steps; i++) selectAt([lastPoint[0] + (point[0] - lastPoint[0]) * i / steps, lastPoint[1] + (point[1] - lastPoint[1]) * i / steps]);
+      lastPoint = point;
+    });
+    /** Restore normal panning after a hold or selection drag. */
+    function endSelectionDrag(event) {
+      if (event.pointerId !== pointerId) return;
+      clearTimeout(holdTimer); holdTimer = null;
+      if (drawing) { drawing = false; map.dragPan.enable(); setTimeout(() => { suppressMapClick = false; }, 350); }
+      pointerId = null; startPoint = null; lastPoint = null;
+    }
+    canvas.addEventListener('pointerup', endSelectionDrag);
+    canvas.addEventListener('pointercancel', endSelectionDrag);
     map.on('click', async event => {
-      try { const result = await provider.findParcels({ lon: event.lngLat.lng, lat: event.lngLat.lat }); showMatches(result.parcels, true); }
+      if (suppressMapClick) return;
+      try { const result = await provider.findParcels({ lon: event.lngLat.lng, lat: event.lngLat.lat }); showMatches(result.parcels, true, { toggle: true }); }
       catch (_) { status.textContent = 'Nie można pobrać działek. Spróbuj ponownie.'; }
     });
     document.getElementById('search-form').addEventListener('submit', async event => {
       event.preventDefault();
       if (!input.value.trim()) { status.textContent = 'Wpisz numer działki.'; return; }
-      try { const result = await provider.findParcels({ number: input.value }); showMatches(result.parcels, true); }
+      try { const result = await provider.findParcels({ number: input.value }); showMatches(result.parcels, true, { focus: true }); }
       catch (_) { status.textContent = 'Nie można wyszukać działki. Spróbuj ponownie.'; }
     });
-    document.getElementById('search-option').addEventListener('click', () => input.focus());
-    document.getElementById('map-option').addEventListener('click', () => { status.textContent = 'Dotknij działki na mapie, aby ją wybrać.'; });
-    document.getElementById('import-option').addEventListener('click', () => { status.textContent = 'Import plików będzie dostępny w kolejnym etapie.'; });
+    document.getElementById('search-option').addEventListener('click', () => setSearch(true));
+    document.getElementById('map-option').addEventListener('click', () => {
+      setDrawer(false); status.textContent = 'Dotknij działki lub przytrzymaj i przeciągnij po mapie.';
+      if (selected.size) {
+        const bounds = new maplibregl.LngLatBounds();
+        selected.forEach(parcel => parcel.geometry.coordinates[0].forEach(point => bounds.extend(point)));
+        map.fitBounds(bounds, { padding: 80, maxZoom: 15, duration: 450 });
+      }
+    });
+    document.getElementById('import-option').addEventListener('click', () => { setDrawer(false); importDialog.showModal(); });
+    document.getElementById('close-import').addEventListener('click', () => importDialog.close());
+    document.getElementById('import-file').addEventListener('change', event => {
+      const file = event.target.files[0];
+      document.getElementById('import-note').textContent = file ? `Wybrano: ${file.name}. Odczyt pliku dodamy w kolejnym etapie.` : 'Import i odczyt pliku będą dostępne w kolejnym etapie.';
+    });
     document.getElementById('locate').addEventListener('click', () => {
       if (!navigator.geolocation) { status.textContent = 'Lokalizacja nie jest dostępna na tym urządzeniu.'; return; }
       status.textContent = 'Ustalamy Twoją lokalizację…';
