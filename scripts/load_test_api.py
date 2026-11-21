@@ -7,8 +7,8 @@
 Each virtual user: starts a sandbox (copy of a ready farm or an empty one) -> reads the clock, crops, own crop areas -> risk per day and
 changes of one crop area -> draws a new crop area (recomputed on the server) -> saves a spray in the past -> deletes the crop area.
 Users start spread over --ramp seconds. Run it from the laptop against the public address (what a phone sees), and from the venue
-network. All requests come from one address, as a room behind one NAT does. Uses data of the sandbox only (removed after the run and,
-at the latest, by the server after SANDBOX_TTL_HOURS). Exit code 1 when the share of 5xx/connection errors is above --max-error-rate
+network. All requests come from one address, as a room behind one NAT does. Uses data of the sandbox only (each user deletes their sandbox at the end;
+the server removes any left over after SANDBOX_TTL_HOURS, and drops the oldest sandbox when SANDBOX_MAX_OWNERS is reached). Exit code 1 when the share of 5xx/connection errors is above --max-error-rate
 or the p95 of any endpoint is above --max-p95 seconds.
 """
 from __future__ import annotations
@@ -54,30 +54,34 @@ async def visitor(i: int, base: str, rec: Recorder, start_after: float, write_sh
         if r is None or r.status_code != 200:
             return
         h = {"Authorization": "Bearer " + r.json()["token"]}
-        await rec.call(c, "GET /clock", "GET", f"{api}/clock")
-        await rec.call(c, "GET /crops", "GET", f"{api}/crops")
-        r = await rec.call(c, "GET /me/crop-areas", "GET", f"{api}/me/crop-areas", headers=h)
-        feats = r.json()["features"] if r is not None and r.status_code == 200 else []
-        if feats:
-            cid = rnd.choice(feats)["properties"]["crop_area_id"]
-            today = date.today()
-            await rec.call(c, "GET /crop-areas/{id}/risk", "GET", f"{api}/crop-areas/{cid}/risk", headers=h,
-                           params={"from": str(today - timedelta(days=20)), "to": str(today + timedelta(days=10))})
-            await rec.call(c, "GET /crop-areas/{id}/changes", "GET", f"{api}/crop-areas/{cid}/changes", headers=h)
-            await rec.call(c, "GET /crop-areas/{id}", "GET", f"{api}/crop-areas/{cid}", headers=h)
-        if rnd.random() >= write_share:
-            return
-        x, y = rnd.choice(CENTRES)
-        r = await rec.call(c, "POST /crop-areas", "POST", f"{api}/crop-areas", headers=h, json={
-            "geometry": square(x + rnd.uniform(-0.05, 0.05), y + rnd.uniform(-0.05, 0.05)), "farmer_crop_id": "wheat",
-            "sowing_date": str(date.today() - timedelta(days=rnd.randint(30, 60))), "name": f"Load test {i}"})
-        if r is None or r.status_code != 201:
-            return
-        new = r.json()["properties"]["crop_area_id"]
-        await rec.call(c, "POST /crop-areas/{id}/sprays", "POST", f"{api}/crop-areas/{new}/sprays", headers=h,
-                       json={"spray_date": str(date.today() - timedelta(days=rnd.randint(1, 6))), "protection_duration_days": 10})
-        if cleanup:
-            await rec.call(c, "DELETE /crop-areas/{id}", "DELETE", f"{api}/crop-areas/{new}", headers=h)
+        try:
+            await rec.call(c, "GET /clock", "GET", f"{api}/clock")
+            await rec.call(c, "GET /crops", "GET", f"{api}/crops")
+            r = await rec.call(c, "GET /me/crop-areas", "GET", f"{api}/me/crop-areas", headers=h)
+            feats = r.json()["features"] if r is not None and r.status_code == 200 else []
+            if feats:
+                cid = rnd.choice(feats)["properties"]["crop_area_id"]
+                today = date.today()
+                await rec.call(c, "GET /crop-areas/{id}/risk", "GET", f"{api}/crop-areas/{cid}/risk", headers=h,
+                               params={"from": str(today - timedelta(days=20)), "to": str(today + timedelta(days=10))})
+                await rec.call(c, "GET /crop-areas/{id}/changes", "GET", f"{api}/crop-areas/{cid}/changes", headers=h)
+                await rec.call(c, "GET /crop-areas/{id}", "GET", f"{api}/crop-areas/{cid}", headers=h)
+            if rnd.random() >= write_share:
+                return
+            x, y = rnd.choice(CENTRES)
+            r = await rec.call(c, "POST /crop-areas", "POST", f"{api}/crop-areas", headers=h, json={
+                "geometry": square(x + rnd.uniform(-0.05, 0.05), y + rnd.uniform(-0.05, 0.05)), "farmer_crop_id": "wheat",
+                "sowing_date": str(date.today() - timedelta(days=rnd.randint(30, 60))), "name": f"Load test {i}"})
+            if r is None or r.status_code != 201:
+                return
+            new = r.json()["properties"]["crop_area_id"]
+            await rec.call(c, "POST /crop-areas/{id}/sprays", "POST", f"{api}/crop-areas/{new}/sprays", headers=h,
+                           json={"spray_date": str(date.today() - timedelta(days=rnd.randint(1, 6))), "protection_duration_days": 10})
+            if cleanup:
+                await rec.call(c, "DELETE /crop-areas/{id}", "DELETE", f"{api}/crop-areas/{new}", headers=h)
+        finally:
+            if cleanup:                                    # the sandbox is removed, the test leaves nothing behind
+                await rec.call(c, "DELETE /sandbox", "DELETE", f"{api}/sandbox", headers=h)
 
 
 def pct(values: list[float], p: float) -> float:

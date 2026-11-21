@@ -136,8 +136,9 @@ def sandbox(body: SandboxIn, request: Request, con=Depends(get_db_rw)):
                 "display_name": "Viewer", "crop_areas": None}
     con.execute("DELETE FROM app.field WHERE owner_id LIKE 'sbx-%%' AND created_at < now() - make_interval(secs => %s)", (ttl,))
     owners = con.execute("SELECT count(DISTINCT owner_id) AS n FROM app.field WHERE owner_id LIKE 'sbx-%'").fetchone()["n"]
-    if owners >= SANDBOX_MAX_OWNERS:
-        raise HTTPException(status_code=503, detail="the demo is full, try again later")
+    if owners >= SANDBOX_MAX_OWNERS:                      # make room: drop the oldest sandbox rather than refuse a new visitor
+        con.execute("DELETE FROM app.field WHERE owner_id = (SELECT owner_id FROM app.field WHERE owner_id LIKE 'sbx-%' "
+                    "GROUP BY owner_id ORDER BY min(created_at) LIMIT 1)")
     sid = "sbx-" + secrets.token_hex(4)
     n_areas = 0
     if body.mode == "mock":
@@ -162,6 +163,15 @@ def sandbox(body: SandboxIn, request: Request, con=Depends(get_db_rw)):
     token = make_token({"sub": sid, "owner_id": sid, "role": "farmer", "sandbox": True}, AUTH_SECRET, ttl)
     return {"token": token, "owner_id": sid, "role": "farmer", "mode": body.mode, "expires_in": ttl,
             "display_name": "Visitor", "crop_areas": n_areas}
+
+
+@router.delete("/sandbox", status_code=204, summary="Delete everything in my sandbox (start over)")
+def end_sandbox(user=Depends(current_user), con=Depends(get_db_rw)):
+    if not user.get("sandbox") or user.get("role") != "farmer":
+        raise HTTPException(status_code=403, detail="only a sandbox visitor can do this")
+    con.execute("DELETE FROM app.field WHERE owner_id = %s AND owner_id LIKE 'sbx-%%'", (user["owner_id"],))
+    con.commit()
+    return Response(status_code=204)
 
 
 @router.post("/crop-areas", status_code=201, summary="Save a crop area (recomputes it)")
