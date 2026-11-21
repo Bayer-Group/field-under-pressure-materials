@@ -10,6 +10,7 @@ const RANKS: { value: TaxonRank; label: string }[] = [
   { value: 'phylum', label: 'Phylum' }, { value: 'class', label: 'Class' }, { value: 'genus', label: 'Genus' },
 ]
 const compact = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 })
+const isCaution = (note: string) => note.startsWith('Few DNA reads') || note.startsWith('Processed with')
 const dayOfYear = (iso: string) => (toTime(iso) - Date.UTC(Number(iso.slice(0, 4)), 0, 1)) / 86_400_000
 
 /** The sample shown when the route names none: the latest well-sequenced bacterial one, else the latest. */
@@ -86,8 +87,13 @@ export function MicrobiomePanel({ plotId, sampleId }: { plotId: string; sampleId
       </div>
 
       <div className="chart-head">
-        <h2>{KIND_LABEL[current.kind]} in the soil, {formatDate(current.date)}</h2>
-        <span className="legend">{compact.format(current.reads)} DNA reads · {current.n_cores} soil {current.n_cores === 1 ? 'core' : 'cores'}</span>
+        <div>
+          <h2>{KIND_LABEL[current.kind]} in the soil, {formatDate(current.date)}</h2>
+          <p className="chart-sub">
+            Share of DNA reads per {rank} · {compact.format(current.reads)} reads from {current.n_cores} soil {current.n_cores === 1 ? 'core' : 'cores'}
+            {current.low_depth && <span className="badge caution">Few reads</span>}
+          </p>
+        </div>
       </div>
       {comp.error ? (
         <p className="message error">Could not load the composition: {comp.error}</p>
@@ -96,9 +102,10 @@ export function MicrobiomePanel({ plotId, sampleId }: { plotId: string; sampleId
       ) : (
         <>
           {comp.data.notes.length > 0 && (
-            <ul className="notes">
-              {comp.data.notes.map((n) => <li key={n} className={n.startsWith('Few DNA reads') ? 'caution' : ''}>{n}</li>)}
-            </ul>
+            <div className={`notes ${comp.data.notes.some(isCaution) ? 'has-caution' : ''}`} role="note">
+              <b className="notes-title">About this sample</b>
+              <ul>{comp.data.notes.map((n) => <li key={n} className={isCaution(n) ? 'caution' : ''}>{n}</li>)}</ul>
+            </div>
           )}
           <CompositionView data={comp.data} query={query} onQuery={setQuery} />
         </>
@@ -111,7 +118,7 @@ function Choice({ label, children }: { label: string; children: React.ReactNode 
   return (
     <div className="choice" role="group" aria-label={label}>
       <span className="choice-label">{label}</span>
-      <div className="seg-buttons">{children}</div>
+      <div className="segmented">{children}</div>
     </div>
   )
 }

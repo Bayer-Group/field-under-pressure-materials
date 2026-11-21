@@ -1,6 +1,7 @@
 import L from 'leaflet'
 import { useEffect, useRef } from 'react'
 import type { Plot } from '../../api'
+import { bySite } from '../../sites'
 
 /** An image laid over the map between two corners. */
 export interface MapOverlay {
@@ -13,14 +14,19 @@ export interface MapOverlay {
 interface Props {
   plots: Plot[]
   selected: Plot | null
+  focusSite: string | null // with no plot selected: zoom to this site's plots instead of all plots
+  highlight: string | null // plot id to emphasise (hovered in a list)
   overlay: MapOverlay | null
   contextM: number // how far around a selected plot the map shows, in metres
   onSelect: (plotId: string) => void
+  onSite: (site: string) => void
   /** When given, clicking the map asks for a short text about that spot and shows it in a popup. */
   inspect?: (lat: number, lon: number) => Promise<string>
 }
 
 const OVERLAY_PANE = 'overlay-image' // above the base map, below plot outlines and markers
+const DOT = { radius: 7, color: '#fff', weight: 2, fillColor: '#1f6f43', fillOpacity: 1 }
+const DOT_HOT = { radius: 10, color: '#fff', weight: 3, fillColor: '#c2410c', fillOpacity: 1 }
 
 /** Square of `half` metres around a point, as Leaflet bounds. */
 function square(lat: number, lon: number, half: number): L.LatLngBounds {
@@ -30,17 +36,18 @@ function square(lat: number, lon: number, half: number): L.LatLngBounds {
 }
 
 /** Interactive map: every plot as a dot; the selected plot outlined, with one image laid over it. */
-export function PlotMap({ plots, selected, overlay, contextM, onSelect, inspect }: Props) {
+export function PlotMap({ plots, selected, focusSite, highlight, overlay, contextM, onSelect, onSite, inspect }: Props) {
   const el = useRef<HTMLDivElement>(null)
   const map = useRef<L.Map | null>(null)
   const layers = useRef<L.ImageOverlay[]>([]) // overlays on the map: the visible one and newer ones still loading
-  const onSelectRef = useRef(onSelect)
-  onSelectRef.current = onSelect
-  const inspectRef = useRef(inspect)
-  inspectRef.current = inspect
+  const dots = useRef(new Map<string, L.CircleMarker>())
+  const view = useRef<L.LatLngBounds | null>(null) // what the map was last fitted to
+  const userMoved = useRef(false) // the user panned or zoomed since: a resize must not undo that
+  const cb = useRef({ onSelect, onSite, inspect })
+  cb.current = { onSelect, onSite, inspect }
 
   useEffect(() => {
-    const m = L.map(el.current!, { maxZoom: 21 }).setView([39.5, -100], 5)
+    const m = L.map(el.current!, { maxZoom: 21, zoomSnap: 0.5 }).setView([39.5, -100], 5)
     m.createPane(OVERLAY_PANE).style.zIndex = '350'
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxNativeZoom: 19,
@@ -48,38 +55,70 @@ export function PlotMap({ plots, selected, overlay, contextM, onSelect, inspect 
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     }).addTo(m)
     m.on('click', (e) => {
-      const ask = inspectRef.current
+      const ask = cb.current.inspect
       if (!ask) return
-      const popup = L.popup().setLatLng(e.latlng).setContent('…').openOn(m)
+      const popup = L.popup().setLatLng(e.latlng).setContent('Reading…').openOn(m)
       ask(e.latlng.lat, e.latlng.lng).then((text) => popup.setContent(text), () => popup.setContent('Could not read this spot.'))
     })
-    // The map area changes size when the panel below it does; Leaflet only notices window resizes itself.
-    const ro = new ResizeObserver(() => m.invalidateSize())
+    const moved = () => { userMoved.current = true }
+    el.current!.addEventListener('pointerdown', moved)
+    el.current!.addEventListener('wheel', moved, { passive: true })
+    // The map area changes size with the layout; Leaflet only notices window resizes itself. Until the user
+    // moves the map, keep what it was fitted to in view (it may first be laid out at a size of zero).
+    const ro = new ResizeObserver(() => {
+      m.invalidateSize()
+      if (view.current && !userMoved.current) m.fitBounds(view.current, { animate: false })
+    })
     ro.observe(el.current!)
     map.current = m
     return () => { ro.disconnect(); m.remove(); map.current = null; layers.current = [] }
   }, [])
 
-  // Plot dots, and the view: all plots, or the selected one with its surroundings.
+  // Plot dots and site labels, and the view: all plots, one site, or the selected plot with its surroundings.
   useEffect(() => {
     const m = map.current
     if (!m || plots.length === 0) return
     const layer = L.layerGroup().addTo(m)
+    dots.current.clear()
     for (const p of plots) {
       if (p.plot_id === selected?.plot_id) continue
-      L.circleMarker([p.lat, p.lon], { radius: 7, color: '#fff', weight: 2, fillColor: '#1f6f43', fillOpacity: 1, bubblingMouseEvents: false })
-        .bindTooltip(`Plot ${p.plot_id}`)
-        .on('click', () => onSelectRef.current(p.plot_id))
+      const dot = L.circleMarker([p.lat, p.lon], { ...DOT, bubblingMouseEvents: false })
+        .bindTooltip(`Plot ${p.plot_id}`, { direction: 'top', offset: [0, -6] })
+        .on('click', () => cb.current.onSelect(p.plot_id))
         .addTo(layer)
+      dots.current.set(p.plot_id, dot)
     }
+    if (!selected) {
+      // one label per site, beside its plots; at the wide view its dots overlap, so the label is the way in
+      for (const { site, plots: ps } of bySite(plots)) {
+        const north = Math.max(...ps.map((p) => p.lat)), west = Math.min(...ps.map((p) => p.lon))
+        L.marker([north, west], {
+          icon: L.divIcon({ className: 'site-label', html: `<span>${site}</span><small>${ps.length} plots</small>`, iconSize: undefined, iconAnchor: [-10, 34] }),
+          keyboard: false, title: `Zoom to site ${site}`,
+        }).on('click', () => cb.current.onSite(site)).addTo(layer)
+      }
+    }
+    let target: L.LatLngBounds
     if (selected) {
-      L.rectangle(square(selected.lat, selected.lon, selected.half_m), { color: '#ffd400', weight: 2, fill: false, interactive: false }).addTo(layer)
-      m.fitBounds(square(selected.lat, selected.lon, contextM))
+      L.rectangle(square(selected.lat, selected.lon, selected.half_m), { color: '#ffd400', weight: 2.5, fill: false, interactive: false }).addTo(layer)
+      target = square(selected.lat, selected.lon, contextM)
     } else {
-      m.fitBounds(L.latLngBounds(plots.map((p) => [p.lat, p.lon])).pad(0.2))
+      const shown = plots.filter((p) => !focusSite || p.site === focusSite)
+      target = L.latLngBounds(shown.map((p) => [p.lat, p.lon])).pad(focusSite ? 0.15 : 0.25)
     }
+    view.current = target
+    userMoved.current = false
+    m.fitBounds(target)
     return () => { layer.remove() }
-  }, [plots, selected, contextM])
+  }, [plots, selected, focusSite, contextM])
+
+  // Emphasise the plot hovered in the list.
+  useEffect(() => {
+    const dot = highlight ? dots.current.get(highlight) : undefined
+    if (!dot) return
+    dot.setStyle(DOT_HOT).setRadius(DOT_HOT.radius).bringToFront().openTooltip()
+    return () => { dot.setStyle(DOT).setRadius(DOT.radius).closeTooltip() }
+  }, [highlight, plots, selected])
 
   // The overlay image. A new one replaces the old only once it has loaded, so stepping through dates does not flicker.
   const url = overlay?.url ?? null

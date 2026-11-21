@@ -7,6 +7,7 @@ const fmt = new Intl.NumberFormat('en')
 const PLURAL = { phylum: 'phyla', class: 'classes', genus: 'genera' } as const
 const GAP = 2 // px of surface between two parts wide enough to carry one
 const MIN_GAPPED = 6 // parts narrower than this touch their neighbours (thousands of genera cannot all have gaps)
+const FIRST_ROWS = 25 // table rows shown before "Show all"
 
 interface Part { key: string; label: string; detail: string | null; pct: number; reads: number | null; color: string }
 
@@ -53,6 +54,12 @@ export function CompositionView({ data, query, onQuery }: { data: Composition; q
   const foundPct = table.reduce((s, p) => s + p.pct, 0)
 
   const [hover, setHover] = useState<string | null>(null)
+  const [showAll, setShowAll] = useState(false)
+  // the long tail of genera is behind a button; a search always lists every match, and the two grey rows stay
+  const short = !q && !showAll && named.length > FIRST_ROWS + 5
+  const rows = short ? [...named.slice(0, FIRST_ROWS), ...rest] : table
+  // bars compare named taxa (the grey rows get none), against the largest one, so they keep their scale while searching
+  const maxPct = Math.max(...named.map((p) => p.pct), 0.0001)
   const [ref, width] = useWidth()
   const total = bar.reduce((s, p) => s + p.pct, 0) || 1
   let x = 0
@@ -102,23 +109,38 @@ export function CompositionView({ data, query, onQuery }: { data: Composition; q
       <table className="comp-table">
         <thead>
           <tr><th>{SINGULAR_TITLE[rank]}</th>
-            {rank !== 'phylum' && <th>Phylum</th>}<th className="num">Share</th><th className="num">Reads</th></tr>
+            {rank !== 'phylum' && <th>Phylum</th>}<th className="share-h">Share of reads</th><th className="num">Reads</th></tr>
         </thead>
         <tbody onPointerLeave={() => setHover(null)}>
-          {table.map((p) => (
-            <tr key={p.key} className={[hover === p.key ? 'on' : '', p.key.startsWith('_') ? 'rest' : ''].join(' ')}
+          {rows.map((p, i) => (
+            <tr key={p.key} className={[hover === p.key ? 'on' : '', p.key.startsWith('_') ? 'rest' : '', short && i === FIRST_ROWS ? 'after-gap' : ''].join(' ')}
               onPointerEnter={() => setHover(p.key)}>
               <td>
                 <i className="swatch" style={{ background: p.color }} />{p.label}
                 {p.key.startsWith('_') && <span className="muted"> · {p.detail}</span>}
               </td>
               {rank !== 'phylum' && <td className="muted">{p.key.startsWith('_') ? '' : p.detail ?? '–'}</td>}
-              <td className="num">{pct(p.pct)}</td>
+              <td>
+                <div className="share">
+                  <span className="share-bar" aria-hidden="true">
+                    {!p.key.startsWith('_') && <span style={{ width: `${(p.pct / maxPct) * 100}%` }} />}
+                  </span>
+                  <span className="num">{pct(p.pct)}</span>
+                </div>
+              </td>
               <td className="num">{p.reads !== null ? fmt.format(p.reads) : ''}</td>
             </tr>
           ))}
         </tbody>
       </table>
+      {short && (
+        <button className="ghost show-all" onClick={() => setShowAll(true)}>
+          Show all {fmt.format(named.length)} {PLURAL[rank]} ({fmt.format(named.length - FIRST_ROWS)} more, together {pct(named.slice(FIRST_ROWS).reduce((s, p) => s + p.pct, 0))})
+        </button>
+      )}
+      {!q && showAll && named.length > FIRST_ROWS + 5 && (
+        <button className="ghost show-all" onClick={() => setShowAll(false)}>Show the top {FIRST_ROWS} only</button>
+      )}
     </div>
   )
 }
