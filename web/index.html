@@ -10,7 +10,6 @@
   <script src="https://unpkg.com/@turf/turf@7.1.0/turf.min.js"></script>
   <script src="geometry-preview.js?v=multicut-2"></script>
   <script src="sandbox-client.js?v=area-patch-1"></script>
-  <script src="farmer-data.js?v=wheat-only-14"></script>
   <script src="crop-workflow.js?v=validation-errors-4"></script>
   <style>
     :root { color-scheme: light; --green: #176544; --ink: #15221b; --muted: #66766d; --line: rgba(32,62,45,.10); --paper: rgba(248,251,247,.93); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-kerning: normal; }
@@ -662,7 +661,7 @@
     <div class="top" id="top-controls">
       <form class="search" id="search-form" role="search">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4 4"/></svg>
-        <input id="parcel-number" aria-label="Village, parcel number or identifier" placeholder="Village, parcel number or identifier" autocomplete="off" />
+        <input id="parcel-number" aria-label="Village, parcel number or identifier" placeholder="Search for a place or parcel number" autocomplete="off" />
       </form>
       <button class="locate crop-magnet-btn active" id="crop-draw-magnet" type="button" aria-label="Snap to boundaries" title="Snap to boundaries" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v7a8 8 0 0 0 16 0V4M4 4h4m8 0h4M4 8h4m8 0h4"/></svg></button>
       <button class="locate" id="locate" type="button" aria-label="Find my location"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 3-7.5 18-2.7-7.8L3 10.5 21 3Z"/></svg></button>
@@ -692,7 +691,6 @@
       <button id="drawer-toggle" class="drawer-toggle" type="button" aria-label="Collapse panel" aria-expanded="true"><span class="handle" aria-hidden="true"></span><span id="drawer-summary">Your fields</span></button>
       <p id="status" class="status" role="status" aria-live="polite"></p>
       <div id="drawer-content" class="drawer-content">
-      <button class="crop-outline" id="open-sandbox" type="button">Open a farm</button>
       <p class="eyebrow">Your fields</p>
       <h1 id="heading">Select a parcel</h1>
       <p class="subtitle">Find parcels on the map, search for them or import a file.</p>
@@ -729,7 +727,6 @@
       <div class="sandbox-choice">
         <button class="crop-outline" id="sandbox-mock" type="button">Explore an example farm</button>
         <button class="crop-outline" id="sandbox-empty" type="button">Start with an empty farm</button>
-        <button class="crop-outline" id="sandbox-local" type="button">Open parcel design preview</button>
       </div>
       <p id="sandbox-error" role="status" aria-live="polite"></p>
     </dialog>
@@ -753,10 +750,11 @@
   <script>
     'use strict';
     // Set mode to 'backend' and provide baseUrl when the real search API is ready.
-    let dataProvider = FarmerData.createProvider({ mode: 'mock' });
-    const provider = new Proxy({}, { get: (_, name) => dataProvider[name] });
     const farmerClient = SandboxClient.create();
     const newViewClient = SandboxClient.create({ storageKey: `${SandboxClient.STORAGE_KEY}.new-view` });
+    // Always the farm service; each journey replaces it with the provider of its own session.
+    let dataProvider = farmerClient.farmerProvider();
+    const provider = new Proxy({}, { get: (_, name) => dataProvider[name] });
     let sandboxClient = farmerClient;
     let pendingJourney = 'farmer';
     let sandboxActive = false;
@@ -1143,28 +1141,6 @@
       results.classList.add('visible');
     }
     /** Show unique locality choices before a farmer enters the parcel number. */
-    function showLocalitySuggestions(parcels) {
-      const localities = new Map();
-      parcels.forEach(parcel => localities.set(`${parcel.locality}|${parcel.commune}`, parcel));
-      results.replaceChildren();
-      const hint = document.createElement('div'); hint.className = 'results-hint'; hint.textContent = localities.size ? 'Select a locality, then enter a parcel number.' : 'No locality found. Enter a parcel number or full identifier.'; results.appendChild(hint);
-      localities.forEach(parcel => {
-        const button = document.createElement('button'); button.type = 'button';
-        const title = document.createElement('span'); title.className = 'result-title'; title.textContent = parcel.locality;
-        const meta = document.createElement('span'); meta.className = 'result-meta'; meta.textContent = `municipality ${parcel.commune}`;
-        button.append(title, meta);
-        button.addEventListener('click', () => {
-          searchLocality = { locality: parcel.locality, commune: parcel.commune };
-          input.value = `${parcel.locality}, municipality ${parcel.commune}`;
-          parcelStepInput.value = ''; parcelStep.classList.add('visible'); results.classList.add('after-parcel-step');
-          searchVersion++; results.replaceChildren();
-          const hint = document.createElement('div'); hint.className = 'results-hint'; hint.textContent = `Enter the parcel number in ${parcel.locality}, municipality ${parcel.commune}.`;
-          results.appendChild(hint); results.classList.add('visible'); parcelStepInput.focus();
-        });
-        results.appendChild(button);
-      });
-      results.classList.add('visible');
-    }
     /** Fly to a locality returned by the farm service. */
     function showPlaces(places) {
       results.replaceChildren();
@@ -1198,32 +1174,17 @@
         return;
       }
       try {
-        if (provider.mode === 'backend') {
-          if (!searchLocality && !/^[\d]/.test(term)) {
-            if (term.length < 2) { results.replaceChildren(); results.classList.remove('visible'); return; }
-            const response = await sandboxClient.places(term);
-            if (version !== searchVersion) return;
-            if (!Array.isArray(response?.places)) throw new Error('Invalid place response');
-            showPlaces(response.places); return;
-          }
-          if (term.length < 3) { results.replaceChildren(); results.classList.remove('visible'); return; }
-          const response = await provider.findParcels({ number: term });
+        if (!searchLocality && !/^[\d]/.test(term)) {
+          if (term.length < 2) { results.replaceChildren(); results.classList.remove('visible'); return; }
+          const response = await sandboxClient.places(term);
           if (version !== searchVersion) return;
-          showSearchParcels(response.parcels);
-          return;
+          if (!Array.isArray(response?.places)) throw new Error('Invalid place response');
+          showPlaces(response.places); return;
         }
-        if (searchLocality && /^\d+(?:\/\d*)?$/.test(term)) {
-          const response = await provider.findParcels({ number: term, locality: `${searchLocality.locality} ${searchLocality.commune}` });
-          if (version !== searchVersion) return;
-          showSearchParcels(response.parcels); return;
-        }
-        const isId = /^\d{6}_\d\.\d{4}\.\d+(?:\/\d+)?$/.test(term);
-        const isNumber = /^\d+(?:\/\d*)?$/.test(term);
-        const isCombined = /^.+\s+\d+(?:\/\d*)?$/.test(term);
+        if (term.length < 3) { results.replaceChildren(); results.classList.remove('visible'); return; }
         const response = await provider.findParcels({ number: term });
         if (version !== searchVersion) return;
-        if (isId || isNumber || isCombined) showSearchParcels(response.parcels);
-        else showLocalitySuggestions(response.parcels);
+        showSearchParcels(response.parcels);
       } catch (_) { if (version !== searchVersion) return; results.replaceChildren(); const hint = document.createElement('div'); hint.className = 'results-hint'; hint.textContent = 'Could not search. Please try again.'; results.appendChild(hint); results.classList.add('visible'); }
     }
     new ResizeObserver(() => document.documentElement.style.setProperty('--drawer-height', `${sheet.offsetHeight}px`)).observe(sheet);
@@ -1293,12 +1254,6 @@
       map.addLayer({ id: 'crop-selected-outline', type: 'line', source: 'crop-areas', filter: ['==', ['get', 'selected'], true], paint: { 'line-color': '#ffffff', 'line-width': 5 } });
       renderSelection();
       setupSandbox();
-      try {
-        const { fields } = await provider.listFields();
-        map.addSource('sample-parcels', { type: 'geojson', data: { type: 'FeatureCollection', features: fields.map(field => ({ type: 'Feature', geometry: field.parcel.geometry, properties: {} })) } });
-        map.addLayer({ id: 'sample-outline', type: 'line', source: 'sample-parcels', paint: { 'line-color': '#617b68', 'line-width': 1.1, 'line-opacity': .65 } }, 'selected-fill');
-        if (sandboxActive) map.setLayoutProperty('sample-outline', 'visibility', 'none');
-      } catch (_) { status.textContent = 'Could not load parcels. Please try again.'; }
     });
     let suppressMapClick = false, suppressClickTimer = null;
     // Hold, then draw a marquee; sample the existing point-lookup mock inside it.
@@ -2680,7 +2635,6 @@
         ['selected-fill', 'selected-outline'].forEach(layer => map.setLayoutProperty(layer, 'visibility', 'visible'));
         input.placeholder = 'Search for a place or parcel number';
         updateZoomHint();
-        document.getElementById('open-sandbox').hidden = true;
         document.getElementById('import-option').disabled = true; document.getElementById('import-option').title = 'File import is not available in the backend yet.';
         renderSelection(); status.textContent = ''; setDrawer(true);
     }
@@ -2698,7 +2652,7 @@
         sandboxSource();
         map.getSource('sandbox-areas').setData(collection);
         ['sandbox-fill', 'sandbox-outline', 'sandbox-scope', 'sandbox-highlight'].forEach(layer => map.setLayoutProperty(layer, 'visibility', 'visible'));
-        ['selected-fill', 'selected-outline', 'sample-outline'].forEach(layer => { if (map.getLayer(layer)) map.setLayoutProperty(layer, 'visibility', 'none'); });
+        ['selected-fill', 'selected-outline'].forEach(layer => { if (map.getLayer(layer)) map.setLayoutProperty(layer, 'visibility', 'none'); });
         map.setFilter('sandbox-highlight', ['==', ['get', 'crop_area_id'], '']);
         sandboxActive = true; document.getElementById('drawer-content').hidden = true; document.getElementById('crop-panel').hidden = true; sandboxPanel.hidden = false;
         document.getElementById('search-form').hidden = true; document.getElementById('parcel-step').classList.remove('visible'); results.classList.remove('visible');
@@ -2719,23 +2673,12 @@
       }
     }
     function setupSandbox() {
-      document.getElementById('open-sandbox').addEventListener('click', () => { if (provider.mode === 'backend' && sandboxClient.hasSession()) { sandboxOpen(); return; } sandboxError.textContent = ''; if (!sandboxDialog.open) sandboxDialog.showModal(); });
       for (const mode of ['mock', 'empty']) document.getElementById(`sandbox-${mode}`).addEventListener('click', async () => {
         if (sandboxClient.hasSession() && !window.confirm('Start a new farm? This browser will no longer hold the current farm token.')) return;
         const buttons = sandboxDialog.querySelectorAll('button'); buttons.forEach(button => button.disabled = true);
         try { sandboxError.textContent = 'Creating farm…'; await sandboxClient.start(mode); await sandboxOpen(); }
         catch (error) { sandboxError.textContent = error.message || 'Could not create a farm.'; }
         finally { buttons.forEach(button => button.disabled = false); }
-      });
-      document.getElementById('sandbox-local').addEventListener('click', () => {
-        sandboxOpenVersion++; sandboxActive = false; sandboxRequest++; sandboxPanel.hidden = true; dataProvider = FarmerData.createProvider({ mode: 'mock' }); selected.clear(); document.getElementById('drawer-content').hidden = false;
-        input.placeholder = 'Village, parcel number or identifier'; document.getElementById('open-sandbox').hidden = false; document.getElementById('open-sandbox').textContent = 'Open a farm';
-        document.getElementById('import-option').disabled = false; document.getElementById('import-option').title = '';
-        document.getElementById('search-form').hidden = false; document.querySelector('.app').classList.remove('sandbox-mode');
-        document.querySelector('.sheet').setAttribute('aria-labelledby', 'heading');
-        sandboxHideMap();
-        ['selected-fill', 'selected-outline', 'sample-outline'].forEach(layer => { if (map.getLayer(layer)) map.setLayoutProperty(layer, 'visibility', 'visible'); });
-        renderSelection(); status.textContent = ''; if (sandboxDialog.open) sandboxDialog.close();
       });
       const resume = sandboxElement('button', 'crop-outline', 'Resume saved farm'); resume.type = 'button';
       resume.addEventListener('click', sandboxOpen); sandboxDialog.querySelector('.sandbox-choice').prepend(resume);
