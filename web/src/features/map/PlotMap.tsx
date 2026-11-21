@@ -25,18 +25,17 @@ interface Props {
   inspect?: (lat: number, lon: number) => Promise<string>
 }
 
-/** What is under everything else: a drawn street map, or orthophotos (aerial and satellite imagery). */
-export type BaseMap = 'streets' | 'imagery'
+/** What is under everything else: a topographic map, orthophotos (aerial and satellite imagery), or nothing
+ *  (only the data on a plain background). */
+export type BaseMap = 'topo' | 'imagery' | 'none'
 
 const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services'
-// Static demo: opened from file:// there is no Referer, which OSM's tile servers refuse; Esri needs no key.
-const STATIC = import.meta.env.VITE_STATIC === '1'
-const BASE_MAPS: Record<BaseMap, { url: string; maxNativeZoom: number; attribution: string }> = {
-  streets: STATIC
-    ? { url: `${ESRI}/World_Topo_Map/MapServer/tile/{z}/{y}/{x}`, maxNativeZoom: 19,
-        attribution: 'Tiles &copy; Esri &mdash; Esri, HERE, Garmin, USGS, NGA, EPA, USDA, NPS' }
-    : { url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', maxNativeZoom: 19,
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' },
+// OpenTopoMap serves tiles without a Referer too, so it also works in the static demo opened from file://.
+const BASE_MAPS: Record<Exclude<BaseMap, 'none'>, L.TileLayerOptions & { url: string }> = {
+  // OpenTopoMap renders up to zoom 17: stretch those tiles when zoomed in closer
+  topo: { url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', subdomains: 'abc', maxNativeZoom: 17,
+          attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, SRTM &mdash; '
+            + 'style &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA)' },
   // beyond zoom 18 Esri has no imagery in many rural places: stretch the zoom-18 tiles instead of showing gaps
   imagery: { url: `${ESRI}/World_Imagery/MapServer/tile/{z}/{y}/{x}`, maxNativeZoom: 18,
              attribution: 'Imagery &copy; Esri &mdash; Esri, Maxar, Earthstar Geographics and the GIS User Community' },
@@ -49,8 +48,11 @@ const DOT_HOT = { radius: 10, color: '#fff', weight: 3, fillColor: '#c2410c', fi
 // Map scale: a screen pixel is taken as 1/96 inch (CSS pixel), the convention web maps use.
 const METRES_PER_CSS_PX = 0.0254 / 96
 const EARTH_CIRCUMFERENCE_M = 40_075_016.686
-/** Scale a selected plot opens at, and the closest a site or all plots are first shown at. */
+/** Scale a selected plot opens at. */
 const START_SCALE = 10_000
+/** The closest a site or all plots are first shown at: zoomed out enough that the topographic map's roads,
+ *  streams, contours and place names around the plots can be read. */
+const GENERAL_SCALE = 25_000
 
 /** Leaflet zoom at which the map shows `scale` (1:scale) at latitude `lat`. */
 function zoomForScale(scale: number, lat: number): number {
@@ -159,10 +161,10 @@ export function PlotMap({ plots, selected, focusSite, highlight, overlay, base, 
     return () => { ro.disconnect(); m.remove(); map.current = null; layers.current = [] }
   }, [])
 
-  // The base map. Tiles of both are kept by the browser, so switching back and forth is quick.
+  // The base map. Tiles of each are kept by the browser, so switching back and forth is quick.
   useEffect(() => {
     const m = map.current
-    if (!m) return
+    if (!m || base === 'none') return
     const { url, ...options } = BASE_MAPS[base]
     const tiles = L.tileLayer(url, { ...options, maxZoom: 21 }).addTo(m)
     return () => { tiles.remove() }
@@ -201,7 +203,7 @@ export function PlotMap({ plots, selected, focusSite, highlight, overlay, base, 
     } else {
       const shown = plots.filter((p) => !focusSite || p.site === focusSite)
       const bounds = L.latLngBounds(shown.map((p) => [p.lat, p.lon])).pad(focusSite ? 0.15 : 0.25)
-      target = { bounds, maxZoom: zoomForScale(START_SCALE, bounds.getCenter().lat) }
+      target = { bounds, maxZoom: zoomForScale(GENERAL_SCALE, bounds.getCenter().lat) }
     }
     view.current = target
     userMoved.current = false
@@ -228,7 +230,7 @@ export function PlotMap({ plots, selected, focusSite, highlight, overlay, base, 
       layers.current = []
       return
     }
-    const next = L.imageOverlay(overlay.url, overlay.bounds, { pane: OVERLAY_PANE, opacity: overlay.opacity ?? 1, className: overlay.crisp ? 'crisp' : '' })
+    const next = L.imageOverlay(overlay.url, overlay.bounds, { pane: OVERLAY_PANE, opacity: overlay.opacity ?? 1, className: `data-frame${overlay.crisp ? ' crisp' : ''}` })
     const settle = () => {
       const at = layers.current.indexOf(next)
       layers.current.splice(0, Math.max(at, 0)).forEach((l) => l.remove())
@@ -241,6 +243,7 @@ export function PlotMap({ plots, selected, focusSite, highlight, overlay, base, 
   // Leaflet adds its own classes to this element, so React must not rewrite className: toggle ours directly.
   const inspectable = inspect !== undefined
   useEffect(() => { el.current!.classList.toggle('inspectable', inspectable) }, [inspectable])
+  useEffect(() => { el.current!.classList.toggle('no-base', base === 'none') }, [base])
 
   return <div ref={el} className="map" />
 }

@@ -61,9 +61,14 @@ button { font: inherit; color: inherit; }
 .panel { min-height: 0; overflow-y: auto; background: var(--surface); border-right: 1px solid var(--line); padding: 18px 22px 28px; }
 .map-area { position: relative; min-height: 0; }
 .map { position: absolute; inset: 0; background: #e8ebe6; }
+.explorer.panel-hidden { grid-template-columns: 1fr; }
+.explorer.panel-hidden .panel { display: none; }
+/* No base map: only the data, on a plain neutral ground */
+.map.no-base { background: #f4f5f2; }
 @media (max-width: 1060px) {
   .explorer, .explorer.has-plot { display: flex; flex-direction: column-reverse; }
   .map-area { flex: none; height: 42vh; min-height: 260px; }
+  .explorer.panel-hidden .map-area { flex: 1; height: auto; }
   .panel { flex: 1; border-right: 0; border-top: 1px solid var(--line); padding: 14px 16px 24px; }
   .tagline { display: none; }
 }
@@ -197,6 +202,28 @@ button { font: inherit; color: inherit; }
 /* ---------- map cards ---------- */
 .map.inspectable { cursor: crosshair; }
 .leaflet-image-layer.crisp { image-rendering: pixelated; }
+/* Sensor data (greenness maps, aerial photos) framed white inside near-black, with a soft shadow, so its edge
+   stands out from any base map: aerial imagery, the topographic map, or none. */
+.leaflet-image-layer.data-frame {
+  outline: 2px solid #fff;
+  box-shadow: 0 0 0 4px #141414, 0 0 12px 5px rgba(0, 0, 0, 0.35);
+}
+/* Top of the map, right of the zoom buttons: hide the side panel, hide the base map */
+.map-toggles { position: absolute; z-index: 1000; top: 10px; left: 56px; display: flex; gap: 6px; flex-wrap: wrap; }
+.map-toggles button {
+  display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: 6px;
+  border: 1px solid rgba(0, 0, 0, 0.25); background: var(--surface); color: var(--ink-2); font-size: 0.8rem; font-weight: 600;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15); cursor: pointer;
+}
+.map-toggles button:hover { color: var(--ink); background: var(--green-wash); }
+.map-toggles button[aria-pressed="true"] { color: var(--green); border-color: var(--green); }
+.map-toggles button:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+/* Narrow map: the "On the map" card takes the top right, so stack icon-only buttons under the north arrow */
+@media (max-width: 700px) {
+  .map-toggles { top: 184px; left: 10px; flex-direction: column; }
+  .map-toggles button { width: 34px; height: 34px; padding: 0; justify-content: center; }
+  .map-toggles button span { display: none; }
+}
 .leaflet-container { font: inherit; }
 .leaflet-popup-content { font-size: 0.85rem; margin: 10px 24px 10px 14px; }
 .layer-card, .ndvi-legend {
