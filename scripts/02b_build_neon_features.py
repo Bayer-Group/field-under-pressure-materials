@@ -11,8 +11,15 @@ from cropfit.config import PROCESSED, RAW
 R = RAW / "neon"
 
 # ---- ITS
-raw = neon.load_its_raw()
-g = neon.build_its_genus(raw)
+raw = neon.load_its_raw()          # DP1.10081.002 + .001, one run per DNA sample, .002 preferred
+core = neon.build_its_core(raw)    # per core, all cores (QC flag kept)
+core.to_parquet(PROCESSED / "its_core_genus.parquet", index=False)
+print("its_core_genus", len(core), "rows,", core.dnaSampleID.nunique(), "cores,",
+      core.groupby("product").dnaSampleID.nunique().to_dict())
+pool = neon.pooling_map()
+pool.to_parquet(PROCESSED / "neon_metagenome_pooling.parquet", index=False)
+print("neon_metagenome_pooling", len(pool), "cores in", pool.genomicsSampleID.nunique(), "composites")
+g = neon.build_its_genus(raw)      # plot-date, QC-passing cores, mean of per-core shares
 p = raw["dnaSampleID"].map(neon.parse_sample_id)
 cores = raw[p.map(bool)].drop_duplicates("dnaSampleID").copy()
 cores["plotID"] = p[cores.index].map(lambda d: d["plotID"])

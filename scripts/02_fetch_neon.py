@@ -4,7 +4,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from cropfit import neon
 
-PRODUCTS = ["DP1.10081.001", "DP1.10109.001", "DP1.10086.001"]
+# DP1.10081.002 = current ITS taxonomy pipeline (~2016+, incl. KONA 2019/2024, STER 2022);
+# DP1.10081.001 = old pipeline (2014-2018). Both are kept; neon.load_its_raw() prefers .002 per DNA sample.
+PRODUCTS = ["DP1.10081.002", "DP1.10081.001", "DP1.10109.001", "DP1.10086.001"]
 if __name__ == "__main__":
     prods = sys.argv[1:] or PRODUCTS
     for dpid in prods:
@@ -16,9 +18,9 @@ if __name__ == "__main__":
             continue
         for n, df in tabs.items():
             print(f"  {n}: {len(df)} rows", flush=True)
-        if dpid == "DP1.10081.001":
+        if dpid in neon.ITS_PRODUCTS:
             try:
-                t = neon.fetch_its_sample_files()
-                print(f"  mcc_soilPerSampleTaxonomy_ITS (assembled): {len(t)} rows", flush=True)
+                t = neon.fetch_its_sample_files(dpid)
+                print(f"  {neon.its_taxonomy_path(dpid).name} (assembled): {len(t)} rows", flush=True)
             except Exception as e:  # noqa: BLE001
                 print("  ITS sample files FAILED", type(e).__name__)
