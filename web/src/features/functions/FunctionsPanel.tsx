@@ -1,8 +1,8 @@
-import { api, type FunctionProfile, type FunctionSample, type FunctionTheme, type Fungi, type MeasuredSoil, type Pathway, type PresenceStatus } from '../../api'
+import { api, type Carriers, type FunctionProfile, type FunctionSample, type FunctionTheme, type Fungi, type MeasuredSoil, type Pathway, type PresenceStatus } from '../../api'
 import { formatDate } from '../../format'
 import { functionsHref, navigate } from '../../router'
 import { useFetch } from '../../useFetch'
-import { CardLegend, DecisionCards } from './DecisionCards'
+import { CardLegend, CarrierList, DecisionCards, agreementClass } from './DecisionCards'
 
 const THEMES: { theme: FunctionTheme; title: string }[] = [
   { theme: 'nitrogen', title: 'Nitrogen' },
@@ -78,7 +78,7 @@ function Profile({ data }: { data: FunctionProfile }) {
     <>
       <section className="fn-block">
         <CardLegend />
-        <DecisionCards cards={data.cards} wide />
+        <DecisionCards cards={data.cards} wide carriers={data.carriers} />
       </section>
       <details className="fn-details">
         <summary>Details: nitrogen pathways, fungal roles, measurements and genes</summary>
@@ -86,7 +86,7 @@ function Profile({ data }: { data: FunctionProfile }) {
           <b className="notes-title">How to read this</b>
           <ul>{data.notes.map((n) => <li key={n} className={n.startsWith('Too few genes') ? 'caution' : ''}>{n}</li>)}</ul>
         </div>
-        <Pathways pathways={data.pathways} />
+        <Pathways pathways={data.pathways} carriers={data.carriers ?? []} />
         {data.fungi && <FungalRoles fungi={data.fungi} />}
         <Measured m={data.measured} />
         <section className="fn-theme">
@@ -119,7 +119,7 @@ function Profile({ data }: { data: FunctionProfile }) {
 }
 
 /** Each nitrogen pathway as its KEGG steps, marked found / trace / not found, with the gene copies per step. */
-function Pathways({ pathways }: { pathways: Pathway[] }) {
+function Pathways({ pathways, carriers }: { pathways: Pathway[]; carriers: Carriers[] }) {
   return (
     <section className="fn-theme">
       <h3>Nitrogen pathways in this sample</h3>
@@ -138,6 +138,16 @@ function Pathways({ pathways }: { pathways: Pathway[] }) {
             ))}
           </ol>
           {p.note && <p className="pw-note">{p.note}</p>}
+          {(() => {
+            const c = p.term_id ? carriers.find((x) => x.term_id === p.term_id) : undefined
+            if (!c) return null
+            return (
+              <p className="pw-note pw-carriers">
+                Who may carry it: {c.top.length ? <CarrierList top={c.top} /> : 'no known carrier above 0.1% of reads.'}{' '}
+                <span className={`carrier-agree ${agreementClass(c)}`}>{c.agreement_text}</span>
+              </p>
+            )
+          })()}
         </div>
       ))}
     </section>

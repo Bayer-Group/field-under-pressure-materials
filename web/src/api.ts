@@ -59,6 +59,7 @@ export interface Taxon {
   phylum: string | null // used for colour; the taxon itself at phylum rank
   pct: number // 0-100, share of the group's reads
   reads: number
+  description?: string | null // genus rank only: plain-language hover text, else null
 }
 
 export interface Composition {
@@ -206,6 +207,7 @@ export interface FunctionGroup {
   theme: FunctionTheme
   status: PresenceStatus
   genes: { gene: string; ko: string; count: number; caveat: string | null }[]
+  term_id?: string | null
 }
 
 export interface Pathway {
@@ -214,6 +216,7 @@ export interface Pathway {
   steps: { step: string; genes: string[]; copies: number; status: PresenceStatus }[]
   complete: boolean
   note: string | null
+  term_id?: string | null
 }
 
 export interface Fungi {
@@ -221,7 +224,7 @@ export interface Fungi {
   same_cores: boolean // from exactly the soil cores of the gene data
   reads: number | null
   named_pct: number // share of fungal reads with a genus name
-  roles: { role: string; label: string; pct: number; top: string[] }[]
+  roles: { role: string; label: string; pct: number; top: string[]; term_id?: string | null }[]
 }
 
 export interface MeasuredSoil {
@@ -252,9 +255,10 @@ export interface DecisionCard {
   flag: string | null // why the card is coloured, when it is
   finding: string // what is there
   implications: Implication[] // what it can mean: possible upsides and risks
-  basis: 'measured' | 'genes' | 'fungi'
+  basis: 'measured' | 'genes' | 'fungi' | 'names'
   confidence: 'high' | 'medium' | 'low'
   evidence: string[]
+  carrier_terms?: string[] // term ids to look up in FunctionProfile.carriers
 }
 
 export interface FunctionProfile {
@@ -269,6 +273,90 @@ export interface FunctionProfile {
   groups: FunctionGroup[]
   measured: MeasuredSoil | null
   notes: string[]
+  carriers?: Carriers[]
+}
+
+export type SummaryClassId = 'useful' | 'mixed' | 'harmful' | 'context' | 'background' | 'unknown'
+export type RolePolarity = 'useful' | 'harmful' | 'context' | 'background' | 'unknown'
+export type RoleConfidence = 'high' | 'medium' | 'low'
+export type RoleEvidence = 'curated_db' | 'well_known_genus' | 'some_species' | 'inferred'
+
+export interface RoleSummary {
+  class_id: SummaryClassId
+  label: string
+  pct: number // share of the group's reads
+  pct_of_named: number // share of reads with a genus name; the six add up to 100
+  n_genera: number
+  top: string[]
+}
+
+export interface RoleGenus {
+  name: string
+  domain: string | null
+  phylum: string | null
+  pct: number
+  reads: number
+  term_id: string
+  confidence: RoleConfidence
+  evidence: RoleEvidence
+  source: string // funguild | fungaltraits | llm:<model>[+reviewed] | unannotated
+  species_examples: string[]
+  note: string | null
+  summary_class: SummaryClassId
+  description: string | null
+}
+
+export interface RoleTerm {
+  term_id: string
+  parent_id: string | null
+  label: string
+  description: string
+  polarity: RolePolarity
+  depth: number
+  ko_groups: string[]
+  pct: number // genera with this role or a sub-role; terms overlap
+  n_genera: number
+  genera: RoleGenus[] // largest first, capped
+  other_genera_pct: number
+}
+
+export interface RoleComposition {
+  sample_id: string
+  kind: MicrobeKind
+  plot_id: string
+  date: string
+  reads: number
+  n_genera: number
+  summary: RoleSummary[]
+  terms: RoleTerm[]
+  annotated_pct: number
+  unassigned_pct: number
+  sources: string[]
+  notes: string[]
+}
+
+export type Agreement = 'both' | 'genes_only' | 'names_only' | 'neither' | 'unknown'
+
+export interface CarrierGenus {
+  name: string
+  pct: number // share of classified bacterial + archaeal reads
+  term_id: string
+  confidence: 'high' | 'medium'
+  evidence: string
+  species_examples: string[]
+  description: string | null
+}
+
+export interface Carriers {
+  term_id: string
+  label: string
+  ko_groups: string[]
+  pct: number
+  n_genera: number
+  top: CarrierGenus[]
+  genes: PresenceStatus
+  agreement: Agreement
+  agreement_text: string
 }
 
 async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
@@ -293,6 +381,7 @@ export const api = {
   microbiome: (plotId: string, s?: AbortSignal) => get<MicrobiomeSample[]>(`/plots/${id(plotId)}/microbiome`, s),
   composition: (sampleId: string, rank: TaxonRank, s?: AbortSignal) =>
     get<Composition>(`/microbiome/${id(sampleId)}?rank=${rank}`, s),
+  roles: (sampleId: string, s?: AbortSignal) => get<RoleComposition>(`/microbiome/${id(sampleId)}/roles`, s),
   event: (eventId: string, s?: AbortSignal) => get<EventDetail>(`/events/${id(eventId)}`, s),
   functionSamples: (plotId: string, s?: AbortSignal) => get<FunctionSample[]>(`/plots/${id(plotId)}/functions`, s),
   functionProfile: (sampleId: string, s?: AbortSignal) => get<FunctionProfile>(`/functions/${id(sampleId)}`, s),

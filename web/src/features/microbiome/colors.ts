@@ -1,4 +1,4 @@
-import type { MicrobeKind } from '../../api'
+import type { MicrobeKind, SummaryClassId } from '../../api'
 
 // Colour follows the phylum, so a phylum keeps its colour across plots, years and ranks. The slots are the
 // validated categorical palette in its fixed order (dataviz reference palette, light mode); phyla are listed by
@@ -25,3 +25,8 @@ export function phylumColor(kind: MicrobeKind, phylum: string | null): string {
 export const inkOn = (bg: string) => (bg === OTHER || bg === UNASSIGNED || DARK_INK_ON.has(bg) ? '#0b0b0b' : '#ffffff')
 
 export const hasOwnColor = (kind: MicrobeKind, phylum: string | null) => phylumColor(kind, phylum) !== OTHER
+
+export const ROLE_COLOR: Record<SummaryClassId, string> = {
+  useful: '#1baf7a', mixed: '#eda100', harmful: '#e34948', context: '#2a78d6', background: '#b39b72', unknown: OTHER,
+}
+export const ROLE_DARK_INK = new Set<string>(['#eda100', '#b39b72', OTHER])

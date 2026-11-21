@@ -1,14 +1,41 @@
-import type { CardStatus, DecisionCard, Implication } from '../../api'
+import type { CardStatus, Carriers, CarrierGenus, DecisionCard, Implication } from '../../api'
+import { GenusName } from '../../GenusName'
 
 const STATUS_LABEL: Record<CardStatus, string> = {
   good: 'Fine', watch: 'Watch', act: 'Low', notice: 'Worth noticing', info: '', unknown: 'No data',
 }
-const BASIS_LABEL = { measured: 'Measured', genes: 'Bacterial genes', fungi: 'Fungal DNA' } as const
+const BASIS_LABEL = { measured: 'Measured', genes: 'Bacterial genes', fungi: 'Fungal DNA', names: 'Bacterial names' } as const
 const KIND_LABEL: Record<Implication['kind'], string> = { upside: 'Possible upside', risk: 'Possible risk', neutral: 'Note' }
 
 /** Short cards: title, one line, and (only when something stands out by a stated rule) the reason it is
  *  coloured. Everything else (the full finding, what it can mean, the numbers and rules) is under "More". */
-export function DecisionCards({ cards, wide }: { cards: DecisionCard[]; wide?: boolean }) {
+export const sharePct = (v: number) => (v >= 10 ? v.toFixed(0) : v >= 1 ? v.toFixed(1) : v >= 0.1 ? v.toFixed(1) : v > 0 ? '<0.1' : '0') + '%'
+const pctLabel = (v: number) => (v >= 1 ? v.toFixed(v >= 10 ? 0 : 1) : v > 0 ? '<1' : '0') + '%'
+/** 'Bradyrhizobium japonicum' -> 'B. japonicum' */
+const abbreviate = (sp: string) => sp.replace(/^([A-Z])[a-z]+\s+/, '$1. ')
+
+/** Carrier genera as an inline list: `Name 6.1% (B. japonicum), ...`. */
+export function CarrierList({ top }: { top: CarrierGenus[] }) {
+  return (
+    <>
+      {top.map((g, i) => (
+        <span key={g.name}>
+          {i > 0 && ', '}
+          <GenusName name={g.name} description={g.description} /> {sharePct(g.pct)}
+          {g.species_examples?.[0] && <i className="carrier-sp"> {abbreviate(g.species_examples[0])}</i>}
+        </span>
+      ))}
+    </>
+  )
+}
+
+export function agreementClass(c: Carriers) {
+  return c.agreement === 'names_only' || c.agreement === 'genes_only' ? 'caution' : ''
+}
+
+/** Short cards: title, one line, and (only when something stands out by a stated rule) the reason it is
+ *  coloured. Everything else (the full finding, what it can mean, the numbers and rules) is under "More". */
+export function DecisionCards({ cards, wide, carriers }: { cards: DecisionCard[]; wide?: boolean; carriers?: Carriers[] }) {
   return (
     <div className={`dc-grid ${wide ? 'wide' : ''}`}>
       {cards.map((c) => (
@@ -32,6 +59,16 @@ export function DecisionCards({ cards, wide }: { cards: DecisionCard[]; wide?: b
               </ul>
             )}
             {c.evidence.length > 0 && <ul className="dc-evidence">{c.evidence.map((e) => <li key={e}>{e}</li>)}</ul>}
+            {(c.carrier_terms ?? []).map((id) => carriers?.find((x) => x.term_id === id)).filter((x): x is Carriers => !!x).map((x) => (
+              <div key={x.term_id} className="dc-carriers">
+                <b>Who may carry it (by name)</b>
+                <p className="carrier-head">{x.label} · {pctLabel(x.pct)}</p>
+                <p className={`carrier-agree ${agreementClass(x)}`}>{x.agreement_text}</p>
+                <p className="carrier-list">
+                  {x.top.length ? <CarrierList top={x.top} /> : 'No known carrier above 0.1% of reads.'}
+                </p>
+              </div>
+            ))}
           </details>
         </article>
       ))}
