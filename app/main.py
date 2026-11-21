@@ -454,8 +454,10 @@ if not has_active_area:
                 status.update(label=f"Gotowe! Wczytano {len(g_fields)} pól w gminie {ob_gmina}.", state="complete")
                 st.rerun()
             except Exception as exc:
-                status.update(label="Błąd pobierania kafla", state="error")
+                import traceback
+                status.update(label=f"Błąd pobierania kafla: {exc}", state="error")
                 st.error(f"Nie udało się pobrać danych dla gminy {ob_gmina}: {exc}")
+                st.code(traceback.format_exc(), language="python")
     st.stop()
 
 fields_df = apply_farm_profile(raw_fields_df, farm_profile, crop_dict_df=crop_dict_df)

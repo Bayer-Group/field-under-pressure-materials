@@ -114,27 +114,39 @@ def _latlon_to_h3(lats: np.ndarray, lons: np.ndarray, res: int = 10) -> list[str
     return [h3.geo_to_h3(float(la), float(lo), res) for la, lo in zip(lats, lons)]
 
 
-def _smooth_polygons_2180(gdf_wgs: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
-    to_2180 = pyproj.Transformer.from_crs("EPSG:4326", "EPSG:2180", always_xy=True).transform
-    to_4326 = pyproj.Transformer.from_crs("EPSG:2180", "EPSG:4326", always_xy=True).transform
+def _to_single_polygon(geom):
+    if geom is None or geom.is_empty:
+        return None
+    if geom.geom_type == "Polygon":
+        return geom
+    if geom.geom_type == "MultiPolygon" and len(geom.geoms) > 0:
+        return max(geom.geoms, key=lambda g: g.area)
+    if hasattr(geom, "geoms"):
+        polys = [g for g in geom.geoms if g.geom_type == "Polygon" and not g.is_empty]
+        if polys:
+            return max(polys, key=lambda g: g.area)
+    return None
 
+
+def _smooth_polygons_2180(gdf_wgs: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """Zachowuje oryginalne granice pól bez zaokrąglania buforem i oblicza powierzchnię w ha."""
+    to_2180 = pyproj.Transformer.from_crs("EPSG:4326", "EPSG:2180", always_xy=True).transform
+
+    keep_rows = []
     clean_geoms = []
     areas_ha = []
-    for geom in gdf_wgs.geometry:
-        poly_m = shp_transform(to_2180, geom)
-        sm = (
-            poly_m.buffer(10.0, join_style=2)
-            .buffer(-10.0, join_style=2)
-            .buffer(-6.0, join_style=2)
-            .buffer(6.0, join_style=2)
-            .simplify(7.0, preserve_topology=True)
-        )
-        if sm.is_empty or sm.geom_type != "Polygon":
-            sm = poly_m.simplify(8.0, preserve_topology=True)
-        areas_ha.append(round(max(float(sm.area) / 10000.0, 0.5), 2))
-        clean_geoms.append(shp_transform(to_4326, sm))
+    for idx, geom in enumerate(gdf_wgs.geometry):
+        poly_wgs = _to_single_polygon(geom)
+        if poly_wgs is None:
+            continue
+        poly_m = shp_transform(to_2180, poly_wgs)
+        if poly_m.is_empty:
+            continue
+        keep_rows.append(idx)
+        areas_ha.append(round(max(float(poly_m.area) / 10000.0, 0.5), 2))
+        clean_geoms.append(poly_wgs)
 
-    out = gdf_wgs.copy()
+    out = gdf_wgs.iloc[keep_rows].copy().reset_index(drop=True)
     out["geometry"] = clean_geoms
     out["area_ha"] = areas_ha
     return out
@@ -459,12 +471,12 @@ def build_gmina_dataset(
         cached_f = pd.read_parquet(f_cache)
         cached_w = pd.read_parquet(w_cache)
         cached_w["timestamp"] = pd.to_datetime(cached_w["timestamp"])
-        if not cached_f.empty and not cached_w.empty and cached_w["timestamp"].max() >= now_pl + pd.Timedelta(hours=12):
+        if not cached_f.empty and "polygon_json" in cached_f.columns and not cached_w.empty and cached_w["timestamp"].max() >= now_pl + pd.Timedelta(hours=12):
             return cached_f, cached_w
 
     gminy_path = APP_DATA_DIR / "gminy_polska.parquet"
     if not gminy_path.exists():
-        alt = ROOT_DIR / "app" / "data" / "gminy_polska.parquet"
+        alt = ROOT_DIR / "app" / "data_app" / "gminy_polska.parquet"
         if alt.exists():
             gminy_path = alt
 
@@ -521,6 +533,8 @@ def build_gmina_dataset(
 
     fields_gdf = gpd.GeoDataFrame(poly_records, crs="EPSG:4326")
     fields_gdf = _smooth_polygons_2180(fields_gdf)
+    if fields_gdf.empty:
+        fields_gdf = _smooth_polygons_2180(gpd.GeoDataFrame(_generate_fallback_parcels(bbox, count=45), crs='EPSG:4326'))
     filtered_gdf = fields_gdf[(fields_gdf["area_ha"] >= 0.5) & (fields_gdf["area_ha"] <= 150.0)].copy()
     if filtered_gdf.empty:
         filtered_gdf = fields_gdf.copy()
@@ -587,7 +601,7 @@ def build_gmina_dataset(
                     "lon": "first",
                     "ph": "mean",
                     "soc_0_5cm_mean": "mean",
-                    "soilTexture": lambda s: s.mode().iloc[0],
+                    "soilTexture": lambda s: s.mode().iloc[0] if not s.mode().empty else "Loam",
                     "geometry": "first",
                 })
                 fields_gdf = gpd.GeoDataFrame(agg, geometry="geometry", crs="EPSG:4326")
@@ -626,10 +640,12 @@ def build_gmina_dataset(
     else:
         fields_gdf["grid_id"] = np.int32(abs(hash(f"{wojewodztwo}_{gmina}")) % 90000000 + 10000000)
 
-    fields_gdf["polygon_json"] = [
-        json.dumps([[round(float(x), 6), round(float(y), 6)] for x, y in geom.exterior.coords])
-        for geom in fields_gdf.geometry
-    ]
+    poly_jsons = []
+    for geom in fields_gdf.geometry:
+        p = _to_single_polygon(geom)
+        coords = list(p.exterior.coords) if p is not None else []
+        poly_jsons.append(json.dumps([[round(float(x), 6), round(float(y), 6)] for x, y in coords]))
+    fields_gdf["polygon_json"] = poly_jsons
 
     h3_col = fields_gdf["h3_index_10"].astype(str)
     out_fields = pd.DataFrame({

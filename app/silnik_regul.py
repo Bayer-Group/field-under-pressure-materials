@@ -3,8 +3,8 @@ from pathlib import Path
 from typing import Optional
 import pandas as pd
 
-DATA_DIR = Path(__file__).parent / "data"
-FARM_PROFILE_PATH = DATA_DIR / "moje_gospodarstwo.json"
+DATA_DIR = Path(__file__).parent / "data_app"
+FARM_PROFILE_PATH = DATA_DIR / "farm_profile.json"
 
 SOWING_ALIASES = {"ZASIEJ", "SIEJ", "ZASADŹ"}
 FALLOW_LABEL = "Brak uprawy / Pod zasiew"
@@ -58,6 +58,8 @@ def load_static_fields() -> pd.DataFrame:
     active_path = DATA_DIR / "active_fields.parquet"
     if active_path.exists():
         df = pd.read_parquet(active_path)
+        if "polygon_json" not in df.columns or df["polygon_json"].isna().all():
+            return pd.DataFrame()
         if "field_uid" not in df.columns and "h3_index" in df.columns:
             df["field_uid"] = [f"{h3}_{i+1:03d}" for i, h3 in enumerate(df["h3_index"].astype(str))]
         return df
@@ -195,7 +197,7 @@ def load_admin_hierarchy() -> dict[str, dict[str, list[dict]]]:
     candidates = [
         DATA_DIR / "gminy_polska.parquet",
         base_dir / "data_app" / "gminy_polska.parquet",
-        base_dir / "data" / "gminy_polska.parquet",
+        base_dir / "data_app" / "gminy_polska.parquet",
     ]
     gminy_path = next((p for p in candidates if p.exists()), None)
     hierarchy: dict[str, dict[str, list[dict]]] = {}
