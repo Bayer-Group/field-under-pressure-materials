@@ -46,6 +46,16 @@ def external_id(owner: str, stored: str) -> str:
     return stored
 
 
+def resolve_id(con, table: str, column: str, owner: str, client_id: str) -> str:
+    """The stored id of what the client calls `client_id`: made through this API (owner~id), or a sandbox copy made before the id
+    format was unified (owner-id), whichever exists, so that a copy is edited in place and not duplicated; else a new owner~id.
+    `table` and `column` are fixed names from the code."""
+    new, legacy = internal_id(owner, client_id), f"{owner}-{client_id}"
+    row = con.execute(f"SELECT {column} AS id FROM {table} WHERE {column} IN (%s, %s) ORDER BY ({column} = %s) DESC LIMIT 1",
+                      (new, legacy, new)).fetchone()
+    return row["id"] if row else new
+
+
 def _check_id(value: str, what: str) -> None:
     if not _ID.match(value):
         raise HTTPException(status_code=422, detail=f"{what} must be 1 to 80 characters of letters, digits and _ . : -")
@@ -159,7 +169,8 @@ def list_fields(user=Depends(current_user), con=Depends(get_db)):
 @router.get("/fields/{field_id}", summary="One field with its crop areas")
 def get_field(field_id: str, user=Depends(current_user), con=Depends(get_db)):
     _check_id(field_id, "field_id")
-    for candidate in (internal_id(user["owner_id"], field_id), field_id):    # a field made through this API, or a generated one
+    owner = user["owner_id"]
+    for candidate in (internal_id(owner, field_id), f"{owner}-{field_id}", field_id):    # made through this API, an older copy, a generated one
         found = load_fields(con, user["owner_id"], candidate)
         if found:
             return found[0]
@@ -229,7 +240,8 @@ def put_field(field_id: str, body: FieldIn, user=Depends(current_user), con=Depe
         raise HTTPException(status_code=422, detail={"message": "confirmations are missing", "missing": missing})
 
     limit = MAX_AREAS_SANDBOX if user.get("sandbox") else MAX_AREAS_OTHER
-    fid = internal_id(owner, field_id)
+    fid = resolve_id(con, "app.field", "field_id", owner, field_id)
+    cids = {i: resolve_id(con, "app.crop_area", "crop_area_id", owner, i) for i in ids}
     others = con.execute("SELECT count(*) AS n FROM app.crop_area a JOIN app.field f USING (field_id) "
                          "WHERE f.owner_id = %s AND f.field_id <> %s", (owner, fid)).fetchone()["n"]
     if others + len(body.crop_areas) > limit:
@@ -253,10 +265,10 @@ def put_field(field_id: str, body: FieldIn, user=Depends(current_user), con=Depe
     con.execute("DELETE FROM app.field_parcel WHERE field_id = %s", (fid,))
     for p in parcel_ids:
         con.execute("INSERT INTO app.field_parcel (field_id, parcel_id) VALUES (%s, %s)", (fid, p))
-    keep = [internal_id(owner, i) for i in ids]
+    keep = list(cids.values())
     con.execute("DELETE FROM app.crop_area WHERE field_id = %s AND NOT (crop_area_id = ANY(%s))", (fid, keep))
     for a in body.crop_areas:
-        cid = internal_id(owner, a.crop_area_id)
+        cid = cids[a.crop_area_id]
         con.execute(
             "INSERT INTO app.crop_area (crop_area_id, field_id, geom, farmer_crop_id, sowing_date, sprays_confirmed) "
             "VALUES (%s, %s, ST_GeomFromEWKB(decode(%s, 'hex')), %s, %s, true) "

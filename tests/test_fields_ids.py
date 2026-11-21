@@ -7,7 +7,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
-from backend.app.api.v1.endpoints.fields import external_id, internal_id  # noqa: E402
+from backend.app.api.v1.endpoints.fields import external_id, internal_id, resolve_id  # noqa: E402
 from backend.app.core.config import AUTH_SECRET  # noqa: E402
 from backend.app.core.security import make_token  # noqa: E402
 from backend.app.services import geometry_validation as gv  # noqa: E402
@@ -25,6 +25,39 @@ class Ids(unittest.TestCase):
     def test_generated_and_cloned_ids(self):
         self.assertEqual(external_id("farmer-001", "f-farmer-001-1"), "f-farmer-001-1")             # a generated field keeps its id
         self.assertEqual(external_id("sbx-ab12", "sbx-ab12-f-farmer-021-1"), "f-farmer-021-1")       # a sandbox copy loses the prefix
+
+
+class FakeCon:
+    """Answers the lookup of resolve_id with the stored ids it was given (a stand-in for the database)."""
+
+    def __init__(self, stored):
+        self.stored = stored
+
+    def execute(self, sql, params):
+        new, legacy = params[0], params[1]
+        found = [s for s in (new, legacy) if s in self.stored]           # the one in the new format comes first
+        self._row = {"id": found[0]} if found else None
+        return self
+
+    def fetchone(self):
+        return self._row
+
+
+class ResolveId(unittest.TestCase):
+    def test_new_copies_use_the_api_format_and_are_edited_in_place(self):
+        # a sandbox copy now stores sid~f-farmer-021-1: the client id f-farmer-021-1 resolves to it (no duplicate)
+        stored = "sbx-ab12~f-farmer-021-1"
+        self.assertEqual(external_id("sbx-ab12", stored), "f-farmer-021-1")
+        self.assertEqual(resolve_id(FakeCon({stored}), "app.field", "field_id", "sbx-ab12", "f-farmer-021-1"), stored)
+
+    def test_older_copies_are_found_too(self):
+        legacy = "sbx-ab12-f-farmer-021-1"                                  # made before the id format was unified
+        self.assertEqual(resolve_id(FakeCon({legacy}), "app.field", "field_id", "sbx-ab12", "f-farmer-021-1"), legacy)
+
+    def test_new_id_and_preference(self):
+        self.assertEqual(resolve_id(FakeCon(set()), "app.field", "field_id", "sbx-ab12", "field-demo-1"), "sbx-ab12~field-demo-1")
+        both = {"sbx-ab12~x", "sbx-ab12-x"}
+        self.assertEqual(resolve_id(FakeCon(both), "app.field", "field_id", "sbx-ab12", "x"), "sbx-ab12~x")
 
 
 class RequestHash(unittest.TestCase):
