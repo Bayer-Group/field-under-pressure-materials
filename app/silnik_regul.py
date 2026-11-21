@@ -482,7 +482,12 @@ def evaluate_fields(
     crop_dict_df: Optional[pd.DataFrame] = None,
     eco_mode: bool = False,
 ) -> pd.DataFrame:
+    if fields_df.empty:
+        return fields_df.copy()
+
     weather_slice = weather_df[weather_df["timestamp"] == pd.to_datetime(selected_timestamp)].copy()
+    if not weather_slice.empty and "grid_id" in weather_slice.columns:
+        weather_slice = weather_slice.drop_duplicates(subset=["grid_id"], keep="last")
     merged = fields_df.merge(weather_slice, on="grid_id", how="left")
 
     if what_if:
@@ -493,6 +498,20 @@ def evaluate_fields(
         if override_precip_24h_mm is not None:
             merged["precip_24h_mm"] = float(override_precip_24h_mm)
 
+    merged["temp_c"] = pd.to_numeric(merged.get("temp_c", 14.0), errors="coerce").fillna(14.0)
+    merged["humidity_pct"] = pd.to_numeric(merged.get("humidity_pct", 65.0), errors="coerce").fillna(65.0)
+    merged["wind_ms"] = pd.to_numeric(merged.get("wind_ms", 2.5), errors="coerce").fillna(2.5)
+    merged["precip_24h_mm"] = pd.to_numeric(merged.get("precip_24h_mm", 0.0), errors="coerce").fillna(0.0)
+    merged["ndvi"] = pd.to_numeric(merged.get("ndvi", 0.5), errors="coerce").fillna(0.5)
+    merged["soil_ph"] = pd.to_numeric(merged.get("soil_ph", 6.2), errors="coerce").fillna(6.2)
+    merged["soil_soc"] = pd.to_numeric(merged.get("soil_soc", 16.0), errors="coerce").fillna(16.0)
+    if "area_ha" not in merged.columns:
+        merged["area_ha"] = 1.5
+
+    rules_work = rules_df.copy() if (rules_df is not None and not rules_df.empty) else pd.DataFrame()
+    if not rules_work.empty and "decyzja_norm" not in rules_work.columns:
+        rules_work["decyzja_norm"] = rules_work["decyzja"].map(normalize_decision)
+
     decisions = []
     messages = []
     hazards = []
@@ -500,6 +519,8 @@ def evaluate_fields(
     risk_levels = []
     fertilizers = []
     eco_statuses = []
+    preparaty_eko = []
+    metody_oprysku = []
     dose_kg_ha_list = []
     total_kg_list = []
     fert_reasons = []
@@ -521,70 +542,94 @@ def evaluate_fields(
         rule_fert = ""
         rule_eco = ""
         rule_dose = None
+        prep_eko = "Brak"
+        metoda = "Lustracja polowa"
         is_fallow = bool(getattr(row, "is_fallow", False))
 
-        if pd.notna(row.precip_24h_mm) and row.precip_24h_mm >= 5.0:
+        if pd.notna(row.precip_24h_mm) and float(row.precip_24h_mm) >= 5.0:
             decision = "CZEKAJ"
             message = f"CZEKAJ: Wysoki opad 24h ({row.precip_24h_mm:.1f} mm) — ryzyko zmycia środka / grząska gleba"
             hazard = "Nadmierny opad 24h"
             rule_id = "BLK-RAIN"
             risk_level = "KRYTYCZNY"
-        elif pd.notna(row.wind_ms) and row.wind_ms > 4.0 and not is_fallow:
+            prep_eko = "Brak (wstrzymanie zabiegu)"
+            metoda = "Wstrzymaj zabieg (ochrona przed zmyciem)"
+        elif pd.notna(row.wind_ms) and float(row.wind_ms) > 4.0 and not is_fallow:
             decision = "CZEKAJ"
             message = f"CZEKAJ: Zbyt silny wiatr > 4 m/s ({row.wind_ms:.1f} m/s)"
             hazard = "Znoszenie cieczy roboczej"
             rule_id = "BLK-WIND"
             risk_level = "WYSOKI"
+            prep_eko = "Brak (wstrzymanie zabiegu)"
+            metoda = "Wstrzymaj zabieg (ochrona przed znoszeniem)"
         elif is_fallow:
-            if pd.notna(row.soil_ph) and row.soil_ph < 5.5:
+            if pd.notna(row.soil_ph) and float(row.soil_ph) < 5.5:
                 decision = "NAWOŹ"
                 rule_fert = "Wapno węglanowe granulowane"
                 rule_eco = "Wapno kredowe / dolomitowe (EKO)"
                 hazard = "Zbyt kwaśny odczyn gleby przed siewem"
                 rule_id = "FALLOW-LIME"
                 risk_level = "WYSOKI"
+                prep_eko = "Wapno naturalne / dolomit (EKO)"
+                metoda = "Wapnowanie przedsiewne"
                 message = f"NAWOŹ przed siewem: pH {row.soil_ph:.1f} wymaga wapnowania | Docelowo: {rec_crop}"
             else:
                 decision = "ZASIEJ"
                 hazard = "Pole nieobsiane — gotowe do siewu"
                 rule_id = "FALLOW-SOW"
                 risk_level = "OPTYMALNY"
+                prep_eko = "Kompost / zaprawa biologiczna EKO"
+                metoda = "Siew rzędowy / punktowy"
                 message = f"ZASIEJ: Pole pod zasiew — zalecany gatunek: {rec_crop} ({soil_reason})"
-        else:
-            crop_rules = rules_df[
-                (rules_df["uprawa"].str.strip().str.lower() == str(row.crop_name).strip().lower())
-                | (rules_df["uprawa"].str.strip().str.upper() == "WSZYSTKIE")
+        elif not rules_work.empty:
+            canon_crop = _canonical_crop_for_rules(str(row.crop_name))
+            allowed_crops = {canon_crop.lower(), "wszystkie"}
+            if canon_crop in CEREAL_CROPS:
+                allowed_crops.add("zboża ogółem")
+
+            crop_rules = rules_work[
+                rules_work["uprawa"].astype(str).str.strip().str.lower().isin(allowed_crops)
             ]
 
-            blocking_rules = crop_rules[crop_rules["decyzja_norm"] == "CZEKAJ"]
-            action_rules = crop_rules[crop_rules["decyzja_norm"] != "CZEKAJ"]
+            matched = []
+            for _, r_rule in crop_rules.iterrows():
+                if _rule_matches_row(
+                    r_rule,
+                    temp_c=float(row.temp_c),
+                    humidity_pct=float(row.humidity_pct),
+                    precip_24h_mm=float(row.precip_24h_mm),
+                    wind_ms=float(row.wind_ms),
+                    ndvi=float(row.ndvi),
+                    soil_ph=float(row.soil_ph),
+                    soil_soc=float(row.soil_soc),
+                ):
+                    matched.append(r_rule)
 
-            matched_rule = None
-            for r in blocking_rules.itertuples(index=False):
-                if _rule_matches_row(r, row):
-                    matched_rule = r
-                    break
-
-            if matched_rule is None:
-                for r in action_rules.itertuples(index=False):
-                    if _rule_matches_row(r, row):
-                        matched_rule = r
-                        break
-
-            if matched_rule is not None:
-                decision = str(matched_rule.decyzja_norm)
-                message = str(matched_rule.komunikat)
-                hazard = str(matched_rule.zagrozenie)
-                rule_id = str(matched_rule.rule_id)
-                risk_level = str(matched_rule.poziom_ryzyka).strip().upper()
-                raw_fert = getattr(matched_rule, "zalecany_nawoz", "")
-                raw_eco = getattr(matched_rule, "nawozy_eko", "")
-                raw_dose = getattr(matched_rule, "dawka_nawozu_kg_ha", None)
-                if pd.notna(raw_fert) and str(raw_fert).strip():
+            if matched:
+                matched.sort(
+                    key=lambda r_item: (
+                        RISK_PRIORITY.get(str(r_item.get("poziom_ryzyka", "")).strip().upper(), 0),
+                        DECISION_PRIORITY.get(normalize_decision(r_item.get("decyzja", "")), 0),
+                        1 if str(r_item.get("uprawa", "")).strip().lower() == canon_crop.lower() else 0,
+                    ),
+                    reverse=True,
+                )
+                best = matched[0]
+                decision = normalize_decision(best.get("decyzja", "MONITORUJ"))
+                message = str(best.get("komunikat", message))
+                hazard = str(best.get("zagrozenie", hazard))
+                rule_id = str(best.get("rule_id", rule_id))
+                risk_level = str(best.get("poziom_ryzyka", risk_level)).strip().upper()
+                prep_eko = str(best.get("preparat_eko", "Brak"))
+                metoda = str(best.get("metoda_oprysku", "Standardowa agrotechnika"))
+                raw_fert = best.get("zalecany_nawoz", "")
+                raw_eco = best.get("nawozy_eko", "")
+                raw_dose = pd.to_numeric(best.get("dawka_nawozu_kg_ha"), errors="coerce")
+                if pd.notna(raw_fert) and str(raw_fert).strip() and not str(raw_fert).strip().lower().startswith("brak"):
                     rule_fert = str(raw_fert).strip()
-                if pd.notna(raw_eco) and str(raw_eco).strip():
+                if pd.notna(raw_eco) and str(raw_eco).strip() and not str(raw_eco).strip().lower().startswith("brak"):
                     rule_eco = str(raw_eco).strip()
-                if pd.notna(raw_dose):
+                if pd.notna(raw_dose) and float(raw_dose) > 0:
                     rule_dose = float(raw_dose)
 
         row_eco_mode = bool(getattr(row, "is_eco_field", eco_mode)) or bool(eco_mode)
@@ -618,6 +663,8 @@ def evaluate_fields(
         risk_levels.append(risk_level)
         fertilizers.append(fert_info["zalecany_nawoz"])
         eco_statuses.append(fert_info["nawozy_eko"])
+        preparaty_eko.append(prep_eko)
+        metody_oprysku.append(metoda)
         dose_kg_ha_list.append(fert_info["dawka_nawozu_kg_ha"])
         total_kg_list.append(fert_info["ilosc_nawozu_kg"])
         fert_reasons.append(fert_info["uzasadnienie_nawozenia"])
@@ -629,6 +676,8 @@ def evaluate_fields(
     merged["poziom_ryzyka"] = risk_levels
     merged["zalecany_nawoz"] = fertilizers
     merged["nawozy_eko"] = eco_statuses
+    merged["preparat_eko"] = preparaty_eko
+    merged["metoda_oprysku"] = metody_oprysku
     merged["dawka_nawozu_kg_ha"] = dose_kg_ha_list
     merged["ilosc_nawozu_kg"] = total_kg_list
     merged["uzasadnienie_nawozenia"] = fert_reasons

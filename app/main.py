@@ -1370,7 +1370,7 @@ with tab_zysk:
         unsafe_allow_html=True,
     )
 
-    profit_base_df = result_df[result_df["is_mine"]].copy() if (my_fields_count > 0 and "is_mine" in result_df.columns) else result_df.copy()
+    profit_base_df = result_df[result_df["is_my_field"]].copy() if (my_fields_count > 0 and "is_my_field" in result_df.columns) else result_df.copy()
     if my_fields_count == 0:
         st.info("Nie zaznaczono jeszcze własnych działek w zakładce 'Moje Gospodarstwo' — kalkulacja obejmuje wszystkie widoczne pola gminy.")
 
