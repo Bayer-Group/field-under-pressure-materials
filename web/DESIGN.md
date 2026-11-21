@@ -11,7 +11,7 @@ Use these principles with [Emil Kowalski's Apple Design skill](https://www.ui-sk
 ## Interaction and layout
 
 - Provide clear affordances and touch targets of at least 44 by 44 CSS pixels. Respect device safe areas, including bottom gesture regions.
-- Avoid unexpected layout shifts: reserve space or animate intentional changes without moving a target while it is being tapped. When selecting on the map, keep the drawer compact; cap the selected-parcel list at two visible rows and scroll the list for more.
+- Avoid unexpected layout shifts: reserve space or animate intentional changes without moving a target while it is being tapped. Keep the drawer in its chosen state when selecting on the map; adjust the visible map when its size changes. Cap the selected-parcel list at two visible rows and scroll the list for more.
 - Use progressive disclosure for secondary information. Search suggestions should behave as an accessible combobox, with an identifiable field, clear results, keyboard access and useful empty and error states.
 - Give immediate feedback for reversible actions. Optimistic updates to server-backed data must also handle failure and restore or reconcile the previous state; never imply a backend save has succeeded when it has not.
 

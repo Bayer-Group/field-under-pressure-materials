@@ -214,7 +214,12 @@
       if (drawerResizeAnimation) { drawerResizeAnimation.cancel(); drawerResizeAnimation = null; }
       sheet.classList.add('resizing');
       const nextHeight = sheet.getBoundingClientRect().height;
-      if (Math.abs(previousHeight - nextHeight) < 1 || window.matchMedia('(prefers-reduced-motion: reduce)').matches) { sheet.classList.remove('resizing'); return; }
+      const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (Math.abs(previousHeight - nextHeight) < 1) { sheet.classList.remove('resizing'); return; }
+      if (window.matchMedia('(max-width: 719px)').matches && !sheet.classList.contains('search-hidden')) {
+        map.panBy([0, (nextHeight - previousHeight) / 2], { duration: reduceMotion ? 0 : 280, easing: t => 1 - Math.pow(1 - t, 3) });
+      }
+      if (reduceMotion) { sheet.classList.remove('resizing'); return; }
       const animation = sheet.animate([{ height: `${previousHeight}px` }, { height: `${nextHeight}px` }], { duration: 280, easing: 'cubic-bezier(.22,1,.36,1)' });
       drawerResizeAnimation = animation;
       animation.onfinish = () => { if (drawerResizeAnimation === animation) { drawerResizeAnimation = null; sheet.classList.remove('resizing'); } };
@@ -251,7 +256,7 @@
     function showMapGuide() { mapGuide.classList.add('visible'); mapGuide.setAttribute('aria-hidden', 'false'); }
     /** Dismiss the map-selection hint and remove it from the accessibility tree. */
     function hideMapGuide() { mapGuide.classList.remove('visible'); mapGuide.setAttribute('aria-hidden', 'true'); }
-    drawerToggle.addEventListener('click', () => { hideMapGuide(); setDrawer(sheet.classList.contains('collapsed')); if (previewParcel) fitParcelPreview(previewParcel); });
+    drawerToggle.addEventListener('click', () => { hideMapGuide(); setDrawer(sheet.classList.contains('collapsed')); if (previewParcel) fitParcelPreview(previewParcel, { onlyIfObscured: true }); });
     searchBackdrop.addEventListener('click', () => setSearch(false));
     document.addEventListener('keydown', event => { if (event.key === 'Escape' && topControls.classList.contains('searching')) setSearch(false); });
     const map = new maplibregl.Map({
@@ -259,7 +264,7 @@
       style: { version: 8, sources: { osm: { type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256, attribution: '&copy; OpenStreetMap contributors' } }, layers: [{ id: 'osm', type: 'raster', source: 'osm' }] }
     });
     /** Fit the complete geometry in the visible map area after the drawer finishes resizing. */
-    async function fitParcelPreview(parcel) {
+    async function fitParcelPreview(parcel, options = {}) {
       const request = ++previewRequest;
       while (drawerResizeAnimation) {
         const animation = drawerResizeAnimation;
@@ -278,6 +283,13 @@
       const padding = { top: 85, right: 24, bottom: 24, left: 24 };
       if (mobile) padding.bottom = Math.max(24, mapRect.bottom - Math.max(mapRect.top, drawerRect.top) + 20);
       else if (drawerRect.right > mapRect.left && drawerRect.left < mapRect.right) padding.left = Math.max(24, drawerRect.right - mapRect.left + 20);
+      if (options.onlyIfObscured) {
+        const visible = polygons.every(polygon => polygon[0].every(point => {
+          const screen = map.project(point);
+          return screen.x >= padding.left && screen.x <= mapRect.width - padding.right && screen.y >= padding.top && screen.y <= mapRect.height - padding.bottom;
+        }));
+        if (visible) return;
+      }
       map.fitBounds(bounds, { padding, maxZoom: 15, duration: 450 });
     }
     map.on('dragstart', event => { if (event.originalEvent) { previewParcel = null; previewRequest++; } });
@@ -342,9 +354,10 @@
     /** Add a selected result without claiming ownership. */
     function selectParcel(parcel, options = {}) {
       if (options.toggle && selected.has(parcel.parcel_id)) {
-        selected.delete(parcel.parcel_id); if (previewParcel?.parcel_id === parcel.parcel_id) { previewParcel = null; previewRequest++; } if (popupParcelId === parcel.parcel_id && parcelPopup) parcelPopup.remove(); status.textContent = 'Działka odznaczona.'; renderSelection(); return;
+        selected.delete(parcel.parcel_id); if (previewParcel?.parcel_id === parcel.parcel_id) { previewParcel = null; previewRequest++; } if (popupParcelId === parcel.parcel_id && parcelPopup) parcelPopup.remove(); status.textContent = ''; renderSelection(); return;
       }
       selected.set(parcel.parcel_id, parcel); results.classList.remove('visible'); status.textContent = ''; renderSelection();
+      if (options.toggle && !sheet.classList.contains('collapsed')) { previewParcel = parcel; fitParcelPreview(parcel, { onlyIfObscured: true }); }
       if (!options.focus) return;
       previewParcel = parcel;
       fitParcelPreview(parcel);
@@ -518,7 +531,6 @@
       startPoint = [event.clientX - rect.left, event.clientY - rect.top];
       cursor = startPoint;
       holdTimer = setTimeout(() => {
-        if (window.matchMedia('(max-width: 719px)').matches && !sheet.classList.contains('collapsed')) setDrawer(false);
         drawing = true; suppressMapClick = true; map.dragPan.disable();
         canvas.setPointerCapture(pointerId); anchor = map.unproject(startPoint); preview = new Map();
         selectionBox.classList.add('visible'); status.textContent = 'Przeciągnij prostokąt nad działkami.';
@@ -567,7 +579,6 @@
     map.on('click', async event => {
       if (suppressMapClick) return;
       hideMapGuide();
-      if (window.matchMedia('(max-width: 719px)').matches && !sheet.classList.contains('collapsed')) { status.textContent = ''; setDrawer(false); }
       try { const result = await provider.findParcels({ lon: event.lngLat.lng, lat: event.lngLat.lat }); showMatches(result.parcels, true, { toggle: true }); }
       catch (_) { status.textContent = 'Nie można pobrać działek. Spróbuj ponownie.'; }
     });
