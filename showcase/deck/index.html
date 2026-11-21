@@ -21,14 +21,11 @@
 
   <!-- 1 · Title -->
   <section data-anim="title" class="s-title" data-hide-brand>
-    <div class="kicker rise">Project showcase</div>
     <h1 class="title lockup" aria-label="Terranos">
       <img class="letters" src="../brand/terranos-dark-letters.png" alt="">
-      <img class="globe" src="../brand/terranos-globe.png" alt="">
+      <canvas class="globe earth" aria-hidden="true"></canvas>
     </h1>
-    <p class="sub rise">Satellite greenness, aerial photos and soil microbes for each sampled plot</p>
-    <div class="tags rise"><span class="tag">2 NEON farm sites</span><span class="tag">29 plots</span><span class="tag">2013 – 2026</span></div>
-    <aside class="notes">Open with the one-line pitch. Press R on any slide to replay its animation.</aside>
+    <aside class="notes">Open with the one-line pitch: satellite greenness, aerial photos and soil microbes for each sampled plot, 29 plots at 2 NEON farm sites, 2013 to 2026. Press R on any slide to replay its animation.</aside>
   </section>
 
   <!-- 2 · Why (plain reveal.js fragments, no custom animation) -->
@@ -204,8 +201,13 @@
 <script src="vendor/gsap/Draggable.min.js"></script>
 <script src="../shots/rects.js"></script>
 <script src="../brand/logo.js"></script>
+<script src="vendor/geo/d3-array.min.js"></script>
+<script src="vendor/geo/d3-geo.min.js"></script>
+<script src="vendor/geo/topojson-client.min.js"></script>
+<script src="vendor/geo/land-110m.js"></script>
 <script src="js/data.js"></script>
 <script src="js/engine.js"></script>
+<script src="js/earth.js"></script>
 <script src="js/anims/basic.js"></script>
 <script src="js/anims/sources.js"></script>
 <script src="js/anims/sites.js"></script>

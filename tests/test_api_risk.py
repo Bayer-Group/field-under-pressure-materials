@@ -232,3 +232,31 @@ def test_light_mode_scores_only_light_plots(client):
     (client.proc.parent / "light_mode.txt").unlink()                        # switching off is picked up (cache key)
     r = client.get("/api/plots/STER_001/crop-risk/2022-002").json()
     assert r["n_units_in_group"] > 5 and not any(n.startswith("Light mode") for n in r["notes"])
+
+
+def test_followup_tests_route(client):
+    r = client.get("/api/plots/STER_001/crop-risk/2022-002/winter_wheat/tests")
+    assert r.status_code == 200
+    d = r.json()
+    assert d["crop"] == "winter_wheat" and d["label"] == "Winter wheat" and "not verified" in d["note"]
+    ids = [s["test_id"] for s in d["suggestions"]]
+    assert ids[0] == "more_cores"                       # the synthetic units have one core each
+    assert "fus_graminearum" in ids and "pythium" in ids and "phytophthora_sojae" not in ids
+    fus = next(s for s in d["suggestions"] if s["test_id"] == "fus_graminearum")
+    assert fus["trigger"] == "resolve_species" and fus["trigger_label"] == "Identify the species"
+    pri = [s["priority"] for s in d["suggestions"]]
+    assert pri == sorted(pri, reverse=True)
+    shallow = client.get("/api/plots/STER_030/crop-risk/2022-002/corn/tests").json()
+    assert [s["test_id"] for s in shallow["suggestions"]] == ["resequence"]
+    assert client.get("/api/plots/STER_001/crop-risk/2022-002/banana/tests").status_code == 404
+    assert client.get("/api/plots/STER_001/crop-risk/1999-002/corn/tests").status_code == 404
+
+
+def test_followup_tests_use_site_context(client):
+    pd.DataFrame([dict(unit_id="STER_001", p_wet_may=0.8, p_hot_dry_jul_aug=0.0, drainage_class="Well drained")]
+                 ).to_parquet(client.proc / "plots.parquet")
+    d = client.get("/api/plots/STER_001/crop-risk/2022-002/corn/tests").json()
+    py = next(s for s in d["suggestions"] if s["test_id"] == "pythium")
+    assert "May is wet in 80% of years" in py["reason"]
+    other = client.get("/api/plots/STER_002/crop-risk/2022-002/corn/tests").json()
+    assert "May is wet" not in next(s for s in other["suggestions"] if s["test_id"] == "pythium")["reason"]

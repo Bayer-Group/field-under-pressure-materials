@@ -298,8 +298,39 @@ export const api = {
   functionProfile: (sampleId: string, s?: AbortSignal) => get<FunctionProfile>(`/functions/${id(sampleId)}`, s),
 }
 
+export type TestTrigger = 'resolve_species' | 'confirm_detection' | 'blind_spot' | 'sampling'
+
+export interface TestSuggestion {
+  test_id: string
+  kind: string
+  trigger: TestTrigger
+  trigger_label: string
+  priority: number // 0-1, only orders the list
+  genus: string | null
+  target: string | null
+  disease: string | null
+  method: string
+  sample: string | null
+  tells_you: string | null
+  reason: string
+  inoculum: string | null
+  source: string | null
+  verified: boolean
+}
+
+export interface FollowupTests {
+  plot_id: string
+  unit: string
+  crop: string
+  label: string
+  suggestions: TestSuggestion[] // most useful first
+  note: string
+}
+
 export const getCropRiskUnits = (plotId: string, s?: AbortSignal) => get<RiskUnitRef[]>(`/plots/${id(plotId)}/crop-risk`, s)
 export const getCropRisk = (plotId: string, unit: string, s?: AbortSignal) =>
   get<PlotCropRisk>(`/plots/${id(plotId)}/crop-risk/${id(unit)}`, s)
 export const getCropContributions = (plotId: string, unit: string, crop: string, s?: AbortSignal) =>
   get<CropContributions>(`/plots/${id(plotId)}/crop-risk/${id(unit)}/${id(crop)}`, s)
+export const getFollowupTests = (plotId: string, unit: string, crop: string, s?: AbortSignal) =>
+  get<FollowupTests>(`/plots/${id(plotId)}/crop-risk/${id(unit)}/${id(crop)}/tests`, s)
