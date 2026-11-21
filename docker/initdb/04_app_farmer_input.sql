@@ -55,6 +55,8 @@ CREATE TABLE IF NOT EXISTS crop_area (
 );
 -- bbch_override is not in FARMER_INPUT_CONTRACT.md yet: the curated contract (growth_stage_source = 'override') needs it.
 ALTER TABLE crop_area ADD COLUMN IF NOT EXISTS bbch_override integer;
+-- sprays_confirmed: NULL = the spray question was not answered, true = answered (an empty list of sprays is an answer: no sprays).
+ALTER TABLE crop_area ADD COLUMN IF NOT EXISTS sprays_confirmed boolean;
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'crop_area_bbch_override_check') THEN

@@ -225,6 +225,7 @@ def add_spray(crop_area_id: str, body: SprayIn, user=Depends(current_user), con=
         raise HTTPException(status_code=422, detail="the spray date cannot be in the future")
     con.execute("INSERT INTO app.spray (crop_area_id, spray_date, protection_duration_days) VALUES (%s, %s, %s)",
                 (crop_area_id, body.spray_date - timedelta(days=shift), body.protection_duration_days))
+    con.execute("UPDATE app.crop_area SET sprays_confirmed = true WHERE crop_area_id = %s", (crop_area_id,))
     _recompute(con, crop_area_id, "spray", what="risk")       # a spray changes nothing in the crop map or the soil
     changed = con.execute("SELECT count(*) AS n FROM curated.risk_change WHERE crop_area_id = %s AND reason = 'spray' "
                           "AND computed_at = now()", (crop_area_id,)).fetchone()["n"]
