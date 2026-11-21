@@ -162,22 +162,29 @@ export function getPlaceholderOrchardHealth(orchardId: string): OrchardHealthSum
     poor: 0,
     moderate: 0,
     healthy: 0,
+    unrated: 0,
   };
 
   let scoreSum = 0;
+  let ratedCount = 0;
   for (const tree of scene.trees) {
-    distribution[tree.healthStatus] += 1;
-    scoreSum += tree.healthScore;
+    if (tree.healthStatus && tree.healthScore !== null) {
+      distribution[tree.healthStatus] += 1;
+      scoreSum += tree.healthScore;
+      ratedCount += 1;
+    } else {
+      distribution.unrated = (distribution.unrated ?? 0) + 1;
+    }
   }
 
   const totalTrees = scene.trees.length;
-  const averageScore = totalTrees > 0 ? Math.round(scoreSum / totalTrees) : 0;
+  const averageScore = ratedCount > 0 ? Math.round(scoreSum / ratedCount) : null;
 
   return {
     orchardId,
     updatedAt: new Date().toISOString(),
     averageScore,
-    overallStatus: scoreToHealthStatus(averageScore),
+    overallStatus: averageScore !== null ? scoreToHealthStatus(averageScore) : null,
     totalTrees,
     distribution,
   };

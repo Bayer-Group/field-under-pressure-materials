@@ -1,6 +1,7 @@
 """Fetch and validate weather for one orchard point from Open-Meteo."""
 
 import json
+import ssl
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone as datetime_timezone
 from http.client import HTTPException
@@ -8,6 +9,17 @@ from math import isfinite
 from urllib.error import HTTPError
 from urllib.parse import urlencode
 from urllib.request import urlopen
+
+try:
+    import certifi
+except ImportError:
+    certifi = None
+
+_SSL_CONTEXT = (
+    ssl.create_default_context(cafile=certifi.where())
+    if certifi is not None
+    else ssl.create_default_context()
+)
 
 
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
@@ -158,7 +170,9 @@ class OpenMeteoClient:
             **parameters,
         })
         try:
-            with urlopen(f"{FORECAST_URL}?{query}", timeout=self.timeout_seconds) as response:
+            with urlopen(
+                f"{FORECAST_URL}?{query}", timeout=self.timeout_seconds, context=_SSL_CONTEXT
+            ) as response:
                 data = json.load(response)
         except HTTPError as error:
             raise OpenMeteoError(f"Open-Meteo returned HTTP {error.code}") from error

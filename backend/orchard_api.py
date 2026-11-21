@@ -1,13 +1,16 @@
 """Read orchard geometry and trees and publish layouts from the frontend."""
 
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 from struct import unpack_from
 from threading import Lock
+from typing import Literal
 
 from bson import ObjectId
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 from pymongo.database import Database
 from pyproj import Geod, Transformer
 
@@ -129,11 +132,113 @@ def _render_trees(db: Database, orchard: dict) -> list[dict]:
     return result
 
 
+class UserPreferencesPatch(BaseModel):
+    theme: Literal["Light", "Dark", "OS"] | None = None
+    lang: Literal["pl", "en"] | None = None
+    activeOrchardId: str | None = None
+
+
+def _serialize_preferences(preferences: dict | None) -> dict:
+    prefs = preferences or {}
+    active = prefs.get("activeOrchardId")
+    return {
+        "theme": prefs.get("theme", "OS"),
+        "lang": prefs.get("lang", "pl"),
+        "activeOrchardId": str(active) if isinstance(active, ObjectId) else active,
+    }
+
+
 def create_orchard_router(db: Database) -> APIRouter:
     router = APIRouter(prefix="/api/v1")
     # Layout saves publish their row index after writing the individual tree documents.
     # The application serves one ASGI worker, so serialize competing saves in this process.
     layout_lock = Lock()
+
+    @router.get("/orchards")
+    def list_orchards() -> list[dict]:
+        items = []
+        for orchard in db.Orchard.find({}, {"environmentalData": 0}):
+            identifier = str(orchard["_id"])
+            try:
+                center = _center(orchard)
+            except HTTPException:
+                center = {"lat": 0.0, "lng": 0.0}
+            geom = orchard.get("geometry", {})
+            area = orchard.get("shapeAreaM2") or geom.get("shapeArea")
+            if not area:
+                try:
+                    _, area, _ = _boundary(orchard)
+                except HTTPException:
+                    area = 0.0
+            items.append(
+                {
+                    "_id": identifier,
+                    "name": _name(orchard),
+                    "areaHectares": round(float(area) / 10_000, 2),
+                    "centroid": {"lat": center["lat"], "long": center["lng"]},
+                }
+            )
+        items.sort(key=lambda item: (item["_id"] != _DEMO_ORCHARD, item["name"]))
+        return items
+
+    @router.get("/orchard/health")
+    def orchard_health(orchard_id: str | None = Query(default=None, alias="orchardId")) -> dict:
+        orchard = orchard_document(db, object_id(orchard_id, "orchardId"))
+        trees = trees_in_layout(db, orchard)
+        distribution = {"dead": 0, "poor": 0, "moderate": 0, "healthy": 0, "unrated": 0}
+        rated_scores: list[float] = []
+        for tree in trees:
+            value = tree.get("healthIndex")
+            score = float(value) if type(value) in (float, int) and 0 <= value <= 100 else None
+            status = _status(score)
+            if status is None:
+                distribution["unrated"] += 1
+            else:
+                distribution[status] += 1
+                rated_scores.append(score)
+        avg_score = round(sum(rated_scores) / len(rated_scores)) if rated_scores else None
+        return {
+            "orchardId": str(orchard["_id"]),
+            "updatedAt": datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+            "averageScore": avg_score,
+            "overallStatus": _status(avg_score),
+            "totalTrees": len(trees),
+            "distribution": distribution,
+        }
+
+    @router.get("/users/{user_id}/preferences")
+    def get_user_preferences(user_id: str) -> dict:
+        user = db.User.find_one({"_id": object_id(user_id, "userId")}, {"preferences": 1})
+        if user is None:
+            raise HTTPException(404, "User not found")
+        return _serialize_preferences(user.get("preferences"))
+
+    @router.patch("/users/{user_id}/preferences")
+    def patch_user_preferences(user_id: str, payload: UserPreferencesPatch) -> dict:
+        uid = object_id(user_id, "userId")
+        user = db.User.find_one({"_id": uid}, {"preferences": 1})
+        if user is None:
+            raise HTTPException(404, "User not found")
+
+        updates: dict = {}
+        data = payload.model_dump(exclude_unset=True)
+        if "theme" in data and data["theme"] is not None:
+            updates["preferences.theme"] = data["theme"]
+        if "lang" in data and data["lang"] is not None:
+            updates["preferences.lang"] = data["lang"]
+        if "activeOrchardId" in data:
+            raw_orchard = data["activeOrchardId"]
+            if raw_orchard is None:
+                updates["preferences.activeOrchardId"] = None
+            else:
+                oid = object_id(raw_orchard, "activeOrchardId")
+                orchard_document(db, oid, {"_id": 1})
+                updates["preferences.activeOrchardId"] = oid
+
+        if updates:
+            db.User.update_one({"_id": uid}, {"$set": updates})
+        updated = db.User.find_one({"_id": uid}, {"preferences": 1})
+        return _serialize_preferences((updated or {}).get("preferences"))
 
     @router.get("/orchard/trees")
     def orchard_trees(orchard_id: str | None = Query(default=None, alias="orchardId")) -> list[dict]:

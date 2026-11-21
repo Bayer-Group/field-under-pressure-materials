@@ -54,15 +54,16 @@ export interface HealthDistribution {
   poor: number;
   moderate: number;
   healthy: number;
+  unrated?: number;
 }
 
 export interface OrchardHealthSummary {
   orchardId: string;
   updatedAt: string;
-  /** Averaged orchard health score on a 0-100 scale */
-  averageScore: number;
-  /** Categorized overall orchard health */
-  overallStatus: HealthStatus;
+  /** Averaged orchard health score on a 0-100 scale, or null when no trees are rated yet */
+  averageScore: number | null;
+  /** Categorized overall orchard health, or null when unrated */
+  overallStatus: HealthStatus | null;
   totalTrees: number;
   distribution: HealthDistribution;
 }
@@ -102,9 +103,10 @@ export interface OrchardTree3D {
   geo: GeoCoord;
   heightMeters: number;
   canopyRadiusMeters: number;
-  /** Individual tree health score 0-100 */
-  healthScore: number;
-  healthStatus: HealthStatus;
+  /** Individual tree health score 0-100, or null when not yet evaluated by backend */
+  healthScore: number | null;
+  healthStatus: HealthStatus | null;
+  species?: ObjectIdString;
 }
 
 export interface PointCloudData {

@@ -17,7 +17,7 @@ import {
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { fetchOrchardLasBuffer, fetchOrchardScene } from '../../api/orchardApi';
-import { HEALTH_PALETTE, HEALTH_STATUS_ORDER } from '../../constants/healthPalette';
+import { HEALTH_PALETTE, HEALTH_STATUS_ORDER, UNRATED_HEALTH_TOKEN } from '../../constants/healthPalette';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useOrchard } from '../../contexts/OrchardContext';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -348,7 +348,7 @@ export function Orchard3DViewerCard() {
       metalness: 0.05,
     });
 
-    const canopyMaterials: Record<OrchardTree3D['healthStatus'], THREE.MeshStandardMaterial> = {
+    const canopyMaterials: Record<'dead' | 'poor' | 'moderate' | 'healthy' | 'unrated', THREE.MeshStandardMaterial> = {
       dead: new THREE.MeshStandardMaterial({
         color: HEALTH_PALETTE.dead.hex3d,
         roughness: 0.85,
@@ -368,6 +368,11 @@ export function Orchard3DViewerCard() {
         color: HEALTH_PALETTE.healthy.hex3d,
         roughness: 0.72,
         metalness: 0.04,
+      }),
+      unrated: new THREE.MeshStandardMaterial({
+        color: UNRATED_HEALTH_TOKEN.hex3d,
+        roughness: 0.76,
+        metalness: 0.05,
       }),
     };
 
@@ -404,7 +409,7 @@ export function Orchard3DViewerCard() {
       trunk.userData.treeId = alignedTree.id;
       treeNode.add(trunk);
 
-      const canopyMat = canopyMaterials[tree.healthStatus];
+      const canopyMat = canopyMaterials[tree.healthStatus ?? 'unrated'];
       const lowerCanopy = new THREE.Mesh(sharedCanopyGeom, canopyMat);
       lowerCanopy.scale.set(
         tree.canopyRadiusMeters,
@@ -832,7 +837,9 @@ export function Orchard3DViewerCard() {
                   <span
                     className="health-swatch"
                     style={{
-                      backgroundColor: HEALTH_PALETTE[selectedTree.healthStatus].hex,
+                      backgroundColor: selectedTree.healthStatus
+                        ? HEALTH_PALETTE[selectedTree.healthStatus].hex
+                        : UNRATED_HEALTH_TOKEN.hex,
                       borderColor:
                         selectedTree.healthStatus === 'dead' && resolvedTheme === 'dark'
                           ? '#71717a'
@@ -840,7 +847,9 @@ export function Orchard3DViewerCard() {
                     }}
                   />
                   <strong>
-                    {t.health.statuses[selectedTree.healthStatus]} ({selectedTree.healthScore}/100)
+                    {selectedTree.healthStatus && selectedTree.healthScore !== null
+                      ? `${t.health.statuses[selectedTree.healthStatus]} (${selectedTree.healthScore}/100)`
+                      : t.health.statuses.unrated}
                   </strong>
                 </span>
               </div>

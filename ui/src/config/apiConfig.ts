@@ -12,9 +12,9 @@ const rawUsePlaceholders = import.meta.env.VITE_USE_PLACEHOLDERS as string | und
 
 export const apiConfig = {
   baseUrl: rawBaseUrl.replace(/\/+$/, ''),
-  /** Defaults to true while backend endpoints are not yet live */
-  usePlaceholders: rawUsePlaceholders !== 'false',
-  requestTimeoutMs: 4000,
+  /** Defaults to false now that the local FastAPI backend is connected; set VITE_USE_PLACEHOLDERS=true to re-enable demos */
+  usePlaceholders: rawUsePlaceholders === 'true',
+  requestTimeoutMs: 6000,
   binaryTimeoutMs: 25000,
   defaultOrchardId: '6b01933c1dc02a368703a020',
   defaultOrchardName: 'Grojec A',

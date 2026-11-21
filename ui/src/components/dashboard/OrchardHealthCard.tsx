@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { HeartPulse } from 'lucide-react';
 import { fetchOrchardHealth } from '../../api/orchardApi';
-import { HEALTH_PALETTE, HEALTH_STATUS_ORDER } from '../../constants/healthPalette';
+import { HEALTH_PALETTE, HEALTH_STATUS_ORDER, UNRATED_HEALTH_TOKEN } from '../../constants/healthPalette';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useOrchard } from '../../contexts/OrchardContext';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -30,15 +30,16 @@ export function OrchardHealthCard() {
     return () => controller.abort();
   }, [selectedOrchardId]);
 
-  const score = summary?.averageScore ?? 0;
-  const overallStatus = summary?.overallStatus ?? 'healthy';
+  const score = summary?.averageScore ?? null;
+  const overallStatus = summary?.overallStatus ?? null;
   const totalTrees = summary?.totalTrees ?? 0;
-  const statusToken = HEALTH_PALETTE[overallStatus];
+  const statusToken = overallStatus ? HEALTH_PALETTE[overallStatus] : UNRATED_HEALTH_TOKEN;
+  const statusLabel = overallStatus ? t.health.statuses[overallStatus] : t.health.statuses.unrated;
 
   // Semi-circular radial gauge geometry
   const radius = 78;
   const circumference = Math.PI * radius;
-  const clampedScore = Math.max(0, Math.min(100, score));
+  const clampedScore = score !== null ? Math.max(0, Math.min(100, score)) : 0;
   const strokeDashoffset = circumference * (1 - clampedScore / 100);
 
   const badgeBg = resolvedTheme === 'dark' ? statusToken.softBgDark : statusToken.softBgLight;
@@ -79,10 +80,10 @@ export function OrchardHealthCard() {
           />
 
           <text x="100" y="76" textAnchor="middle" className="health-score-value">
-            {score}
+            {score !== null ? score : '—'}
           </text>
           <text x="100" y="96" textAnchor="middle" className="health-score-caption">
-            / 100 · {t.health.averageIndex}
+            {score !== null ? `/ 100 · ${t.health.averageIndex}` : t.health.statuses.unrated}
           </text>
         </svg>
 
@@ -101,7 +102,7 @@ export function OrchardHealthCard() {
                 borderColor: overallStatus === 'dead' && resolvedTheme === 'dark' ? '#71717a' : 'transparent',
               }}
             />
-            {t.health.statuses[overallStatus]}
+            {statusLabel}
           </span>
           <span className="health-total-label">
             {t.health.totalTrees}: <strong>{totalTrees}</strong>

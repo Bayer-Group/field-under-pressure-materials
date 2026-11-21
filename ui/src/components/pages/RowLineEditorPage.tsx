@@ -15,7 +15,12 @@ import {
   Trash2,
   Undo2,
 } from 'lucide-react';
-import { fetchCropPrefs, fetchOrchardBoundary, saveOrchardLayout } from '../../api/orchardApi';
+import {
+  fetchCropPrefs,
+  fetchOrchardBoundary,
+  fetchOrchardTrees,
+  saveOrchardLayout,
+} from '../../api/orchardApi';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useOrchard } from '../../contexts/OrchardContext';
 import type {
@@ -84,8 +89,9 @@ export function RowLineEditorPage() {
     Promise.all([
       fetchOrchardBoundary(selectedOrchardId, controller.signal),
       fetchCropPrefs(controller.signal),
+      fetchOrchardTrees(selectedOrchardId, controller.signal).catch(() => null),
     ])
-      .then(([orchardRes, cropsRes]) => {
+      .then(([orchardRes, cropsRes, treesRes]) => {
         setOrchard(orchardRes.data);
         setOrchardEndpoint(orchardRes.endpoint);
         setCropPrefs(cropsRes.data);
@@ -96,19 +102,50 @@ export function RowLineEditorPage() {
           setAverageSpacingMeters((prev) => prev || cropsRes.data[0].recommendedSpacingMeters);
         }
 
-        // Convert any pre-existing Orchard.rows (empty on first entry) into DraftRow[]
+        // Hydrate pre-existing Orchard.rows with actual Tree.species from MongoDB
         const fallbackSpecies = cropsRes.data[0]?._id ?? '';
+        const speciesByTreeId = new Map<string, ObjectIdString>();
+        for (const tree of treesRes?.data ?? []) {
+          if (tree.species) {
+            speciesByTreeId.set(tree.id, tree.species);
+          }
+        }
+
         if (orchardRes.data.rows.length > 0) {
           setRows(
-            orchardRes.data.rows.map((r) => ({
-              id: r.id,
-              label: r.label,
-              start: r.start,
-              end: r.end,
-              averageSpacingMeters: r.averageSpacingMeters,
-              species: fallbackSpecies,
-              treeSpeciesOverrides: {},
-            })),
+            orchardRes.data.rows.map((r) => {
+              const treeSpeciesList = r.treeIds.map((tid) => speciesByTreeId.get(tid) ?? fallbackSpecies);
+              // Dominant species for the row
+              const counts = new Map<string, number>();
+              for (const sp of treeSpeciesList) {
+                if (sp) counts.set(sp, (counts.get(sp) ?? 0) + 1);
+              }
+              let dominantSpecies = fallbackSpecies;
+              let bestCount = -1;
+              for (const [sp, cnt] of counts.entries()) {
+                if (cnt > bestCount) {
+                  bestCount = cnt;
+                  dominantSpecies = sp;
+                }
+              }
+
+              const treeSpeciesOverrides: Record<number, ObjectIdString> = {};
+              treeSpeciesList.forEach((sp, idx) => {
+                if (sp && sp !== dominantSpecies) {
+                  treeSpeciesOverrides[idx] = sp;
+                }
+              });
+
+              return {
+                id: r.id,
+                label: r.label,
+                start: r.start,
+                end: r.end,
+                averageSpacingMeters: r.averageSpacingMeters,
+                species: dominantSpecies,
+                treeSpeciesOverrides,
+              };
+            }),
           );
         }
       })

@@ -39,6 +39,7 @@ export interface Translations {
     periodMin: string;
     periodMax: string;
     avgSpread: string;
+    noData: string;
     ranges: {
       '24h': string;
       '7d': string;
@@ -59,6 +60,7 @@ export interface Translations {
       poor: string;
       moderate: string;
       healthy: string;
+      unrated: string;
     };
   };
   orchard3d: {
@@ -193,6 +195,7 @@ export const TRANSLATIONS: Record<Language, Translations> = {
       periodMin: 'Min w oknie',
       periodMax: 'Max w oknie',
       avgSpread: 'Śr. amplituda',
+      noData: 'Brak danych temperaturowych dla wybranego zakresu',
       ranges: {
         '24h': '24h',
         '7d': '7 dni',
@@ -213,6 +216,7 @@ export const TRANSLATIONS: Record<Language, Translations> = {
         poor: 'Zły stan',
         moderate: 'Średni',
         healthy: 'Poprawny',
+        unrated: 'Brak oceny',
       },
     },
     orchard3d: {
@@ -347,6 +351,7 @@ export const TRANSLATIONS: Record<Language, Translations> = {
       periodMin: 'Window min',
       periodMax: 'Window max',
       avgSpread: 'Avg spread',
+      noData: 'No temperature history available for this range',
       ranges: {
         '24h': '24h',
         '7d': '7D',
@@ -367,6 +372,7 @@ export const TRANSLATIONS: Record<Language, Translations> = {
         poor: 'Poor',
         moderate: 'Moderate',
         healthy: 'Healthy',
+        unrated: 'Unrated',
       },
     },
     orchard3d: {

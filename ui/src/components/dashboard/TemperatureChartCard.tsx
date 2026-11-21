@@ -207,6 +207,12 @@ export function TemperatureChartCard() {
       </div>
 
       <div className="chart-canvas-wrap">
+        {visiblePoints.length === 0 ? (
+          <div className="empty-rows-state" style={{ marginTop: 48 }}>
+            {t.temperature.noData}
+          </div>
+        ) : (
+        <>
         <svg
           ref={svgRef}
           viewBox={`0 0 ${width} ${height}`}
@@ -300,6 +306,8 @@ export function TemperatureChartCard() {
               <strong>{hoveredPoint.minTempC.toFixed(1)}°C</strong>
             </div>
           </div>
+        )}
+        </>
         )}
       </div>
 

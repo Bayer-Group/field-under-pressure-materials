@@ -56,4 +56,13 @@ export const HEALTH_PALETTE: Record<HealthStatus, HealthColorToken> = {
   },
 };
 
+export const UNRATED_HEALTH_TOKEN = {
+  hex: '#94a3b8',
+  hex3d: 0x94a3b8,
+  softBgLight: 'rgba(148, 163, 184, 0.16)',
+  softBgDark: 'rgba(148, 163, 184, 0.2)',
+  borderLight: '#94a3b8',
+  borderDark: '#64748b',
+} as const;
+
 export const HEALTH_STATUS_ORDER: HealthStatus[] = ['healthy', 'moderate', 'poor', 'dead'];

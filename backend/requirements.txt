@@ -3,3 +3,4 @@ fastapi>=0.115,<1
 uvicorn>=0.34,<1
 tzdata; platform_system == "Windows"
 pyproj>=3.6,<4
+certifi>=2024.8
