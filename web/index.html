@@ -9,7 +9,7 @@
   <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
   <script src="https://unpkg.com/@turf/turf@7.1.0/turf.min.js"></script>
   <script src="geometry-preview.js?v=multicut-2"></script>
-  <script src="sandbox-client.js?v=error-detail-2"></script>
+  <script src="sandbox-client.js?v=area-edit-1"></script>
   <script src="farmer-data.js?v=wheat-only-14"></script>
   <script src="crop-workflow.js?v=validation-errors-4"></script>
   <style>
@@ -154,6 +154,9 @@
     .fc-factor-dot { width: 14px; height: 14px; }
     .fc-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
     .fc-factor-key { margin: 6px 0 0; color: #708074; font-size: 11px; }
+    .fc-more { margin-top: 8px; border-top: 1px solid var(--line); }
+    .fc-more summary { display: flex; align-items: center; min-height: 44px; color: var(--green); font-size: 13px; font-weight: 700; cursor: pointer; }
+    .fc-more .fc-facts { padding-bottom: 4px; }
     .fc-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
     .fc-soon { display: grid; justify-items: center; gap: 1px; min-height: 52px; padding: 6px 8px; }
     .fc-soon small { color: #7a8a7f; font-size: 10px; font-weight: 600; }
@@ -166,6 +169,19 @@
     .fc-marker-flag { padding: 3px 6px; border-radius: 9px; background: #fff; color: #a23730; font-size: 10px; letter-spacing: .02em; }
     .fc-marker.tone-high { box-shadow: 0 0 0 4px rgba(199,70,62,.28), 0 3px 12px rgba(20,44,30,.3); }
     .fc-marker.active { outline: 3px solid #15221b; outline-offset: 1px; }
+    .area-dialog { max-height: min(88dvh, 720px); overflow-y: auto; }
+    .area-dialog h2 { margin-bottom: 2px; }
+    .area-dialog-sub { margin: 0 0 12px; }
+    .area-dialog .crop-label { margin: 12px 0; }
+    .area-sprays { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line); }
+    .area-sprays h3 { margin: 0 0 6px; font-size: 15px; letter-spacing: -.02em; }
+    .area-spray-row { display: grid; grid-template-columns: 1fr 76px 44px; gap: 8px; align-items: end; }
+    .area-spray-row .crop-label { margin: 6px 0; }
+    .area-spray-row .crop-remove-icon { margin-bottom: 9px; font-size: 22px; }
+    .area-spray-static { margin: 6px 0; color: var(--ink); font-size: 14px; font-variant-numeric: tabular-nums; }
+    .area-changes { margin: 4px 0 10px; padding-left: 18px; color: var(--ink); font-size: 14px; line-height: 1.5; font-variant-numeric: tabular-nums; }
+    .area-dialog-actions { display: grid; gap: 8px; margin-top: 14px; }
+    .area-dialog-actions .primary { margin-top: 0; }
     .sandbox-choice { display: grid; gap: 8px; }
     .sandbox-choice .crop-outline { text-align: left; }
     .geometry-popup-message { margin: 8px 0 0; color: #5c7062; font-size: 13px; line-height: 1.4; }
@@ -656,6 +672,10 @@
         <button class="crop-outline" id="sandbox-local" type="button">Open parcel design preview</button>
       </div>
       <p id="sandbox-error" role="status" aria-live="polite"></p>
+    </dialog>
+    <dialog id="area-dialog" class="area-dialog" aria-labelledby="area-dialog-title">
+      <h2 id="area-dialog-title">Edit area</h2>
+      <div id="area-dialog-body" aria-live="polite"></div>
     </dialog>
     <dialog id="import-dialog" aria-labelledby="import-title">
       <h2 id="import-title">Import file</h2>
@@ -1342,6 +1362,7 @@
     let sandboxDay = null;
     let sandboxMarkers = [];
     let sandboxNotice = '';
+    let sandboxWhyOpen = false;
     const sandboxHistory = new Map();
     const sandboxDetails = new Map();
     // Initial UI-only threshold for grouping neighbouring areas; it does not change stored geometries.
@@ -1676,6 +1697,20 @@
             list.append(item);
           });
           section.append(sandboxElement('h2', '', 'Why this level'), list, sandboxElement('p', 'fc-factor-key', 'Red raises the chance of septoria, green lowers it.'));
+          // Only values the API returns for this day; temperature, humidity and rainfall are not part of the contract.
+          const values = [];
+          const windowHours = row.reasons?.window_hours || 72;
+          if (Number.isFinite(row.h_hours)) values.push(['Longest wet spell', Number.isFinite(row.h_low) && Number.isFinite(row.h_high) && row.h_low !== row.h_high ? `${row.h_low}–${row.h_high} h` : `${row.h_hours} h`, `Consecutive wet hours within the ${windowHours} hours up to this day.`]);
+          if (Number.isFinite(row.coverage)) values.push(['Weather data', `${Math.round(row.coverage * 100)}% of hours`, `Hours with weather data in the ${windowHours}-hour window.`]);
+          const source = ({ estimated: 'Estimated from accumulated temperature', override: 'From your growth stage entry', calendar: 'Estimated from the calendar' })[row.growth_stage_source];
+          if (source) values.push(['Growth stage', source]);
+          if (row.protected_until && row.protected_until >= day) values.push(['Spray protection', `Until ${sandboxFormatDate(row.protected_until)}`]);
+          if (values.length) {
+            const more = sandboxElement('details', 'fc-more'); more.dataset.key = 'why-values';
+            more.open = sandboxWhyOpen; more.addEventListener('toggle', () => { sandboxWhyOpen = more.open; });
+            more.append(sandboxElement('summary', '', 'Show values'), sandboxFacts(values));
+            section.append(more);
+          }
           parts.push(section);
         }
       }
@@ -1686,16 +1721,275 @@
       crop.append(sandboxElement('h2', '', sandboxLabel(sandboxFeature(id)?.properties?.farmer_crop_id)), sandboxFacts([['Sown', sown], ['Spray protection', protectedUntil]]));
       const actions = sandboxElement('div', 'fc-actions');
       [['spray', 'Record a spray'], ['edit', 'Edit area details']].forEach(([key, text]) => {
-        const button = sandboxElement('button', 'crop-outline fc-soon'); button.type = 'button'; button.dataset.key = `action-${key}`;
-        button.append(sandboxElement('span', '', text), sandboxElement('small', '', 'Not available yet'));
-        button.addEventListener('click', () => { sandboxNotice = `${text} is not available from this screen yet. Nothing was saved.`; sandboxRender(); });
+        const button = sandboxElement('button', 'crop-outline', text); button.type = 'button'; button.dataset.key = `action-${key}`;
+        button.addEventListener('click', () => sandboxOpenEditor(key, id));
         actions.append(button);
       });
       crop.append(actions);
-      if (sandboxNotice) { const notice = sandboxElement('p', 'fc-notice', sandboxNotice); notice.setAttribute('role', 'status'); crop.append(notice); }
       parts.push(crop);
       return parts;
     }
+    // ---- Area edits: record a spray (POST /crop-areas/{id}/sprays) and edit sowing date and spray history (PUT /fields/{id}).
+    const areaDialog = document.getElementById('area-dialog');
+    let areaEdit = null;
+    const AREA_DATE = /^\d{4}-\d{2}-\d{2}$/;
+    /** Find the /fields record of an area by exact id forms (`<owner>~<id>`, `<owner>-<id>` or the id itself). */
+    function sandboxLinkArea(id, fields) {
+      const props = sandboxFeature(id)?.properties || {};
+      const owner = props.owner_id;
+      const same = (stored, external) => stored === external || (owner && (stored === `${owner}~${external}` || stored === `${owner}-${external}`));
+      const matches = [];
+      fields.forEach(field => (field.crop_areas || []).forEach(area => {
+        if (same(id, area.crop_area_id) && (!props.field_id || same(props.field_id, field.field_id))) matches.push({ field, area });
+      }));
+      return matches.length === 1 ? matches[0] : null;
+    }
+    /** Read the spray entries of an area from /fields; null when they cannot be read unambiguously. */
+    async function sandboxReadSprays(id) {
+      const result = await sandboxClient.fields();
+      const link = Array.isArray(result?.fields) ? sandboxLinkArea(id, result.fields) : null;
+      return link && Array.isArray(link.area.past_sprays) ? link.area.past_sprays : null;
+    }
+    function sandboxSprayText(spray) { return `${sandboxFormatDate(spray.date)} · ${spray.protection_duration_days} ${spray.protection_duration_days === 1 ? 'day' : 'days'}`; }
+    function sandboxErrorText(error) {
+      const detail = typeof error?.detail === 'string' ? error.detail : error?.detail?.message;
+      if (error?.status === 422 && detail) return `The farm service rejected the change: ${detail}.`;
+      if (error?.status === 401) return 'Your farm session has expired. Reload the farm and try again.';
+      return error?.message || 'The change could not be saved.';
+    }
+    /** Highest definite risk class on the farm for a day; null when no area has one. */
+    function sandboxTopClass(day) {
+      let best = null;
+      sandboxAreaIds().forEach(id => { const tone = sandboxTone(sandboxAssessment(id, day)); if (sandboxRank[tone] && (!best || sandboxRank[tone] > sandboxRank[best])) best = tone; });
+      return best;
+    }
+    function sandboxOpenEditor(kind, id) {
+      areaEdit = { kind, id, step: kind === 'spray' ? 'form' : 'loading', date: '', days: '', error: '', sprays: [], sowing: '' };
+      if (!areaDialog.open) areaDialog.showModal();
+      sandboxRenderEditor();
+      if (kind === 'edit') sandboxLoadEditor(areaEdit);
+    }
+    /** Load the field record for editing and decide whether it can be saved without touching other data. */
+    async function sandboxLoadEditor(state) {
+      try {
+        const result = await sandboxClient.fields();
+        if (areaEdit !== state) return;
+        if (!Array.isArray(result?.fields)) throw new Error('The farm service returned incomplete field data.');
+        const link = sandboxLinkArea(state.id, result.fields);
+        state.link = link;
+        state.original = link ? { sowing: link.area.sowing_date, sprays: Array.isArray(link.area.past_sprays) ? link.area.past_sprays.map(item => ({ ...item })) : null } : null;
+        state.sowing = state.original?.sowing || sandboxDetails.get(state.id)?.sowing || '';
+        state.sprays = (state.original?.sprays || []).map((item, index) => ({ key: `s${index}`, from: index, date: item.date, days: String(item.protection_duration_days) }));
+        state.readOnly = !link ? 'This area could not be matched to its field record, so it cannot be edited here.'
+          : !Array.isArray(link.field.parcel_ids) || !link.field.parcel_ids.length ? 'Changing the sowing date or earlier sprays is not available for this example field yet. You can still record a new spray.'
+          : link.field.crop_areas.some(area => area !== link.area && (!Array.isArray(area.past_sprays) || !area.geometry || !area.crop?.farmer_crop_id || !AREA_DATE.test(area.sowing_date || '')))
+            ? 'Another area in this field has incomplete data, so the field cannot be saved safely here.' : '';
+        state.step = 'form';
+      } catch (error) { if (areaEdit !== state) return; state.step = 'load-error'; state.error = error.message || 'Could not load the area.'; }
+      sandboxRenderEditor();
+    }
+    /** Validate the form and return the change list, or an error message. */
+    function sandboxEditorChanges(state) {
+      const today = sandboxToday;
+      const dayError = (value, what) => !AREA_DATE.test(value || '') ? `Enter the ${what}.` : value > today ? `The ${what} cannot be after today.` : '';
+      const daysError = value => !/^\d+$/.test(value || '') || Number(value) < 1 || Number(value) > 60 ? 'Enter protection between 1 and 60 days.' : '';
+      if (state.kind === 'spray') {
+        const error = dayError(state.date, 'spray date') || daysError(state.days);
+        if (error) return { error };
+        const until = sandboxDate(Number(state.days), state.date);
+        return { changes: [`Add a spray on ${sandboxFormatDate(state.date)}`, `Protection for ${state.days} ${state.days === '1' ? 'day' : 'days'}, until ${sandboxFormatDate(until)}`] };
+      }
+      const error = dayError(state.sowing, 'sowing date') || state.sprays.map(item => dayError(item.date, 'spray date') || daysError(item.days)).find(Boolean);
+      if (error) return { error };
+      const changes = [];
+      if (state.sowing !== state.original.sowing) changes.push(`Sowing date: ${state.original.sowing ? sandboxFormatDate(state.original.sowing) : 'not set'} → ${sandboxFormatDate(state.sowing)}`);
+      const before = state.original.sprays || [];
+      state.sprays.forEach(item => {
+        const next = { date: item.date, protection_duration_days: Number(item.days) };
+        if (item.from === undefined) changes.push(`Add spray: ${sandboxSprayText(next)}`);
+        else if (before[item.from].date !== next.date || before[item.from].protection_duration_days !== next.protection_duration_days) changes.push(`Change spray: ${sandboxSprayText(before[item.from])} → ${sandboxSprayText(next)}`);
+      });
+      before.forEach((item, index) => { if (!state.sprays.some(entry => entry.from === index)) changes.push(`Remove spray: ${sandboxSprayText(item)}`); });
+      if (state.original.sprays === null && !state.sprays.length) changes.push('Confirm that no sprays were made');
+      return changes.length ? { changes } : { error: 'Nothing has changed yet.' };
+    }
+    function sandboxField(labelText, input) { const label = sandboxElement('label', 'crop-label', labelText); label.append(input); return label; }
+    function sandboxDateInput(value, onInput, max = sandboxToday) {
+      const input = document.createElement('input'); input.type = 'date'; input.className = 'crop-input'; input.max = max; input.value = value || ''; input.required = true;
+      input.addEventListener('input', () => onInput(input.value)); return input;
+    }
+    function sandboxDaysInput(value, onInput) {
+      const input = document.createElement('input'); input.type = 'number'; input.inputMode = 'numeric'; input.min = '1'; input.max = '60'; input.step = '1'; input.className = 'crop-input'; input.value = value || ''; input.required = true; input.placeholder = 'e.g. 14';
+      input.addEventListener('input', () => onInput(input.value)); return input;
+    }
+    function sandboxRenderEditor() {
+      const state = areaEdit; if (!state) return;
+      const body = document.getElementById('area-dialog-body');
+      const title = document.getElementById('area-dialog-title');
+      title.textContent = state.kind === 'spray' ? 'Record a spray' : 'Edit area details';
+      body.replaceChildren(sandboxElement('p', 'area-dialog-sub', `${sandboxAreaName(state.id)} · ${sandboxLabel(sandboxFeature(state.id)?.properties?.farmer_crop_id)}`));
+      const buttons = sandboxElement('div', 'area-dialog-actions');
+      const button = (text, cls, onClick, disabled = false) => { const item = sandboxElement('button', cls, text); item.type = 'button'; item.disabled = disabled; item.addEventListener('click', onClick); buttons.append(item); return item; };
+      const close = () => { areaEdit = null; areaDialog.close(); };
+      if (state.step === 'loading') { body.append(sandboxElement('p', 'risk-loading', 'Loading the area…')); button('Cancel', 'crop-outline', close); }
+      else if (state.step === 'load-error') {
+        body.append(sandboxElement('p', 'crop-inline-error', state.error));
+        button('Try again', 'primary', () => { state.step = 'loading'; sandboxRenderEditor(); sandboxLoadEditor(state); }); button('Cancel', 'crop-outline', close);
+      } else if (state.step === 'form') {
+        if (state.kind === 'spray') {
+          body.append(sandboxElement('p', 'crop-muted', 'Enter a spray you have already made. Both fields are required.'));
+          body.append(sandboxField('Spray date', sandboxDateInput(state.date, value => { state.date = value; })));
+          body.append(sandboxField('Protection (days)', sandboxDaysInput(state.days, value => { state.days = value; })));
+        } else {
+          if (state.readOnly) body.append(sandboxElement('p', 'crop-notice', state.readOnly));
+          if (state.readOnly) body.append(sandboxFacts([['Sown', state.sowing ? sandboxFormatDate(state.sowing) : 'Unavailable']]));
+          else body.append(sandboxField('Sowing date', sandboxDateInput(state.sowing, value => { state.sowing = value; })));
+          const history = sandboxElement('section', 'area-sprays');
+          history.append(sandboxElement('h3', '', 'Spray history'));
+          if (!state.sprays.length) history.append(sandboxElement('p', 'crop-muted', state.original?.sprays === null ? 'No spray history has been confirmed for this area yet.' : 'No sprays recorded.'));
+          state.sprays.forEach((item, index) => {
+            if (state.readOnly) { history.append(sandboxElement('p', 'area-spray-static', sandboxSprayText({ date: item.date, protection_duration_days: Number(item.days) }))); return; }
+            const row = sandboxElement('div', 'area-spray-row');
+            row.append(sandboxField(`Spray ${index + 1} date`, sandboxDateInput(item.date, value => { item.date = value; })), sandboxField('Days', sandboxDaysInput(item.days, value => { item.days = value; })));
+            const remove = sandboxElement('button', 'crop-remove-icon', '×'); remove.type = 'button'; remove.setAttribute('aria-label', `Remove spray ${index + 1}`);
+            remove.addEventListener('click', () => { state.sprays.splice(index, 1); sandboxRenderEditor(); });
+            row.append(remove); history.append(row);
+          });
+          if (!state.readOnly) {
+            const add = sandboxElement('button', 'crop-link', '+ Add a spray entry'); add.type = 'button';
+            add.addEventListener('click', () => { state.sprays.push({ key: `n${Date.now()}`, date: '', days: '' }); sandboxRenderEditor(); });
+            history.append(add);
+          }
+          body.append(history);
+        }
+        if (state.error) body.append(sandboxElement('p', 'crop-inline-error', state.error));
+        if (state.kind === 'edit' && state.readOnly) {
+          button('Record a spray', 'primary', () => sandboxOpenEditor('spray', state.id)); button('Close', 'crop-outline', close);
+        } else {
+          button('Review change', 'primary', () => { const result = sandboxEditorChanges(state); state.error = result.error || ''; if (result.changes) { state.changes = result.changes; state.step = 'review'; } sandboxRenderEditor(); });
+          button('Cancel', 'crop-outline', close);
+        }
+      } else if (state.step === 'review') {
+        body.append(sandboxElement('p', 'crop-muted', 'You are about to save:'));
+        const list = sandboxElement('ul', 'area-changes'); state.changes.forEach(text => list.append(sandboxElement('li', '', text))); body.append(list);
+        body.append(sandboxElement('p', 'crop-muted', 'The farm service recalculates the assessment after saving.'));
+        button('Save', 'primary', () => sandboxSaveEditor(state)); button('Back', 'crop-outline', () => { state.step = 'form'; sandboxRenderEditor(); });
+      } else if (state.step === 'saving') {
+        body.append(sandboxElement('p', 'risk-loading', 'Saving and recalculating…')); button('Saving…', 'primary', () => {}, true);
+      } else if (state.step === 'error') {
+        body.append(sandboxElement('p', 'crop-inline-error', state.error));
+        button('Try again', 'primary', () => sandboxSaveEditor(state)); button('Back', 'crop-outline', () => { state.step = 'form'; state.error = ''; sandboxRenderEditor(); });
+      } else if (state.step === 'unconfirmed') {
+        body.append(sandboxElement('p', 'crop-inline-error', state.error));
+        button('Check again', 'primary', () => sandboxConfirmSpray(state)); button('Close', 'crop-outline', () => { close(); sandboxReloadAfterSave(state.snapshot, { unconfirmed: true }); });
+      }
+      body.append(buttons);
+      if (state.focusedStep !== state.step && state.step !== 'saving') { state.focusedStep = state.step; body.querySelector('input:not([disabled]), button.primary:not([disabled])')?.focus({ preventScroll: true }); }
+    }
+    function sandboxSnapshot() {
+      return { top: sandboxTopClass(sandboxToday), view: { ...sandboxView }, areaId: sandboxSelected, firstArea: sandboxCurrentSet()?.areaIds[0] || null, day: sandboxDay };
+    }
+    async function sandboxSaveEditor(state) {
+      state.snapshot = state.snapshot || sandboxSnapshot();
+      state.step = 'saving'; state.error = ''; sandboxRenderEditor();
+      if (state.kind === 'spray') {
+        let before = null;
+        try { before = await sandboxReadSprays(state.id); } catch (_) { before = null; }
+        state.before = before; state.sent = { date: state.date, protection_duration_days: Number(state.days) };
+        try { await sandboxClient.addSpray(state.id, { spray_date: state.sent.date, protection_duration_days: state.sent.protection_duration_days }); }
+        catch (error) {
+          if (areaEdit !== state) return;
+          if (error.status) { state.step = 'error'; state.error = sandboxErrorText(error); sandboxRenderEditor(); return; }
+          // The request may have reached the server: check the stored entries instead of sending it again.
+          await sandboxConfirmSpray(state); return;
+        }
+        return sandboxFinishEditor(state);
+      }
+      try {
+        const latest = await sandboxClient.fields();
+        const link = Array.isArray(latest?.fields) ? sandboxLinkArea(state.id, latest.fields) : null;
+        if (!link || JSON.stringify({ sowing: link.area.sowing_date, sprays: link.area.past_sprays }) !== JSON.stringify(state.original)) throw Object.assign(new Error('This area changed since you opened it. Close and open it again to edit the latest data.'), { status: 409 });
+        const areas = link.field.crop_areas.map(area => ({
+          crop_area_id: area.crop_area_id, geometry: area.geometry, crop: { farmer_crop_id: area.crop.farmer_crop_id },
+          sowing_date: area === link.area ? state.sowing : area.sowing_date,
+          past_sprays: area === link.area ? state.sprays.map(item => ({ date: item.date, protection_duration_days: Number(item.days) })) : area.past_sprays.map(item => ({ date: item.date, protection_duration_days: item.protection_duration_days }))
+        }));
+        const validation = await sandboxClient.validateField({ parcel_ids: link.field.parcel_ids, crop_areas: areas.map(area => ({ crop_area_id: area.crop_area_id, geometry: area.geometry })) });
+        if (!validation?.validation_id || validation.errors?.length || validation.overlaps?.length) throw Object.assign(new Error('The stored boundary of this field no longer passes validation, so nothing was saved.'), { status: 422 });
+        state.intended = areas.find(area => area.crop_area_id === link.area.crop_area_id);
+        state.fieldId = link.field.field_id;
+        await sandboxClient.putField(link.field.field_id, { field_id: link.field.field_id, name: link.field.name, parcel_ids: link.field.parcel_ids, validation_id: validation.validation_id, crop_areas: areas });
+      } catch (error) {
+        if (areaEdit !== state) return;
+        if (!error.status && state.intended) {
+          // The full-field save is idempotent; check whether it was stored before asking to retry.
+          try {
+            const check = await sandboxClient.field(state.fieldId);
+            const stored = (check?.crop_areas || []).find(area => area.crop_area_id === state.intended.crop_area_id);
+            if (stored && stored.sowing_date === state.intended.sowing_date && JSON.stringify((stored.past_sprays || []).map(item => [item.date, item.protection_duration_days])) === JSON.stringify(state.intended.past_sprays.map(item => [item.date, item.protection_duration_days]))) return sandboxFinishEditor(state);
+          } catch (_) { /* Fall through to the retry message. */ }
+        }
+        state.step = 'error'; state.error = error.status ? sandboxErrorText(error) : 'The connection was lost. It is not confirmed whether the change was saved; trying again is safe for this edit.'; sandboxRenderEditor(); return;
+      }
+      sandboxFinishEditor(state);
+    }
+    /** After an unconfirmed spray request, decide from the stored entries whether it was saved. */
+    async function sandboxConfirmSpray(state) {
+      state.step = 'saving'; sandboxRenderEditor();
+      let after = null;
+      try { after = await sandboxReadSprays(state.id); } catch (_) { after = null; }
+      if (areaEdit !== state) return;
+      const count = list => list.filter(item => item.date === state.sent.date && item.protection_duration_days === state.sent.protection_duration_days).length;
+      if (after && state.before) {
+        if (count(after) > count(state.before)) return sandboxFinishEditor(state);
+        state.step = 'error'; state.error = 'The spray was not saved. Check your connection and try again.';
+      } else {
+        state.step = 'unconfirmed'; state.error = 'The connection was lost and the spray history could not be checked. Do not record the spray again until it can be checked.';
+      }
+      sandboxRenderEditor();
+    }
+    function sandboxFinishEditor(state) {
+      if (areaEdit !== state) return;
+      areaEdit = null; areaDialog.close();
+      sandboxReloadAfterSave(state.snapshot, { saved: state.kind === 'spray' ? 'Spray saved.' : 'Area details saved.' });
+    }
+    /** Reload the recalculated analysis and choose the view by comparing today's highest farm class before and after. */
+    async function sandboxReloadAfterSave(snapshot, options = {}) {
+      const openVersion = ++sandboxOpenVersion;
+      try {
+        const [collection, clock] = await Promise.all([sandboxClient.areas(), sandboxClient.clock()]);
+        if (openVersion !== sandboxOpenVersion) return;
+        if (collection?.type !== 'FeatureCollection' || !Array.isArray(collection.features) || !AREA_DATE.test(clock?.today || '')) throw new Error('incomplete');
+        sandboxFeatures = collection.features; sandboxToday = clock.today; sandboxRequest++;
+        sandboxHistory.clear(); sandboxDetails.clear();
+        sandboxSets = sandboxGroupAreas(sandboxFeatures);
+      } catch (_) {
+        if (openVersion !== sandboxOpenVersion) return;
+        sandboxNotice = `${options.saved || ''} The updated analysis could not be loaded. Open the farm again to see it.`.trim(); sandboxRender(); return;
+      }
+      const after = sandboxTopClass(sandboxToday);
+      const label = value => ({ low: 'Low', medium: 'Moderate', high: 'High' })[value];
+      let notice = options.saved || (options.unconfirmed ? 'The spray could not be confirmed. Check the protection shown for this area before recording it again.' : '');
+      const restore = () => {
+        sandboxDay = snapshot.day && snapshot.day <= sandboxToday ? snapshot.day : sandboxToday;
+        if (snapshot.view.mode === 'area' && sandboxFeature(snapshot.areaId)) sandboxShow({ mode: 'area', areaId: snapshot.areaId });
+        else if (snapshot.view.mode === 'set' && sandboxSetOf(snapshot.firstArea)) sandboxShow({ mode: 'set', setId: sandboxSetOf(snapshot.firstArea).id });
+        else sandboxShow({ mode: 'farm' });
+      };
+      if (!snapshot.top || !after) {
+        restore();
+        notice += ' The highest farm risk could not be compared, because a definite risk level is missing before or after the change.';
+      } else if (snapshot.top === after) restore();
+      else {
+        sandboxDay = sandboxToday;
+        const highest = sandboxSets.slice().sort((a, b) => sandboxSeverity(sandboxWorst(b.areaIds, sandboxToday)) - sandboxSeverity(sandboxWorst(a.areaIds, sandboxToday)))[0];
+        sandboxShow(highest ? { mode: 'set', setId: highest.id } : { mode: 'farm' }, { focus: true });
+        notice += ` The highest risk on the farm today changed from ${label(snapshot.top)} to ${label(after)}.`;
+      }
+      sandboxNotice = notice.trim(); sandboxRender();
+      sandboxLoadAll(openVersion);
+    }
+    areaDialog.addEventListener('cancel', event => { if (areaEdit?.step === 'saving') event.preventDefault(); else areaEdit = null; });
     function sandboxLabel(id) { return sandboxCrops.find(item => item.farmer_crop_id === id)?.label || id || 'Crop unavailable'; }
     function sandboxRender() {
       const focusKey = sandboxPanel.contains(document.activeElement) ? document.activeElement.dataset.key : null;
@@ -1706,6 +2000,9 @@
       const title = sandboxView.mode === 'area' ? sandboxAreaName(sandboxSelected) : sandboxView.mode === 'set' && set ? set.name : 'Whole farm';
       const heading = sandboxElement('h1', 'risk-heading', title); heading.id = 'sandbox-heading';
       sandboxPanel.append(sandboxElement('p', 'risk-eyebrow', 'SEPTORIA · WHEAT'), heading);
+      if (sandboxNotice) { const notice = sandboxElement('p', 'fc-notice', sandboxNotice); notice.setAttribute('role', 'status'); sandboxPanel.append(notice); }
+      const earliest = sandboxMinDay(sandboxScope());
+      if (earliest && sandboxDay < earliest) sandboxDay = earliest;
       if (!sandboxFeatures.length) {
         const manage = sandboxElement('button', 'crop-outline', 'Manage parcels'); manage.type = 'button'; manage.addEventListener('click', enterParcelSetup);
         sandboxPanel.append(sandboxElement('p', 'risk-empty', 'There are no crop areas yet. Select parcels to get started.'), manage);

@@ -102,7 +102,10 @@
       risk: (id, from, to) => request(`/crop-areas/${encodeURIComponent(id)}/risk?${new URLSearchParams({ from, to })}`),
       changes: id => request(`/crop-areas/${encodeURIComponent(id)}/changes`),
       createArea: body => request('/crop-areas', { method: 'POST', body }),
-      addSpray: (id, body) => request(`/crop-areas/${encodeURIComponent(id)}/sprays`, { method: 'POST', body })
+      addSpray: (id, body) => request(`/crop-areas/${encodeURIComponent(id)}/sprays`, { method: 'POST', body }),
+      field: id => request(`/fields/${encodeURIComponent(id)}`),
+      validateField: body => request('/fields/validate', { method: 'POST', body }),
+      putField: (id, body) => request(`/fields/${encodeURIComponent(id)}`, { method: 'PUT', body })
     };
   }
   root.SandboxClient = { create, BASE_URL, STORAGE_KEY };
