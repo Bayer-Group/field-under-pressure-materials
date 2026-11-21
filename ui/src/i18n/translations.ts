@@ -89,6 +89,58 @@ export interface Translations {
     rowEditorNote: string;
     backToDashboard: string;
   };
+  rowEditor: {
+    title: string;
+    subtitle: string;
+    backdropLabel: string;
+    backdropBlank: string;
+    backdropSatellite: string;
+    previewPayload: string;
+    saveLayout: string;
+    saving: string;
+    saveSuccessTitle: string;
+    saveBackendNote: string;
+    toolsLabel: string;
+    toolDraw: string;
+    toolSelect: string;
+    toolPaint: string;
+    angleSnap: string;
+    angleSnapHint: string;
+    parallelRow: string;
+    parallelRowHint: string;
+    undo: string;
+    clearAll: string;
+    fitView: string;
+    emptyOrchardBadge: string;
+    emptyOrchardGuide: string;
+    hintDrawMode: string;
+    hintFinishLine: string;
+    hintSelectMode: string;
+    hintPaintMode: string;
+    rowsCountLabel: string;
+    treesCountLabel: string;
+    activeSpeciesLabel: string;
+    rowsUnit: string;
+    treesUnit: string;
+    speciesTitle: string;
+    speciesHint: string;
+    useRecommendedSpacing: string;
+    spacingTitle: string;
+    treeSpacingLabel: string;
+    applySpacingAll: string;
+    rowOffsetLabel: string;
+    edgeMarginLabel: string;
+    selectedTreeTitle: string;
+    computedByBackend: string;
+    changeTreeSpecies: string;
+    rowsListTitle: string;
+    emptyRowsList: string;
+    deleteRow: string;
+    rowSpeciesShort: string;
+    rowSpacingShort: string;
+    payloadPreviewTitle: string;
+    payloadPreviewSubtitle: string;
+  };
 }
 
 export const TRANSLATIONS: Record<Language, Translations> = {
@@ -101,7 +153,7 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     },
     nav: {
       dashboard: 'Dashboard',
-      rowEditor: 'Edytor linii rzędów (wkrótce)',
+      rowEditor: 'Edytor linii rzędów',
       analytics: 'Analityka (placeholder)',
       layers: 'Warstwy i skany (placeholder)',
       settings: 'Ustawienia (placeholder)',
@@ -182,6 +234,59 @@ export const TRANSLATIONS: Record<Language, Translations> = {
         'Tutaj znajdzie się ekran rysowania linii rzędów na mapie, na podstawie których backend wyliczy dokładne pozycje pojedynczych drzew 3D (POST /api/v1/orchard/row-lines).',
       backToDashboard: 'Wróć do Dashboardu',
     },
+    rowEditor: {
+      title: 'Edytor Linii Rzędów Sadu',
+      subtitle: 'Narysuj proste linie rzędów w granicach sadu, aby wyliczyć współrzędne pojedynczych drzew.',
+      backdropLabel: 'Tryb podkładu',
+      backdropBlank: 'Pusty kształt',
+      backdropSatellite: 'Zdjęcie satelitarne',
+      previewPayload: 'Podgląd MongoDB',
+      saveLayout: 'Zapisz układ',
+      saving: 'Zapisywanie...',
+      saveSuccessTitle: 'Wysłano układ do endpointu',
+      saveBackendNote: 'healthIndex zostanie obliczony po stronie backendu',
+      toolsLabel: 'Narzędzia rysowania',
+      toolDraw: 'Rysuj rząd',
+      toolSelect: 'Zaznacz / Edytuj',
+      toolPaint: 'Maluj gatunek',
+      angleSnap: 'Przyciągaj kąt',
+      angleSnapHint: 'Wyrównuje linię równolegle do ostatniego rzędu lub co 15° (lub przytrzymaj Shift)',
+      parallelRow: 'Równoległy rząd',
+      parallelRowHint: 'Dodaje równoległy rząd przesunięty o odstęp między rzędami i przycięty do kształtu pola',
+      undo: 'Cofnij',
+      clearAll: 'Wyczyść sad',
+      fitView: 'Dopasuj widok do sadu',
+      emptyOrchardBadge: 'Pusty sad — brak rzędów',
+      emptyOrchardGuide: 'Wybierz gatunek po prawej i kliknij dwa punkty (początek i koniec), aby narysować pierwszy rząd.',
+      hintDrawMode: 'Kliknij punkt początkowy rzędu · Scroll: zoom · PPM: przesuwanie',
+      hintFinishLine: 'Kliknij punkt końcowy rzędu · Esc lub PPM: anuluj · Shift: przyciąganie kąta',
+      hintSelectMode: 'Kliknij rząd, aby przesuwać punkty A/B, lub kliknij drzewo, aby zmienić jego gatunek',
+      hintPaintMode: 'Kliknij rząd albo przeciągnij po drzewach, aby przypisać aktywny gatunek (CropPref)',
+      rowsCountLabel: 'Rzędy',
+      treesCountLabel: 'Wyliczone drzewa',
+      activeSpeciesLabel: 'Aktywny gatunek',
+      rowsUnit: 'rzędów',
+      treesUnit: 'drzew',
+      speciesTitle: 'Gatunek drzewa',
+      speciesHint: 'Wybierz gatunek z kolekcji CropPref dla nowych rzędów lub narzędzia malowania.',
+      useRecommendedSpacing: 'Użyj zalecanego odstępu',
+      spacingTitle: 'Parametry rozmieszczenia',
+      treeSpacingLabel: 'Średni odstęp między drzewami',
+      applySpacingAll: 'Zastosuj odstęp do wszystkich rzędów',
+      rowOffsetLabel: 'Odstęp rzędów',
+      edgeMarginLabel: 'Margines granicy',
+      selectedTreeTitle: 'Wybrane drzewo',
+      computedByBackend: 'liczy backend',
+      changeTreeSpecies: 'Zmień gatunek (CropPref ObjectId)',
+      rowsListTitle: 'Narysowane rzędy',
+      emptyRowsList: 'Brak rzędów. Narysuj pierwszą prostą linię na obszarze sadu, aby automatycznie wyliczyć drzewa.',
+      deleteRow: 'Usuń rząd',
+      rowSpeciesShort: 'Gatunek',
+      rowSpacingShort: 'Odstęp (m)',
+      payloadPreviewTitle: 'Podgląd dokumentów do zapisu w MongoDB',
+      payloadPreviewSubtitle:
+        'Orchard.rows przechowuje punkty start/end oraz uporządkowane ObjectId drzew; Tree zawiera coordinates, healthIndex: null oraz species (CropPref ObjectId).',
+    },
   },
   en: {
     app: {
@@ -192,7 +297,7 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     },
     nav: {
       dashboard: 'Dashboard',
-      rowEditor: 'Row Line Editor (coming next)',
+      rowEditor: 'Row Line Editor',
       analytics: 'Analytics (placeholder)',
       layers: 'Layers & Scans (placeholder)',
       settings: 'Settings (placeholder)',
@@ -272,6 +377,59 @@ export const TRANSLATIONS: Record<Language, Translations> = {
       rowEditorNote:
         'This screen will allow drawing orchard row lines on the map so individual 3D tree positions are calculated and submitted via POST /api/v1/orchard/row-lines.',
       backToDashboard: 'Back to Dashboard',
+    },
+    rowEditor: {
+      title: 'Orchard Row Line Editor',
+      subtitle: 'Draw straight row lines across the orchard polygon to calculate individual tree coordinates.',
+      backdropLabel: 'Canvas backdrop',
+      backdropBlank: 'Empty shape',
+      backdropSatellite: 'Satellite map',
+      previewPayload: 'MongoDB Payload',
+      saveLayout: 'Save layout',
+      saving: 'Saving...',
+      saveSuccessTitle: 'Layout sent to endpoint',
+      saveBackendNote: 'healthIndex will be computed by the backend',
+      toolsLabel: 'Drawing tools',
+      toolDraw: 'Draw row',
+      toolSelect: 'Select / Edit',
+      toolPaint: 'Paint species',
+      angleSnap: 'Angle snap',
+      angleSnapHint: 'Snaps parallel to the last row or 15° steps (or hold Shift)',
+      parallelRow: 'Parallel row',
+      parallelRowHint: 'Duplicates a parallel row shifted by row spacing and clipped to field geometry',
+      undo: 'Undo',
+      clearAll: 'Clear orchard',
+      fitView: 'Fit orchard parcel',
+      emptyOrchardBadge: 'Empty orchard — no rows yet',
+      emptyOrchardGuide: 'Pick a tree species on the right and click two points (start & end) to draw the first row.',
+      hintDrawMode: 'Click row start point · Scroll: zoom · Right-drag: pan',
+      hintFinishLine: 'Click row end point · Esc or right-click: cancel · Shift: angle snap',
+      hintSelectMode: 'Click a row to drag A/B handles, or click a tree to change its species',
+      hintPaintMode: 'Click a row or drag across trees to assign the active species (CropPref)',
+      rowsCountLabel: 'Rows',
+      treesCountLabel: 'Calculated trees',
+      activeSpeciesLabel: 'Active species',
+      rowsUnit: 'rows',
+      treesUnit: 'trees',
+      speciesTitle: 'Tree Species',
+      speciesHint: 'Choose a CropPref species for newly drawn rows or the species brush.',
+      useRecommendedSpacing: 'Use recommended spacing',
+      spacingTitle: 'Placement Parameters',
+      treeSpacingLabel: 'Average spacing between trees',
+      applySpacingAll: 'Apply spacing to all rows',
+      rowOffsetLabel: 'Row offset',
+      edgeMarginLabel: 'Border margin',
+      selectedTreeTitle: 'Selected Tree',
+      computedByBackend: 'backend computed',
+      changeTreeSpecies: 'Change species (CropPref ObjectId)',
+      rowsListTitle: 'Drawn Rows',
+      emptyRowsList: 'No rows yet. Draw a straight line across the orchard shape to generate tree coordinates.',
+      deleteRow: 'Delete row',
+      rowSpeciesShort: 'Species',
+      rowSpacingShort: 'Spacing (m)',
+      payloadPreviewTitle: 'MongoDB Persistence Payload Preview',
+      payloadPreviewSubtitle:
+        'Orchard.rows stores start/end coordinates and ordered Tree ObjectIds; Tree stores coordinates, healthIndex: null, and species (CropPref ObjectId).',
     },
   },
 };

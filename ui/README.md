@@ -19,6 +19,8 @@ npm run build
 
 ## API Endpoints & Placeholder Architecture
 
+Pełna specyfikacja wszystkich endpointów, parametrów, schematów MongoDB oraz podkładu satelitarnego znajduje się w [`API_SPEC.md`](./API_SPEC.md).
+
 All backend transfer contracts live in:
 - `src/config/apiConfig.ts` — base URL, `VITE_USE_PLACEHOLDERS` toggle, and endpoint paths
 - `src/types/orchard.ts` — request & response TypeScript models
@@ -32,7 +34,9 @@ Prepared endpoints:
 - `GET /api/v1/orchard/point-cloud?orchardId=...`
 - `GET /api/v1/orchard/trees?orchardId=...`
 - `GET /api/v1/orchard/row-lines?orchardId=...`
-- `POST /api/v1/orchard/row-lines` (prepared for the upcoming Row Line Editor screen)
+- `GET /api/v1/crop-prefs` (`CropPref` collection — tree species catalog)
+- `GET /api/v1/orchards/:orchardId` (`Orchard` collection — field polygon geometry & rows)
+- `POST /api/v1/orchards/:orchardId/layout` (saves `Orchard.rows` with start/end + ordered `treeIds` and inserts calculated `Tree` docs with `coordinates`, `healthIndex: null`, `species: ObjectId`)
 - `PATCH /api/v1/orchard/trees/:treeId`
 
 ### Removing placeholders once the backend is live

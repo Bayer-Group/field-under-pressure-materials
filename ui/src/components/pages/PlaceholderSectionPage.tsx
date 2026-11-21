@@ -3,15 +3,14 @@ import { useLanguage } from '../../contexts/LanguageContext';
 import type { NavSectionId } from '../layout/Sidebar';
 
 interface PlaceholderSectionPageProps {
-  section: Exclude<NavSectionId, 'dashboard'>;
+  section: Exclude<NavSectionId, 'dashboard' | 'row-editor'>;
   onBackToDashboard: () => void;
 }
 
 export function PlaceholderSectionPage({ section, onBackToDashboard }: PlaceholderSectionPageProps) {
   const { t } = useLanguage();
 
-  const titles: Record<Exclude<NavSectionId, 'dashboard'>, string> = {
-    'row-editor': t.nav.rowEditor,
+  const titles: Record<Exclude<NavSectionId, 'dashboard' | 'row-editor'>, string> = {
     analytics: t.nav.analytics,
     layers: t.nav.layers,
     settings: t.nav.settings,
@@ -24,9 +23,7 @@ export function PlaceholderSectionPage({ section, onBackToDashboard }: Placehold
           <Construction size={28} strokeWidth={1.7} />
         </div>
         <h1 className="placeholder-section-title">{titles[section]}</h1>
-        <p className="placeholder-section-desc">
-          {section === 'row-editor' ? t.placeholderView.rowEditorNote : t.placeholderView.description}
-        </p>
+        <p className="placeholder-section-desc">{t.placeholderView.description}</p>
         <button type="button" className="primary-btn" onClick={onBackToDashboard}>
           <ArrowLeft size={16} />
           <span>{t.placeholderView.backToDashboard}</span>
