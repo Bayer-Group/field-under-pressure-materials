@@ -12,8 +12,8 @@ import pandas as pd
 import requests
 
 
-OPEN_METEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
-OPEN_METEO_ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
+OPEN_METEO_FORECAST_URL = os.getenv("OPEN_METEO_FORECAST_URL", "https://api.open-meteo.com/v1/forecast")
+OPEN_METEO_ARCHIVE_URL = os.getenv("OPEN_METEO_ARCHIVE_URL", "https://archive-api.open-meteo.com/v1/archive")
 
 # Maks. 10 zmiennych na endpoint (brak mnożnika kosztu nVariables / 10 w Open-Meteo)
 FORECAST_HOURLY_VARS = [

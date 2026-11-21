@@ -7,7 +7,6 @@ from rasterio.enums import Resampling
 from rasterio.features import geometry_mask
 from rasterio.mask import mask
 from rasterio.vrt import WarpedVRT
-from shapely.geometry import mapping
 
 
 def download_clip_sentinel_ndvi_ndmi(
@@ -16,7 +15,7 @@ def download_clip_sentinel_ndvi_ndmi(
     end_date,
     out_dir,
     max_cc=10,
-    n_scenes=1,
+    n_scenes=8,
     max_missing_ratio=0.3,
 ):
     out_dir = Path(out_dir)
@@ -24,12 +23,12 @@ def download_clip_sentinel_ndvi_ndmi(
 
     boundary = gpd.read_file(boundary_file)
     boundary_wgs84 = boundary.to_crs("EPSG:4326")
-    search_geometry = mapping(boundary_wgs84.geometry.union_all())
+    search_bbox = [float(v) for v in boundary_wgs84.total_bounds]
 
     client = Client.open("https://earth-search.aws.element84.com/v1")
     search = client.search(
         collections=["sentinel-2-l2a"],
-        intersects=search_geometry,
+        bbox=search_bbox,
         datetime=f"{start_date}/{end_date}",
         query={"eo:cloud_cover": {"lt": max_cc}},
     )

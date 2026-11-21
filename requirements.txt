@@ -28,3 +28,9 @@ earthengine-api>=1.1
 geemap>=0.32
 # Uncomment if you Export.*.toCloudStorage and need to list/download GCS objects in Python:
 # google-cloud-storage>=2.14
+
+torch
+segmentation-models-pytorch
+geopandas>=1.0
+shapely>=2.0
+scipy
