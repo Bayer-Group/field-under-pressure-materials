@@ -5,12 +5,16 @@ import { useLanguage } from '../../contexts/LanguageContext';
 import { useOrchard } from '../../contexts/OrchardContext';
 import type { TemperaturePoint, TemperatureSeriesResponse, TimeRange } from '../../types/orchard';
 
-const TIME_RANGES: TimeRange[] = ['24h', '7d', '30d', '90d', '1y'];
+const TIME_RANGES: TimeRange[] = ['24h', '7d', '30d', '90d'];
 
 function buildPath(coords: Array<{ x: number; y: number }>): string {
   if (coords.length === 0) return '';
   if (coords.length === 1) return `M ${coords[0].x} ${coords[0].y}`;
   return coords.map((pt, i) => `${i === 0 ? 'M' : 'L'} ${pt.x.toFixed(1)} ${pt.y.toFixed(1)}`).join(' ');
+}
+
+function pointHourlyTemp(p: TemperaturePoint): number {
+  return Number(((p.minTempC + p.maxTempC) / 2).toFixed(1));
 }
 
 export function TemperatureChartCard() {
@@ -22,6 +26,8 @@ export function TemperatureChartCard() {
   const [endpoint, setEndpoint] = useState<string>('');
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
+
+  const isHourlyMode = range === '24h';
 
   useEffect(() => {
     const controller = new AbortController();
@@ -49,20 +55,25 @@ export function TemperatureChartCard() {
 
   const stats = useMemo(() => {
     if (visiblePoints.length === 0) {
-      return { min: 0, max: 0, avgSpread: 0 };
+      return { min: 0, max: 0, avgSpread: 0, avgTemp: 0, latestTemp: 0 };
     }
     let min = Infinity;
     let max = -Infinity;
     let spreadSum = 0;
+    let avgSum = 0;
     for (const p of visiblePoints) {
       if (p.minTempC < min) min = p.minTempC;
       if (p.maxTempC > max) max = p.maxTempC;
       spreadSum += p.maxTempC - p.minTempC;
+      avgSum += pointHourlyTemp(p);
     }
+    const last = visiblePoints[visiblePoints.length - 1];
     return {
       min,
       max,
       avgSpread: Number((spreadSum / visiblePoints.length).toFixed(1)),
+      avgTemp: Number((avgSum / visiblePoints.length).toFixed(1)),
+      latestTemp: pointHourlyTemp(last),
     };
   }, [visiblePoints]);
 
@@ -112,11 +123,23 @@ export function TemperatureChartCard() {
 
   const maxCoords = visiblePoints.map((p, i) => ({ x: toX(i), y: toY(p.maxTempC) }));
   const minCoords = visiblePoints.map((p, i) => ({ x: toX(i), y: toY(p.minTempC) }));
+  const hourlyCoords = visiblePoints.map((p, i) => ({ x: toX(i), y: toY(pointHourlyTemp(p)) }));
 
   const maxPath = buildPath(maxCoords);
   const minPath = buildPath(minCoords);
+  const hourlyPath = buildPath(hourlyCoords);
 
   const areaPath = useMemo(() => {
+    if (isHourlyMode) {
+      if (hourlyCoords.length < 2) return '';
+      const baseY = pad.top + plotH;
+      const forward = hourlyCoords
+        .map((pt, i) => `${i === 0 ? 'M' : 'L'} ${pt.x.toFixed(1)} ${pt.y.toFixed(1)}`)
+        .join(' ');
+      const lastX = hourlyCoords[hourlyCoords.length - 1].x.toFixed(1);
+      const firstX = hourlyCoords[0].x.toFixed(1);
+      return `${forward} L ${lastX} ${baseY} L ${firstX} ${baseY} Z`;
+    }
     if (maxCoords.length < 2) return '';
     const forward = maxCoords.map((pt, i) => `${i === 0 ? 'M' : 'L'} ${pt.x.toFixed(1)} ${pt.y.toFixed(1)}`).join(' ');
     const backward = [...minCoords]
@@ -124,7 +147,7 @@ export function TemperatureChartCard() {
       .map((pt) => `L ${pt.x.toFixed(1)} ${pt.y.toFixed(1)}`)
       .join(' ');
     return `${forward} ${backward} Z`;
-  }, [maxCoords, minCoords]);
+  }, [isHourlyMode, hourlyCoords, maxCoords, minCoords, pad.top, plotH]);
 
   const showFrostLine = yDomain.yMin < 0 && yDomain.yMax > 0;
   const frostY = toY(0);
@@ -141,6 +164,7 @@ export function TemperatureChartCard() {
 
   const hoveredPoint = hoverIndex !== null ? visiblePoints[hoverIndex] : null;
   const hoveredX = hoverIndex !== null ? toX(hoverIndex) : 0;
+  const cardTitle = isHourlyMode ? t.temperature.titleHourly : t.temperature.title;
 
   return (
     <section className="card chart-card">
@@ -149,7 +173,7 @@ export function TemperatureChartCard() {
           <div className="card-icon">
             <Thermometer size={18} strokeWidth={1.9} />
           </div>
-          <h2 className="card-title">{t.temperature.title}</h2>
+          <h2 className="card-title">{cardTitle}</h2>
         </div>
 
         <div className="time-scale-controls">
@@ -173,20 +197,36 @@ export function TemperatureChartCard() {
 
       <div className="temp-meta-bar">
         <div className="temp-stats">
-          <div className="stat-chip">
-            <span className="stat-dot stat-dot-min" />
-            <span className="stat-label">{t.temperature.periodMin}:</span>
-            <strong className="stat-value">{stats.min.toFixed(1)}°C</strong>
-          </div>
-          <div className="stat-chip">
-            <span className="stat-dot stat-dot-max" />
-            <span className="stat-label">{t.temperature.periodMax}:</span>
-            <strong className="stat-value">{stats.max.toFixed(1)}°C</strong>
-          </div>
-          <div className="stat-chip">
-            <span className="stat-label">{t.temperature.avgSpread}:</span>
-            <strong className="stat-value">{stats.avgSpread.toFixed(1)}°C</strong>
-          </div>
+          {isHourlyMode ? (
+            <>
+              <div className="stat-chip">
+                <span className="stat-dot stat-dot-hourly" />
+                <span className="stat-label">{t.temperature.latestLabel}:</span>
+                <strong className="stat-value">{stats.latestTemp.toFixed(1)}°C</strong>
+              </div>
+              <div className="stat-chip">
+                <span className="stat-label">{t.temperature.avgLabel}:</span>
+                <strong className="stat-value">{stats.avgTemp.toFixed(1)}°C</strong>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="stat-chip">
+                <span className="stat-dot stat-dot-min" />
+                <span className="stat-label">{t.temperature.periodMin}:</span>
+                <strong className="stat-value">{stats.min.toFixed(1)}°C</strong>
+              </div>
+              <div className="stat-chip">
+                <span className="stat-dot stat-dot-max" />
+                <span className="stat-label">{t.temperature.periodMax}:</span>
+                <strong className="stat-value">{stats.max.toFixed(1)}°C</strong>
+              </div>
+              <div className="stat-chip">
+                <span className="stat-label">{t.temperature.avgSpread}:</span>
+                <strong className="stat-value">{stats.avgSpread.toFixed(1)}°C</strong>
+              </div>
+            </>
+          )}
         </div>
 
         <label className="zoom-slider-control">
@@ -212,115 +252,176 @@ export function TemperatureChartCard() {
             {t.temperature.noData}
           </div>
         ) : (
-        <>
-        <svg
-          ref={svgRef}
-          viewBox={`0 0 ${width} ${height}`}
-          className="temp-svg"
-          role="img"
-          aria-label={t.temperature.title}
-          onMouseMove={handlePointerMove}
-          onMouseLeave={() => setHoverIndex(null)}
-        >
-          <defs>
-            <linearGradient id="tempBandGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--temp-max)" stopOpacity="0.22" />
-              <stop offset="100%" stopColor="var(--temp-min)" stopOpacity="0.16" />
-            </linearGradient>
-          </defs>
+          <>
+            <svg
+              ref={svgRef}
+              viewBox={`0 0 ${width} ${height}`}
+              className="temp-svg"
+              role="img"
+              aria-label={cardTitle}
+              onMouseMove={handlePointerMove}
+              onMouseLeave={() => setHoverIndex(null)}
+            >
+              <defs>
+                <linearGradient id="tempBandGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="var(--temp-max)" stopOpacity="0.22" />
+                  <stop offset="100%" stopColor="var(--temp-min)" stopOpacity="0.16" />
+                </linearGradient>
+                <linearGradient id="tempHourlyGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.24" />
+                  <stop offset="100%" stopColor="var(--accent)" stopOpacity="0.02" />
+                </linearGradient>
+              </defs>
 
-          {/* Horizontal gridlines & Y ticks */}
-          {yTicks.map((tick) => {
-            const y = toY(tick);
-            return (
-              <g key={tick}>
-                <line x1={pad.left} y1={y} x2={pad.left + plotW} y2={y} className="chart-grid-line" />
-                <text x={pad.left - 10} y={y + 4} textAnchor="end" className="chart-axis-text">
-                  {tick}°
-                </text>
-              </g>
-            );
-          })}
+              {/* Horizontal gridlines & Y ticks */}
+              {yTicks.map((tick) => {
+                const y = toY(tick);
+                return (
+                  <g key={tick}>
+                    <line x1={pad.left} y1={y} x2={pad.left + plotW} y2={y} className="chart-grid-line" />
+                    <text x={pad.left - 10} y={y + 4} textAnchor="end" className="chart-axis-text">
+                      {tick}°
+                    </text>
+                  </g>
+                );
+              })}
 
-          {/* 0°C frost reference line */}
-          {showFrostLine && (
-            <g>
-              <line
-                x1={pad.left}
-                y1={frostY}
-                x2={pad.left + plotW}
-                y2={frostY}
-                className="chart-frost-line"
-                strokeDasharray="4 4"
-              />
-              <text x={pad.left + plotW - 4} y={frostY - 6} textAnchor="end" className="chart-frost-label">
-                0°C
-              </text>
-            </g>
-          )}
+              {/* 0°C frost reference line */}
+              {showFrostLine && (
+                <g>
+                  <line
+                    x1={pad.left}
+                    y1={frostY}
+                    x2={pad.left + plotW}
+                    y2={frostY}
+                    className="chart-frost-line"
+                    strokeDasharray="4 4"
+                  />
+                  <text x={pad.left + plotW - 4} y={frostY - 6} textAnchor="end" className="chart-frost-label">
+                    0°C
+                  </text>
+                </g>
+              )}
 
-          {/* Shaded min-max envelope */}
-          {areaPath && <path d={areaPath} fill="url(#tempBandGrad)" />}
+              {/* Shaded area */}
+              {areaPath && (
+                <path d={areaPath} fill={isHourlyMode ? 'url(#tempHourlyGrad)' : 'url(#tempBandGrad)'} />
+              )}
 
-          {/* Min & Max lines */}
-          {minPath && <path d={minPath} fill="none" className="temp-line-min" strokeWidth={2.2} strokeLinejoin="round" />}
-          {maxPath && <path d={maxPath} fill="none" className="temp-line-max" strokeWidth={2.2} strokeLinejoin="round" />}
+              {/* Single hourly curve (24h) OR Min/Max dual lines (7d/30d/90d) */}
+              {isHourlyMode ? (
+                hourlyPath && (
+                  <path
+                    d={hourlyPath}
+                    fill="none"
+                    className="temp-line-hourly"
+                    strokeWidth={2.4}
+                    strokeLinejoin="round"
+                  />
+                )
+              ) : (
+                <>
+                  {minPath && (
+                    <path
+                      d={minPath}
+                      fill="none"
+                      className="temp-line-min"
+                      strokeWidth={2.2}
+                      strokeLinejoin="round"
+                    />
+                  )}
+                  {maxPath && (
+                    <path
+                      d={maxPath}
+                      fill="none"
+                      className="temp-line-max"
+                      strokeWidth={2.2}
+                      strokeLinejoin="round"
+                    />
+                  )}
+                </>
+              )}
 
-          {/* X-axis ticks */}
-          {xTickIndices.map((idx) => {
-            const pt = visiblePoints[idx];
-            if (!pt) return null;
-            return (
-              <text key={idx} x={toX(idx)} y={height - 10} textAnchor="middle" className="chart-axis-text">
-                {pt.label}
-              </text>
-            );
-          })}
+              {/* X-axis ticks */}
+              {xTickIndices.map((idx) => {
+                const pt = visiblePoints[idx];
+                if (!pt) return null;
+                return (
+                  <text key={idx} x={toX(idx)} y={height - 10} textAnchor="middle" className="chart-axis-text">
+                    {pt.label}
+                  </text>
+                );
+              })}
 
-          {/* Hover vertical guide & active markers */}
-          {hoverIndex !== null && hoveredPoint && (
-            <g>
-              <line x1={hoveredX} y1={pad.top} x2={hoveredX} y2={pad.top + plotH} className="chart-hover-guide" />
-              <circle cx={hoveredX} cy={toY(hoveredPoint.maxTempC)} r={4.5} className="temp-dot-max" />
-              <circle cx={hoveredX} cy={toY(hoveredPoint.minTempC)} r={4.5} className="temp-dot-min" />
-            </g>
-          )}
-        </svg>
+              {/* Hover vertical guide & active markers */}
+              {hoverIndex !== null && hoveredPoint && (
+                <g>
+                  <line x1={hoveredX} y1={pad.top} x2={hoveredX} y2={pad.top + plotH} className="chart-hover-guide" />
+                  {isHourlyMode ? (
+                    <circle cx={hoveredX} cy={toY(pointHourlyTemp(hoveredPoint))} r={4.5} className="temp-dot-hourly" />
+                  ) : (
+                    <>
+                      <circle cx={hoveredX} cy={toY(hoveredPoint.maxTempC)} r={4.5} className="temp-dot-max" />
+                      <circle cx={hoveredX} cy={toY(hoveredPoint.minTempC)} r={4.5} className="temp-dot-min" />
+                    </>
+                  )}
+                </g>
+              )}
+            </svg>
 
-        {hoveredPoint && hoverIndex !== null && (
-          <div
-            className="chart-tooltip"
-            style={{
-              left: `${Math.min(76, Math.max(6, (hoveredX / width) * 100))}%`,
-            }}
-          >
-            <div className="chart-tooltip-date">{hoveredPoint.label}</div>
-            <div className="chart-tooltip-row">
-              <span className="stat-dot stat-dot-max" />
-              <span>{t.temperature.maxLabel}:</span>
-              <strong>{hoveredPoint.maxTempC.toFixed(1)}°C</strong>
-            </div>
-            <div className="chart-tooltip-row">
-              <span className="stat-dot stat-dot-min" />
-              <span>{t.temperature.minLabel}:</span>
-              <strong>{hoveredPoint.minTempC.toFixed(1)}°C</strong>
-            </div>
-          </div>
-        )}
-        </>
+            {hoveredPoint && hoverIndex !== null && (
+              <div
+                className="chart-tooltip"
+                style={{
+                  left: `${Math.min(76, Math.max(6, (hoveredX / width) * 100))}%`,
+                }}
+              >
+                <div className="chart-tooltip-date">{hoveredPoint.label}</div>
+                {isHourlyMode ? (
+                  <div className="chart-tooltip-row">
+                    <span className="stat-dot stat-dot-hourly" />
+                    <span>{t.temperature.hourlyLabel}:</span>
+                    <strong>{pointHourlyTemp(hoveredPoint).toFixed(1)}°C</strong>
+                  </div>
+                ) : (
+                  <>
+                    <div className="chart-tooltip-row">
+                      <span className="stat-dot stat-dot-max" />
+                      <span>{t.temperature.maxLabel}:</span>
+                      <strong>{hoveredPoint.maxTempC.toFixed(1)}°C</strong>
+                    </div>
+                    <div className="chart-tooltip-row">
+                      <span className="stat-dot stat-dot-min" />
+                      <span>{t.temperature.minLabel}:</span>
+                      <strong>{hoveredPoint.minTempC.toFixed(1)}°C</strong>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </>
         )}
       </div>
 
       <div className="card-footer-meta">
         <div className="legend-inline">
-          <span className="legend-item">
-            <span className="legend-line legend-line-max" />
-            {t.temperature.maxLabel}
-          </span>
-          <span className="legend-item">
-            <span className="legend-line legend-line-min" />
-            {t.temperature.minLabel}
-          </span>
+          {isHourlyMode ? (
+            <span className="legend-item">
+              <span className="legend-line legend-line-hourly" />
+              {t.temperature.hourlyLabel}
+            </span>
+          ) : (
+            <>
+              <span className="legend-item">
+                <span className="legend-line legend-line-max" />
+                {t.temperature.maxLabel}
+              </span>
+              <span className="legend-item">
+                <span className="legend-line legend-line-min" />
+                {t.temperature.minLabel}
+              </span>
+            </>
+          )}
           {showFrostLine && (
             <span className="legend-item">
               <span className="legend-line legend-line-frost" />

@@ -30,9 +30,13 @@ export interface Translations {
   };
   temperature: {
     title: string;
+    titleHourly: string;
     subtitle: string;
     minLabel: string;
     maxLabel: string;
+    hourlyLabel: string;
+    latestLabel: string;
+    avgLabel: string;
     frostLine: string;
     timeScale: string;
     windowAdjust: string;
@@ -45,7 +49,6 @@ export interface Translations {
       '7d': string;
       '30d': string;
       '90d': string;
-      '1y': string;
     };
   };
   health: {
@@ -186,9 +189,13 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     },
     temperature: {
       title: 'Temperatura Min / Max',
+      titleHourly: 'Temperatura (24h)',
       subtitle: 'Wykres liniowy z dostrajaniem skali czasu',
       minLabel: 'Temp. min',
       maxLabel: 'Temp. max',
+      hourlyLabel: 'Temperatura',
+      latestLabel: 'Ostatnia',
+      avgLabel: 'Średnia',
       frostLine: 'Próg przymrozku (0°C)',
       timeScale: 'Skala czasu',
       windowAdjust: 'Dostrajanie okna',
@@ -201,7 +208,6 @@ export const TRANSLATIONS: Record<Language, Translations> = {
         '7d': '7 dni',
         '30d': '30 dni',
         '90d': '90 dni',
-        '1y': '1 rok',
       },
     },
     health: {
@@ -342,9 +348,13 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     },
     temperature: {
       title: 'Min / Max Temperature',
+      titleHourly: 'Temperature (24h)',
       subtitle: 'Line chart with interactive time-scale tuning',
       minLabel: 'Min temp',
       maxLabel: 'Max temp',
+      hourlyLabel: 'Temperature',
+      latestLabel: 'Latest',
+      avgLabel: 'Average',
       frostLine: 'Frost threshold (0°C)',
       timeScale: 'Time scale',
       windowAdjust: 'Window zoom',
@@ -357,7 +367,6 @@ export const TRANSLATIONS: Record<Language, Translations> = {
         '7d': '7D',
         '30d': '30D',
         '90d': '90D',
-        '1y': '1Y',
       },
     },
     health: {

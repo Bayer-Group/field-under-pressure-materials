@@ -87,7 +87,7 @@ Pobiera szereg czasowy temperatur minimalnych i maksymalnych do wykresu linioweg
 
 - **Query params:**
   - `orchardId` (`string`, wymagany) — ObjectId sadu (np. `6b01933c1dc02a368703a020`)
-  - `range` (`"24h" | "7d" | "30d" | "90d" | "1y"`, wymagany) — zakres czasowy
+  - `range` (`"24h" | "7d" | "30d" | "90d"`, wymagany) — zakres czasowy
 - **Response `200 OK`:**
 ```json
 {
