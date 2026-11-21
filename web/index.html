@@ -2,120 +2,166 @@
 <html lang="pl">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>PyQGIS FastAPI Bridge - Web Viewer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#edf3ed" />
+  <title>Twoje pola — Field Under Pressure</title>
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" />
   <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
-  <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet" />
+  <script src="farmer-data.js"></script>
   <style>
-    body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; height: 100vh; }
-    #sidebar { width: 340px; background: #ffffff; border-right: 1px solid #e2e8f0; padding: 20px; box-sizing: border-box; display: flex; flex-direction: column; gap: 15px; }
-    #map { flex: 1; height: 100%; }
-    h1 { font-size: 16px; margin: 0; color: #1e293b; }
-    p { font-size: 13px; margin: 0; color: #64748b; line-height: 1.4; }
-    button { background: #0284c7; color: white; border: none; padding: 10px 14px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 13px; }
-    button:hover { background: #0369a1; }
-    pre { background: #0f172a; color: #38bdf8; padding: 10px; border-radius: 4px; font-size: 11px; overflow-x: auto; flex: 1; margin: 0; }
+    :root { color-scheme: light; --green: #176544; --ink: #15221b; --muted: #66766d; --line: rgba(32,62,45,.10); --paper: rgba(248,251,247,.93); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: var(--ink); background: #e8efe8; }
+    button, input { font: inherit; }
+    button { cursor: pointer; }
+    button:focus-visible, input:focus-visible { outline: 3px solid #2d815d; outline-offset: 3px; }
+    svg { width: 21px; height: 21px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+    .app { position: relative; height: 100vh; height: 100dvh; overflow: hidden; isolation: isolate; }
+    #map { position: absolute; inset: 0; background: #e6ede3; }
+    .top { position: absolute; top: max(16px, env(safe-area-inset-top)); left: 16px; right: 16px; display: flex; gap: 8px; z-index: 2; }
+    .search { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; padding: 0 14px; height: 52px; border: 1px solid rgba(255,255,255,.8); border-radius: 17px; background: var(--paper); box-shadow: 0 5px 22px rgba(24,50,35,.12); backdrop-filter: blur(18px); }
+    .search svg { width: 19px; color: #42564a; }
+    .search input { width: 100%; min-width: 0; padding: 0; color: var(--ink); border: 0; outline: 0; background: transparent; font-size: 15px; }
+    .search input::placeholder { color: #69786d; opacity: 1; }
+    .locate { width: 52px; height: 52px; display: grid; place-items: center; flex: none; border: 1px solid rgba(255,255,255,.8); border-radius: 17px; background: var(--paper); color: var(--ink); box-shadow: 0 5px 22px rgba(24,50,35,.12); backdrop-filter: blur(18px); }
+    .locate:active, .option:active { transform: scale(.985); }
+    .sheet { position: absolute; z-index: 2; left: 0; right: 0; bottom: 0; padding: 10px 20px max(20px, env(safe-area-inset-bottom)); border: 1px solid rgba(255,255,255,.85); border-bottom: 0; border-radius: 28px 28px 0 0; background: rgba(235,246,238,.94); box-shadow: 0 -10px 40px rgba(20,50,33,.14); backdrop-filter: blur(25px); max-height: min(68dvh, 570px); overflow-y: auto; }
+    .handle { width: 36px; height: 4px; border-radius: 4px; background: #a9bdb0; margin: 1px auto 20px; }
+    .eyebrow { color: var(--green); font-size: 11px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; margin: 0 0 8px; }
+    h1 { font-size: clamp(25px, 7vw, 30px); letter-spacing: -.045em; line-height: 1.1; margin: 0; }
+    .subtitle { color: var(--muted); margin: 7px 0 19px; font-size: 14px; line-height: 1.4; }
+    .options { display: grid; gap: 7px; }
+    .option { width: 100%; min-height: 52px; display: flex; align-items: center; gap: 14px; padding: 0 15px; text-align: left; border: 1px solid rgba(255,255,255,.9); border-radius: 14px; background: rgba(255,255,255,.74); color: var(--ink); font-size: 14px; font-weight: 650; transition: transform 100ms ease, background 100ms ease; }
+    .option .icon { color: var(--green); display: grid; place-items: center; width: 22px; }
+    .option .chevron { margin-left: auto; width: 17px; color: #829188; }
+    .selected { display: none; margin: 0 0 13px; padding: 12px 14px; border: 1px solid rgba(23,101,68,.14); border-radius: 14px; background: rgba(255,255,255,.66); }
+    .selected.visible { display: block; }
+    .selected-head { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
+    .selected-list { margin: 7px 0 0; display: flex; flex-wrap: wrap; gap: 6px; }
+    .parcel-chip { display: inline-flex; align-items: center; gap: 7px; border: 0; border-radius: 9px; padding: 5px 8px; background: #e7f1e9; color: #28573d; font-size: 12px; }
+    .parcel-chip svg { width: 13px; height: 13px; }
+    .primary { width: 100%; min-height: 52px; margin-top: 12px; border: 0; border-radius: 15px; background: #14221a; color: #fff; font-size: 14px; font-weight: 700; }
+    .primary:disabled { opacity: .38; cursor: not-allowed; }
+    .status { position: absolute; z-index: 3; top: calc(max(16px, env(safe-area-inset-top)) + 61px); left: 16px; right: 16px; margin: 0; padding: 10px 13px; border-radius: 12px; background: #fff; box-shadow: 0 5px 20px rgba(24,50,35,.12); font-size: 13px; line-height: 1.4; }
+    .status:empty { display: none; }
+    .results { display: none; position: absolute; z-index: 3; top: calc(max(16px, env(safe-area-inset-top)) + 58px); left: 16px; right: 76px; padding: 6px; border-radius: 14px; background: #fff; box-shadow: 0 5px 20px rgba(24,50,35,.15); }
+    .results.visible { display: grid; }
+    .results button { text-align: left; min-height: 44px; border: 0; border-radius: 9px; background: transparent; color: var(--ink); padding: 8px 10px; }
+    .results button:hover { background: #edf5ee; }
+    .maplibregl-ctrl-bottom-right { bottom: min(68dvh, 570px); }
+    .maplibregl-ctrl-attrib { font-size: 10px !important; }
+    @media (min-width: 720px) { .top { left: 24px; right: auto; width: 440px; top: 24px; } .sheet { left: 24px; bottom: 24px; right: auto; width: 390px; max-height: calc(100dvh - 115px); border-radius: 25px; border-bottom: 1px solid #fff; } .maplibregl-ctrl-bottom-right { bottom: 0; } .status { left: 24px; right: auto; width: 440px; top: 84px; } .results { left: 24px; right: auto; width: 380px; top: 82px; } }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: 0.01ms !important; scroll-behavior: auto !important; } }
   </style>
 </head>
 <body>
-  <div id="sidebar">
-    <h1>🌐 PyQGIS FastAPI Bridge</h1>
-    <p>Generyczny podgląd mapowy łączący MapLibre GL JS z backendem analitycznym.</p>
-    
-    <button onclick="fetchGeoJson()">📥 Fetch GeoJSON from API</button>
-    <div id="status" style="font-size: 12px; color: #64748b;"></div>
-    
-    <pre id="output">// Odpowiedź z serwera pojawi się tutaj</pre>
-  </div>
-
-  <div id="map"></div>
-
-  <script src="farmer-data.js"></script>
+  <main class="app">
+    <div id="map" aria-label="Mapa działek"></div>
+    <div class="top">
+      <form class="search" id="search-form" role="search">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4 4"/></svg>
+        <input id="parcel-number" aria-label="Numer działki" placeholder="Numer działki" autocomplete="off" />
+      </form>
+      <button class="locate" id="locate" type="button" aria-label="Znajdź moją lokalizację"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 3-7.5 18-2.7-7.8L3 10.5 21 3Z"/></svg></button>
+    </div>
+    <div id="results" class="results" aria-label="Wyniki wyszukiwania"></div>
+    <p id="status" class="status" role="status" aria-live="polite"></p>
+    <section class="sheet" aria-labelledby="heading">
+      <div class="handle" aria-hidden="true"></div>
+      <p class="eyebrow">Twoje pola · 1 z 3</p>
+      <h1 id="heading">Wybierz działkę</h1>
+      <p class="subtitle">Znajdź swoje pole na mapie lub dodaj je z pliku.</p>
+      <div id="selected" class="selected"><div class="selected-head"><span class="dot"></span><span id="selected-count"></span></div><div id="selected-list" class="selected-list"></div></div>
+      <div class="options">
+        <button class="option" id="search-option" type="button"><span class="icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3 7 21M17 3l-2 18M4 9h16M3 15h16"/></svg></span><span>Numer działki</span><svg class="chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>
+        <button class="option" id="map-option" type="button"><span class="icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 3 14 10-7 1-3 6L5 3Z"/></svg></span><span>Wybierz na mapie</span><svg class="chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>
+        <button class="option" id="import-option" type="button"><span class="icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3m-4 4 4-4 4 4M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg></span><span>Importuj plik</span><svg class="chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>
+      </div>
+      <button id="continue" class="primary" disabled type="button">Dalej</button>
+    </section>
+  </main>
   <script>
+    'use strict';
+    const provider = FarmerData.createProvider({ mode: 'mock' });
+    const selected = new Map();
+    const input = document.getElementById('parcel-number');
+    const status = document.getElementById('status');
+    const results = document.getElementById('results');
+    const next = document.getElementById('continue');
     const map = new maplibregl.Map({
-      container: 'map',
-      style: {
-        version: 8,
-        sources: {
-          osm: {
-            type: 'raster',
-            tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-            tileSize: 256,
-            attribution: '&copy; OpenStreetMap contributors'
-          }
-        },
-        layers: [{ id: 'osm', type: 'raster', source: 'osm' }]
-      },
-      center: [20.76, 52.175],
-      zoom: 13
+      container: 'map', center: [20.773, 52.175], zoom: 12.8,
+      style: { version: 8, sources: { osm: { type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256, attribution: '&copy; OpenStreetMap contributors' } }, layers: [{ id: 'osm', type: 'raster', source: 'osm' }] }
     });
-
-    async function fetchGeoJson() {
-      const status = document.getElementById('status');
-      const out = document.getElementById('output');
-      status.innerText = 'Odpytywanie API...';
-
-      // Przykładowy poligon w GeoJSON (np. pobrany z API)
-      const sampleGeoJson = {
-        "type": "FeatureCollection",
-        "features": [
-          {
-            "type": "Feature",
-            "properties": { "id": "PARCEL-001", "name": "Przykładowy poligon" },
-            "geometry": {
-              "type": "Polygon",
-              "coordinates": [
-                [
-                  [20.7510, 52.1810],
-                  [20.7580, 52.1815],
-                  [20.7575, 52.1765],
-                  [20.7505, 52.1760],
-                  [20.7510, 52.1810]
-                ]
-              ]
-            }
-          }
-        ]
-      };
-
-      try {
-        const res = await fetch('http://127.0.0.1:8000/api/v1/analysis/PARCEL-001');
-        const data = await res.json();
-        out.innerText = JSON.stringify(data, null, 2);
-        status.innerHTML = '<span style="color: green;">✓ Dane pobrane z API</span>';
-      } catch (e) {
-        out.innerText = JSON.stringify(sampleGeoJson, null, 2);
-        status.innerHTML = '<span style="color: #64748b;">(Tryb offline: załadowano lokalny GeoJSON)</span>';
-      }
-
-      // Rysowanie niebieskiego obrysu na mapie
-      if (map.getSource('sample-data')) {
-        map.getSource('sample-data').setData(sampleGeoJson);
-      } else {
-        map.addSource('sample-data', {
-          type: 'geojson',
-          data: sampleGeoJson
-        });
-        map.addLayer({
-          id: 'polygon-fill',
-          type: 'fill',
-          source: 'sample-data',
-          paint: {
-            'fill-color': '#0284c7',
-            'fill-opacity': 0.25
-          }
-        });
-        map.addLayer({
-          id: 'polygon-outline',
-          type: 'line',
-          source: 'sample-data',
-          paint: {
-            'line-color': '#0284c7',
-            'line-width': 2
-          }
-        });
-      }
+    /** Render the selected parcels and their removable labels. */
+    function renderSelection() {
+      const items = [...selected.values()];
+      const source = map.getSource('selected-parcels');
+      if (source) source.setData({ type: 'FeatureCollection', features: items.map(parcel => ({ type: 'Feature', geometry: parcel.geometry, properties: { id: parcel.parcel_id } })) });
+      const panel = document.getElementById('selected');
+      panel.classList.toggle('visible', items.length > 0);
+      document.getElementById('selected-count').textContent = `Wybrane działki: ${items.length}`;
+      const list = document.getElementById('selected-list');
+      list.replaceChildren();
+      items.forEach(parcel => {
+        const button = document.createElement('button');
+        button.type = 'button'; button.className = 'parcel-chip';
+        button.textContent = `${parcel.parcel_number} ×`;
+        button.setAttribute('aria-label', `Usuń działkę ${parcel.parcel_number}`);
+        button.addEventListener('click', () => { selected.delete(parcel.parcel_id); renderSelection(); });
+        list.appendChild(button);
+      });
+      next.disabled = items.length === 0;
     }
+    /** Add a selected result without claiming ownership. */
+    function selectParcel(parcel) {
+      selected.set(parcel.parcel_id, parcel); results.classList.remove('visible'); status.textContent = 'Działka dodana. Możesz wybrać kolejną.'; renderSelection();
+      const bounds = parcel.geometry.coordinates[0].reduce((box, point) => box.extend(point), new maplibregl.LngLatBounds());
+      const panel = document.querySelector('.sheet');
+      const mobile = window.matchMedia('(max-width: 719px)').matches;
+      const bottom = mobile ? Math.min(panel.offsetHeight + 20, Math.max(20, map.getContainer().clientHeight - 140)) : 40;
+      map.fitBounds(bounds, { padding: { top: 100, bottom, left: mobile ? 35 : 430, right: 35 }, maxZoom: 15, duration: 450 });
+    }
+    /** Offer one or more backend-provided matches for selection. */
+    function showMatches(parcels, autoSelect) {
+      results.replaceChildren(); results.classList.remove('visible');
+      if (!parcels.length) { status.textContent = 'Nie znaleziono działki. Spróbuj ponownie.'; return; }
+      if (parcels.length === 1 && autoSelect) { selectParcel(parcels[0]); return; }
+      status.textContent = parcels.length > 1 ? 'Znaleziono kilka działek. Wybierz właściwą.' : 'Wybierz działkę z wyników.';
+      parcels.forEach(parcel => { const button = document.createElement('button'); button.type = 'button'; button.textContent = parcel.parcel_number; button.addEventListener('click', () => selectParcel(parcel)); results.appendChild(button); });
+      results.classList.add('visible');
+    }
+    map.on('load', async () => {
+      const selectionColor = getComputedStyle(document.documentElement).getPropertyValue('--green').trim();
+      map.addSource('selected-parcels', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      map.addLayer({ id: 'selected-fill', type: 'fill', source: 'selected-parcels', paint: { 'fill-color': selectionColor, 'fill-opacity': .25 } });
+      map.addLayer({ id: 'selected-outline', type: 'line', source: 'selected-parcels', paint: { 'line-color': selectionColor, 'line-width': 2.5 } });
+      renderSelection();
+      try {
+        const { fields } = await provider.listFields();
+        map.addSource('sample-parcels', { type: 'geojson', data: { type: 'FeatureCollection', features: fields.map(field => ({ type: 'Feature', geometry: field.parcel.geometry, properties: {} })) } });
+        map.addLayer({ id: 'sample-outline', type: 'line', source: 'sample-parcels', paint: { 'line-color': '#617b68', 'line-width': 1.1, 'line-opacity': .65 } }, 'selected-fill');
+      } catch (_) { status.textContent = 'Nie można pobrać działek. Spróbuj ponownie.'; }
+    });
+    map.on('click', async event => {
+      try { const result = await provider.findParcels({ lon: event.lngLat.lng, lat: event.lngLat.lat }); showMatches(result.parcels, true); }
+      catch (_) { status.textContent = 'Nie można pobrać działek. Spróbuj ponownie.'; }
+    });
+    document.getElementById('search-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      if (!input.value.trim()) { status.textContent = 'Wpisz numer działki.'; return; }
+      try { const result = await provider.findParcels({ number: input.value }); showMatches(result.parcels, true); }
+      catch (_) { status.textContent = 'Nie można wyszukać działki. Spróbuj ponownie.'; }
+    });
+    document.getElementById('search-option').addEventListener('click', () => input.focus());
+    document.getElementById('map-option').addEventListener('click', () => { status.textContent = 'Dotknij działki na mapie, aby ją wybrać.'; });
+    document.getElementById('import-option').addEventListener('click', () => { status.textContent = 'Import plików będzie dostępny w kolejnym etapie.'; });
+    document.getElementById('locate').addEventListener('click', () => {
+      if (!navigator.geolocation) { status.textContent = 'Lokalizacja nie jest dostępna na tym urządzeniu.'; return; }
+      status.textContent = 'Ustalamy Twoją lokalizację…';
+      navigator.geolocation.getCurrentPosition(position => { map.flyTo({ center: [position.coords.longitude, position.coords.latitude], zoom: 15 }); status.textContent = 'Lokalizacja znaleziona. Dotknij działki na mapie.'; }, () => { status.textContent = 'Nie udało się ustalić lokalizacji. Możesz wyszukać działkę lub wybrać ją na mapie.'; });
+    });
+    next.addEventListener('click', () => { status.textContent = 'Wybór upraw dodamy w następnym etapie.'; });
   </script>
 </body>
 </html>
