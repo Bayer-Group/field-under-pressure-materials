@@ -427,14 +427,14 @@ scene(18, 21, (root) => {
   const head = words(root, 'What can your soil <span class="hl">do for you?</span>', 'heading', 0, 96)
   const sub = words(root, 'Plain-language cards · what it means · what you can do · how sure we are', 'sub', 0, 190)
   for (const x of [kick, head, sub]) css(x.box, { width: '1920px', textAlign: 'center' })
-  const S = 0.98, cardR = R.functions.card
+  const S = 0.8, cardR = R.functions.card.slice(0, 6)
   const cards = cardR.map((r) => tile(root, 'functions', r, S))
-  const cw = cardR[0][2] * S, ch = cardR[0][3] * S, gap = 26
-  const pos = cards.map((_, i) => i < 3
-    ? [960 - (3 * cw + 2 * gap) / 2 + i * (cw + gap), 262]
-    : [960 - (2 * cw + gap) / 2 + (i - 3) * (cw + gap), 262 + ch + gap])
-  const badges = R.functions.statusBadge
-  const stamps = [0, 4].map((i) => ({ i, e: el('div', 'glow', root) }))
+  const cw = cardR[0][2] * S, gap = 26
+  const rowH = [0, 1].map((row) => Math.max(...cardR.slice(row * 3, row * 3 + 3).map((r) => r[3] * S)))
+  const pos = cards.map((_, i) => [960 - (3 * cw + 2 * gap) / 2 + (i % 3) * (cw + gap), 262 + (i >= 3 ? rowH[0] + gap : 0)])
+  // "Watch"/"Fine" badges, matched to the card that contains them
+  const inside = (b, r) => b[0] >= r[0] && b[1] >= r[1] && b[0] < r[0] + r[2] && b[1] < r[1] + r[3]
+  const stamps = (R.functions.statusBadge ?? []).map((b) => ({ b, i: cardR.findIndex((r) => inside(b, r)), e: el('div', 'glow', root) })).filter((s) => s.i >= 0)
   return (t) => {
     kick.update(t, 18.05, 21.2); head.update(t, 18.1, 21.2, 0.06); sub.update(t, 18.35, 21.2, 0.025)
     cards.forEach((c, i) => {
@@ -443,14 +443,13 @@ scene(18, 21, (root) => {
       c.style.opacity = clamp(p * 1.3)
       place(c, x, y + (1 - p) * 520, `rotate(${rot}deg) scale(${0.85 + 0.15 * p})`)
     })
-    // pulse the "Watch" badges
-    for (const s of stamps) {
-      const b = badges[s.i], card = cardR[s.i], [x, y] = pos[s.i]
+    stamps.forEach((s, k) => {
+      const card = cardR[s.i], [x, y] = pos[s.i], b = s.b
       const bx = x + (b[0] - card[0]) * S, by = y + (b[1] - card[1]) * S
-      const ph = life(t, 19.6 + (s.i ? 0.2 : 0), 21.1, 0.3, 0.25, E.outBack)
+      const ph = life(t, 19.6 + k * 0.2, 21.1, 0.3, 0.25, E.outBack)
       css(s.e, { width: b[2] * S + 16 + 'px', height: b[3] * S + 16 + 'px', opacity: clamp(ph), borderColor: '#fbbf24', boxShadow: '0 0 30px rgba(251,191,36,.8)' })
       place(s.e, bx - 8, by - 8, `scale(${0.6 + 0.4 * ph + 0.06 * Math.sin(t * 14)})`)
-    }
+    })
   }
 })
 
@@ -458,44 +457,36 @@ scene(18, 21, (root) => {
 // 21-24 s  Nitrogen cycle
 // =====================================================================================
 scene(21, 24, (root) => {
-  const kick = words(root, '<b>06</b>The nitrogen story', 'kicker', 132, 62)
-  const head = words(root, 'Follow the <span class="hl">nitrogen.</span>', 'heading', 132, 96)
-  const nc = R['functions-ncycle'].ncycle[0], S = 1.25, X = 132, Y = 222
-  const diagram = tile(root, 'functions-ncycle', nc, S)
-  const box = R['functions-ncycle'].ncBox  // 0 air, 1 urea, 2 ammonium, 3 nitrate, 4 N2O, 5 N2
-  const toStage = (r) => [X + (r[0] - nc[0]) * S, Y + (r[1] - nc[1]) * S, r[2] * S, r[3] * S]
-  const steps = [
-    { b: 1, t0: 21.75, text: 'Fertiliser & manure', color: '#b5f26b' },
-    { b: 2, t0: 22.3, text: 'Ammonium · kept in the field', color: '#b5f26b' },
-    { b: 3, t0: 22.85, text: 'Nitrate · washes out with rain', color: '#fbbf24' },
-    { b: 4, t0: 23.35, text: 'N₂O · greenhouse gas', color: '#fb923c' },
-  ].map((s) => ({ ...s, r: toStage(box[s.b]), glow: el('div', 'glow', root), pill: el('div', 'pill', root, s.text) }))
-  const particle = el('div', 'abs', root)
-  css(particle, { width: '26px', height: '26px', borderRadius: '50%', background: '#fff', boxShadow: '0 0 0 6px rgba(181,242,107,.5), 0 0 40px #b5f26b', zIndex: 5 })
+  const kick = words(root, '<b>06</b>The nitrogen story', 'kicker', 0, 62)
+  const head = words(root, 'Follow the <span class="hl">nitrogen.</span>', 'heading', 0, 96)
+  for (const x of [kick, head]) css(x.box, { width: '1920px', textAlign: 'center' })
+  // The "Nitrogen cycle microbes" decision card, blown up, then its findings one by one.
+  const all = R.functions.card, r = all[4] ?? all[0], S = 2.1
+  const card = tile(root, 'functions', r, S)
+  const W = r[2] * S, H = r[3] * S, X = 960 - W / 2, Y = 250
+  const items = [
+    ['Full denitrification', '#fb923c'], ['Nitrate kept as ammonium', '#b5f26b'], ['Nitrification', '#fbbf24'],
+    ['Urea breakdown', '#60a5fa'], ['No N fixation found', '#b9d3c3'],
+  ].map(([text, c]) => el('div', 'tag', root, `<span class="dot" style="background:${c}"></span>${text}`))
+  let widths = null
   return (t) => {
     kick.update(t, 21.05, 24.2); head.update(t, 21.1, 24.2)
-    const rv = E.outExpo(prog(t, 20.95, 21.7))
-    diagram.style.clipPath = `circle(${rv * 120}% at 50% 50%)`
-    const z = 1 + 0.035 * prog(t, 21, 24)
-    place(diagram, X, Y, `scale(${z})`); diagram.style.transformOrigin = '50% 50%'
-    let current = null
-    steps.forEach((s, i) => {
-      const next = steps[i + 1]
-      const on = life(t, s.t0, next ? next.t0 + 0.1 : 24.1, 0.25, 0.2, E.outBack)
-      const [x, y, w, h] = s.r
-      css(s.glow, { width: w + 20 + 'px', height: h + 20 + 'px', opacity: clamp(on), borderColor: s.color, boxShadow: `0 0 0 6px ${s.color}44, 0 0 44px ${s.color}` })
-      place(s.glow, x - 10, y - 10)
-      s.pill.style.opacity = clamp(on)
-      const below = s.b === 4 || s.b === 1
-      place(s.pill, x + w / 2 - 170, below ? y + h + 22 : y - 74, `scale(${0.8 + 0.2 * on})`)
-      if (t >= s.t0) current = i
+    const p = E.outExpo(prog(t, 21.0, 21.7))
+    card.style.opacity = clamp(p * 1.5)
+    place(card, X, Y + (1 - p) * 80, `scale(${0.9 + 0.1 * p + 0.02 * prog(t, 21.7, 24)})`); card.style.transformOrigin = '50% 50%'
+    widths ??= items.map((e) => e.offsetWidth)
+    const rows = [items.slice(0, 3), items.slice(3)]
+    let k = 0
+    rows.forEach((row, ri) => {
+      const ws = row.map((_, j) => widths[k + j]), total = ws.reduce((a, b) => a + b, 0) + 18 * (row.length - 1)
+      let x = 960 - total / 2
+      row.forEach((e, j) => {
+        const q = E.outBack(prog(t, 21.8 + (k + j) * 0.35, 22.2 + (k + j) * 0.35))
+        e.style.opacity = clamp(q); place(e, x, Y + H + 60 + ri * 90 + (1 - q) * 30, `scale(${0.7 + 0.3 * q})`)
+        x += ws[j] + 18
+      })
+      k += row.length
     })
-    // a nitrogen atom travels box to box
-    const centers = steps.map((s) => [s.r[0] + s.r[2] / 2, s.r[1] + s.r[3] / 2])
-    const path = [[21.6, centers[0]], [21.75, centers[0]], [22.3, centers[1]], [22.85, centers[2]], [23.35, centers[3]], [24, centers[3]]]
-    const [px, py] = kf(t, path, E.inout3)
-    particle.style.opacity = life(t, 21.6, 24, 0.2, 0.2)
-    place(particle, px - 13, py - 13)
   }
 })
 
