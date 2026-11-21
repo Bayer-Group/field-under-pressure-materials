@@ -538,6 +538,10 @@ input {
   background-color: var(--temp-max);
 }
 
+.stat-dot-hourly {
+  background-color: var(--accent);
+}
+
 .zoom-slider-control {
   display: inline-flex;
   align-items: center;
@@ -600,6 +604,10 @@ input {
   stroke: var(--temp-min);
 }
 
+.temp-line-hourly {
+  stroke: var(--accent);
+}
+
 .temp-dot-max {
   fill: var(--temp-max);
   stroke: var(--bg-surface);
@@ -608,6 +616,12 @@ input {
 
 .temp-dot-min {
   fill: var(--temp-min);
+  stroke: var(--bg-surface);
+  stroke-width: 2;
+}
+
+.temp-dot-hourly {
+  fill: var(--accent);
   stroke: var(--bg-surface);
   stroke-width: 2;
 }
@@ -675,6 +689,10 @@ input {
 
 .legend-line-min {
   background-color: var(--temp-min);
+}
+
+.legend-line-hourly {
+  background-color: var(--accent);
 }
 
 .legend-line-frost {
