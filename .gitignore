@@ -37,7 +37,11 @@ metodyki/
 *.tif
 *.tiff
 *.zip
+*.bak
+
+# Cache per użytkownik wewnątrz app/data_app (pliki bazowe gminy_polska, reguly i wzorzec EKO są w repo)
+!app/data_app/
 app/data_app/active_*.parquet
 app/data_app/gminy_cache/
 app/data_app/farm_profile.json
-*.bak
+app/data_app/*_33uxr.parquet
