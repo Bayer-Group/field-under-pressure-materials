@@ -66,7 +66,6 @@ flowchart LR
 | `ml/model.py` | Sieć `VegetationLSTM` (Encoder–Decoder LSTM + kondycjonowanie statyczne + połączenie rezydualne) oraz zamaskowana funkcja straty `masked_smooth_l1_loss` i metryki MAE/RMSE |
 | `ml/train.py` | Pętla treningowa z AdamW, `ReduceLROnPlateau`, obcinaniem gradientów, wyborem urządzenia (`cuda`/`mps`/`cpu`) i zapisem samowystarczalnego checkpointu `.pt` |
 | `ml/predict.py` | Wczytywanie checkpointu (`load_trained_model`) i prognoza 7-dniowa (`predict_field_7days`) w formacie gotowym dla `evaluate_field_calendar` |
-| `ml/test_ml.py` | Testy jednostkowe i end-to-end (GeoTIFF, Bayer+IMERG, trening demo, inferencja, kalendarz) |
 | `ml/DATA_AND_MODEL_SPEC.md` | Niniejsza dokumentacja |
 
 ---
@@ -91,8 +90,8 @@ Pipeline treningowy oczekuje trzech znormalizowanych tabel Parquet w katalogu `m
 | `om` | `float` | `%` | Materia organiczna |
 | `cec` | `float` | cmol(c)/kg | Pojemność wymiany kationów |
 | `bulk_density` | `float` | kg/dm³ | Gęstość objętościowa |
-| `wilting_point`, `field_capacity` | `float` | m³/m³ | Progi retencji z `kw/soil_bonification.py` |
-| `bonitation_score`, `klasa_bonitacyjna`, `permeability`, `water_retention`, `soilTexture` | `float / string` | metadane | Informacje pomocnicze dla panelu i reguł agronomicznych |
+| `wilting_point`, `field_capacity`, `awc_mm_per_m` | `float` | m³/m³ / mm/m | Parametry retencji Saxtona & Rawlsa (2006) z `kw/soil_bonification.py` |
+| `band_ph`, `band_om`, `band_cec`, `permeability`, `water_retention`, `soil_variability`, `soilTexture` | `string` | metadane | Natywne pasma ISRIC SoilGrids oraz zmienność wewnętrzna i reguły agronomiczne |
 
 > [!TIP]
 > W `bk/fields_crops.geojson` część pól ma `crop_code = NaN` (np. klasy poza `ACCEPTED_CROPS` lub udział < 50%) oraz inne uprawy (np. `1120` jęczmień, `1320` burak). Domyślnie `build_fields_master(..., only_mvp_crops=False)` mapuje je na kategorię `"inne"`, dzięki czemu nie tracimy przykładów treningowych dla LSTM; ustawienie `only_mvp_crops=True` zawęża tabelę wyłącznie do pszenicy, kukurydzy i rzepaku.
@@ -173,7 +172,7 @@ Standaryzacja (`FeatureScaler`) jest zawsze dopasowywana **wyłącznie na oknach
 
 1. **Spójne granice pól (`bk/fields_crops.geojson` vs `kw/fields.geojson`):**
    - Obecnie `bk/fields_crops.geojson` zawiera **408 pól** w woj. mazowieckim (`lon ~20.70–20.95, lat ~52.58–52.68`), natomiast `kw/fields.geojson` zawiera **66 pól** w woj. lubuskim (`lon ~15.70–15.85, lat ~52.58–52.65`).
-   - Przed uruchomieniem `build_fields_master` należy przeliczyć `prepare_all_soil_profiles(geojson_path="bk/fields_crops.geojson", ...)` z `kw/soil_bonification.py`, aby `fields_soil_profiles.parquet` i `bk/fields_crops.geojson` miały **identyczne pola i `field_id`**.
+   - Przed uruchomieniem `build_fields_master` należy przeliczyć `prepare_all_soil_profiles(geojson_path="bk/fields_crops.geojson", ...)` z `kw/soil_bonification.py` (moduł potrafi też sam wywołać `CropDetector` z `bk/assign_crops.py` przez `assign_crops_year`), aby `fields_soil_profiles.parquet` i `bk/fields_crops.geojson` miały **identyczne pola, uprawy i `field_id`**.
 2. **Daty w nazwach plików z `satelite_img_downloader.ipynb`:**
    - W notatniku przykładowa ścieżka to `test/wycinek.tif` (bez daty w nazwie). Przy masowym pobieraniu scen historycznych do treningu warto zapisywać pliki np. jako `sentinel_2024-06-24.tif` albo przekazywać do `extract_satellite_indices_from_tiffs` jawną listę `[("2024-06-24", "sciezka.tif"), ...]`.
 3. **Inferencja live na listopad 2026 (`kw/meteo.py`):**

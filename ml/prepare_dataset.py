@@ -61,6 +61,7 @@ def build_fields_master(
 
     soil_df = pd.read_parquet(soil_profiles_parquet)
     soil_df["field_id"] = soil_df["field_id"].astype(str)
+    soil_df = soil_df.drop(columns=[c for c in ("crop", "crop_code") if c in soil_df.columns])
 
     merged = soil_df.merge(crops_df, on="field_id", how="inner")
     merged = merged[merged["area_ha"] >= min_area_ha].copy()
@@ -81,12 +82,15 @@ def build_fields_master(
         "om",
         "cec",
         "bulk_density",
-        "bonitation_score",
-        "klasa_bonitacyjna",
+        "band_ph",
+        "band_om",
+        "band_cec",
+        "soil_variability",
         "permeability",
         "water_retention",
         "wilting_point",
         "field_capacity",
+        "awc_mm_per_m",
         "soilTexture",
     ]
     present_cols = [c for c in ordered_cols if c in merged.columns]
@@ -436,12 +440,14 @@ def generate_synthetic_demo_dataset(
                 "om": round(float(rng.uniform(2.5, 5.5)), 2),
                 "cec": round(float(rng.uniform(12.0, 22.0)), 2),
                 "bulk_density": round(float(rng.uniform(1.25, 1.48)), 2),
-                "bonitation_score": round(float(rng.uniform(45.0, 82.0)), 1),
-                "klasa_bonitacyjna": "IIIb" if not is_sandy else "IVa",
+                "band_ph": "moderate",
+                "band_om": "high",
+                "band_cec": "moderate",
                 "permeability": "wysoka" if is_sandy else "srednia",
                 "water_retention": "niska" if is_sandy else "srednia",
                 "wilting_point": 0.08 if is_sandy else 0.13,
                 "field_capacity": 0.18 if is_sandy else 0.28,
+                "awc_mm_per_m": 100.0 if is_sandy else 150.0,
                 "soilTexture": "Sandy Loam" if is_sandy else "Loam",
             }
         )
