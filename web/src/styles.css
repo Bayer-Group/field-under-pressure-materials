@@ -9,6 +9,8 @@
   --line-2: #cdd3cd;
   --green: #1f6f43;
   --green-wash: #e7f1eb;
+  --good: #1f7a45; /* low risk in the crop risk grid */
+  --bad: #c0262d; /* high risk in the crop risk grid */
   --visit: #c2410c;
   --photo: #1d4ed8;
   --dna: #7c3aed;
@@ -343,6 +345,12 @@ button { font: inherit; color: inherit; }
 .risk .chart-head h2 { margin: 0; }
 .risk .muted { color: var(--muted); }
 .risk-note { margin: 8px 0; font-size: 0.8rem; color: var(--muted); }
+.risk-note .key { font-weight: 600; }
+.risk-note .key::before { content: ''; display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 4px; vertical-align: -0.5px; }
+.risk-note .key.good { color: var(--good); }
+.risk-note .key.good::before { background: var(--good); }
+.risk-note .key.bad { color: var(--bad); }
+.risk-note .key.bad::before { background: var(--bad); }
 .risk .segmented { margin-bottom: 6px; }
 .risk-scroll { overflow-x: auto; margin: 8px 0 4px; }
 .heat { display: grid; gap: 2px; align-items: stretch; min-width: max-content; width: 100%; }

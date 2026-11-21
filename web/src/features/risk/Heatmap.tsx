@@ -3,7 +3,13 @@ import { riskHref } from '../../router'
 
 export interface Selection { plot: string; crop: string }
 
-const pct = (t: number) => Math.round(8 + 82 * t)
+/** Cell colour for a value at `t` (0 = lowest risk, 1 = highest): green below the middle, red above it,
+ *  stronger the further from the middle. */
+function tone(t: number): { background: string; color: string } {
+  const strength = Math.round(8 + 82 * Math.abs(t - 0.5) * 2)
+  const hue = t < 0.5 ? 'var(--good)' : 'var(--bad)'
+  return { background: `color-mix(in srgb, ${hue} ${strength}%, transparent)`, color: strength > 55 ? '#fff' : 'var(--ink)' }
+}
 
 /** Plot x crop grid of risk indices. Shading is per crop column, or on one scale for every cell. */
 export function Heatmap({ rows, plotId, unit, selected, across, nUnits, onSelect }: {
@@ -37,12 +43,11 @@ export function Heatmap({ rows, plotId, unit, selected, across, nUnits, onSelect
                 const rank = 1 + r.peers.filter((q) => q.risk_index > v).length
                 const text = `${p}, ${r.label}: ${v.toFixed(2)}, rank ${rank} of ${r.peers.length}`
                 const [lo, hi] = ranges[i]
-                const x = pct(hi > lo ? (v - lo) / (hi - lo) : 0.5)
                 const on = selected.plot === p && selected.crop === r.crop
                 return (
                   <button key={r.crop} className={`heat-cell${on ? ' on' : ''}`} aria-label={text} title={text}
                     aria-pressed={on} onClick={() => onSelect({ plot: p, crop: r.crop })}
-                    style={{ background: `color-mix(in srgb, var(--green) ${x}%, transparent)`, color: x > 55 ? '#fff' : 'var(--ink)' }}>
+                    style={tone(hi > lo ? (v - lo) / (hi - lo) : 0.5)}>
                     {v.toFixed(2)}
                   </button>
                 )

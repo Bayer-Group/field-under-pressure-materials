@@ -198,10 +198,10 @@ function PlotHead({ plot, plots, tab, onOpen }: { plot: Plot; plots: Plot[]; tab
       <h1>Plot {plot.plot_id}</h1>
       <p className="muted plot-sub">{siteName(plot.site)} · {formatLatLon(plot.lat, plot.lon)} · {plot.half_m * 2} × {plot.half_m * 2} m (yellow square on the map)</p>
       <nav className="tabs" ref={tabs} aria-label="What to show for this plot">
-        <a href={greennessHref(plot.plot_id)} aria-current={tab === 'greenness' ? 'page' : undefined}>Greenness over time</a>
         <a href={microbesHref(plot.plot_id)} aria-current={tab === 'microbes' ? 'page' : undefined}>Soil microbes</a>
         <a href={functionsHref(plot.plot_id)} aria-current={tab === 'functions' ? 'page' : undefined}>Soil characteristics</a>
         <a href={riskHref(plot.plot_id)} aria-current={tab === 'risk' ? 'page' : undefined}>Crop disease risk</a>
+        <a href={greennessHref(plot.plot_id)} aria-current={tab === 'greenness' ? 'page' : undefined}>Greenness over time</a>
         <a href={planHref(plot.plot_id)} aria-current={tab === 'plan' ? 'page' : undefined}>Treatment plan</a>
       </nav>
     </div>
