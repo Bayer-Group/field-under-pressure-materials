@@ -1,9 +1,11 @@
 # Read contract for the front end and QGIS (PROPOSAL)
 
 Status: **proposal of the database owner**, to be accepted or corrected by the front end (#15) and QGIS (#14, #12) owners in the issues.
-Nothing is implemented in the API yet (#21). What exists in the database: the views of schema `serve`
-(`docker/README.md`, "Serving layer"). The API is a thin `SELECT` over those views, so the farmer front end and QGIS see the same
-data and no business logic lives in the API or in the readers.
+**The read endpoints below are implemented** (`backend/app/api/v1/endpoints/farm.py`, under `/api/v1`; interactive documentation at
+`/docs`), except the two `POST` writes (#51). Demo logins: `analyst` and `farmer001` … `farmer050`, all with the password `demo`
+(`scripts/generate_mock_farmers.py`). Where to reach the API: `docker/VM.md`. The views of schema `serve` (`docker/README.md`,
+"Serving layer") are the single source: the API is a thin `SELECT` over them, so the farmer front end and QGIS see the same data and
+no business logic lives in the API or in the readers.
 
 ## 1. Rules
 
@@ -58,8 +60,9 @@ Fields can be `null` (for example `risk_class` when `status` is `out_of_window`)
 
 ## 4. Open points
 
-- The database driver of the backend is a team decision (#21); until then the endpoints stay on paper. The views exist and can be
-  tried in any SQL client.
+- The database driver of the backend is `psycopg` (the one the scripts use), chosen so that the front end and QGIS can test now; it is
+  one dependency and can be replaced behind `backend/app/core/db.py` if the team decides otherwise (#21).
+- Fix what does not fit: shapes, names, missing fields. The API is easy to change; say so in #48 (front end) or #49 (QGIS).
 - Authentication is a demonstration only (login page, hashed passwords, signed token, isolation on the server); a production system
   would use OIDC.
 - Paging of `GET /grid/risk` (about 2,400 cells per day is small enough for one answer).

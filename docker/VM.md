@@ -104,6 +104,21 @@ Without a local `psql`: `docker run --rm -it --network host postgres:15 psql -h 
 **QGIS:** Layer → Data Source Manager → PostgreSQL → New connection: host `localhost`, port `5433`, database
 `spatial_db`, user and password as above.
 
+## Backend API on the VM
+
+The backend (FastAPI, `docker/backend.Dockerfile`) runs as the compose service `backend` next to the database and reads it over
+the internal compose network, so the database port stays closed. The owner deploys it with `scripts/provision_vm.sh deploy`
+(updates the code, adds `AUTH_SECRET` to the VM's `.env` if missing, builds and starts only `backend`, checks `/health`). Before the
+first deploy, apply the database migrations (`docker/migrations/003`-`005`) and, for the demo logins, run
+`scripts/generate_mock_farmers.py`. Endpoints and logins: `docs/serve_read_contract.md`; interactive documentation at `/docs`.
+
+Two ways to reach the API (the plain HTTP API carries the demo password, so it is not for anything real):
+- **SSH tunnel** (no firewall change, needs access to the project): `scripts/provision_vm.sh api-tunnel`, then use
+  `http://localhost:8000/api/v1` and `http://localhost:8000/docs`.
+- **Open the port for chosen addresses**: `API_SOURCE_RANGES=<cidr,...> scripts/provision_vm.sh firewall` (a rule for the API port
+  only, with no default range on purpose; the database port is never opened). Then use `http://<VM external IP>:8000/api/v1`.
+  A page served over HTTPS cannot call a plain HTTP API (mixed content): for that the API needs HTTPS in front of it.
+
 ## Who needs the tunnel (and who does not)
 
 Only people and programs that talk to the database **directly**: the person loading data, someone debugging the

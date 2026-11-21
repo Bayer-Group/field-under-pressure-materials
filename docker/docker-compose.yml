@@ -22,6 +22,22 @@ services:
       timeout: 3s
       retries: 10
 
+  # 1b. Backend API (FastAPI): reads the serve views, demo login. Build: docker/backend.Dockerfile
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/backend.Dockerfile
+    container_name: spatial_backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-gis_user}:${POSTGRES_PASSWORD:-secretpassword}@postgis:5432/${POSTGRES_DB:-spatial_db}
+      AUTH_SECRET: ${AUTH_SECRET:-}      # empty: random at start (tokens expire on restart)
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    depends_on:
+      postgis:
+        condition: service_healthy
+
   # 2. Local S3 for COG raster files (MinIO)
   minio:
     image: minio/minio:latest

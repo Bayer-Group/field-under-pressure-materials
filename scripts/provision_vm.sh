@@ -5,12 +5,15 @@
 #   scripts/provision_vm.sh create [-y]   # create the VM (billable resource, asks for confirmation)
 #   scripts/provision_vm.sh setup         # install Docker, clone the repo, create .env, start PostGIS
 #   scripts/provision_vm.sh tunnel        # SSH tunnel to the database: localhost:$LOCAL_PORT -> VM:5432
+#   scripts/provision_vm.sh deploy        # update the code on the VM and (re)start the backend API container
+#   scripts/provision_vm.sh api-tunnel    # SSH tunnel to the API: localhost:$API_PORT -> VM:$API_PORT
+#   API_SOURCE_RANGES=<cidr,...> scripts/provision_vm.sh firewall   # open the API port for the given addresses only
 #   scripts/provision_vm.sh status|start|stop
 #
 # Configuration via environment variables (defaults in parentheses):
 #   GCLOUD_CONFIG (geoearth)  gcloud configuration name: account, project, region
 #   VM_NAME (fup-vm)  ZONE (europe-central2-a)  MACHINE_TYPE (e2-standard-4)  DISK_GB (100)
-#   REPO_URL, BRANCH (team/geoearth-junction)  LOCAL_PORT (5433)
+#   REPO_URL, BRANCH (team/geoearth-junction)  LOCAL_PORT (5433)  API_PORT (8000)
 #   DRY_RUN=1  only print the state-changing commands, do not run them
 #
 # Rules:
@@ -29,6 +32,7 @@ DISK_GB="${DISK_GB:-100}"
 REPO_URL="${REPO_URL:-https://github.com/geoearth-junction/field-under-pressure-materials.git}"
 BRANCH="${BRANCH:-team/geoearth-junction}"
 LOCAL_PORT="${LOCAL_PORT:-5433}"
+API_PORT="${API_PORT:-8000}"
 DRY_RUN="${DRY_RUN:-0}"
 
 # gcloud configuration for this process only (does not switch the active configuration in other terminals).
@@ -149,6 +153,61 @@ REMOTE
   echo "Done. Database access: scripts/provision_vm.sh tunnel"
 }
 
+cmd_deploy() {
+  vm_exists || die "VM '$VM_NAME' does not exist (run create first)"
+  [ "$(vm_status)" = "RUNNING" ] || die "VM '$VM_NAME' is not running (status: $(vm_status)); run: start"
+  if [ "$DRY_RUN" = "1" ]; then
+    echo "[DRY_RUN] ssh to $VM_NAME: update $BRANCH, ensure AUTH_SECRET in .env, docker compose up -d --build backend, health check"
+    return 0
+  fi
+  gcloud compute ssh "$VM_NAME" --zone "$ZONE" --command "BRANCH='$BRANCH' API_PORT='$API_PORT' bash -s" <<'REMOTE'
+set -euo pipefail
+DIR="$HOME/field-under-pressure-materials"
+cd "$DIR"
+git fetch origin "$BRANCH"
+git checkout "$BRANCH"
+git pull --ff-only origin "$BRANCH"
+[ -f .env ] || { echo "ERROR: no .env (run setup first)." >&2; exit 1; }
+if ! grep -q '^AUTH_SECRET=.\+' .env; then
+  sed -i '/^AUTH_SECRET=/d' .env
+  echo "AUTH_SECRET=$(openssl rand -hex 32)" >> .env
+  echo "Added AUTH_SECRET to .env (not printed)."
+fi
+grep -q '^BACKEND_PORT=' .env || echo "BACKEND_PORT=$API_PORT" >> .env
+sudo docker compose --env-file .env -f docker/docker-compose.yml up -d --build backend
+for _ in $(seq 1 30); do
+  curl -fsS "http://127.0.0.1:${API_PORT}/health" && echo && exit 0
+  sleep 2
+done
+echo "ERROR: the backend did not answer on port ${API_PORT}; see: sudo docker logs spatial_backend" >&2
+exit 1
+REMOTE
+  echo "Done. Locally: scripts/provision_vm.sh api-tunnel  (or open the port with: API_SOURCE_RANGES=... scripts/provision_vm.sh firewall)"
+}
+
+cmd_firewall() {
+  [ -n "${API_SOURCE_RANGES:-}" ] || die "set API_SOURCE_RANGES (comma-separated CIDR ranges allowed to reach the API, e.g. 203.0.113.7/32); there is no default on purpose"
+  if gcloud compute firewall-rules describe fup-allow-api >/dev/null 2>&1; then
+    echo "Firewall rule fup-allow-api already exists; left unchanged:"
+    gcloud compute firewall-rules describe fup-allow-api --format='value(sourceRanges.list(),allowed[].map().firewall_rule().list())'
+    return 0
+  fi
+  echo "Opening TCP $API_PORT of VMs tagged 'fup' to: $API_SOURCE_RANGES (the database port 5432 stays closed)"
+  run gcloud compute firewall-rules create fup-allow-api --direction=INGRESS --action=allow \
+    --rules="tcp:${API_PORT}" --source-ranges="$API_SOURCE_RANGES" --target-tags=fup \
+    --description="Backend API of field-under-pressure (demo)"
+}
+
+cmd_api_tunnel() {
+  vm_exists || die "VM '$VM_NAME' does not exist"
+  echo "Tunnel: localhost:${API_PORT} -> ${VM_NAME}:${API_PORT} (Ctrl+C to stop). The API is then at http://localhost:${API_PORT}/api/v1 and the docs at /docs."
+  if [ "$DRY_RUN" = "1" ]; then
+    echo "[DRY_RUN] gcloud compute ssh $VM_NAME --zone $ZONE -- -N -L ${API_PORT}:localhost:${API_PORT}"
+    return 0
+  fi
+  exec gcloud compute ssh "$VM_NAME" --zone "$ZONE" -- -N -L "${API_PORT}:localhost:${API_PORT}"
+}
+
 cmd_tunnel() {
   vm_exists || die "VM '$VM_NAME' does not exist"
   echo "Tunnel: localhost:${LOCAL_PORT} -> ${VM_NAME}:5432 (Ctrl+C to stop). In QGIS/psql use host localhost, port ${LOCAL_PORT}."
@@ -178,13 +237,16 @@ usage() { sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'; }
 main() {
   local cmd="${1:-}"; shift || true
   case "$cmd" in
-    create|setup|tunnel|status|start|stop) check_env ;;
+    create|setup|deploy|firewall|api-tunnel|tunnel|status|start|stop) check_env ;;
     ""|-h|--help|help) usage; exit 0 ;;
     *) usage >&2; die "unknown command: $cmd" ;;
   esac
   case "$cmd" in
     create) cmd_create "$@" ;;
     setup)  cmd_setup ;;
+    deploy) cmd_deploy ;;
+    firewall) cmd_firewall ;;
+    api-tunnel) cmd_api_tunnel ;;
     tunnel) cmd_tunnel ;;
     status) cmd_status ;;
     start)  cmd_power start ;;
