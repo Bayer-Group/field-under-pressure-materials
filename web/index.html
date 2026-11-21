@@ -103,6 +103,63 @@
     .risk-area-name { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 13px; }
     .risk-area-dot { width: 9px; height: 9px; flex: none; border-radius: 50%; background: #89928c; } .risk-dot-low { background: #328250; } .risk-dot-medium { background: #d2932b; } .risk-dot-high { background: #c7463e; }
     .risk-note { margin: 0 2px; font-size: 11px; } .risk-empty { color: #607266; font-size: 13px; line-height: 1.4; }
+    /* Field conditions: scopes, day stepper, area details and map markers. */
+    .risk-none { background: transparent; color: #5d6c63; box-shadow: inset 0 0 0 1px rgba(32,62,45,.22); }
+    .fc-dot { width: 9px; height: 9px; flex: none; border-radius: 50%; background: #c3cac5; box-shadow: inset 0 0 0 1px rgba(32,62,45,.25); }
+    .tone-low.fc-dot, .fc-marker.tone-low { background: #328250; } .tone-medium.fc-dot, .fc-marker.tone-medium { background: #d2932b; } .tone-high.fc-dot, .fc-marker.tone-high { background: #c7463e; } .tone-unknown.fc-dot, .fc-marker.tone-unknown { background: #89928c; }
+    .tone-low.fc-dot, .tone-medium.fc-dot, .tone-high.fc-dot, .tone-unknown.fc-dot { box-shadow: none; }
+    .fc-scopes { display: flex; gap: 6px; margin: 0 -20px; padding: 2px 20px 3px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; scroll-padding-inline: 20px; }
+    .fc-scopes::-webkit-scrollbar { display: none; }
+    .fc-chip { flex: none; display: inline-flex; align-items: center; gap: 7px; min-height: 44px; padding: 0 14px; border: 1px solid rgba(32,62,45,.12); border-radius: 14px; background: rgba(255,255,255,.72); color: #2f4a39; font-size: 13px; font-weight: 650; white-space: nowrap; transition: background 160ms ease, color 160ms ease, transform 100ms ease; }
+    .fc-chip:active { transform: scale(.97); }
+    .fc-chip[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: #fff; }
+    .fc-chip[aria-pressed="true"] .fc-dot { box-shadow: 0 0 0 2px #fff; }
+    .fc-scopes + .fc-scopes { margin-top: -6px; }
+    .fc-scopes + .fc-scopes .fc-chip { min-height: 44px; border-radius: 22px; font-size: 12px; }
+    .fc-day-wrap { display: grid; gap: 4px; }
+    .fc-day { position: relative; display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; gap: 6px; padding: 4px; border-radius: 16px; background: rgba(214,229,218,.7); touch-action: pan-y; user-select: none; }
+    .fc-day-step { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 12px; background: #fff; color: var(--green); box-shadow: 0 1px 4px rgba(20,50,33,.1); transition: opacity 160ms ease, transform 100ms ease; }
+    .fc-day-step:active:not(:disabled) { transform: scale(.94); }
+    .fc-day-step:disabled { opacity: .3; background: transparent; box-shadow: none; cursor: default; }
+    .fc-day-step svg { width: 20px; height: 20px; stroke-width: 2.2; }
+    .fc-day-label { display: grid; justify-items: center; gap: 1px; min-height: 44px; padding: 3px 0; border: 0; background: transparent; color: var(--ink); font-variant-numeric: tabular-nums; }
+    .fc-day-label strong { font-size: 15px; letter-spacing: -.01em; }
+    .fc-day-label small { color: #5f7266; font-size: 11px; }
+    .fc-day-input { position: absolute; left: 50%; bottom: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+    .fc-day-note { margin: 0 4px; color: #6a7c6f; font-size: 11px; text-align: center; }
+    .fc-summary, .fc-level { padding: 15px 16px; border-radius: 18px; background: #edf0ed; color: #34463b; }
+    .fc-summary.tone-low, .fc-level.tone-low { background: #e0f1e3; color: #21623a; }
+    .fc-summary.tone-medium, .fc-level.tone-medium { background: #fff0d3; color: #7a4c0c; }
+    .fc-summary.tone-high, .fc-level.tone-high { background: #c7463e; color: #fff; }
+    .fc-summary.tone-none, .fc-level.tone-none { background: transparent; box-shadow: inset 0 0 0 1.5px rgba(32,62,45,.2); }
+    .fc-summary-title { margin: 0; font-size: 17px; font-weight: 750; letter-spacing: -.02em; line-height: 1.25; }
+    .fc-summary-note { margin: 4px 0 0; font-size: 12px; line-height: 1.4; opacity: .88; }
+    .fc-level-kicker { margin: 0; font-size: 11px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; opacity: .8; }
+    .fc-level-title { margin: 3px 0 0; font-size: 28px; font-weight: 760; letter-spacing: -.04em; line-height: 1.1; }
+    .fc-level-note { margin: 7px 0 0; font-size: 13px; line-height: 1.42; }
+    .fc-level .crop-link { color: inherit; text-decoration: underline; }
+    .fc-row-text { display: grid; gap: 2px; min-width: 0; }
+    .fc-row-text small { overflow: hidden; color: #66766d; font-size: 11px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+    .fc-list { max-height: 182px; }
+    .fc-section { padding: 14px 16px; border: 1px solid rgba(255,255,255,.9); border-radius: 18px; background: rgba(255,255,255,.78); }
+    .fc-section h2 { margin: 0 0 8px; color: #344f3d; font-size: 13px; letter-spacing: -.01em; }
+    .fc-facts { display: grid; gap: 10px; margin: 0; font-variant-numeric: tabular-nums; }
+    .fc-facts div { display: flex; justify-content: space-between; gap: 14px; font-size: 13px; }
+    .fc-facts dt { flex: none; color: var(--muted); }
+    .fc-facts dd { display: grid; gap: 2px; margin: 0; font-weight: 650; text-align: right; }
+    .fc-facts dd small { color: #708074; font-size: 11px; font-weight: 500; line-height: 1.35; }
+    .fc-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
+    .fc-soon { display: grid; justify-items: center; gap: 1px; min-height: 52px; padding: 6px 8px; }
+    .fc-soon small { color: #7a8a7f; font-size: 10px; font-weight: 600; }
+    .fc-notice { margin: 10px 0 0; padding: 9px 11px; border-radius: 11px; background: #f2f4f2; color: #4d5f53; font-size: 12px; line-height: 1.4; }
+    .fc-marker { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px 0 10px; border: 2px solid #fff; border-radius: 18px; color: #fff; font: 700 12px/1 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; white-space: nowrap; box-shadow: 0 3px 12px rgba(20,44,30,.3); cursor: pointer; }
+    .fc-marker::before { content: ''; position: absolute; inset: -6px; }
+    .fc-marker { background: #c3cac5; color: #263a2e; }
+    .fc-marker.tone-low, .fc-marker.tone-medium, .fc-marker.tone-high, .fc-marker.tone-unknown { color: #fff; }
+    .fc-marker-dot { display: none; }
+    .fc-marker-flag { padding: 3px 6px; border-radius: 9px; background: #fff; color: #a23730; font-size: 10px; letter-spacing: .02em; }
+    .fc-marker.tone-high { box-shadow: 0 0 0 4px rgba(199,70,62,.28), 0 3px 12px rgba(20,44,30,.3); }
+    .fc-marker.active { outline: 3px solid #15221b; outline-offset: 1px; }
     .sandbox-choice { display: grid; gap: 8px; }
     .sandbox-choice .crop-outline { text-align: left; }
     .geometry-popup-message { margin: 8px 0 0; color: #5c7062; font-size: 13px; line-height: 1.4; }
@@ -419,7 +476,7 @@
     @keyframes drag-pointer { 0%,12% { opacity: 0; transform: translate(18px, 22px); } 20% { opacity: 1; transform: translate(18px, 22px); } 54%,66% { opacity: 1; transform: translate(157px, 94px); } 78%,100% { opacity: 0; transform: translate(157px, 94px); } }
     .sheet.collapsed { overflow: hidden; padding-bottom: max(8px, env(safe-area-inset-bottom)); }
     .drawer-content { opacity: 1; overflow: visible; transition: opacity 150ms ease; }
-    .sheet.collapsed .drawer-content, .sheet.collapsed .crop-panel { height: 0; opacity: 0; overflow: hidden; pointer-events: none; }
+    .sheet.collapsed .drawer-content, .sheet.collapsed .crop-panel, .sheet.collapsed .sandbox-panel { height: 0; opacity: 0; overflow: hidden; pointer-events: none; }
     .drawer-toggle { display: block; width: 100%; border: 0; background: transparent; padding: 1px 0 10px; cursor: pointer; touch-action: none; user-select: none; }
     .drawer-toggle .handle { display: block; margin: 1px auto 4px; }
     .drawer-toggle span:last-child { display: none; color: var(--green); font-size: 11px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
@@ -656,13 +713,14 @@
     }
     /** Expand or collapse the selection panel. */
     function setDrawer(open) {
-      if (sheet.classList.contains('collapsed') === !open) { document.getElementById('drawer-content').inert = !open; document.getElementById('crop-panel').inert = !open; return; }
+      if (sheet.classList.contains('collapsed') === !open) { document.getElementById('drawer-content').inert = !open; document.getElementById('crop-panel').inert = !open; document.getElementById('sandbox-panel').inert = !open; return; }
       const previousHeight = sheet.getBoundingClientRect().height;
       if (drawerResizeAnimation) { drawerResizeAnimation.cancel(); drawerResizeAnimation = null; }
       sheet.classList.add('resizing');
       sheet.classList.toggle('collapsed', !open);
       document.getElementById('drawer-content').inert = !open;
       document.getElementById('crop-panel').inert = !open;
+      document.getElementById('sandbox-panel').inert = !open;
       drawerToggle.setAttribute('aria-expanded', String(open));
       drawerToggle.setAttribute('aria-label', open ? 'Collapse panel' : 'Open panel');
       animateDrawerResize(previousHeight);
@@ -731,6 +789,7 @@
       sheet.classList.toggle('collapsed', !open);
       document.getElementById('drawer-content').inert = !open;
       document.getElementById('crop-panel').inert = !open;
+      document.getElementById('sandbox-panel').inert = !open;
       drawerToggle.setAttribute('aria-expanded', String(open));
       drawerToggle.setAttribute('aria-label', open ? 'Collapse panel' : 'Open panel');
       animateDrawerResize(currentHeight);
@@ -1271,8 +1330,17 @@
     let sandboxToday = null;
     let sandboxSelected = null;
     let sandboxRequest = 0;
-    let sandboxHistoryRequest = 0;
     let sandboxOpenVersion = 0;
+    let sandboxSets = [];
+    let sandboxView = { mode: 'farm', setId: null };
+    let sandboxDay = null;
+    let sandboxMarkers = [];
+    let sandboxNotice = '';
+    const sandboxHistory = new Map();
+    const sandboxDetails = new Map();
+    // Initial UI-only threshold for grouping neighbouring areas; it does not change stored geometries.
+    const SANDBOX_GROUP_DISTANCE_M = 100;
+    const sandboxRank = { low: 1, medium: 2, high: 3 };
     const sandboxDialog = document.getElementById('sandbox-dialog');
     const sandboxPanel = document.getElementById('sandbox-panel');
     const sandboxError = document.getElementById('sandbox-error');
@@ -1282,127 +1350,467 @@
       if (value !== undefined) element.textContent = value;
       return element;
     };
-    function sandboxDate(offset) {
-      const date = new Date(`${sandboxToday}T00:00:00Z`);
+    /** Return the ISO day `offset` days after `from` (the backend's today by default). */
+    function sandboxDate(offset, from = sandboxToday) {
+      const date = new Date(`${from}T00:00:00Z`);
       date.setUTCDate(date.getUTCDate() + offset);
       return date.toISOString().slice(0, 10);
     }
-    function sandboxLabel(id) { return sandboxCrops.find(item => item.farmer_crop_id === id)?.label || id || 'Crop unavailable'; }
-    function sandboxSummary(properties) {
-      const labels = { protected: 'Protected by treatment', out_of_window: 'Outside growth window', insufficient_data: 'Not enough data', stage_unknown: 'Growth stage unavailable', uncertain: 'Uncertain assessment' };
-      if (properties.status !== 'ok') return labels[properties.status] || 'Assessment unavailable';
-      return ({ low: 'Low risk', medium: 'Moderate risk', high: 'High risk' })[properties.risk_class] || 'Risk unavailable';
+    /** Format an API day without shifting it to the browser's time zone. */
+    function sandboxFormatDate(day, options = { day: 'numeric', month: 'short', year: 'numeric' }) {
+      return new Date(`${day}T00:00:00Z`).toLocaleDateString('en-GB', { ...options, timeZone: 'UTC' });
     }
-    function sandboxTone(properties) {
-      return properties.status === 'ok' && ['low', 'medium', 'high'].includes(properties.risk_class) ? properties.risk_class : 'unknown';
+    function sandboxFeature(id) { return sandboxFeatures.find(item => item.properties?.crop_area_id === id); }
+    function sandboxAreaIds() { return sandboxFeatures.map(item => item.properties?.crop_area_id).filter(Boolean); }
+    /** Name an area after its field, numbering areas that share a field name. */
+    function sandboxAreaName(id) {
+      const feature = sandboxFeature(id);
+      const name = feature?.properties?.field_name;
+      if (!name) return `Area ${sandboxFeatures.indexOf(feature) + 1}`;
+      const same = sandboxFeatures.filter(item => item.properties?.field_name === name);
+      return same.length > 1 ? `${name} · area ${same.indexOf(feature) + 1}` : name;
     }
-    function sandboxRiskBadge(properties) {
-      return sandboxElement('span', `risk-badge risk-${sandboxTone(properties)}`, sandboxSummary(properties));
+    /** Return one day's assessment: a row, null (no assessment), 'loading' or 'error'. */
+    function sandboxAssessment(id, day) {
+      const history = sandboxHistory.get(id);
+      if (history?.rows) return history.rows.get(day) || null;
+      const today = sandboxFeature(id)?.properties;
+      if (day === sandboxToday && today?.date === day) return today;
+      return history?.error ? 'error' : 'loading';
     }
-    function sandboxRender() {
-      sandboxPanel.replaceChildren();
-      const eyebrow = sandboxElement('p', 'risk-eyebrow', 'SEPTORIA · WHEAT');
-      const heading = sandboxElement('h1', 'risk-heading', 'Field conditions'); heading.id = 'sandbox-heading';
-      const description = sandboxElement('p', 'risk-intro', 'Explore conditions on each area of your field.');
-      sandboxPanel.append(eyebrow, heading, description);
-      if (sandboxSelected) {
-        const detail = sandboxElement('section', 'sandbox-detail'); detail.id = 'sandbox-detail';
-        detail.append(sandboxElement('p', 'sandbox-risk', 'Loading area…')); sandboxPanel.append(detail);
-      }
-      const listTitle = sandboxElement('div', 'risk-list-heading');
-      listTitle.append(sandboxElement('strong', '', 'Your areas'), sandboxElement('span', '', `${sandboxFeatures.length}`));
-      const list = sandboxElement('div', 'sandbox-list');
-      if (!sandboxFeatures.length) list.append(sandboxElement('p', 'risk-empty', 'There are no crop areas yet. Select parcels to get started.'));
-      sandboxFeatures.forEach((feature, index) => {
-        const p = feature.properties || {};
-        const button = sandboxElement('button', 'sandbox-area'); button.type = 'button';
-        button.classList.toggle('active', p.crop_area_id === sandboxSelected);
-        button.setAttribute('aria-pressed', String(p.crop_area_id === sandboxSelected));
-        const name = sandboxElement('span', 'risk-area-name');
-        name.append(sandboxElement('span', `risk-area-dot risk-dot-${sandboxTone(p)}`), sandboxElement('strong', '', `Area ${index + 1} · ${sandboxLabel(p.farmer_crop_id)}`));
-        button.append(name, sandboxRiskBadge(p));
-        button.addEventListener('click', () => sandboxSelect(p.crop_area_id, { focus: true })); list.append(button);
-      });
-      const note = sandboxElement('p', 'risk-note', 'The map shows today’s conditions. Risk indicates favourable conditions for septoria, not a diagnosis.');
-      const manage = sandboxElement('button', 'crop-outline', 'Manage parcels'); manage.type = 'button';
-      manage.addEventListener('click', enterParcelSetup);
-      sandboxPanel.append(listTitle, list, note, manage);
+    /** Colour tone of an assessment; anything without a risk class never looks like low risk. */
+    function sandboxTone(row) {
+      if (!row || typeof row !== 'object') return 'none';
+      return ['ok', 'protected'].includes(row.status) && sandboxRank[row.risk_class] ? row.risk_class : 'unknown';
     }
-    async function sandboxShowRisk(id, offset, target, version, sequence) {
-      const day = sandboxDate(offset);
-      target.replaceChildren(sandboxElement('p', 'risk-loading', 'Loading conditions…'));
-      try {
-        const rows = await sandboxClient.risk(id, day, day);
-        if (version !== sandboxRequest || sequence !== sandboxHistoryRequest || id !== sandboxSelected || !target.isConnected) return;
-        if (!Array.isArray(rows)) throw new Error('Invalid conditions response');
-        const row = rows.find(item => item.date === day);
-        target.replaceChildren();
-        if (!row) { target.append(sandboxElement('p', 'risk-loading', 'No assessment is available for this date.')); return; }
-        target.append(sandboxRiskBadge(row));
-        if (row.status === 'ok' && typeof row.conditions_met === 'boolean') {
-          target.append(sandboxElement('p', 'risk-explanation', row.conditions_met ? 'Conditions favourable for septoria were identified.' : 'Conditions favourable for septoria were not identified.'));
+    function sandboxSeverity(row) {
+      const tone = sandboxTone(row);
+      if (sandboxRank[tone]) return sandboxRank[tone] + (row.status === 'ok' ? .5 : 0);
+      return tone === 'unknown' ? .25 : 0;
+    }
+    function sandboxSummary(row) {
+      if (row === 'loading') return 'Loading…';
+      if (row === 'error') return 'Could not load';
+      if (!row) return 'No assessment';
+      const level = ({ low: 'Low risk', medium: 'Moderate risk', high: 'High risk' })[row.risk_class];
+      if (['ok', 'protected'].includes(row.status) && level) return level;
+      return ({ protected: 'Protected', uncertain: 'Uncertain', insufficient_data: 'Not enough data', stage_unknown: 'Growth stage unknown', out_of_window: 'Outside susceptible stage' })[row.status] || 'No assessment';
+    }
+    function sandboxRiskBadge(row) {
+      const tone = sandboxTone(row);
+      const text = sandboxSummary(row) + (row?.status === 'protected' && sandboxRank[row.risk_class] ? ' · protected' : '');
+      return sandboxElement('span', `risk-badge risk-${tone === 'none' ? 'none' : tone}`, text);
+    }
+    /** Return the most severe assessment among areas for one day. */
+    function sandboxWorst(ids, day) {
+      let worst = null, score = -1;
+      ids.forEach(id => { const row = sandboxAssessment(id, day); const value = sandboxSeverity(row); if (value > score) { worst = row; score = value; } });
+      return worst;
+    }
+    function sandboxRings(geometry) {
+      if (geometry?.type === 'Polygon') return geometry.coordinates;
+      if (geometry?.type === 'MultiPolygon') return geometry.coordinates.flat();
+      return [];
+    }
+    function sandboxPolygons(geometry) {
+      if (geometry?.type === 'Polygon') return [geometry.coordinates];
+      if (geometry?.type === 'MultiPolygon') return geometry.coordinates;
+      return [];
+    }
+    /** Shortest distance in metres between two area boundaries (0 when they touch or overlap). */
+    function sandboxGap(a, b) {
+      try { if (turf.booleanIntersects(a, b)) return 0; } catch (_) { /* Fall back to boundary distances. */ }
+      let best = Infinity;
+      for (const [from, to] of [[a, b], [b, a]]) {
+        const lines = sandboxRings(to.geometry).filter(ring => ring.length > 1).map(ring => turf.lineString(ring));
+        for (const point of sandboxRings(from.geometry).flat()) {
+          for (const line of lines) {
+            best = Math.min(best, turf.pointToLineDistance(turf.point(point), line, { units: 'meters' }));
+            if (best <= SANDBOX_GROUP_DISTANCE_M) return best;
+          }
         }
-        if (Number.isFinite(row.h_hours)) target.append(sandboxElement('p', 'risk-meta', `${row.h_hours} h of favourable conditions`));
-        if (row.status === 'protected' && row.protected_until) target.append(sandboxElement('p', 'risk-meta', `Protection until ${row.protected_until}`));
-      } catch (_) {
-        if (version === sandboxRequest && sequence === sandboxHistoryRequest && target.isConnected) target.replaceChildren(sandboxElement('p', 'risk-loading', 'Could not load conditions. Change the date or select the area to try again.'));
       }
+      return best;
     }
-    async function sandboxSelect(id, options = {}) {
-      const feature = sandboxFeatures.find(item => item.properties?.crop_area_id === id);
-      if (!feature) return;
-      sandboxSelected = id; const version = ++sandboxRequest;
-      map.setFilter('sandbox-highlight', ['==', ['get', 'crop_area_id'], id]);
-      sandboxRender(); setDrawer(true);
-      if (options.focus && feature.geometry) fitParcelPreview({ geometry: feature.geometry });
-      const target = document.getElementById('sandbox-detail');
-      const index = sandboxFeatures.indexOf(feature);
-      const header = sandboxElement('div', 'risk-detail-head');
-      header.append(sandboxElement('div', '', `Area ${index + 1}`), sandboxElement('span', 'risk-detail-date', 'TODAY'));
-      const title = sandboxElement('h2', '', 'Septoria conditions');
-      const dateText = sandboxElement('p', 'risk-selected-date', sandboxToday);
-      const value = sandboxElement('div', 'risk-reading'); value.setAttribute('aria-live', 'polite');
-      const sliderLabel = sandboxElement('label', 'risk-slider-label', 'Explore the past 30 days');
-      const range = document.createElement('input'); range.type = 'range'; range.min = '-30'; range.max = '0'; range.step = '1'; range.value = '0'; range.setAttribute('aria-label', 'Conditions date, up to 30 days before today');
-      const ticks = sandboxElement('div', 'risk-slider-ticks'); ticks.append(sandboxElement('span', '', '30 days ago'), sandboxElement('span', '', 'Today'));
-      sliderLabel.append(range, ticks);
-      const details = sandboxElement('p', 'risk-meta', '');
-      target.replaceChildren(header, title, dateText, value, sliderLabel, details);
-      let timer = null;
-      const load = () => {
-        const offset = Number(range.value), day = sandboxDate(offset), sequence = ++sandboxHistoryRequest;
-        dateText.textContent = day;
-        header.lastChild.textContent = offset === 0 ? 'TODAY' : 'HISTORY';
-        value.replaceChildren(sandboxElement('p', 'risk-loading', 'Loading conditions…'));
-        clearTimeout(timer);
-        timer = setTimeout(() => sandboxShowRisk(id, offset, value, version, sequence), 150);
-      };
-      range.addEventListener('input', load); load();
+    /** Group areas whose boundaries are within the threshold, transitively, for UI navigation only. */
+    function sandboxGroupAreas(features) {
+      const items = features.filter(item => item.properties?.crop_area_id && sandboxRings(item.geometry).length);
+      const parent = items.map((_, index) => index);
+      const find = index => parent[index] === index ? index : (parent[index] = find(parent[index]));
+      const boxes = items.map(item => turf.bbox(item));
+      for (let i = 0; i < items.length; i++) {
+        for (let j = i + 1; j < items.length; j++) {
+          const [a, b] = [boxes[i], boxes[j]];
+          const lat = (a[1] + a[3]) / 2, dy = SANDBOX_GROUP_DISTANCE_M / 111320, dx = dy / Math.max(.1, Math.cos(lat * Math.PI / 180));
+          if (a[0] - dx > b[2] || b[0] - dx > a[2] || a[1] - dy > b[3] || b[1] - dy > a[3]) continue;
+          if (find(i) !== find(j) && sandboxGap(items[i], items[j]) <= SANDBOX_GROUP_DISTANCE_M) parent[find(i)] = find(j);
+        }
+      }
+      const groups = new Map();
+      items.forEach((item, index) => { const root = find(index); if (!groups.has(root)) groups.set(root, []); groups.get(root).push(item); });
+      let letter = 0;
+      return [...groups.values()].map((members, index) => {
+        const areaIds = members.map(item => item.properties.crop_area_id);
+        const geometry = { type: 'MultiPolygon', coordinates: members.flatMap(item => sandboxPolygons(item.geometry)) };
+        const name = areaIds.length === 1 ? sandboxAreaName(areaIds[0]) : `Group ${String.fromCharCode(65 + letter++)}`;
+        return { id: `set-${index}`, name, areaIds, geometry, bbox: turf.bbox(geometry) };
+      });
+    }
+    function sandboxSetOf(id) { return sandboxSets.find(set => set.areaIds.includes(id)); }
+    function sandboxCurrentSet() { return sandboxSets.find(set => set.id === sandboxView.setId); }
+    function sandboxScope() {
+      if (sandboxView.mode === 'area') return sandboxSelected ? [sandboxSelected] : [];
+      if (sandboxView.mode === 'set') return sandboxCurrentSet()?.areaIds || [];
+      return sandboxAreaIds();
+    }
+    /**
+     * Earliest day of the history for a scope: the area's sowing date, or for several areas the latest of their
+     * sowing dates (a temporary assumption awaiting review). Returns undefined while sowing dates are loading.
+     */
+    function sandboxMinDay(ids) {
+      if (!ids.length) return sandboxToday;
+      const details = ids.map(id => sandboxDetails.get(id));
+      if (details.some(item => !item)) return undefined;
+      const known = details.map(item => item.sowing).filter(Boolean).sort();
+      if (known.length) return known[known.length - 1] < sandboxToday ? known[known.length - 1] : sandboxToday;
+      const first = ids.map(id => sandboxHistory.get(id)?.rows).filter(Boolean).flatMap(rows => [...rows.keys()]).sort()[0];
+      return first || sandboxToday;
+    }
+    /** Load the sowing date and the past-to-today assessment history of one area. */
+    async function sandboxLoadArea(id, version) {
       try {
         const result = await sandboxClient.area(id);
-        if (version !== sandboxRequest || id !== sandboxSelected || !details.isConnected) return;
-        const props = result?.properties || {};
-        details.textContent = props.sowing_date ? `Sown ${props.sowing_date}` : '';
-      } catch (_) { if (version === sandboxRequest && details.isConnected) details.textContent = 'Sowing date unavailable.'; }
+        if (version !== sandboxOpenVersion) return;
+        const sowing = result?.properties?.sowing_date;
+        sandboxDetails.set(id, { sowing: /^\d{4}-\d{2}-\d{2}$/.test(sowing || '') ? sowing : null });
+      } catch (_) { if (version !== sandboxOpenVersion) return; sandboxDetails.set(id, { sowing: null, error: true }); }
+      sandboxRefresh();
+      try {
+        const rows = await sandboxClient.risk(id, sandboxDetails.get(id).sowing || sandboxDate(-365), sandboxToday);
+        if (version !== sandboxOpenVersion) return;
+        if (!Array.isArray(rows)) throw new Error('Invalid conditions response');
+        sandboxHistory.set(id, { rows: new Map(rows.filter(row => row?.date && row.date <= sandboxToday).map(row => [row.date, row])) });
+      } catch (_) { if (version !== sandboxOpenVersion) return; sandboxHistory.set(id, { error: true }); }
+      sandboxRefresh();
     }
+    async function sandboxLoadAll(version) {
+      const queue = sandboxAreaIds();
+      const worker = async () => { while (queue.length && version === sandboxOpenVersion) await sandboxLoadArea(queue.shift(), version); };
+      await Promise.all(Array.from({ length: Math.min(4, queue.length) }, worker));
+    }
+    /** Re-render the panel and the map for the current view and day. */
+    function sandboxRefresh() { if (!sandboxActive) return; sandboxRender(); sandboxPaint(); }
+    function sandboxSetDay(day) {
+      const min = sandboxMinDay(sandboxScope());
+      if (!day || day > sandboxToday || (min && day < min) || (!min && day !== sandboxToday) || day === sandboxDay) return;
+      sandboxDay = day; sandboxRefresh();
+    }
+    function sandboxChip(key, label, row, active, onClick) {
+      const chip = sandboxElement('button', 'fc-chip'); chip.type = 'button'; chip.dataset.key = key;
+      chip.setAttribute('aria-pressed', String(active));
+      chip.setAttribute('aria-label', `${label}: ${sandboxSummary(row)}`);
+      chip.append(sandboxElement('span', `fc-dot tone-${sandboxTone(row)}`), sandboxElement('span', '', label));
+      chip.addEventListener('click', onClick);
+      return chip;
+    }
+    function sandboxChips(label, chips, previous) {
+      const row = sandboxElement('div', 'fc-scopes'); row.setAttribute('role', 'group'); row.setAttribute('aria-label', label);
+      row.dataset.key = label; row.append(...chips);
+      requestAnimationFrame(() => {
+        row.scrollLeft = previous || 0;
+        const active = row.querySelector('[aria-pressed="true"]');
+        if (active && (active.offsetLeft < row.scrollLeft || active.offsetLeft + active.offsetWidth > row.scrollLeft + row.clientWidth)) row.scrollLeft = active.offsetLeft - 20;
+      });
+      return row;
+    }
+    const sandboxChevron = direction => {
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('aria-hidden', 'true');
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path'); path.setAttribute('d', direction < 0 ? 'm15 5-7 7 7 7' : 'm9 5 7 7-7 7');
+      svg.append(path); return svg;
+    };
+    /** Day stepper limited to the past and today; earlier and later days by button, swipe or arrow keys. */
+    function sandboxDayControl(ids) {
+      const min = sandboxMinDay(ids);
+      const wrap = sandboxElement('div', 'fc-day'); wrap.setAttribute('role', 'group'); wrap.setAttribute('aria-label', 'Day');
+      const prev = sandboxElement('button', 'fc-day-step'); prev.type = 'button'; prev.dataset.key = 'day-prev';
+      prev.setAttribute('aria-label', 'Previous day'); prev.append(sandboxChevron(-1)); prev.disabled = !min || sandboxDay <= min;
+      const next = sandboxElement('button', 'fc-day-step'); next.type = 'button'; next.dataset.key = 'day-next';
+      next.setAttribute('aria-label', 'Next day'); next.append(sandboxChevron(1)); next.disabled = sandboxDay >= sandboxToday;
+      const isToday = sandboxDay === sandboxToday;
+      const label = sandboxElement('button', 'fc-day-label'); label.type = 'button'; label.dataset.key = 'day-pick';
+      label.setAttribute('aria-label', `Choose a day. Showing ${isToday ? 'today, ' : ''}${sandboxFormatDate(sandboxDay, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}`);
+      label.append(sandboxElement('strong', '', isToday ? 'Today' : sandboxFormatDate(sandboxDay, { weekday: 'long' })), sandboxElement('small', '', sandboxFormatDate(sandboxDay)));
+      const picker = document.createElement('input'); picker.type = 'date'; picker.className = 'fc-day-input'; picker.tabIndex = -1; picker.setAttribute('aria-hidden', 'true');
+      picker.max = sandboxToday; if (min) picker.min = min; picker.value = sandboxDay;
+      picker.addEventListener('change', () => sandboxSetDay(picker.value));
+      label.addEventListener('click', () => { if (!min) return; try { picker.showPicker(); } catch (_) { picker.focus(); } });
+      prev.addEventListener('click', () => sandboxSetDay(sandboxDate(-1, sandboxDay)));
+      next.addEventListener('click', () => sandboxSetDay(sandboxDate(1, sandboxDay)));
+      wrap.addEventListener('keydown', event => {
+        if (event.key === 'ArrowLeft') { event.preventDefault(); sandboxSetDay(sandboxDate(-1, sandboxDay)); }
+        if (event.key === 'ArrowRight') { event.preventDefault(); sandboxSetDay(sandboxDate(1, sandboxDay)); }
+      });
+      let swipe = null;
+      wrap.addEventListener('pointerdown', event => { swipe = { x: event.clientX, y: event.clientY }; });
+      wrap.addEventListener('pointerup', event => {
+        if (!swipe) return; const dx = event.clientX - swipe.x, dy = event.clientY - swipe.y; swipe = null;
+        if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) sandboxSetDay(sandboxDate(dx < 0 ? 1 : -1, sandboxDay));
+      });
+      wrap.append(prev, label, picker, next);
+      const holder = sandboxElement('div', 'fc-day-wrap'); holder.append(wrap);
+      if (min === undefined) holder.append(sandboxElement('p', 'fc-day-note', 'Loading earlier days…'));
+      else if (min && sandboxDay === min && min !== sandboxToday) holder.append(sandboxElement('p', 'fc-day-note', ids.length > 1 ? 'Earliest day: the latest sowing date in this view.' : 'Earliest day: sowing date.'));
+      return holder;
+    }
+    function sandboxRow(key, name, meta, row, onClick, active = false) {
+      const button = sandboxElement('button', 'sandbox-area'); button.type = 'button'; button.dataset.key = key;
+      button.classList.toggle('active', active);
+      const left = sandboxElement('span', 'risk-area-name');
+      const text = sandboxElement('span', 'fc-row-text'); text.append(sandboxElement('strong', '', name));
+      if (meta) text.append(sandboxElement('small', '', meta));
+      left.append(sandboxElement('span', `risk-area-dot fc-dot tone-${sandboxTone(row)}`), text);
+      button.append(left, sandboxRiskBadge(row));
+      button.addEventListener('click', onClick);
+      return button;
+    }
+    function sandboxFarmContent(day) {
+      const ids = sandboxAreaIds();
+      const rows = ids.map(id => sandboxAssessment(id, day));
+      const high = ids.filter((_, index) => sandboxTone(rows[index]) === 'high');
+      const missing = rows.filter(row => ['none', 'unknown'].includes(sandboxTone(row)) && row !== 'loading').length;
+      const loading = rows.filter(row => row === 'loading').length;
+      const worst = sandboxWorst(ids, day);
+      const summary = sandboxElement('section', `fc-summary tone-${high.length ? 'high' : sandboxTone(worst)}`);
+      summary.setAttribute('aria-live', 'polite');
+      if (high.length) {
+        summary.append(sandboxElement('p', 'fc-summary-title', `High risk on ${high.length} of ${ids.length} ${ids.length === 1 ? 'area' : 'areas'}`));
+        summary.append(sandboxElement('p', 'fc-summary-note', high.map(sandboxAreaName).join(', ')));
+      } else if (sandboxRank[sandboxTone(worst)]) {
+        summary.append(sandboxElement('p', 'fc-summary-title', `Highest level: ${sandboxSummary(worst)}`));
+      } else {
+        summary.append(sandboxElement('p', 'fc-summary-title', loading === ids.length ? 'Loading assessments…' : 'No risk level for this day'));
+      }
+      const notes = [];
+      if (missing) notes.push(`${missing} ${missing === 1 ? 'area' : 'areas'} without a risk level`);
+      if (loading && loading !== ids.length) notes.push(`${loading} still loading`);
+      if (notes.length) summary.append(sandboxElement('p', 'fc-summary-note', notes.join(' · ')));
+      const heading = sandboxElement('div', 'risk-list-heading'); heading.append(sandboxElement('strong', '', 'Area groups'), sandboxElement('span', '', `${sandboxSets.length}`));
+      const list = sandboxElement('div', 'sandbox-list fc-list');
+      sandboxSets.slice().sort((a, b) => sandboxSeverity(sandboxWorst(b.areaIds, day)) - sandboxSeverity(sandboxWorst(a.areaIds, day))).forEach(set => {
+        const meta = set.areaIds.length === 1 ? '1 area' : `${set.areaIds.length} areas · ${set.areaIds.map(sandboxAreaName).join(', ')}`;
+        list.append(sandboxRow(`row:${set.id}`, set.name, meta, sandboxWorst(set.areaIds, day), () => sandboxShow({ mode: 'set', setId: set.id }, { focus: true })));
+      });
+      const manage = sandboxElement('button', 'crop-outline', 'Manage parcels'); manage.type = 'button'; manage.dataset.key = 'manage';
+      manage.addEventListener('click', enterParcelSetup);
+      return [summary, heading, list, manage];
+    }
+    function sandboxSetContent(set, day) {
+      const worst = sandboxWorst(set.areaIds, day);
+      const summary = sandboxElement('section', `fc-summary tone-${sandboxTone(worst)}`); summary.setAttribute('aria-live', 'polite');
+      summary.append(sandboxElement('p', 'fc-summary-title', sandboxRank[sandboxTone(worst)] ? `Highest in this group: ${sandboxSummary(worst)}` : worst === 'loading' ? 'Loading assessments…' : 'No risk level for this day'));
+      summary.append(sandboxElement('p', 'fc-summary-note', `${set.areaIds.length} neighbouring areas. Each area has its own assessment.`));
+      const list = sandboxElement('div', 'sandbox-list fc-list');
+      set.areaIds.slice().sort((a, b) => sandboxSeverity(sandboxAssessment(b, day)) - sandboxSeverity(sandboxAssessment(a, day)))
+        .forEach(id => list.append(sandboxRow(`row:${id}`, sandboxAreaName(id), sandboxLabel(sandboxFeature(id)?.properties?.farmer_crop_id), sandboxAssessment(id, day), () => sandboxSelect(id, { focus: true }))));
+      return [summary, list];
+    }
+    function sandboxFacts(entries) {
+      const list = sandboxElement('dl', 'fc-facts');
+      entries.forEach(([term, value, note]) => {
+        const item = sandboxElement('div'); const dd = sandboxElement('dd', '', value);
+        if (note) dd.append(sandboxElement('small', '', note));
+        item.append(sandboxElement('dt', '', term), dd); list.append(item);
+      });
+      return list;
+    }
+    /** Render one area's assessment for the selected day, its explanation and crop facts. */
+    function sandboxShowRisk(id, day) {
+      const row = sandboxAssessment(id, day);
+      const tone = sandboxTone(row);
+      const level = sandboxElement('section', `fc-level tone-${tone}`); level.setAttribute('aria-live', 'polite');
+      level.append(sandboxElement('p', 'fc-level-kicker', day === sandboxToday ? 'Today' : sandboxFormatDate(day, { weekday: 'short', day: 'numeric', month: 'short' })));
+      level.append(sandboxElement('p', 'fc-level-title', sandboxSummary(row)));
+      const notes = {
+        protected: row?.protected_until ? `Protected by a spray until ${sandboxFormatDate(row.protected_until)}. The level describes the weather conditions.` : 'Protected by a spray.',
+        uncertain: `Some weather hours are missing. The longest wet spell lasted between ${row?.h_low ?? '?'} and ${row?.h_high ?? '?'} h, so the level cannot be confirmed.`,
+        insufficient_data: 'Too few weather hours are available to assess this day.',
+        stage_unknown: 'The growth stage could not be determined, so this day was not assessed.',
+        out_of_window: 'The crop is outside the growth stage in which septoria is assessed.'
+      };
+      if (row === 'loading') level.append(sandboxElement('p', 'fc-level-note', 'Loading the assessment…'));
+      else if (row === 'error') {
+        level.append(sandboxElement('p', 'fc-level-note', 'Could not load the history of this area.'));
+        const retry = sandboxElement('button', 'crop-link', 'Try again'); retry.type = 'button'; retry.dataset.key = 'retry';
+        retry.addEventListener('click', () => { sandboxHistory.delete(id); sandboxDetails.delete(id); sandboxRefresh(); sandboxLoadArea(id, sandboxOpenVersion); });
+        level.append(retry);
+      } else if (!row) level.append(sandboxElement('p', 'fc-level-note', 'No assessment is available for this day.'));
+      else if (notes[row.status]) level.append(sandboxElement('p', 'fc-level-note', notes[row.status]));
+      const parts = [level];
+      if (row && typeof row === 'object') {
+        const why = [];
+        const windowHours = row.reasons?.window_hours || 72;
+        if (Number.isFinite(row.h_hours)) {
+          const range = Number.isFinite(row.h_low) && Number.isFinite(row.h_high) && row.h_low !== row.h_high ? `${row.h_low}–${row.h_high} h` : `${row.h_hours} h`;
+          why.push(['Longest wet spell', range, `Consecutive wet hours within the ${windowHours} hours up to this day.`]);
+        }
+        if (Number.isFinite(row.coverage)) why.push(['Weather data', `${Math.round(row.coverage * 100)}% of hours`, `Share of the ${windowHours} hours with weather data.`]);
+        const source = ({ estimated: 'estimated from accumulated temperature', override: 'from your growth stage entry', calendar: 'estimated from the calendar' })[row.growth_stage_source];
+        if (row.status === 'out_of_window') why.push(['Growth stage', 'Outside the susceptible period', source]);
+        else if (row.status === 'stage_unknown') why.push(['Growth stage', 'Unknown']);
+        else if (row.growth_stage_zone || source) why.push(['Growth stage', 'Within the susceptible period', source]);
+        if (why.length) {
+          const section = sandboxElement('section', 'fc-section');
+          section.append(sandboxElement('h2', '', 'Why this level'), sandboxFacts(why));
+          parts.push(section);
+        }
+      }
+      const detail = sandboxDetails.get(id);
+      const sown = !detail ? 'Loading…' : detail.sowing ? sandboxFormatDate(detail.sowing) : 'Unavailable';
+      const protectedUntil = row && typeof row === 'object' && row.protected_until && row.protected_until >= day ? `Until ${sandboxFormatDate(row.protected_until)}` : row && typeof row === 'object' ? 'None recorded for this day' : '—';
+      const crop = sandboxElement('section', 'fc-section');
+      crop.append(sandboxElement('h2', '', sandboxLabel(sandboxFeature(id)?.properties?.farmer_crop_id)), sandboxFacts([['Sown', sown], ['Spray protection', protectedUntil]]));
+      const actions = sandboxElement('div', 'fc-actions');
+      [['spray', 'Record a spray'], ['edit', 'Edit area details']].forEach(([key, text]) => {
+        const button = sandboxElement('button', 'crop-outline fc-soon'); button.type = 'button'; button.dataset.key = `action-${key}`;
+        button.append(sandboxElement('span', '', text), sandboxElement('small', '', 'Not available yet'));
+        button.addEventListener('click', () => { sandboxNotice = `${text} is not available from this screen yet. Nothing was saved.`; sandboxRender(); });
+        actions.append(button);
+      });
+      crop.append(actions);
+      if (sandboxNotice) { const notice = sandboxElement('p', 'fc-notice', sandboxNotice); notice.setAttribute('role', 'status'); crop.append(notice); }
+      parts.push(crop);
+      return parts;
+    }
+    function sandboxLabel(id) { return sandboxCrops.find(item => item.farmer_crop_id === id)?.label || id || 'Crop unavailable'; }
+    function sandboxRender() {
+      const focusKey = sandboxPanel.contains(document.activeElement) ? document.activeElement.dataset.key : null;
+      const scroll = {}; sandboxPanel.querySelectorAll('.fc-scopes').forEach(row => { scroll[row.dataset.key] = row.scrollLeft; });
+      sandboxPanel.replaceChildren();
+      const set = sandboxCurrentSet();
+      const day = sandboxDay;
+      const title = sandboxView.mode === 'area' ? sandboxAreaName(sandboxSelected) : sandboxView.mode === 'set' && set ? set.name : 'Whole farm';
+      const heading = sandboxElement('h1', 'risk-heading', title); heading.id = 'sandbox-heading';
+      sandboxPanel.append(sandboxElement('p', 'risk-eyebrow', 'SEPTORIA · WHEAT'), heading);
+      if (!sandboxFeatures.length) {
+        const manage = sandboxElement('button', 'crop-outline', 'Manage parcels'); manage.type = 'button'; manage.addEventListener('click', enterParcelSetup);
+        sandboxPanel.append(sandboxElement('p', 'risk-empty', 'There are no crop areas yet. Select parcels to get started.'), manage);
+        document.getElementById('drawer-summary').textContent = 'No crop areas yet';
+        return;
+      }
+      const scopeChips = [sandboxChip('scope:farm', 'Whole farm', sandboxWorst(sandboxAreaIds(), day), sandboxView.mode === 'farm', () => sandboxShow({ mode: 'farm' }, { focus: true }))];
+      sandboxSets.forEach(item => scopeChips.push(sandboxChip(`scope:${item.id}`, item.name, sandboxWorst(item.areaIds, day), sandboxView.mode !== 'farm' && sandboxView.setId === item.id, () => sandboxShow({ mode: 'set', setId: item.id }, { focus: true }))));
+      sandboxPanel.append(sandboxChips('Farm and area groups', scopeChips, scroll['Farm and area groups']));
+      if (set && sandboxView.mode !== 'farm' && set.areaIds.length > 1) {
+        const areaChips = [sandboxChip('area:all', 'All in group', sandboxWorst(set.areaIds, day), sandboxView.mode === 'set', () => sandboxShow({ mode: 'set', setId: set.id }, { focus: true }))];
+        set.areaIds.forEach(id => areaChips.push(sandboxChip(`area:${id}`, sandboxAreaName(id), sandboxAssessment(id, day), sandboxView.mode === 'area' && sandboxSelected === id, () => sandboxSelect(id, { focus: true }))));
+        sandboxPanel.append(sandboxChips(`Areas in ${set.name}`, areaChips, scroll[`Areas in ${set.name}`]));
+      }
+      sandboxPanel.append(sandboxDayControl(sandboxScope()));
+      if (sandboxView.mode === 'area' && sandboxSelected) sandboxPanel.append(...sandboxShowRisk(sandboxSelected, day));
+      else if (sandboxView.mode === 'set' && set) sandboxPanel.append(...sandboxSetContent(set, day));
+      else sandboxPanel.append(...sandboxFarmContent(day));
+      sandboxPanel.append(sandboxElement('p', 'risk-note', 'Risk shows weather conditions favourable for septoria, not a diagnosis.'));
+      const worst = sandboxWorst(sandboxScope(), day);
+      document.getElementById('drawer-summary').textContent = `${title} · ${sandboxSummary(worst)}${day === sandboxToday ? '' : ` · ${sandboxFormatDate(day, { day: 'numeric', month: 'short' })}`}`;
+      if (focusKey) [...sandboxPanel.querySelectorAll('[data-key]')].find(element => element.dataset.key === focusKey && !element.disabled)?.focus({ preventScroll: true });
+    }
+    function sandboxScopeGeometry() {
+      if (sandboxView.mode === 'area') return sandboxFeature(sandboxSelected)?.geometry;
+      if (sandboxView.mode === 'set') return sandboxCurrentSet()?.geometry;
+      return { type: 'MultiPolygon', coordinates: sandboxSets.flatMap(set => set.geometry.coordinates) };
+    }
+    /** Switch between the whole farm, an area group and a single area. */
+    function sandboxShow(view, options = {}) {
+      let next = { mode: view.mode, setId: null };
+      if (view.mode === 'set') {
+        const set = sandboxSets.find(item => item.id === view.setId); if (!set) return;
+        next = { mode: set.areaIds.length === 1 ? 'area' : 'set', setId: set.id };
+        sandboxSelected = set.areaIds.length === 1 ? set.areaIds[0] : null;
+      } else if (view.mode === 'area') {
+        const set = sandboxSetOf(view.areaId); if (!set) return;
+        next = { mode: 'area', setId: set.id }; sandboxSelected = view.areaId;
+      } else sandboxSelected = null;
+      sandboxView = next; sandboxRequest++; sandboxNotice = '';
+      const min = sandboxMinDay(sandboxScope());
+      if (min && sandboxDay < min) sandboxDay = min;
+      const previousHeight = sheet.getBoundingClientRect().height;
+      sandboxRender(); sandboxPaint();
+      if (!sheet.classList.contains('collapsed')) animateDrawerResize(previousHeight);
+      const geometry = sandboxScopeGeometry();
+      if (options.focus && geometry) fitParcelPreview({ geometry }, { onlyIfObscured: Boolean(options.fromMap) });
+    }
+    function sandboxSelect(id, options = {}) { sandboxShow({ mode: 'area', areaId: id }, options); }
     function sandboxSelectAt(point) {
       if (!map.getLayer('sandbox-fill')) return;
       const feature = map.queryRenderedFeatures(point, { layers: ['sandbox-fill'] })[0];
-      if (feature?.properties?.crop_area_id) sandboxSelect(feature.properties.crop_area_id, { focus: true });
+      // Selecting on the map keeps the drawer in its chosen state.
+      if (feature?.properties?.crop_area_id) sandboxSelect(feature.properties.crop_area_id, { focus: true, fromMap: true });
+    }
+    /** Paint the selected day's levels on the map and emphasise the current scope. */
+    function sandboxPaint() {
+      const source = map.getSource('sandbox-areas'); if (!source) return;
+      const scope = new Set(sandboxView.mode === 'farm' ? sandboxAreaIds() : sandboxCurrentSet()?.areaIds || []);
+      source.setData({ type: 'FeatureCollection', features: sandboxFeatures.map(feature => {
+        const id = feature.properties?.crop_area_id;
+        return { ...feature, properties: { ...feature.properties, tone: sandboxTone(sandboxAssessment(id, sandboxDay)), focus: scope.has(id) } };
+      }) });
+      map.setFilter('sandbox-highlight', ['==', ['get', 'crop_area_id'], sandboxView.mode === 'area' && sandboxSelected ? sandboxSelected : '']);
+      map.setFilter('sandbox-scope', sandboxView.mode === 'farm' ? ['==', ['get', 'crop_area_id'], ''] : ['==', ['get', 'focus'], true]);
+      sandboxUpdateMarkers();
+    }
+    /** Show markers for area groups that are too small to read at the current scale, merging overlapping ones. */
+    function sandboxUpdateMarkers() {
+      sandboxMarkers.forEach(marker => marker.remove()); sandboxMarkers = [];
+      if (!sandboxActive || !sandboxSets.length) return;
+      const clusters = [];
+      sandboxSets.forEach(set => {
+        const [west, south, east, north] = set.bbox;
+        const a = map.project([west, south]), b = map.project([east, north]);
+        if (Math.abs(b.x - a.x) > 28 && Math.abs(b.y - a.y) > 28) return;
+        const center = [(west + east) / 2, (south + north) / 2], point = map.project(center);
+        const near = clusters.find(cluster => Math.abs(cluster.point.x - point.x) < 96 && Math.abs(cluster.point.y - point.y) < 40);
+        if (near) near.sets.push(set); else clusters.push({ point, center, sets: [set] });
+      });
+      clusters.forEach(cluster => {
+        const single = cluster.sets.length === 1 ? cluster.sets[0] : null;
+        const ids = cluster.sets.flatMap(set => set.areaIds);
+        const worst = sandboxWorst(ids, sandboxDay);
+        const highCount = ids.filter(id => sandboxTone(sandboxAssessment(id, sandboxDay)) === 'high').length;
+        const element = sandboxElement('button', `fc-marker tone-${sandboxTone(worst)}`); element.type = 'button';
+        element.classList.toggle('active', Boolean(single) && sandboxView.mode !== 'farm' && sandboxView.setId === single.id);
+        const name = single ? single.name : `${cluster.sets.length} groups`;
+        element.append(sandboxElement('span', 'fc-marker-dot'), sandboxElement('span', '', name));
+        if (highCount) element.append(sandboxElement('span', 'fc-marker-flag', single && ids.length === 1 ? 'High' : `${highCount} high`));
+        element.setAttribute('aria-label', `${name}: ${sandboxSummary(worst)}${single ? '' : '. Zoom in to separate the groups.'}`);
+        element.addEventListener('click', event => {
+          event.stopPropagation();
+          if (single) sandboxShow({ mode: 'set', setId: single.id }, { focus: true });
+          else fitParcelPreview({ geometry: { type: 'MultiPolygon', coordinates: cluster.sets.flatMap(set => set.geometry.coordinates) } });
+        });
+        sandboxMarkers.push(new maplibregl.Marker({ element }).setLngLat(cluster.center).addTo(map));
+      });
     }
     function sandboxSource() {
       if (map.getSource('sandbox-areas')) return;
+      const tone = ['match', ['get', 'tone'], 'low', '#328250', 'medium', '#d2932b', 'high', '#c7463e', 'unknown', '#89928c', '#c3cac5'];
       map.addSource('sandbox-areas', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-      map.addLayer({ id: 'sandbox-fill', type: 'fill', source: 'sandbox-areas', paint: { 'fill-color': ['case', ['!=', ['get', 'status'], 'ok'], '#89928c', ['match', ['get', 'risk_class'], 'low', '#328250', 'medium', '#d2932b', 'high', '#c7463e', '#89928c']], 'fill-opacity': .55 } });
-      map.addLayer({ id: 'sandbox-outline', type: 'line', source: 'sandbox-areas', paint: { 'line-color': '#31493a', 'line-width': ['case', ['==', ['get', 'status'], 'uncertain'], 3, 1.5] } });
+      map.addLayer({ id: 'sandbox-fill', type: 'fill', source: 'sandbox-areas', paint: { 'fill-color': tone, 'fill-opacity': ['case', ['boolean', ['get', 'focus'], false], .6, .28] } });
+      map.addLayer({ id: 'sandbox-outline', type: 'line', source: 'sandbox-areas', paint: { 'line-color': ['case', ['==', ['get', 'tone'], 'none'], '#6f7a73', '#31493a'], 'line-width': 1.5 } });
+      map.addLayer({ id: 'sandbox-scope', type: 'line', source: 'sandbox-areas', filter: ['==', ['get', 'crop_area_id'], ''], paint: { 'line-color': '#15221b', 'line-width': 2.5 } });
       map.addLayer({ id: 'sandbox-highlight', type: 'line', source: 'sandbox-areas', filter: ['==', ['get', 'crop_area_id'], ''], paint: { 'line-color': '#fff', 'line-width': 4 } });
+      map.on('moveend', () => { if (sandboxActive) sandboxUpdateMarkers(); });
+    }
+    /** Hide the field-conditions layers and markers when leaving the farm view. */
+    function sandboxHideMap() {
+      ['sandbox-fill', 'sandbox-outline', 'sandbox-scope', 'sandbox-highlight'].forEach(layer => { if (map.getLayer(layer)) map.setLayoutProperty(layer, 'visibility', 'none'); });
+      sandboxMarkers.forEach(marker => marker.remove()); sandboxMarkers = [];
     }
     function enterParcelSetup() {
         sandboxOpenVersion++; sandboxActive = false; sandboxRequest++; sandboxPanel.hidden = true;
         dataProvider = sandboxClient.farmerProvider(); selected.clear();
         document.getElementById('drawer-content').hidden = false; document.getElementById('search-form').hidden = false;
         document.querySelector('.app').classList.remove('sandbox-mode'); document.querySelector('.sheet').setAttribute('aria-labelledby', 'heading');
-        ['sandbox-fill', 'sandbox-outline', 'sandbox-highlight'].forEach(layer => { if (map.getLayer(layer)) map.setLayoutProperty(layer, 'visibility', 'none'); });
+        sandboxHideMap();
         ['selected-fill', 'selected-outline'].forEach(layer => map.setLayoutProperty(layer, 'visibility', 'visible'));
         input.placeholder = 'Search for a place or parcel number';
         updateZoomHint();
@@ -1419,9 +1827,11 @@
         if (collection?.type !== 'FeatureCollection' || !Array.isArray(collection.features) || !Array.isArray(crops) || !/^\d{4}-\d{2}-\d{2}$/.test(clock?.today || '')) throw new Error('The farm service returned incomplete data.');
         if (options.afterSave && cropWorkflow.isEditing()) cropWorkflow.close();
         sandboxFeatures = collection.features; sandboxCrops = crops; sandboxToday = clock.today; sandboxSelected = null; sandboxRequest++;
+        sandboxDay = clock.today; sandboxView = { mode: 'farm', setId: null }; sandboxNotice = ''; sandboxHistory.clear(); sandboxDetails.clear();
+        sandboxSets = sandboxGroupAreas(sandboxFeatures);
         sandboxSource();
         map.getSource('sandbox-areas').setData(collection);
-        ['sandbox-fill', 'sandbox-outline', 'sandbox-highlight'].forEach(layer => map.setLayoutProperty(layer, 'visibility', 'visible'));
+        ['sandbox-fill', 'sandbox-outline', 'sandbox-scope', 'sandbox-highlight'].forEach(layer => map.setLayoutProperty(layer, 'visibility', 'visible'));
         ['selected-fill', 'selected-outline', 'sample-outline'].forEach(layer => { if (map.getLayer(layer)) map.setLayoutProperty(layer, 'visibility', 'none'); });
         map.setFilter('sandbox-highlight', ['==', ['get', 'crop_area_id'], '']);
         sandboxActive = true; document.getElementById('drawer-content').hidden = true; document.getElementById('crop-panel').hidden = true; sandboxPanel.hidden = false;
@@ -1430,13 +1840,10 @@
         document.getElementById('drawer-summary').textContent = 'Your crop areas'; status.textContent = '';
         sandboxRender(); setDrawer(true); sandboxError.textContent = ''; if (sandboxDialog.open) sandboxDialog.close();
         if (pendingJourney === 'setup') { pendingJourney = 'farmer'; enterParcelSetup(); return true; }
-        if (sandboxFeatures.length) {
-          const bounds = new maplibregl.LngLatBounds();
-          const extendCoordinates = value => { if (Array.isArray(value) && typeof value[0] === 'number' && typeof value[1] === 'number') bounds.extend(value); else if (Array.isArray(value)) value.forEach(extendCoordinates); };
-          sandboxFeatures.forEach(feature => { if (feature.geometry) extendCoordinates(feature.geometry.coordinates); });
-          if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: { top: 90, right: 50, bottom: 170, left: 50 }, maxZoom: 16, duration: 500 });
-        }
-        if (sandboxFeatures.length && sandboxFeatures[0].properties?.crop_area_id) sandboxSelect(sandboxFeatures[0].properties.crop_area_id);
+        // Open the group that holds today's highest available risk and zoom to it above the drawer.
+        const highest = sandboxSets.slice().sort((a, b) => sandboxSeverity(sandboxWorst(b.areaIds, sandboxToday)) - sandboxSeverity(sandboxWorst(a.areaIds, sandboxToday)))[0];
+        if (highest) sandboxShow({ mode: 'set', setId: highest.id }, { focus: true }); else sandboxPaint();
+        sandboxLoadAll(openVersion);
         return true;
       } catch (error) {
         if (openVersion !== sandboxOpenVersion || options.afterSave) return false;
@@ -1460,7 +1867,7 @@
         document.getElementById('import-option').disabled = false; document.getElementById('import-option').title = '';
         document.getElementById('search-form').hidden = false; document.querySelector('.app').classList.remove('sandbox-mode');
         document.querySelector('.sheet').setAttribute('aria-labelledby', 'heading');
-        if (map.getLayer('sandbox-fill')) ['sandbox-fill', 'sandbox-outline', 'sandbox-highlight'].forEach(layer => map.setLayoutProperty(layer, 'visibility', 'none'));
+        sandboxHideMap();
         ['selected-fill', 'selected-outline', 'sample-outline'].forEach(layer => { if (map.getLayer(layer)) map.setLayoutProperty(layer, 'visibility', 'visible'); });
         renderSelection(); status.textContent = ''; if (sandboxDialog.open) sandboxDialog.close();
       });
