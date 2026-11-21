@@ -53,6 +53,8 @@ The *Crop disease risk* tab shows, for each plot and year, each crop's rank amon
 
 The *Soil microbes* tab has a Taxonomy | Roles switch. Roles shows the sample's reads by role (useful, potentially harmful, nitrogen cyclers and so on), and genus names show a short description on hover. The *Soil functions* tab shows which named genera may carry each gene-backed function. The roles are AI-annotated at genus level; see [`AGENT.md`](AGENT.md) (sections 3.14 and 5) for the caveats.
 
+The *Treatment plan* tab lists, for a plot, year and crop, the product types worth considering before planting and during growth (seed treatments, foliar fungicides, biologicals, fertilisers, nitrogen stabilisers, inoculants, lime), each with the soil finding behind it and the test that would confirm it. It draws on the crop disease risk, the soil measurements and bacterial genes of the same year, the crop history and the site. The product list (`rules/products.csv`) is not verified: it names product classes, not brands or rates.
+
 ```bash
 cd web && npm install && npm run build      # once, and after changing anything in web/
 .venv/bin/python scripts/13_fetch_ndvi_maps.py   # once: greenness maps (network, about 300 MB); optional
@@ -64,6 +66,7 @@ cd web && npm install && npm run build      # once, and after changing anything 
 - `src/cropfit/api.py`: the local JSON API over `data/processed/` (new backend results get a route here); `api_microbiome.py` holds the soil microbes routes (plot → samples, sample → composition by phylum, class or genus).
 - `web/src/api.ts`: the typed client; `web/src/features/<name>/`: one folder per part of the screen.
 - `src/cropfit/api_risk.py`: the crop risk routes (plot → units, unit → crop ranks, crop → genera behind the score); `web/src/features/risk/`: the *Crop disease risk* tab.
+- `src/cropfit/products.py` and `rules/products.csv`: the product rules; `web/src/features/plan/`: the *Treatment plan* tab.
 - Frontend development: run `scripts/12_gui.py` and, in `web/`, `npm run dev` (it forwards `/api` to port 8000).
 
 ## Status

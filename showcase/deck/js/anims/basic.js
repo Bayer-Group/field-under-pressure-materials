@@ -1,10 +1,15 @@
 // Small reusable animations for text-only slides.
 
-// Title: the logo builds (letters wipe in, globe rolls into the "o"), then the rest rises.
+// Title: the letters wipe in while the Earth slides into the "o" spinning fast, then settles into
+// a slow endless turn.
 Deck.anim('title', (slide, D) => {
-  const tl = gsap.timeline({ defaults: { ease: 'power3.out' } })
-  tl.add(D.lockupIn(slide.querySelector('.lockup')), 0.1)
-    .from(slide.querySelectorAll('.rise'), { y: 40, autoAlpha: 0, duration: 0.8, stagger: 0.12 }, '-=0.5')
+  const { letters, globe } = D.lockup(slide.querySelector('.lockup'))
+  const earth = D.earth(globe)
+  const spin = D.loop(() => gsap.to(earth, { lon: '-=360', duration: 36, ease: 'none', repeat: -1, onUpdate: earth.draw }))
+  const tl = gsap.timeline()
+  tl.fromTo(letters, { clipPath: 'inset(0% 100% 0% 0%)' }, { clipPath: 'inset(0% 0% 0% 0%)', duration: 1.4, ease: 'power3.inOut' }, 0.1)
+    .from(globe, { x: 700, scale: 0.4, autoAlpha: 0, duration: 1.6, ease: 'power3.out' }, 0.3)
+  if (spin) tl.fromTo(spin, { timeScale: 16 }, { timeScale: 1, duration: 3, ease: 'power2.out' }, 0.3)
   return tl
 })
 

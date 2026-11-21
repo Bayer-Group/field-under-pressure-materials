@@ -482,6 +482,43 @@ export interface FollowupTests {
   note: string
 }
 
+export type ProductTrigger = 'pathogen_high' | 'confirm_first' | 'site_favoured' | 'soil_signal'
+export type ProductTiming = 'before_planting' | 'during_growth'
+
+export interface ProductRecommendation {
+  product_id: string
+  category: string // fungicide_seed | fungicide_foliar | biocontrol | fertiliser | inhibitor | inoculant | amendment | no_product | caution | note
+  category_label: string
+  product_class: string
+  timing: ProductTiming
+  stage: string | null
+  trigger: ProductTrigger
+  trigger_label: string
+  priority: number // 0-1, only orders the list
+  basis: 'measured' | 'genes' | 'fungi' | 'site' | 'history'
+  confidence: string
+  genus: string | null
+  reason: string
+  works_because: string | null
+  caution: string | null
+  confirm_with: { test_id: string; name: string }[] // follow-up tests that would confirm the finding
+  source: string | null
+  verified: boolean
+}
+
+export interface ProductPlan {
+  plot_id: string
+  unit: string
+  crop: string
+  label: string
+  recommendations: ProductRecommendation[] // highest priority first
+  unchecked: { product_id: string; product_class: string }[] // soil rules whose values are missing
+  sources: string[]
+  note: string
+}
+
+export const getProductPlan = (plotId: string, unit: string, crop: string, s?: AbortSignal) =>
+  get<ProductPlan>(`/plots/${id(plotId)}/crop-risk/${id(unit)}/${id(crop)}/products`, s)
 export const getCropRiskUnits = (plotId: string, s?: AbortSignal) => get<RiskUnitRef[]>(`/plots/${id(plotId)}/crop-risk`, s)
 export const getCropRisk = (plotId: string, unit: string, s?: AbortSignal) =>
   get<PlotCropRisk>(`/plots/${id(plotId)}/crop-risk/${id(unit)}`, s)

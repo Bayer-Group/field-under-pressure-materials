@@ -260,3 +260,48 @@ def test_followup_tests_use_site_context(client):
     assert "May is wet in 80% of years" in py["reason"]
     other = client.get("/api/plots/STER_002/crop-risk/2022-002/corn/tests").json()
     assert "May is wet" not in next(s for s in other["suggestions"] if s["test_id"] == "pythium")["reason"]
+
+
+def test_products_route(client):
+    r = client.get("/api/plots/STER_001/crop-risk/2022-002/winter_wheat/products")
+    assert r.status_code == 200
+    d = r.json()
+    assert d["label"] == "Winter wheat" and "not verified" in d["note"]
+    rec = {x["product_id"]: x for x in d["recommendations"]}
+    fus = rec["fus_seed"]                               # STER_001 has the most Fusarium in 2022
+    assert fus["trigger"] == "pathogen_high" and fus["trigger_label"] == "High for the site"
+    assert fus["category_label"] == "Seed treatment" and fus["timing"] == "before_planting"
+    assert {t["test_id"] for t in fus["confirm_with"]} == {"fus_graminearum", "fus_crown_rot"}
+    assert all(t["name"] for t in fus["confirm_with"]) and fus["verified"] is False
+    assert not [x for x in d["recommendations"] if x["trigger"] == "soil_signal"]      # no soil tables here
+    assert {"lime", "starter_n", "urease_inhibitor"} <= {x["product_id"] for x in d["unchecked"]}
+    assert any("No metagenome" in s for s in d["sources"]) and any("no soil chemistry" in s for s in d["sources"])
+    assert client.get("/api/plots/STER_001/crop-risk/2022-002/banana/products").status_code == 404
+    assert client.get("/api/plots/STER_001/crop-risk/1999-002/corn/products").status_code == 404
+
+
+def test_products_use_soil_measurements_history_and_site(client):
+    pd.DataFrame([dict(plotID="STER_001", collectDate="2022-07-03", ph_water=5.1, organic_c_pct=0.7, cn_ratio=11.0)]
+                 ).to_parquet(client.proc / "neon_chem.parquet")
+    pd.DataFrame([dict(unit_id="STER_001", year=y, crop_group=g) for y, g in ((2020, "winter_wheat"), (2021, "fallow"))]
+                 ).to_parquet(client.proc / "plot_crop_history.parquet")
+    pd.DataFrame([dict(unit_id="STER_001", p_wet_may=0.8, p_hot_dry_jul_aug=0.0, drainage_class="Well drained")]
+                 ).to_parquet(client.proc / "plots.parquet")
+    d = client.get("/api/plots/STER_001/crop-risk/2022-002/soybean/products").json()
+    rec = {x["product_id"]: x for x in d["recommendations"]}
+    assert {"lime", "organic_amendment", "rhizobial_inoculant", "pythium_seed", "phytophthora_seed"} <= set(rec)
+    assert "pH is 5.1" in rec["lime"]["reason"] and rec["lime"]["basis"] == "measured"
+    assert rec["pythium_seed"]["confirm_with"][0]["name"] == "Pythium species"
+    assert "lime" not in {x["product_id"] for x in d["unchecked"]}
+    assert any("NEON, 3 Jul 2022" in s for s in d["sources"]) and any("2020 to 2021" in s for s in d["sources"])
+    wheat = client.get("/api/plots/STER_001/crop-risk/2022-002/winter_wheat/products").json()
+    assert "rhizobial_inoculant" not in {x["product_id"] for x in wheat["recommendations"]}
+
+
+def test_static_bake_includes_tests_and_products(client, tmp_path):
+    from cropfit import bake
+    out = tmp_path / "static"                       # not tmp_path itself: bake clears <out>/data
+    m = bake.bake(client, out, workers=2, log=lambda *_: None)
+    assert m["counts"]["crop_products"] == m["counts"]["crop_tests"] == m["counts"]["crop_contributions"] > 0
+    key = bake.path_to_key("/plots/STER_001/crop-risk/2022-002/winter_wheat/products")
+    assert "fus_seed" in (out / "data" / f"{key}.js").read_text()
