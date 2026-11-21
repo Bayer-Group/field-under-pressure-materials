@@ -15,7 +15,7 @@ Related: `docs/nmdc-data-guide.md` (how to interpret the NMDC files and how STER
 ```bash
 uv venv --python 3.12 .venv            # geo wheels are risky on newer system Pythons
 uv pip install --python .venv/bin/python -e .
-.venv/bin/python -m pytest -q          # 125 tests, no network, no data needed
+.venv/bin/python -m pytest -q          # 135 tests, no network, no data needed
 ```
 
 The package is `cropfit` in `src/cropfit/` (the name is historical). Scripts add `src/` to `sys.path` themselves; run them from the repo root: `.venv/bin/python scripts/<name>.py`. `e1_match.py` and `pull_nmdc_cropland.py` use paths relative to the current directory, so run them from the repo root.
@@ -41,6 +41,7 @@ The package is `cropfit` in `src/cropfit/` (the name is historical). Scripts add
 | `e1.py` | Open-Meteo / NASA POWER climate for EU points, plus modelling helpers used by the LUCAS experiment (needs scikit-learn). |
 | `kb.py` | FungalTraits and USDA Fungus-Host downloads, name normalisation, genus x crop host table (see 3.12). |
 | `risk.py` | Crop risk index per plot-unit x crop (see 3.12). |
+| `api_risk.py` | GUI endpoints for the crop risk index (`/api/plots/{id}/crop-risk[/{unit}[/{crop}]]`), computed on demand from `risk.py` |
 
 Lookup tables in `rules/` (generic, read by the code): `cdl_codes.csv` (all 132 CDL codes to a crop-group vocabulary), `ko_panel.csv` (KEGG KOs of interest with function group and caveat), `lucas_lc1_groups.csv` (LUCAS land-cover codes with `is_cereal`; documentation only, `e1_match.py` hard-codes its own cereal rule B11-B19), `genus_synonyms.csv` (alias -> canonical genus: Rhizoctonia/Thanatephorus/Ceratobasidium -> Rhizoctonia_complex, Gibberella -> Fusarium) and `crop_host_taxa.csv` (USDA host taxon -> crop_group). Small input tables in `resources/` are listed under each dataset.
 
@@ -429,6 +430,7 @@ Note: `03_build_plots.py` takes its plots from the event registry (the 29 plots 
   - No species synonymy. Fusarium's denominator includes old names (moniliforme, nivale), and dual names (Gibberella zeae = F. graminearum) count as two species.
   - JSON output is large (3.5 to 19 MB per site-year, mostly contributions, including H = 0 rows and `excluded_by_filter` rows). Use the parquet tables when you can.
   - The caveats in section 5 apply: relative abundance, genus level, and a host record means the fungus can infect the crop, not that it does in this field. Fungi only, no bacteria.
+- **GUI:** the "Crop disease risk" tab shows these results per plot. The unit key is `YYYY-00N` (e.g. `2016-002`, one per ITS product). A plot is ranked only against plots of the same site, year and product. Comparing crops with each other mostly reflects how well each crop's diseases are documented, not soil risk.
 
 ## 4. Quick recipes
 
