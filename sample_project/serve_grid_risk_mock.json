@@ -1,0 +1,577 @@
+{
+  "type": "FeatureCollection",
+  "data_status": "mock",
+  "note": "MOCK fixture in the shape of docs/serve_read_contract.md section 3; not real data",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          20.6,
+          52.08
+        ]
+      },
+      "properties": {
+        "grid_id": "G-0000",
+        "date": "2026-11-21",
+        "risk_class": "low",
+        "uncertain": false,
+        "h_low": 3,
+        "h_high": 3,
+        "coverage": 1.0
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          20.644,
+          52.08
+        ]
+      },
+      "properties": {
+        "grid_id": "G-0001",
+        "date": "2026-11-21",
+        "risk_class": "medium",
+        "uncertain": false,
+        "h_low": 12,
+        "h_high": 12,
+        "coverage": 1.0
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          20.688,
+          52.08
+        ]
+      },
+      "properties": {
+        "grid_id": "G-0002",
+        "date": "2026-11-21",
+        "risk_class": "low",
+        "uncertain": false,
+        "h_low": 3,
+        "h_high": 3,
+        "coverage": 1.0
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          20.732,
+          52.08
+        ]
+      },
+      "properties": {
+        "grid_id": "G-0003",
+        "date": "2026-11-21",
+        "risk_class": "low",
+        "uncertain": true,
+        "h_low": 3,
+        "h_high": 6,
+        "coverage": 1.0
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          20.776,
+          52.08
+        ]
+      },
+      "properties": {
+        "grid_id": "G-0004",
+        "date": "2026-11-21",
+        "risk_class": "medium",
+        "uncertain": false,
+        "h_low": 12,
+        "h_high": 12,
+        "coverage": 1.0
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          20.82,
+          52.08
+        ]
+      },
+      "properties": {
+        "grid_id": "G-0005",
+        "date": "2026-11-21",
+        "risk_class": "low",
+        "uncertain": false,
+        "h_low": 3,
+        "h_high": 3,
+        "coverage": 1.0
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          20.6,
+          52.124
+        ]
+      },
+      "properties": {
+        "grid_id": "G-0006",
+        "date": "2026-11-21",
+        "risk_class": "high",
+        "uncertain": false,
+        "h_low": 22,
+        "h_high": 22,
+        "coverage": 1.0
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          20.644,
+          52.124
+        ]
+      },
+      "properties": {
+        "grid_id": "G-0007",
+        "date": "2026-11-21",
+        "risk_class": "medium",
+        "uncertain": false,
+        "h_low": 12,
+        "h_high": 12,
+        "coverage": 1.0
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          20.688,
+          52.124
+        ]
+      },
+      "properties": {
+        "grid_id": "G-0008",
+        "date": "2026-11-21",
+        "risk_class": "low",
+        "uncertain": false,
+        "h_low": 3,
+        "h_high": 3,
+        "coverage": 1.0
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          20.732,
+          52.124
+        ]
+      },
+      "properties": {
+        "grid_id": "G-0009",
+        "date": "2026-11-21",
+        "risk_class": "high",
+        "uncertain": false,
+        "h_low": 22,
+        "h_high": 22,
+        "coverage": 1.0
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          20.776,
+          52.124
+        ]
+      },
+      "properties": {
+        "grid_id": "G-0010",
+        "date": "2026-11-21",
+        "risk_class": "medium",
+        "uncertain": true,
+        "h_low": 12,
+        "h_high": 15,
+        "coverage": 1.0
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          20.82,
+          52.124
+        ]
+      },
+      "properties": {
+        "grid_id": "G-0011",
+        "date": "2026-11-21",
+        "risk_class": null,
+        "uncertain": false,
+        "h_low": null,
+        "h_high": null,
+        "coverage": 0.0
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          20.6,
+          52.168
+        ]
+      },
+      "properties": {
+        "grid_id": "G-0012",
+        "date": "2026-11-21",
+        "risk_class": "low",
+        "uncertain": false,
+        "h_low": 3,
+        "h_high": 3,
+        "coverage": 1.0
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          20.644,
+          52.168
+        ]
+      },
+      "properties": {
+        "grid_id": "G-0013",
+        "date": "2026-11-21",
+        "risk_class": "medium",
+        "uncertain": false,
+        "h_low": 12,
+        "h_high": 12,
+        "coverage": 1.0
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          20.688,
+          52.168
+        ]
+      },
+      "properties": {
+        "grid_id": "G-0014",
+        "date": "2026-11-21",
+        "risk_class": "low",
+        "uncertain": false,
+        "h_low": 3,
+        "h_high": 3,
+        "coverage": 1.0
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          20.732,
+          52.168
+        ]
+      },
+      "properties": {
+        "grid_id": "G-0015",
+        "date": "2026-11-21",
+        "risk_class": "low",
+        "uncertain": false,
+        "h_low": 3,
+        "h_high": 3,
+        "coverage": 1.0
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          20.776,
+          52.168
+        ]
+      },
+      "properties": {
+        "grid_id": "G-0016",
+        "date": "2026-11-21",
+        "risk_class": "medium",
+        "uncertain": false,
+        "h_low": 12,
+        "h_high": 12,
+        "coverage": 1.0
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          20.82,
+          52.168
+        ]
+      },
+      "properties": {
+        "grid_id": "G-0017",
+        "date": "2026-11-21",
+        "risk_class": "low",
+        "uncertain": true,
+        "h_low": 3,
+        "h_high": 6,
+        "coverage": 1.0
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          20.6,
+          52.212
+        ]
+      },
+      "properties": {
+        "grid_id": "G-0018",
+        "date": "2026-11-21",
+        "risk_class": "high",
+        "uncertain": false,
+        "h_low": 22,
+        "h_high": 22,
+        "coverage": 1.0
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          20.644,
+          52.212
+        ]
+      },
+      "properties": {
+        "grid_id": "G-0019",
+        "date": "2026-11-21",
+        "risk_class": "medium",
+        "uncertain": false,
+        "h_low": 12,
+        "h_high": 12,
+        "coverage": 1.0
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          20.688,
+          52.212
+        ]
+      },
+      "properties": {
+        "grid_id": "G-0020",
+        "date": "2026-11-21",
+        "risk_class": "low",
+        "uncertain": false,
+        "h_low": 3,
+        "h_high": 3,
+        "coverage": 1.0
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          20.732,
+          52.212
+        ]
+      },
+      "properties": {
+        "grid_id": "G-0021",
+        "date": "2026-11-21",
+        "risk_class": "high",
+        "uncertain": false,
+        "h_low": 22,
+        "h_high": 22,
+        "coverage": 1.0
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          20.776,
+          52.212
+        ]
+      },
+      "properties": {
+        "grid_id": "G-0022",
+        "date": "2026-11-21",
+        "risk_class": "medium",
+        "uncertain": false,
+        "h_low": 12,
+        "h_high": 12,
+        "coverage": 1.0
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          20.82,
+          52.212
+        ]
+      },
+      "properties": {
+        "grid_id": "G-0023",
+        "date": "2026-11-21",
+        "risk_class": "low",
+        "uncertain": false,
+        "h_low": 3,
+        "h_high": 3,
+        "coverage": 1.0
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          20.6,
+          52.256
+        ]
+      },
+      "properties": {
+        "grid_id": "G-0024",
+        "date": "2026-11-21",
+        "risk_class": "low",
+        "uncertain": true,
+        "h_low": 3,
+        "h_high": 6,
+        "coverage": 1.0
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          20.644,
+          52.256
+        ]
+      },
+      "properties": {
+        "grid_id": "G-0025",
+        "date": "2026-11-21",
+        "risk_class": "medium",
+        "uncertain": false,
+        "h_low": 12,
+        "h_high": 12,
+        "coverage": 1.0
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          20.688,
+          52.256
+        ]
+      },
+      "properties": {
+        "grid_id": "G-0026",
+        "date": "2026-11-21",
+        "risk_class": "low",
+        "uncertain": false,
+        "h_low": 3,
+        "h_high": 3,
+        "coverage": 1.0
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          20.732,
+          52.256
+        ]
+      },
+      "properties": {
+        "grid_id": "G-0027",
+        "date": "2026-11-21",
+        "risk_class": "low",
+        "uncertain": false,
+        "h_low": 3,
+        "h_high": 3,
+        "coverage": 1.0
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          20.776,
+          52.256
+        ]
+      },
+      "properties": {
+        "grid_id": "G-0028",
+        "date": "2026-11-21",
+        "risk_class": "medium",
+        "uncertain": false,
+        "h_low": 12,
+        "h_high": 12,
+        "coverage": 1.0
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          20.82,
+          52.256
+        ]
+      },
+      "properties": {
+        "grid_id": "G-0029",
+        "date": "2026-11-21",
+        "risk_class": "low",
+        "uncertain": false,
+        "h_low": 3,
+        "h_high": 3,
+        "coverage": 1.0
+      }
+    }
+  ]
+}

@@ -16,7 +16,7 @@ import json
 import urllib.error
 import urllib.request
 
-DEFAULT_BASE_URL = "http://127.0.0.1:8000/api/v1"
+DEFAULT_BASE_URL = "https://34-118-11-71.nip.io/api/v1"
 USER_AGENT = "PyQgisFastApiBridge/1.0"
 
 
