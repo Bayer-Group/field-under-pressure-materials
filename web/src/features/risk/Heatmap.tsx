@@ -1,12 +1,13 @@
 import type { CropRiskRow } from '../../api'
+import { riskHref } from '../../router'
 
 export interface Selection { plot: string; crop: string }
 
 const pct = (t: number) => Math.round(8 + 82 * t)
 
 /** Plot x crop grid of risk indices. Shading is per crop column, or on one scale for every cell. */
-export function Heatmap({ rows, plotId, selected, across, nUnits, onSelect }: {
-  rows: CropRiskRow[]; plotId: string; selected: Selection; across: boolean; nUnits: number
+export function Heatmap({ rows, plotId, unit, selected, across, nUnits, onSelect }: {
+  rows: CropRiskRow[]; plotId: string; unit: string; selected: Selection; across: boolean; nUnits: number
   onSelect: (s: Selection) => void
 }) {
   const values = rows.map((r) => new Map(r.peers.map((p) => [p.plot_id, p.risk_index])))
@@ -24,7 +25,7 @@ export function Heatmap({ rows, plotId, selected, across, nUnits, onSelect }: {
           <span />
           {rows.map((r) => <span key={r.crop} className="heat-col">{r.label}</span>)}
           {plots.map((p) => (
-            <Row key={p} plot={p} me={p === plotId}>
+            <Row key={p} plot={p} me={p === plotId} href={riskHref(p, unit, selected.crop)}>
               {rows.map((r, i) => {
                 const v = values[i].get(p)
                 if (r.status === 'no_knowledge') {
@@ -59,10 +60,15 @@ export function Heatmap({ rows, plotId, selected, across, nUnits, onSelect }: {
   )
 }
 
-function Row({ plot, me, children }: { plot: string; me: boolean; children: React.ReactNode }) {
+/** Row label: the plot ID doubles as a plot selector (same year, method and crop on that plot). */
+function Row({ plot, me, href, children }: { plot: string; me: boolean; href: string; children: React.ReactNode }) {
   return (
     <>
-      <span className={`heat-row${me ? ' me' : ''}`}>{plot}{me && <span className="muted"> (this plot)</span>}</span>
+      {me ? (
+        <span className="heat-row me" aria-current="page">{plot}<span className="muted"> (this plot)</span></span>
+      ) : (
+        <a className="heat-row" href={href} title={`Open plot ${plot}`}>{plot}</a>
+      )}
       {children}
     </>
   )

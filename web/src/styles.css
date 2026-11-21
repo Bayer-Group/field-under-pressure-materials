@@ -308,6 +308,8 @@ button { font: inherit; color: inherit; }
 .heat-col { font-size: 0.72rem; line-height: 1.2; color: var(--ink-2); text-align: center; align-self: end; padding: 0 2px 4px; min-width: 52px; }
 .heat-row { font-size: 0.78rem; font-variant-numeric: tabular-nums; align-self: center; padding-right: 8px; white-space: nowrap; color: var(--ink-2); }
 .heat-row.me { font-weight: 700; color: var(--ink); }
+a.heat-row { text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
+a.heat-row:hover { color: var(--ink); text-decoration-color: currentColor; }
 .heat-cell {
   border: 0; border-radius: 4px; padding: 6px 2px; font-size: 0.78rem; font-variant-numeric: tabular-nums; text-align: center;
   background: transparent; cursor: pointer;

@@ -33,7 +33,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 import pandas as pd  # noqa: E402
 from cropfit import risk  # noqa: E402
-from cropfit.config import PROCESSED  # noqa: E402
+from cropfit.config import PROCESSED, light_plots  # noqa: E402
 
 
 def main() -> None:
@@ -47,7 +47,12 @@ def main() -> None:
     ap.add_argument("--out-dir", type=Path, default=PROCESSED, help="output directory (default data/processed)")
     args = ap.parse_args()
 
-    result = risk.compute_crop_risk(args.site, args.year, min_unit_reads=args.min_unit_reads,
+    core = risk.load_core_genus()
+    lp = light_plots()
+    if lp is not None:   # light mode (scripts/00_light_mode.py): score and compare only these plots, as the GUI does
+        core = core[core["plotID"].isin(lp)]
+        print(f"light mode: only plots {', '.join(lp)}")
+    result = risk.compute_crop_risk(args.site, args.year, core=core, min_unit_reads=args.min_unit_reads,
                                     min_expected_reads=args.min_expected_reads, min_reference=args.min_reference)
     if result.empty:
         print(result.metadata["reason"])

@@ -16,7 +16,7 @@ from pydantic import BaseModel
 
 from . import api as core
 from . import kb as kbmod
-from . import neon, risk
+from . import config, neon, risk
 
 MIN_UNIT_READS = 2000           # risk.compute_crop_risk default; below this a unit is not scored
 CURRENT_PRODUCT = ".002"
@@ -165,7 +165,18 @@ def _core_path():
     return core.PROCESSED / "its_core_genus.parquet"
 
 
+def _light_plots() -> tuple[str, ...] | None:
+    """Light-mode plots (data/light_mode.txt next to the processed folder), or None when light mode is off.
+    Read relative to core.PROCESSED (not config.LIGHT_FILE) so the API and its tests follow the same data dir."""
+    f = core.PROCESSED.parent / "light_mode.txt"
+    if not f.exists():
+        return None
+    plots = {config.normalise_plot(line.split("#")[0]) for line in f.read_text().splitlines()}
+    return tuple(sorted(p for p in plots if p))
+
+
 def _core_df() -> pd.DataFrame:
+    """its_core_genus; in light mode only the light-mode plots, so they are scored against each other only."""
     f = _core_path()
     if not f.exists():
         raise HTTPException(503, "its_core_genus.parquet missing: run scripts/02b_build_neon_features.py")
@@ -173,12 +184,14 @@ def _core_df() -> pd.DataFrame:
     if "product" not in df.columns:
         raise HTTPException(503, "its_core_genus.parquet is stale (no `product` column): "
                                  "run scripts/02b_build_neon_features.py")
-    return df
+    lp = _light_plots()
+    return df if lp is None else df[df["plotID"].isin(lp)]
 
 
-def _core_mtime() -> float:
+def _core_mtime() -> tuple:
+    """Cache key of the core input: file mtime plus the light-mode plot list (switching it changes the data)."""
     _core_df()
-    return _core_path().stat().st_mtime
+    return (_core_path().stat().st_mtime, _light_plots())
 
 
 def _kb_mtimes() -> tuple:
@@ -202,14 +215,14 @@ def _kb(mtimes) -> kbmod.KB:
 
 
 @lru_cache(maxsize=8)
-def _result(site: str, year: int, core_mtime: float, kb_mtimes: tuple) -> risk.CropRiskResult:
+def _result(site: str, year: int, core_mtime: tuple, kb_mtimes: tuple) -> risk.CropRiskResult:
     # core_mtime and kb_mtimes are cache keys: the tables themselves are loaded here at request time
     with _lock:
         return risk.compute_crop_risk(site, year, core=_core_df(), kb=_kb(kb_mtimes))
 
 
 @lru_cache(maxsize=16)
-def _site_units(site: str, core_mtime: float) -> pd.DataFrame:
+def _site_units(site: str, core_mtime: tuple) -> pd.DataFrame:
     sc = _core_df()
     units, _ = risk.build_units(sc[sc["site"] == site], {})
     units = units.copy()
@@ -328,9 +341,14 @@ def crop_risk(plot_id: str, unit: str):
     md = res.metadata
     peers = res.summary[res.summary["product"] == u.product].drop_duplicates("unit_id")
     crops = [_crop_row(res, c, uid, u.product) for c in kbmod.SCORED_CROPS]
+    notes = list(md.get("notes", []))
+    lp = _light_plots()
+    if lp is not None:
+        notes.insert(0, f"Light mode is on: only plots {', '.join(lp)} are scored and compared with each other, "
+                        "so comparison sets are small.")
     return PlotCropRisk(
         **_ref(u).model_dump(), plot_id=plot_id, site=site, n_units_in_group=int(len(peers)), crops=crops,
-        skipped=_skipped_groups(res, uid), caveats=list(md.get("caveats", [])), notes=list(md.get("notes", [])),
+        skipped=_skipped_groups(res, uid), caveats=list(md.get("caveats", [])), notes=notes,
         kb=_kb_sources(md), parameters={k: float(v) for k, v in md.get("parameters", {}).items()},
         index_type=str(md.get("index_type", "")))
 

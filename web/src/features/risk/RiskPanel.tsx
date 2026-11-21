@@ -122,6 +122,7 @@ function Body({ data, plotId, unit, crop, across, setAcross, picked, pick }: {
       <p className="risk-note">
         Each cell is the crop risk index of a plot. Shading compares plots within each crop (darkest = highest for that crop).
         Relative index, not a probability of disease.
+        {data.notes.filter((n) => n.startsWith('Light mode')).map((n) => <strong key={n}> {n}</strong>)}
       </p>
       <Choice label="Shading">
         <button aria-pressed={!across} onClick={() => setAcross(false)}>Shade within each crop</button>
@@ -129,7 +130,7 @@ function Body({ data, plotId, unit, crop, across, setAcross, picked, pick }: {
       </Choice>
       {sel && (
         <>
-          <Heatmap rows={data.crops} plotId={plotId} selected={sel} across={across} nUnits={data.n_units_in_group} onSelect={onSelect} />
+          <Heatmap rows={data.crops} plotId={plotId} unit={unit} selected={sel} across={across} nUnits={data.n_units_in_group} onSelect={onSelect} />
           <Breakdown plot={sel.plot} unit={unit} crop={sel.crop} />
         </>
       )}

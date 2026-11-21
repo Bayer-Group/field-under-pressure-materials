@@ -219,3 +219,16 @@ def test_responses_are_strict_json(client):
         json.dumps(r, allow_nan=False)
         for c in r["crops"]:
             json.dumps(client.get(f"/api/plots/STER_020/crop-risk/{unit['unit']}/{c['crop']}").json(), allow_nan=False)
+
+
+def test_light_mode_scores_only_light_plots(client):
+    (client.proc.parent / "light_mode.txt").write_text("# light mode\nSTER_001\nSTER 002\nSTER_003\nSTER_004\nSTER_005\n")
+    light = {"STER_001", "STER_002", "STER_003", "STER_004", "STER_005"}
+    r = client.get("/api/plots/STER_001/crop-risk/2022-002").json()
+    assert r["n_units_in_group"] == 5 and r["notes"][0].startswith("Light mode is on")
+    for c in r["crops"]:
+        assert {p["plot_id"] for p in c["peers"]} <= light
+    assert client.get("/api/plots/STER_006/crop-risk").json() == []        # outside light mode: no ITS units
+    (client.proc.parent / "light_mode.txt").unlink()                        # switching off is picked up (cache key)
+    r = client.get("/api/plots/STER_001/crop-risk/2022-002").json()
+    assert r["n_units_in_group"] > 5 and not any(n.startswith("Light mode") for n in r["notes"])
