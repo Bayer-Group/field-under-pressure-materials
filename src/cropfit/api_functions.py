@@ -20,6 +20,7 @@ joined_fungi_genus (scripts/06) and fungal_guilds (scripts/14).
 from __future__ import annotations
 
 import datetime as dt
+import re
 from typing import Literal
 
 import pandas as pd
@@ -56,6 +57,41 @@ AGREEMENT_TEXT = {
     "neither": "Neither genes nor known carriers by name found.",
     "unknown": "Too few genes to compare with the named carriers.",
 }
+
+# Plain names for the phyla the gene phylogeny reports (closest known relatives of the genes)
+FRIENDLY_PHYLUM = {
+    "Actinomycetota": "actinobacteria", "Pseudomonadota": "proteobacteria", "Nitrososphaerota": "soil archaea",
+    "Thermoproteota": "soil archaea", "Gemmatimonadota": "Gemmatimonadetes", "Chloroflexota": "Chloroflexi",
+    "Myxococcota": "myxobacteria", "Bacteroidota": "Bacteroidetes", "Verrucomicrobiota": "Verrucomicrobia",
+    "Acidobacteriota": "acidobacteria", "Cyanobacteriota": "cyanobacteria", "Bacillota": "Firmicutes",
+    "Planctomycetota": "Planctomycetes", "Nitrospirota": "Nitrospira", "Ascomycota": "fungi (Ascomycota)",
+}
+WHO_MIN_SHARE = 15.0        # % of a function's genes for a phylum to be named
+WHO_CLOSE_IDENTITY = 95.0   # % protein identity from which a genus is named as a close match
+WHO_CLOSE_SHARE = 10.0      # ... and that genus carries at least this % of the genes
+AMMONIA_OXIDISERS = {"Nitrososphaerota", "Thermoproteota"}             # ammonia-oxidising archaea
+AMMONIA_OXIDISER_FAMILIES = {"Nitrosomonadaceae", "Nitrospiraceae"}   # ammonia-oxidising / comammox bacteria
+METHANOTROPH_FAMILIES = {"Methylococcaceae", "Methylomonadaceae", "Methylocystaceae", "Beijerinckiaceae",
+                         "Methylacidiphilaceae", "Methylomirabilaceae"}   # aerobic methane oxidisers
+SOLUBLE_MMO = ["K16157", "K16158", "K16159", "K16160", "K16161"]       # mmoXYZBC: methanotrophs only
+UNUSUAL_CLASSES = {"Energy metabolism", "Xenobiotics biodegradation", "Biosynthesis of other secondary metabolites",
+                   "Biosynthesis of terpenoids and polyketides"}   # ecologically telling; housekeeping left out
+UNUSUAL_RARE, MIN_REFERENCE = 2, 5   # "uncommon": complete in at most 2 of the other deep samples (needs >= 5 of them)
+# Plain-language (short name, meaning) for modules a farmer may care about (general knowledge, kept short), most
+# relevant first: this order ranks the "unusual" card, and only modules listed here are named in its headline.
+MODULE_NOTES = {
+    "M00790": ("pyrrolnitrin", "an antifungal compound made by some biocontrol bacteria"),
+    "M00875": ("staphyloferrin B", "an iron-binding siderophore, which can starve pathogens of iron"),
+    "M00876": ("staphyloferrin A", "an iron-binding siderophore, which can starve pathogens of iron"),
+    "M01070": ("ferricrocin", "an iron-binding siderophore best known from fungi"),
+    "M00623": ("phthalate breakdown", "breaks down phthalates (plastic softeners)"),
+    "M00636": ("phthalate breakdown", "breaks down phthalates (plastic softeners)"),
+    "M00174": ("methane oxidation", "consumes methane"),
+    "M00778": ("type II polyketides", "the backbone of many antibiotics, made mostly by actinobacteria"),
+    "M01039": ("spirilloxanthin", "a pigment of light-harvesting bacteria"),
+    "M01044": ("astaxanthin", "a red antioxidant pigment"),
+}
+COPPER_RESISTANCE = ["K07233", "K07156", "K07245", "K07787", "K07798", "K07796", "K07810"]   # pco/cop + cus
 
 # function_group in rules/ko_panel.csv -> (title, what it does, theme); used for the gene list
 GROUPS: dict[str, tuple[str, str, str]] = {
@@ -199,6 +235,9 @@ class DecisionCard(BaseModel):
     confidence: str                  # high | medium | low
     evidence: list[str]              # the numbers and rules behind the finding
     carrier_terms: list[str] = []    # term ids to look up in FunctionProfile.carriers ("Who may carry it")
+    section: str = "microbes"        # measured | microbes | life: where the card sits on the page
+    who: list[str] = []              # who carries it, from the genes' closest known relatives (gene phylogeny)
+    context: str | None = None       # one line placing the sample among the well-sequenced NEON farm soils
 
 
 Agreement = Literal["both", "genes_only", "names_only", "neither", "unknown"]
@@ -399,6 +438,116 @@ def _bacteria_rollup(r) -> tuple[microbe_roles.RollUp | None, int]:
     return microbe_roles.roll_up(taxa, "bacteria", ann=microbe_roles.load_annotations(core.PROCESSED)), reads
 
 
+# ---------------------------------------------------------------- KEGG modules and gene phylogeny
+def _module_state(key: str) -> tuple[pd.DataFrame, int] | None:
+    """This metagenome's KEGG module completeness (all its KOs) with, per module, in how many of the *other*
+    well-sequenced metagenomes it is complete. None without scripts/19 output."""
+    if not (_has("kegg_module_completeness") and _has("kegg_modules")):
+        return None
+    comp, mods = core.table("kegg_module_completeness"), core.table("kegg_modules")
+    mine = comp[comp["metagenome_key"] == key].merge(
+        mods[["module", "name", "class_a", "class_b", "class_c", "definition"]], on="module")
+    if mine.empty:
+        return None
+    mg = _metagenomes()
+    others = set(mg.loc[mg["ko_depth_ok"], "metagenome_key"]) - {key}
+    ref = comp[comp["metagenome_key"].isin(others)]
+    full = ref.assign(full=ref["completeness"] == 1).groupby("module")["full"].sum()
+    mine = mine.assign(ref_complete=mine["module"].map(full).fillna(0).astype(int))
+    return mine, len(others)
+
+
+def _plain(name: str) -> str:
+    """'Denitrification, nitrate => nitrogen' -> 'Denitrification'."""
+    return name.split(",")[0].strip()
+
+
+def _who(key: str, kos: list[str]) -> list[str]:
+    """Who carries these genes: the phyla of their closest known relatives (>= WHO_MIN_SHARE % of the genes), plus a
+    genus when the match is close. [] without scripts/20 output or with too few genes."""
+    if not _has("ko_taxa"):
+        return []
+    t = core.table("ko_taxa")
+    x = t[(t["metagenome_key"] == key) & t["ko"].isin(kos)]
+    total = float(x["n_genes"].sum())
+    if total < MIN_COUNT:
+        return []
+    out = []
+    ph = x.groupby("phylum")["n_genes"].sum().sort_values(ascending=False)
+    for phylum, n in ph.head(3).items():
+        share = 100 * n / total
+        if share >= WHO_MIN_SHARE and phylum:
+            out.append(f"{FRIENDLY_PHYLUM.get(phylum, phylum)} ({share:.0f}%)")
+    g = x.groupby("genus").agg(n=("n_genes", "sum"), ident=("identity_median", "median"))
+    g = g[(100 * g["n"] / total >= WHO_CLOSE_SHARE) & (g["ident"] >= WHO_CLOSE_IDENTITY)]
+    out += [f"{genus}, close match ({100 * r.n / total:.0f}%)" for genus, r in g.sort_values("n", ascending=False).head(2).iterrows()
+            if genus and not genus.startswith("unclassified")]
+    return out
+
+
+def _ammonia_oxidiser_share(key: str) -> float | None:
+    """% of the ambiguous amoA/pmoA genes (K10944) whose closest relatives are known ammonia oxidisers."""
+    if not _has("ko_taxa"):
+        return None
+    t = core.table("ko_taxa")
+    x = t[(t["metagenome_key"] == key) & (t["ko"] == "K10944")]
+    total = float(x["n_genes"].sum())
+    if total < MIN_COUNT:
+        return None
+    hit = x[x["phylum"].isin(AMMONIA_OXIDISERS) | x["family"].isin(AMMONIA_OXIDISER_FAMILIES)]["n_genes"].sum()
+    return 100 * float(hit) / total
+
+
+def _methanotroph_genes(key: str) -> int:
+    """Methane-oxidation genes that really point to methanotrophs: soluble MMO, or particulate MMO (K10944-6,
+    shared with ammonia oxidisers) whose closest relatives are methanotroph families."""
+    if not _has("ko_taxa"):
+        return 0
+    t = core.table("ko_taxa")
+    x = t[t["metagenome_key"] == key]
+    smmo = x[x["ko"].isin(SOLUBLE_MMO)]["n_genes"].sum()
+    pmmo = x[x["ko"].isin(["K10944", "K10945", "K10946"]) & x["family"].isin(METHANOTROPH_FAMILIES)]["n_genes"].sum()
+    return int(smmo + pmmo)
+
+
+def _per_genome_reference(key: str, kos: list[str]) -> tuple[float, list[float]] | None:
+    """Copies of these KOs per genome (marker mean) here and in each other well-sequenced metagenome."""
+    if not _has("ko_counts_all"):
+        return None
+    mg = _metagenomes().set_index("metagenome_key")
+    deep = mg[mg["ko_depth_ok"] & (mg["marker_mean"] > 0)]
+    if key not in deep.index:
+        return None
+    k = core.table("ko_counts_all")
+    per = (k[k["ko"].isin(kos) & k["metagenome_key"].isin(deep.index)].groupby("metagenome_key")["count"].sum()
+           .reindex(deep.index, fill_value=0) / deep["marker_mean"])
+    return float(per[key]), [float(v) for v in per.drop(key)]
+
+
+def _compare(value: float, others: list[float]) -> str:
+    """'more than', 'fewer than' or 'about as many as' the others (outside / inside their range)."""
+    if value > max(others):
+        return "more than"
+    if value < min(others):
+        return "fewer than"
+    return "about as many as"
+
+
+def _count_range(counts: list[int]) -> str:
+    lo, hi = int(min(counts)), int(max(counts))
+    return "none" if hi == 0 else str(lo) if lo == hi else f"{lo}-{hi}"
+
+
+def _module_kos(definition: str) -> list[str]:
+    return re.findall(r"K\d{5}", definition or "")
+
+
+def _ref_line(row, n_ref: int, what: str = "complete") -> str | None:
+    if row is None or n_ref < 1:
+        return None
+    return f"{what.capitalize()} in {int(row.ref_complete)} of the {n_ref} other well-sequenced NEON farm soils."
+
+
 # ---------------------------------------------------------------- cards
 def _p(v: float) -> str:
     """Share for text: '<1%' for small non-zero shares, so 'present' and '0%' never meet."""
@@ -461,14 +610,190 @@ def _bacteria_pathogen_card(ru: microbe_roles.RollUp, reads: int) -> DecisionCar
                         implications=imps, basis="names", confidence="low", evidence=ev, carrier_terms=[])
 
 
+SECTION = {"n_now": "measured", "n_release": "measured", "soil": "measured", "fungi": "life",
+           "bacteria_pathogens": "life", "root_health": "life", "copper": "life"}   # everything else: microbes
+
+
 def _cards(copies: dict[str, int], pathways: list[Pathway], fungi: Fungi | None, m: Measured | None,
            deep: bool, guilds: pd.DataFrame, bacteria: microbe_roles.RollUp | None = None,
-           bacteria_reads: int = 0) -> list[DecisionCard]:
-    """The cards of one sample; `bacteria` is the sample's genus roll-up (None without genus-level data)."""
+           bacteria_reads: int = 0, key: str | None = None) -> list[DecisionCard]:
+    """The cards of one sample; `bacteria` is the sample's genus roll-up (None without genus-level data); `key`
+    (the metagenome) adds who carries each function and the KEGG-module cards when scripts 19/20 have run."""
     cards = _gene_cards(copies, pathways, fungi, m, deep, guilds, bacteria, bacteria_reads)
     for c in cards:
         c.carrier_terms = CARD_CARRIER_TERMS.get(c.card, [])
+        c.section = SECTION.get(c.card, "microbes")
+    if key and deep:
+        cards += _module_cards(cards, key, m)
     return cards
+
+
+def _module_cards(cards: list[DecisionCard], key: str, m: Measured | None) -> list[DecisionCard]:
+    """Use all KEGG genes: who carries the nitrogen, phosphorus and root-health functions (gene phylogeny), how
+    common each pathway is among the other well-sequenced NEON farm soils, and three cards built from KEGG modules."""
+    U, N = "upside", "neutral"
+    imp = lambda kind, text: Implication(kind=kind, text=text)  # noqa: E731
+    by = {c.card: c for c in cards}
+    state = _module_state(key)
+    mods, n_ref = state if state else (pd.DataFrame(), 0)
+    row = lambda mid: next(iter(mods[mods["module"] == mid].itertuples()), None) if len(mods) else None  # noqa: E731
+    complete = lambda mid: bool(row(mid) is not None and row(mid).completeness == 1)  # noqa: E731
+
+    # ---- nitrogen: plain summary from the modules, who does each step, reference
+    if "nitrogen" in by and len(mods):
+        c = by["nitrogen"]
+        can = [txt for mid, txt in (("M00528", "turn ammonium into nitrate"),
+                                    ("M00529", "turn nitrate back into nitrogen gas"),
+                                    ("M00530", "keep nitrate in the soil as ammonium")) if complete(mid)]
+        c.headline = ("Microbes here can " + ", ".join(can[:-1]) + (" and " if len(can) > 1 else "") + can[-1]
+                      if can else "Few complete nitrogen pathways") + (
+            "; no sign of nitrogen fixation." if not complete("M00175") else "; some can fix nitrogen.")
+        aob = _ammonia_oxidiser_share(key)
+        if aob is not None:
+            c.implications.insert(0, imp(U if aob >= 50 else N,
+                f"About {aob:.0f}% of the ammonia-oxidation genes come from known ammonia oxidisers (mostly soil "
+                "archaea), so nitrification is real here, not only a look-alike enzyme."
+                if aob >= 50 else
+                f"Only about {aob:.0f}% of the ammonia-oxidation genes come from known ammonia oxidisers; the rest "
+                "are similar enzymes of other bacteria."))
+            c.implications = [i for i in c.implications if "(if these genes are from ammonia rather than methane" not in i.text]
+        c.who = [f"N2O made by: {', '.join(_who(key, ['K04561'])[:2]) or 'too few genes'}",
+                 f"N2O removed by: {', '.join(_who(key, ['K00376'])[:3]) or 'too few genes'}",
+                 f"Ammonium to nitrate: {', '.join(_who(key, ['K10944'])[:2]) or 'too few genes'}"]
+        c.context = _ref_line(row("M00529"), n_ref, "full denitrification")
+    if "p_release" in by:
+        by["p_release"].who = _who(key, ["K01113", "K01077", "K00117", "K06137"])
+    if "copper" in by:
+        c = by["copper"]
+        c.who = _who(key, COPPER_RESISTANCE)
+        ref = _per_genome_reference(key, COPPER_RESISTANCE)
+        if ref and len(ref[1]) >= MIN_REFERENCE:
+            value, others = ref
+            c.headline = (f"Some soil bacteria carry copper-resistance genes, {_compare(value, others)} in the other "
+                          "well-sequenced farm soils.")
+            c.context = (f"About {value:.1f} copies per bacterial genome here; {min(others):.1f}-{max(others):.1f} in "
+                         f"the {len(others)} other well-sequenced NEON farm soils.")
+            if _compare(value, others) == "more than":
+                c.implications.insert(0, imp(N, "More copper-resistance genes than in the other farm soils can point to "
+                                                "copper building up (copper fungicides, manure), but is not proof of it."))
+    if "root_health" in by:
+        by["root_health"].who = [f"Stress relief (ACC deaminase): {', '.join(_who(key, ['K01505'])) or 'too few genes'}"]
+    if not len(mods):
+        return []
+    out: list[DecisionCard] = []
+    pathways = mods[mods["class_a"] == "Pathway modules"]
+
+    # ---- breakdown of aromatic and man-made compounds (KEGG: Xenobiotics biodegradation)
+    xen = pathways[pathways["class_b"] == "Xenobiotics biodegradation"]
+    done = xen[xen["completeness"] == 1]
+    if len(xen):
+        ref = core.table("kegg_module_completeness")
+        mg = _metagenomes()
+        others = set(mg.loc[mg["ko_depth_ok"], "metagenome_key"]) - {key}
+        per_other = (ref[ref["metagenome_key"].isin(others) & ref["module"].isin(xen["module"]) & (ref["completeness"] == 1)]
+                     .groupby("metagenome_key").size().reindex(list(others), fill_value=0))
+        names = [_plain(x) for x in done.sort_values("name")["name"]]
+        imps = [imp(U, "These are the routes soil bacteria use to break down plant lignin products and some pesticide, "
+                       "fuel and plastic residues.")] if len(done) else []
+        for mid in ("M00623", "M00636"):
+            if complete(mid):
+                imps.append(imp(U, f"One of them {MODULE_NOTES[mid][1]}."))
+                break
+        partial = xen[(xen["completeness"] >= 0.5) & (xen["completeness"] < 1)]
+        if len(partial):
+            imps.append(imp(N, "Partly present: " + ", ".join(_plain(x) for x in partial["name"].head(4)) + "."))
+        out.append(DecisionCard(
+            card="breakdown", title="Breakdown of aromatic and man-made compounds", status="info", flag=None,
+            headline=(f"Microbes here can fully break down {len(done)} kinds of aromatic compound."
+                      if len(done) else "No complete breakdown route for aromatic compounds found."),
+            finding="Complete: " + (", ".join(names) if names else "none") + ".",
+            implications=imps, basis="genes", confidence="low", section="microbes",
+            context=(f"The other {len(per_other)} well-sequenced NEON farm soils have {int(per_other.median())} "
+                     f"(range {int(per_other.min())}-{int(per_other.max())})." if len(per_other) else None),
+            evidence=[f"KEGG modules in 'Xenobiotics biodegradation': {len(done)} complete, {len(partial)} at 50% or more, "
+                      f"of {len(xen)}.", "A module counts as complete when every step has at least one gene copy."]))
+
+    # ---- gases: methane and sulfur
+    meth_module = complete("M00174")
+    methanotrophs = _methanotroph_genes(key)
+    meth_ox = meth_module and methanotrophs >= MIN_COUNT
+    meth_made = [m_ for m_ in ("M00567", "M00357", "M00356", "M00563") if complete(m_)]
+    sox = complete("M00595")
+    imps = [imp(U, "Microbes here can consume methane, a greenhouse gas.") if meth_ox else
+            imp(N, "The methane-oxidation genes found come from ammonia oxidisers, not methane eaters: no clear sign "
+                   "of methane-consuming microbes.") if meth_module else
+            imp(N, "No complete methane-consuming route found.")]
+    imps.append(imp(N, "No complete route for making methane, as expected in well-aerated soil.") if not meth_made else
+                imp(N, "A complete methane-making route is present: such microbes work in waterlogged, oxygen-poor spots."))
+    if sox:
+        imps.append(imp(U, "Microbes can turn reduced sulfur into sulfate, the form crops take up."))
+    out.append(DecisionCard(
+        card="gases", title="Methane and sulfur", status="info", flag=None,
+        headline=("Can consume methane" if meth_ox else "No clear methane consumers") + (
+            "; can turn sulfur into sulfate" if sox else "") + ".",
+        finding="KEGG modules: methane oxidation " + ("complete" if meth_module else "incomplete")
+                + (f" ({methanotrophs} genes from methanotrophs)" if meth_module else "")
+                + f"; methane production {'complete' if meth_made else 'incomplete'}; sulfur oxidation (SOX) "
+                + ("complete" if sox else "incomplete") + ".",
+        implications=imps, basis="genes", confidence="low", section="microbes",
+        who=[],
+        context=None,
+        evidence=["KEGG M00174 (methane oxidation), M00567/M00357/M00356/M00563 (methanogenesis), M00595 (SOX).",
+                  "Methane eaters are counted only from soluble methane monooxygenase (mmoX-C) or particulate monooxygenase "
+                  "genes whose closest relatives are methanotroph families: the same particulate genes also belong to "
+                  "ammonia oxidisers in this annotation."]))
+
+    # ---- what is unusual compared with the other well-sequenced farm soils
+    if n_ref >= MIN_REFERENCE:
+        eco = pathways[pathways["class_b"].isin(UNUSUAL_CLASSES)]
+        rare = eco[(eco["completeness"] == 1) & (eco["ref_complete"] <= UNUSUAL_RARE)]
+        missing = eco[(eco["completeness"] < 1) & (eco["ref_complete"] >= n_ref - 1)]
+        # modules with a known plain meaning first, then the rarest
+        prio = {mid: i for i, mid in enumerate(MODULE_NOTES)}           # MODULE_NOTES order = relevance
+        rare = (rare.assign(_prio=rare["module"].map(prio).fillna(len(prio)))
+                .sort_values(["_prio", "ref_complete", "name"]))
+        dup = eco["name"].map(_plain).duplicated(keep=False)
+        label = lambda r: (r.name if dup.get(r.Index, False) else _plain(r.name)) + (  # noqa: E731
+            f" ({MODULE_NOTES[r.module][1]})" if r.module in MODULE_NOTES else "")
+        noted = [r for r in rare.itertuples() if r.module in MODULE_NOTES][:2]
+        rest = [r for r in rare.itertuples() if r not in noted]
+        if noted:
+            headline = ("Microbes here can make " + " and ".join(f"{MODULE_NOTES[r.module][0]} "
+                                                               f"({MODULE_NOTES[r.module][1]})" for r in noted)
+                        + ", which few of the other farm soils can.")
+        elif len(rare):
+            headline = "A few less common pathways, none with a clear meaning for crops."
+        elif len(missing):
+            headline = "Nothing extra; a few pathways common elsewhere look incomplete here."
+        else:
+            headline = "Nothing stands out against the other farm soils."
+        imps = []
+        if rest:
+            imps.append(imp(N, ("Also uncommon: " if noted else "Uncommon here: ")
+                            + "; ".join(label(r) for r in rest[:5]) + "."))
+        if len(missing):
+            imps.append(imp(N, "Usual elsewhere but incomplete here: "
+                               + "; ".join(label(r) for r in missing.head(5).itertuples()) + "."))
+        if len(rare) or len(missing):
+            imps.append(imp(N, "Deeper-sequenced samples complete more pathways, so part of a difference can be depth."))
+        who = [f"{MODULE_NOTES[r.module][0][:1].upper()}{MODULE_NOTES[r.module][0][1:]}: "
+               f"{', '.join(_who(key, _module_kos(r.definition))[:2]) or 'too few genes to tell'}" for r in noted]
+        shown = noted or list(rare.itertuples())
+        out.append(DecisionCard(
+            card="unusual", title="Unusual for these soils", status="info", flag=None,
+            headline=headline, who=who,
+            finding=f"Pathways for energy and nutrient cycling, breakdown of compounds and natural products (antibiotics, "
+                    f"siderophores, pigments), compared with the {n_ref} other well-sequenced NEON farm soils: complete "
+                    f"here but in at most {UNUSUAL_RARE} of them, or incomplete here but complete in at least {n_ref - 1}.",
+            implications=imps, basis="genes", confidence="low", section="microbes",
+            context=(f"Complete in {_count_range([r.ref_complete for r in shown])} of the {n_ref} other well-sequenced "
+                     "NEON farm soils." if shown else f"Compared with {n_ref} other well-sequenced NEON farm soils."),
+            evidence=[f"{r.module} {r.name}: complete here, in {r.ref_complete} of {n_ref} others"
+                      for r in rare.head(8).itertuples()]
+                     + [f"{r.module} {r.name}: {r.steps_found}/{r.n_steps} steps here, complete in {r.ref_complete} of "
+                        f"{n_ref} others" for r in missing.head(8).itertuples()]
+                     + ["A small reference: differences can also come from sequencing depth or chance."]))
+    return out
 
 
 def _gene_cards(copies: dict[str, int], pathways: list[Pathway], fungi: Fungi | None, m: Measured | None,
@@ -710,11 +1035,10 @@ def _gene_cards(copies: dict[str, int], pathways: list[Pathway], fungi: Fungi | 
                            "can say whether there is enough."))
         cards.append(DecisionCard(
             card="p_release", title="Phosphorus release by microbes", status="info", flag=None,
-            headline="Frees P from organic matter and minerals" + (", about equally" if 40 <= share <= 60 else
-                     f", mostly from {'organic matter' if share > 60 else 'minerals'}"),
-            finding="Microbes here can free phosphorus from organic matter and from minerals, "
-                    + ("about equally." if 40 <= share <= 60 else
-                       f"mostly from {'organic matter' if share > 60 else 'minerals'}."),
+            headline="Microbes here can free phosphorus from organic matter and from minerals, "
+                     + ("about equally." if 40 <= share <= 60 else
+                        f"mostly from {'organic matter' if share > 60 else 'minerals'}."),
+            finding=f"Genes for freeing phosphorus: {org} copies for organic phosphorus, {mineral} for mineral phosphorus.",
             implications=imps, basis="genes", confidence="low",
             evidence=[f"Organic-P genes (phoD, phoA, appA) {org}, mineral-P genes (gcd, pqqC) {mineral} copies"]))
 
@@ -723,7 +1047,7 @@ def _gene_cards(copies: dict[str, int], pathways: list[Pathway], fungi: Fungi | 
     if plasmid + pumps >= MIN_COUNT:
         cards.append(DecisionCard(
             card="copper", title="Copper resistance", status="info", flag=None,
-            headline=f"{plasmid + pumps} copper-resistance gene copies",
+            headline="Some soil bacteria carry copper-resistance genes.",
             finding=f"Copper-resistance genes found: {plasmid} copies of pco/cop genes (often carried on plasmids) and "
                     f"{pumps} of the cus copper pump.",
             implications=[imp(N, "Resistance genes on plasmids can pass between bacteria and spread where copper builds "
@@ -825,6 +1149,7 @@ def function_profile(sample_id: str):
         notes.append("Who may carry it: genera of this sample's bacteria and archaea known for the role (AI "
                      "annotation, medium or high confidence); shares are of the classified bacterial and archaeal reads.")
     return FunctionProfile(sample_id=r.sample_id, plot_id=r.plotID, date=r.date, n_genes=r.n_ko_genes,
-                           deep_enough=deep, cards=_rank(_cards(copies, pathways, fungi, measured, deep, guilds, ru, bacteria_reads)),
+                           deep_enough=deep, cards=_rank(_cards(copies, pathways, fungi, measured, deep, guilds, ru,
+                                                                bacteria_reads, key=r.metagenome_key)),
                            pathways=pathways, fungi=fungi, groups=groups, measured=measured, notes=notes,
                            carriers=carriers)

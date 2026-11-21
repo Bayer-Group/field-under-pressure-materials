@@ -259,6 +259,9 @@ export interface DecisionCard {
   confidence: 'high' | 'medium' | 'low'
   evidence: string[]
   carrier_terms?: string[] // term ids to look up in FunctionProfile.carriers
+  section: 'measured' | 'microbes' | 'life' // where the card sits on the page
+  who: string[] // who carries it, from the genes' closest known relatives
+  context: string | null // one line placing the sample among the well-sequenced NEON farm soils
 }
 
 export interface FunctionProfile {

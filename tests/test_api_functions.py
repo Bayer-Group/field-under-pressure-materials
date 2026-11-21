@@ -1,5 +1,5 @@
 """Soil-functions routes of the GUI API on a tiny synthetic dataset: no network, no real data.
-The view reads one sample on its own: nothing is ranked against other samples."""
+Each sample is read on its own; only the KEGG-module cards compare it with other well-sequenced samples."""
 import datetime as dt
 
 import pandas as pd
@@ -249,3 +249,85 @@ def test_pathogen_card_in_the_profile(with_names):
     assert card["title"] == "Bacteria that include plant pathogens" and card["status"] == "info"   # Streptomyces: some species
     assert card["headline"].startswith("20% from genera that include plant pathogens")
     assert "Streptomyces 20% (S. scabies)" in card["finding"]
+
+
+@pytest.fixture
+def with_modules(client):
+    """Six more well-sequenced metagenomes as a reference, KEGG module completeness and the KO x lineage table."""
+    proc = api.PROCESSED
+    others = [f"nmdc:dobj-r{i}" for i in range(6)]
+    mg = pd.read_parquet(proc / "metagenomes.parquet")
+    mg["marker_mean"] = [100.0, 1.0]
+    mg = pd.concat([mg, pd.DataFrame([dict(metagenome_key=k, site="P", plotID="P_001", date="2021-06-0" + str(i + 1),
+                                           n_ko_genes=700_000, ko_depth_ok=True, marker_mean=100.0)
+                                      for i, k in enumerate(others)])], ignore_index=True)
+    mg.to_parquet(proc / "metagenomes.parquet")
+    panel = pd.read_parquet(proc / "ko_panel.parquet")
+    pd.concat([panel, pd.DataFrame([dict(metagenome_key=k, ko="K0", gene="nirK", function_group="denitrification",
+                                         count=50, per_genome_eq=0.5, per_million=0.0) for k in others])]
+              ).to_parquet(proc / "ko_panel.parquet")
+    pd.DataFrame([dict(module="M00529", name="Denitrification, nitrate => nitrogen", class_a="Pathway modules",
+                       class_b="Energy metabolism", class_c="Nitrogen metabolism", definition="K00370 K00368 K04561 K00376"),
+                  dict(module="M00790", name="Pyrrolnitrin biosynthesis, tryptophan => pyrrolnitrin",
+                       class_a="Pathway modules", class_b="Biosynthesis of other secondary metabolites",
+                       class_c="Biosynthesis of other bacterial compounds", definition="K14266 K19981 K14257 K19982"),
+                  dict(module="M00174", name="Methane oxidation, methanotroph, methane => formaldehyde",
+                       class_a="Pathway modules", class_b="Energy metabolism", class_c="Methane metabolism",
+                       definition="(K10944+K10945+K10946) K14028")]
+                 ).to_parquet(proc / "kegg_modules.parquet")
+    C = lambda key, mod, c: dict(metagenome_key=key, module=mod, steps_found=int(4 * c), n_steps=4,  # noqa: E731
+                                 completeness=c, missing_steps=[], via_alias="")
+    pd.DataFrame([C("nmdc:dobj-a", "M00529", 1.0), C("nmdc:dobj-a", "M00790", 1.0), C("nmdc:dobj-a", "M00174", 1.0)]
+                 + [C(k, "M00529", 1.0 if i < 4 else 0.75) for i, k in enumerate(others)]
+                 + [C(k, "M00790", 0.5) for k in others] + [C(k, "M00174", 1.0) for k in others]
+                 ).to_parquet(proc / "kegg_module_completeness.parquet")
+    T = lambda ko, phylum, family, genus, n, ident: dict(  # noqa: E731
+        metagenome_key="nmdc:dobj-a", ko=ko, domain="Bacteria", phylum=phylum, class_="", order="", family=family,
+        genus=genus, n_genes=n, identity_median=ident)
+    pd.DataFrame([T("K00376", "Pseudomonadota", "Nitrobacteraceae", "Bradyrhizobium", 15, 97.0),
+                  T("K00376", "Gemmatimonadota", "", "", 5, 70.0),
+                  T("K04561", "Actinomycetota", "", "", 20, 65.0),
+                  T("K10944", "Nitrososphaerota", "Nitrososphaeraceae", "Nitrososphaera", 30, 80.0),
+                  T("K10944", "Actinomycetota", "", "", 10, 60.0),
+                  T("K14266", "Pseudomonadota", "Pseudomonadaceae", "Pseudomonas", 8, 85.0),
+                  T("K07787", "Pseudomonadota", "", "", 30, 70.0)]
+                 ).rename(columns={"class_": "class"}).to_parquet(proc / "ko_taxa.parquet")
+    pd.DataFrame([dict(metagenome_key="nmdc:dobj-a", ko="K07787", count=300)]            # 3 per genome here
+                 + [dict(metagenome_key=k, ko="K07787", count=50 + 10 * i) for i, k in enumerate(others)]   # 0.5-1.0
+                 ).to_parquet(proc / "ko_counts_all.parquet")
+    return client
+
+
+def test_cards_are_grouped_into_sections(with_modules):
+    cards = {c["card"]: c for c in with_modules.get("/api/functions/mg-dobj-a").json()["cards"]}
+    assert cards["n_now"]["section"] == "measured" and cards["fungi"]["section"] == "life"
+    assert cards["copper"]["section"] == "life" and cards["nitrogen"]["section"] == "microbes"
+    assert cards["unusual"]["section"] == "microbes"
+
+
+def test_who_carries_the_nitrogen_steps_and_reference(with_modules):
+    n = next(c for c in with_modules.get("/api/functions/mg-dobj-a").json()["cards"] if c["card"] == "nitrogen")
+    assert "N2O removed by: proteobacteria (75%), Gemmatimonadetes (25%), Bradyrhizobium, close match (75%)" in n["who"]
+    assert "Ammonium to nitrate: soil archaea (75%), actinobacteria (25%)" in n["who"]
+    assert n["context"] == "Full denitrification in 4 of the 6 other well-sequenced NEON farm soils."
+    assert any("About 75% of the ammonia-oxidation genes" in i["text"] for i in n["implications"])
+
+
+def test_methane_needs_methanotrophs_not_ammonia_oxidisers(with_modules):
+    g = next(c for c in with_modules.get("/api/functions/mg-dobj-a").json()["cards"] if c["card"] == "gases")
+    assert g["headline"].startswith("No clear methane consumers")          # module complete, but genes from archaea
+
+
+def test_unusual_names_meaningful_rare_pathways_and_who(with_modules):
+    u = next(c for c in with_modules.get("/api/functions/mg-dobj-a").json()["cards"] if c["card"] == "unusual")
+    assert "pyrrolnitrin (an antifungal compound" in u["headline"]
+    assert u["who"] == ["Pyrrolnitrin: proteobacteria (100%)"]
+    assert u["context"] == "Complete in none of the 6 other well-sequenced NEON farm soils."
+    assert "Methane" not in u["headline"]                                   # complete in every other soil: not rare
+
+
+def test_copper_is_compared_per_genome(with_modules):
+    cu = next(c for c in with_modules.get("/api/functions/mg-dobj-a").json()["cards"] if c["card"] == "copper")
+    assert "more than in the other well-sequenced farm soils" in cu["headline"]
+    assert cu["context"].startswith("About 3.0 copies per bacterial genome here; 0.5-1.0 in the 6 other")
+    assert cu["who"] == ["proteobacteria (100%)"]

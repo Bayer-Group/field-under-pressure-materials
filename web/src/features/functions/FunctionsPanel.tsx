@@ -2,7 +2,7 @@ import { api, type Carriers, type FunctionProfile, type FunctionSample, type Fun
 import { formatDate } from '../../format'
 import { functionsHref, navigate } from '../../router'
 import { useFetch } from '../../useFetch'
-import { CardLegend, CarrierList, DecisionCards, agreementClass } from './DecisionCards'
+import { CarrierList, DecisionCards, agreementClass } from './DecisionCards'
 
 const THEMES: { theme: FunctionTheme; title: string }[] = [
   { theme: 'nitrogen', title: 'Nitrogen' },
@@ -77,8 +77,7 @@ function Profile({ data }: { data: FunctionProfile }) {
   return (
     <>
       <section className="fn-block">
-        <CardLegend />
-        <DecisionCards cards={data.cards} wide carriers={data.carriers} />
+        <DecisionCards cards={data.cards} carriers={data.carriers} />
       </section>
       <details className="fn-details">
         <summary>Details: nitrogen pathways, fungal roles, measurements and genes</summary>

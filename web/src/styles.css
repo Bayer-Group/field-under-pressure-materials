@@ -519,3 +519,40 @@ a.heat-row:hover { color: var(--ink); text-decoration-color: currentColor; }
 .carrier-agree.caution { color: var(--caution); font-weight: 600; }
 .carrier-list { margin: 2px 0 0; }
 .carrier-sp { color: var(--muted); }
+
+/* soil characteristics: calm sections and cards */
+.sc-section { margin: 4px 0 22px; }
+.sc-section > h3 { font-size: 0.95rem; font-weight: 650; color: var(--ink); margin: 0; text-transform: none; letter-spacing: 0; }
+.sc-sub { font-size: 0.8rem; color: var(--muted); margin: 2px 0 10px; }
+.sc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; align-items: start; }
+.sc-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius, 10px); padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 6px; box-shadow: 0 1px 2px rgb(16 24 20 / 0.04); }
+.sc-card.look { border-left: 3px solid #e0b25c; }
+.sc-card.ok { border-left: 3px solid #8cc4a2; }
+.sc-card header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.sc-card h4 { margin: 0; font-size: 0.93rem; font-weight: 600; color: var(--ink); }
+.sc-tag { display: inline-flex; align-items: center; gap: 5px; font-size: 0.74rem; color: var(--ink-2); white-space: nowrap; }
+.sc-tag i { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+.sc-tag.ok i { background: #3f9a63; }
+.sc-tag.look i { background: #d39a33; }
+.sc-tag.none i { background: var(--line-2); }
+.sc-headline { font-size: 0.88rem; color: var(--ink); line-height: 1.45; }
+.sc-flag { font-size: 0.8rem; color: var(--ink-2); background: #fbf6ea; border-radius: 6px; padding: 4px 8px; }
+.sc-who { font-size: 0.8rem; color: var(--ink-2); }
+.sc-label { display: block; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin-bottom: 2px; }
+.sc-who ul { margin: 0; padding-left: 16px; }
+.sc-context { font-size: 0.76rem; color: var(--muted); border-top: 1px dashed var(--line); padding-top: 6px; }
+.sc-more { font-size: 0.8rem; color: var(--ink-2); }
+.sc-more > summary { cursor: pointer; color: var(--green); font-size: 0.78rem; }
+.sc-more[open] > summary { margin-bottom: 6px; }
+.sc-meta { color: var(--muted); }
+.sc-finding { margin-bottom: 6px; }
+.sc-points { list-style: none; margin: 0 0 6px; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.sc-points li { position: relative; padding-left: 16px; }
+.sc-points li::before { position: absolute; left: 2px; font-weight: 700; }
+.sc-points li.upside::before { content: '+'; color: #3f9a63; }
+.sc-points li.risk::before { content: '–'; color: #b7791f; }
+.sc-notes { margin: 0 0 6px; padding-left: 16px; color: var(--muted); font-size: 0.76rem; }
+.sc-evidence { margin-top: 6px; font-size: 0.74rem; color: var(--muted); }
+.sc-evidence summary { cursor: pointer; }
+.sc-evidence ul { margin: 4px 0 0; padding-left: 16px; }
