@@ -133,14 +133,14 @@ def refresh_risk(cur, crop_area_id: str, d0: date, d1: date, rules: septoria.Rul
     winter_crop = crop == "wheat"                                  # spring wheat has no separate crop id: stage_unknown later
     cur.execute("SELECT spray_date, protection_duration_days FROM app.spray WHERE crop_area_id = %s", (crop_area_id,))
     sprays = cur.fetchall()
-    lead = timedelta(hours=rules.window_hours)
     cur.execute("SELECT utc_time, date, is_wet FROM curated.weather_hourly_features WHERE grid_id = %s "
                 "AND date BETWEEN %s AND %s ORDER BY utc_time", (grid_id, d0 - timedelta(days=4), d1))
-    hours = {r[0]: r[2] for r in cur.fetchall()}
-    last_hour: dict[date, datetime] = {}
-    cur.execute("SELECT date, max(utc_time) FROM curated.weather_hourly_features WHERE grid_id = %s "
-                "AND date BETWEEN %s AND %s GROUP BY date", (grid_id, d0, d1))
-    last_hour = {r[0]: r[1] for r in cur.fetchall()}
+    hours: dict[datetime, bool | None] = {}
+    last_hour: dict[date, datetime] = {}                           # the last hour of each local day (rows are ordered)
+    for utc_time, local_date, is_wet in cur.fetchall():
+        hours[utc_time] = is_wet
+        if d0 <= local_date <= d1:
+            last_hour[local_date] = utc_time
     cur.execute("SELECT date, gdd_since_resumption FROM curated.weather_daily_features WHERE grid_id = %s "
                 "AND date BETWEEN %s AND %s", (grid_id, d0, d1))
     gdd = {r[0]: r[1] for r in cur.fetchall()}
@@ -150,7 +150,7 @@ def refresh_risk(cur, crop_area_id: str, d0: date, d1: date, rules: septoria.Rul
     previous = {r[0]: tuple(r[1:]) for r in cur.fetchall()}
     cur.execute("DELETE FROM curated.risk_assessment WHERE crop_area_id = %s AND disease = %s AND date BETWEEN %s AND %s",
                 (crop_area_id, DISEASE, d0, d1))
-    n = 0
+    risk_rows, change_rows = [], []                                # written in one batch (pipeline) after the loop
     day = d0
     while day <= d1:
         end = last_hour.get(day)
@@ -162,32 +162,40 @@ def refresh_risk(cur, crop_area_id: str, d0: date, d1: date, rules: septoria.Rul
         spray_date, prot = max(active, key=lambda sp_: sp_[0] + timedelta(days=sp_[1])) if active else (None, None)
         r = septoria.assess(day, flags, gdd=gdd.get(day), bbch_override=bbch, winter_crop=winter_crop,
                             spray_date=spray_date, protection_days=prot, rules=rules)
-        cur.execute(
-            "INSERT INTO curated.risk_assessment (crop_area_id, disease, date, grid_id, h_hours, h_low, h_high, risk_class, "
-            "status, threshold_medium, threshold_high, coverage, protected_until, growth_stage_zone, growth_stage_source, "
-            "gdd_since_resumption, conditions_met, reasons, computed_at, model_version, input_hash) "
-            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
-            (crop_area_id, DISEASE, day, grid_id, r["h_hours"], r["h_low"], r["h_high"], r["risk_class"], r["status"],
-             r["threshold_medium"], r["threshold_high"], r["coverage"], r["protected_until"], r["growth_stage_zone"],
-             r["growth_stage_source"], r["gdd_since_resumption"], r["conditions_met"], json.dumps(r["reasons"]),
-             datetime.now(timezone.utc), r["model_version"], r["input_hash"]))
+        risk_rows.append((crop_area_id, DISEASE, day, grid_id, r["h_hours"], r["h_low"], r["h_high"], r["risk_class"], r["status"],
+                          r["threshold_medium"], r["threshold_high"], r["coverage"], r["protected_until"], r["growth_stage_zone"],
+                          r["growth_stage_source"], r["gdd_since_resumption"], r["conditions_met"], json.dumps(r["reasons"]),
+                          datetime.now(timezone.utc), r["model_version"], r["input_hash"]))
         old, new = previous.get(day), (r["risk_class"], r["status"], r["conditions_met"])
         if old != new:                                             # log only real changes (and the first calculation)
             o = old or (None, None, None)
-            cur.execute(
-                "INSERT INTO curated.risk_change (crop_area_id, disease, date, reason, old_class, new_class, old_status, "
-                "new_status, old_conditions_met, new_conditions_met, new_input_hash) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
-                (crop_area_id, DISEASE, day, "created" if old is None else reason, o[0], new[0], o[1], new[1], o[2], new[2],
-                 r["input_hash"]))
-        n += 1
+            change_rows.append((crop_area_id, DISEASE, day, "created" if old is None else reason, o[0], new[0], o[1], new[1],
+                                o[2], new[2], r["input_hash"]))
         day += timedelta(days=1)
-    return n
+    if risk_rows:
+        cur.executemany(
+            "INSERT INTO curated.risk_assessment (crop_area_id, disease, date, grid_id, h_hours, h_low, h_high, risk_class, "
+            "status, threshold_medium, threshold_high, coverage, protected_until, growth_stage_zone, growth_stage_source, "
+            "gdd_since_resumption, conditions_met, reasons, computed_at, model_version, input_hash) "
+            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)", risk_rows)
+    if change_rows:
+        cur.executemany(
+            "INSERT INTO curated.risk_change (crop_area_id, disease, date, reason, old_class, new_class, old_status, "
+            "new_status, old_conditions_met, new_conditions_met, new_input_hash) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+            change_rows)
+    return len(risk_rows)
 
 
-def refresh(con, crop_area_id: str, d0: date, d1: date, rules: septoria.Rules, reason: str = "recompute") -> dict:
-    """Refresh everything for one crop area inside the caller's transaction."""
+def refresh(con, crop_area_id: str, d0: date, d1: date, rules: septoria.Rules, reason: str = "recompute",
+            what: str = "all") -> dict:
+    """Refresh one crop area inside the caller's transaction. what="all": crop map, field context and risk assessment (a new or
+    changed geometry or crop); what="risk": only the risk assessment (a spray changes nothing in the crop map or the soil)."""
+    if what not in ("all", "risk"):
+        raise ValueError("what must be 'all' or 'risk'")
     with con.cursor(row_factory=tuple_row) as cur:           # tuple rows whatever the connection's row factory is
-        crop_map = refresh_crop_map(cur, crop_area_id)
-        refresh_field_context(cur, crop_area_id, crop_map)
+        crop_map = []
+        if what == "all":
+            crop_map = refresh_crop_map(cur, crop_area_id)
+            refresh_field_context(cur, crop_area_id, crop_map)
         days = refresh_risk(cur, crop_area_id, d0, d1, rules, reason)
     return {"crop_area_id": crop_area_id, "map_classes": len(crop_map), "risk_days": days}

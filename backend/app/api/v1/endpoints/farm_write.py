@@ -90,12 +90,12 @@ def _feature(con, crop_area_id: str) -> dict:
         (crop_area_id,)).fetchone()["f"]
 
 
-def _recompute(con, crop_area_id: str, reason: str) -> None:
+def _recompute(con, crop_area_id: str, reason: str, what: str = "all") -> None:
     d0, d1 = _data_range(con)
     if not _slots.acquire(timeout=10):
         raise HTTPException(status_code=503, detail="busy, try again in a moment")
     try:
-        refresh(con, crop_area_id, d0, d1, rules(), reason)
+        refresh(con, crop_area_id, d0, d1, rules(), reason, what)
     finally:
         _slots.release()
 
@@ -211,7 +211,7 @@ def add_spray(crop_area_id: str, body: SprayIn, user=Depends(current_user), con=
         raise HTTPException(status_code=422, detail="the spray date cannot be in the future")
     con.execute("INSERT INTO app.spray (crop_area_id, spray_date, protection_duration_days) VALUES (%s, %s, %s)",
                 (crop_area_id, body.spray_date - timedelta(days=shift), body.protection_duration_days))
-    _recompute(con, crop_area_id, "spray")
+    _recompute(con, crop_area_id, "spray", what="risk")       # a spray changes nothing in the crop map or the soil
     changed = con.execute("SELECT count(*) AS n FROM curated.risk_change WHERE crop_area_id = %s AND reason = 'spray' "
                           "AND computed_at = now()", (crop_area_id,)).fetchone()["n"]
     con.commit()
