@@ -45,7 +45,7 @@
     .field-name input { width: 100%; min-height: 44px; padding: 0 12px; border: 1px solid rgba(32,62,45,.14); border-radius: 11px; color: var(--ink); background: rgba(255,255,255,.86); font-size: 14px; font-weight: 500; }
     .primary { width: 100%; min-height: 52px; margin-top: 12px; border: 0; border-radius: 15px; background: #14221a; color: #fff; font-size: 14px; font-weight: 700; }
     .primary:disabled { opacity: .38; cursor: not-allowed; }
-    .status { position: absolute; z-index: 3; top: calc(max(16px, env(safe-area-inset-top)) + 61px); left: 16px; right: 16px; margin: 0; padding: 10px 13px; border-radius: 12px; background: #fff; box-shadow: 0 5px 20px rgba(24,50,35,.12); font-size: 13px; line-height: 1.4; }
+    .status { position: static; margin: 0 0 12px; padding: 10px 13px; border-radius: 12px; font-size: 13px; line-height: 1.4; }
     .status:empty { display: none; }
     .status { background: rgba(239,247,240,.84); border: 1px solid rgba(255,255,255,.7); backdrop-filter: blur(18px); color: #294c36; }
     .map-guide { display: none; position: absolute; z-index: 3; left: 50%; top: calc((100% - var(--drawer-height, 61px)) / 2); width: min(84vw, 320px); transform: translate(-50%, -50%); justify-items: center; gap: 0; text-align: center; pointer-events: none; }
@@ -62,6 +62,7 @@
     @keyframes select-area { 0%,20% { opacity: 0; transform: scale(.01); } 21% { opacity: 1; transform: scale(.01); } 54%,66% { opacity: 1; transform: scale(1); } 78%,100% { opacity: 0; transform: scale(1); } }
     @keyframes drag-pointer { 0%,12% { opacity: 0; transform: translate(18px, 22px); } 20% { opacity: 1; transform: translate(18px, 22px); } 54%,66% { opacity: 1; transform: translate(157px, 94px); } 78%,100% { opacity: 0; transform: translate(157px, 94px); } }
     .sheet.collapsed { max-height: 61px; overflow: hidden; padding-bottom: 8px; }
+    .sheet.collapsed:has(.status:not(:empty)) { max-height: 180px; }
     .drawer-content { max-height: 520px; opacity: 1; overflow-y: auto; transition: max-height 220ms ease, opacity 150ms ease; }
     .sheet.collapsed .drawer-content { max-height: 0; opacity: 0; overflow: hidden; pointer-events: none; }
     .drawer-toggle { display: block; width: 100%; border: 0; background: transparent; padding: 1px 0 10px; cursor: pointer; }
@@ -72,7 +73,13 @@
     .top.searching { position: absolute; z-index: 6; top: 50%; left: 50%; right: auto; width: min(90vw, 440px); transform: translate(-50%, -50%); transition: top 360ms cubic-bezier(.22,1,.36,1), width 360ms cubic-bezier(.22,1,.36,1); }
     .top.searching .locate { display: none; }
     .top.searching .search { height: 60px; box-shadow: 0 12px 40px rgba(24,50,35,.24); }
-    .results.searching { position: absolute; z-index: 6; top: calc(50% + 38px); left: 50%; right: auto; width: min(90vw, 440px); max-height: min(42dvh, 360px); overflow: auto; transform: translateX(-50%); }
+    .results.searching { position: absolute; z-index: 6; top: calc(50% + 38px); left: 50%; right: auto; width: min(90vw, 440px); max-height: min(32dvh, 260px); overflow: auto; transform: translateX(-50%); }
+    .parcel-step { display: none; position: absolute; z-index: 3; top: calc(max(16px, env(safe-area-inset-top)) + 58px); left: 16px; right: 76px; }
+    .parcel-step.visible { display: flex; }
+    .parcel-step.searching { z-index: 6; top: calc(50% + 38px); left: 50%; right: auto; width: min(90vw, 440px); transform: translateX(-50%); }
+    .parcel-step .search { width: 100%; }
+    .results.after-parcel-step { top: calc(max(16px, env(safe-area-inset-top)) + 116px); }
+    .results.searching.after-parcel-step { top: calc(50% + 96px); max-height: min(25dvh, 220px); }
     .search-backdrop { display: none; position: absolute; inset: 0; z-index: 5; background: rgba(16,35,24,.23); }
     .search-backdrop.visible { display: block; }
     dialog { width: min(90vw, 390px); padding: 24px; border: 1px solid rgba(255,255,255,.9); border-radius: 24px; color: var(--ink); background: rgba(242,249,243,.97); box-shadow: 0 16px 50px rgba(15,40,25,.22); }
@@ -102,7 +109,7 @@
     .results button:hover { background: #edf5ee; }
     .maplibregl-ctrl-bottom-right { bottom: min(68dvh, 570px); }
     .maplibregl-ctrl-attrib { font-size: 10px !important; }
-    @media (min-width: 720px) { .top { left: 24px; right: 24px; width: auto; top: 24px; } .sheet { left: 24px; bottom: 0; right: auto; width: 390px; max-height: calc(100dvh - 115px); border-radius: 25px 25px 0 0; border-bottom: 0; } .sheet.search-hidden { transform: translateY(calc(100% + 12px)); } .maplibregl-ctrl-top-right { bottom: max(26px, env(safe-area-inset-bottom) + 12px); } .maplibregl-ctrl-bottom-right { bottom: 0; } .status { left: 24px; right: auto; width: 440px; top: 84px; } .results { left: 24px; right: 84px; width: auto; top: 82px; } }
+    @media (min-width: 720px) { .top { left: 24px; right: 24px; width: auto; top: 24px; } .sheet { left: 24px; bottom: 0; right: auto; width: 390px; max-height: calc(100dvh - 115px); border-radius: 25px 25px 0 0; border-bottom: 0; } .sheet.search-hidden { transform: translateY(calc(100% + 12px)); } .maplibregl-ctrl-top-right { bottom: max(26px, env(safe-area-inset-bottom) + 12px); } .maplibregl-ctrl-bottom-right { bottom: 0; } .results, .parcel-step { left: 24px; right: 84px; width: auto; top: 82px; } .results.after-parcel-step { top: 140px; } .parcel-step.searching { top: calc(50% + 38px); } .results.searching.after-parcel-step { top: calc(50% + 96px); } }
     @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; scroll-behavior: auto !important; } .demo-marquee { opacity: 1; transform: none; stroke-dashoffset: 0; } .demo-pointer { opacity: 1; transform: translate(157px, 94px); } }
   </style>
 </head>
@@ -129,10 +136,16 @@
       </form>
       <button class="locate" id="locate" type="button" aria-label="Znajdź moją lokalizację"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 3-7.5 18-2.7-7.8L3 10.5 21 3Z"/></svg></button>
     </div>
+    <div id="parcel-step" class="parcel-step">
+      <form class="search" id="parcel-step-form" role="search">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3 7 21M17 3l-2 18M4 9h16M3 15h16"/></svg>
+        <input id="parcel-step-input" aria-label="Numer działki w wybranej miejscowości" placeholder="Wpisz numer działki, np. 123/4" autocomplete="off" />
+      </form>
+    </div>
     <div id="results" class="results" aria-label="Wyniki wyszukiwania"></div>
-    <p id="status" class="status" role="status" aria-live="polite"></p>
     <section class="sheet" aria-labelledby="heading">
       <button id="drawer-toggle" class="drawer-toggle" type="button" aria-label="Zwiń panel" aria-expanded="true"><span class="handle" aria-hidden="true"></span><span>Twoje pola</span></button>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
       <div id="drawer-content" class="drawer-content">
       <p class="eyebrow">Twoje pola</p>
       <h1 id="heading">Wybierz działkę</h1>
@@ -164,6 +177,8 @@
     const provider = FarmerData.createProvider({ mode: 'mock' });
     const selected = new Map();
     const input = document.getElementById('parcel-number');
+    const parcelStep = document.getElementById('parcel-step');
+    const parcelStepInput = document.getElementById('parcel-step-input');
     const status = document.getElementById('status');
     const results = document.getElementById('results');
     const next = document.getElementById('continue');
@@ -192,12 +207,15 @@
       if (open) drawerBeforeSearch = !sheet.classList.contains('collapsed');
       topControls.classList.toggle('searching', open);
       results.classList.toggle('searching', open);
+      parcelStep.classList.toggle('searching', open);
       searchBackdrop.classList.toggle('visible', open);
       sheet.classList.toggle('search-hidden', open);
       document.getElementById('drawer-content').inert = open || sheet.classList.contains('collapsed');
-      if (open) { clearTimeout(suggestionTimer); searchVersion++; results.classList.remove('visible'); searchLocality = null; input.value = ''; input.placeholder = 'Wieś, numer działki lub identyfikator'; status.textContent = ''; input.focus(); }
-      else { clearTimeout(suggestionTimer); searchVersion++; results.classList.remove('visible'); input.blur(); setDrawer(drawerBeforeSearch); }
+      if (open) { clearTimeout(suggestionTimer); searchVersion++; results.classList.remove('visible'); resetLocality(); input.value = ''; status.textContent = ''; input.focus(); }
+      else { clearTimeout(suggestionTimer); searchVersion++; results.classList.remove('visible'); input.blur(); parcelStepInput.blur(); resetLocality(); setDrawer(drawerBeforeSearch); }
     }
+    /** Return to the first search step when the locality changes or search closes. */
+    function resetLocality() { searchLocality = null; parcelStepInput.value = ''; parcelStep.classList.remove('visible'); results.classList.remove('after-parcel-step'); }
     /** Show the map-selection hint until the farmer interacts with the map. */
     function showMapGuide() { mapGuide.classList.add('visible'); mapGuide.setAttribute('aria-hidden', 'false'); }
     /** Dismiss the map-selection hint and remove it from the accessibility tree. */
@@ -254,7 +272,7 @@
       meta.textContent = `${parcel.locality || 'Miejscowość'} · gm. ${parcel.commune || 'gmina'} · ${Number(parcel.area_ha || 0).toFixed(2).replace('.', ',')} ha`;
       const id = document.createElement('span'); id.className = 'result-id'; id.textContent = parcel.cadastral_id || parcel.parcel_id;
       button.type = 'button'; button.append(title, meta, id);
-      button.addEventListener('click', () => { clearTimeout(suggestionTimer); searchVersion++; setSearch(false); selectParcel(parcel, options); });
+      button.addEventListener('click', () => { clearTimeout(suggestionTimer); searchVersion++; setSearch(false); resetLocality(); input.value = ''; input.blur(); selectParcel(parcel, options); });
       results.appendChild(button);
     }
     /** Offer one or more backend-provided matches for map selection. */
@@ -288,10 +306,11 @@
         button.append(title, meta);
         button.addEventListener('click', () => {
           searchLocality = { locality: parcel.locality, commune: parcel.commune };
-          input.value = ''; input.placeholder = `Numer działki · ${parcel.locality}, gm. ${parcel.commune}`;
+          input.value = `${parcel.locality}, gm. ${parcel.commune}`;
+          parcelStepInput.value = ''; parcelStep.classList.add('visible'); results.classList.add('after-parcel-step');
           searchVersion++; results.replaceChildren();
           const hint = document.createElement('div'); hint.className = 'results-hint'; hint.textContent = `Wpisz numer działki w obrębie ${parcel.locality}, gm. ${parcel.commune}.`;
-          results.appendChild(hint); results.classList.add('visible'); input.focus();
+          results.appendChild(hint); results.classList.add('visible'); parcelStepInput.focus();
         });
         results.appendChild(button);
       });
@@ -299,7 +318,7 @@
     }
     /** Search a full identifier, a locality and number, a bare number, or a locality prefix. */
     async function lookupParcelSearch() {
-      const term = input.value.trim();
+      const term = (searchLocality ? parcelStepInput.value : input.value).trim();
       const version = ++searchVersion;
       if (!term) {
         results.replaceChildren();
@@ -436,8 +455,15 @@
       catch (_) { status.textContent = 'Nie można pobrać działek. Spróbuj ponownie.'; }
     });
     document.getElementById('search-form').addEventListener('submit', event => { event.preventDefault(); clearTimeout(suggestionTimer); lookupParcelSearch(); });
-    input.addEventListener('focus', () => { if (input.value.trim() && !topControls.classList.contains('searching')) lookupParcelSearch(); });
+    document.getElementById('parcel-step-form').addEventListener('submit', event => { event.preventDefault(); clearTimeout(suggestionTimer); lookupParcelSearch(); });
+    input.addEventListener('focus', () => { if (!searchLocality && input.value.trim() && !topControls.classList.contains('searching')) lookupParcelSearch(); });
     input.addEventListener('input', () => {
+      clearTimeout(suggestionTimer);
+      resetLocality();
+      searchVersion++;
+      suggestionTimer = setTimeout(lookupParcelSearch, 220);
+    });
+    parcelStepInput.addEventListener('input', () => {
       clearTimeout(suggestionTimer);
       searchVersion++;
       suggestionTimer = setTimeout(lookupParcelSearch, 220);
