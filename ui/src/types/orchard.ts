@@ -7,6 +7,28 @@ export type DataSourceMode = 'api' | 'placeholder';
 /** 24-character hexadecimal MongoDB ObjectId string */
 export type ObjectIdString = string;
 
+/** Matches MongoDB `User.preferences.theme` enum */
+export type UserThemePreference = 'Light' | 'Dark' | 'OS';
+
+/** Document embedded in MongoDB `User.preferences` */
+export interface UserPreferencesDoc {
+  theme: UserThemePreference;
+  lang: 'pl' | 'en';
+  /** Selected Orchard ObjectId displayed across UI */
+  activeOrchardId: ObjectIdString | null;
+}
+
+/** Summary entry returned by `GET /api/v1/orchards` for the topbar selector */
+export interface OrchardOption {
+  _id: ObjectIdString;
+  name: string;
+  areaHectares: number;
+  centroid: {
+    lat: number;
+    long: number;
+  };
+}
+
 export interface ApiResult<T> {
   data: T;
   source: DataSourceMode;

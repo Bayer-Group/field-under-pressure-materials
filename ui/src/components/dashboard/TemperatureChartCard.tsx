@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Thermometer } from 'lucide-react';
 import { fetchTemperatureSeries } from '../../api/orchardApi';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { useOrchard } from '../../contexts/OrchardContext';
 import type { TemperaturePoint, TemperatureSeriesResponse, TimeRange } from '../../types/orchard';
 
 const TIME_RANGES: TimeRange[] = ['24h', '7d', '30d', '90d', '1y'];
@@ -14,6 +15,7 @@ function buildPath(coords: Array<{ x: number; y: number }>): string {
 
 export function TemperatureChartCard() {
   const { t } = useLanguage();
+  const { selectedOrchardId } = useOrchard();
   const [range, setRange] = useState<TimeRange>('30d');
   const [windowPercent, setWindowPercent] = useState<number>(100);
   const [series, setSeries] = useState<TemperatureSeriesResponse | null>(null);
@@ -23,7 +25,7 @@ export function TemperatureChartCard() {
 
   useEffect(() => {
     const controller = new AbortController();
-    fetchTemperatureSeries(range, undefined, controller.signal)
+    fetchTemperatureSeries(range, selectedOrchardId, controller.signal)
       .then((res) => {
         setSeries(res.data);
         setEndpoint(res.endpoint);
@@ -36,7 +38,7 @@ export function TemperatureChartCard() {
       });
 
     return () => controller.abort();
-  }, [range]);
+  }, [range, selectedOrchardId]);
 
   const visiblePoints: TemperaturePoint[] = useMemo(() => {
     if (!series || series.points.length === 0) return [];
@@ -147,10 +149,7 @@ export function TemperatureChartCard() {
           <div className="card-icon">
             <Thermometer size={18} strokeWidth={1.9} />
           </div>
-          <div>
-            <h2 className="card-title">{t.temperature.title}</h2>
-            <p className="card-subtitle">{t.temperature.subtitle}</p>
-          </div>
+          <h2 className="card-title">{t.temperature.title}</h2>
         </div>
 
         <div className="time-scale-controls">

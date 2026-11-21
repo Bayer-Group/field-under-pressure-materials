@@ -4,8 +4,11 @@ import {
   getPlaceholderOrchardBoundary,
   getPlaceholderOrchardHealth,
   getPlaceholderOrchardScene,
+  getPlaceholderOrchardsList,
   getPlaceholderSaveOrchardLayoutResponse,
   getPlaceholderTemperatureSeries,
+  getPlaceholderUserPreferences,
+  savePlaceholderUserPreferences,
 } from '../placeholders';
 import type {
   ApiResult,
@@ -13,6 +16,7 @@ import type {
   ObjectIdString,
   OrchardBoundaryDoc,
   OrchardHealthSummary,
+  OrchardOption,
   OrchardSceneResponse,
   OrchardTree3D,
   PointCloudData,
@@ -23,6 +27,7 @@ import type {
   TemperatureSeriesResponse,
   TimeRange,
   TreeUpdatePayload,
+  UserPreferencesDoc,
 } from '../types/orchard';
 import { httpClient } from './httpClient';
 
@@ -105,33 +110,58 @@ export async function fetchOrchardPointCloud(
   );
 }
 
+function isValidLasMagic(buffer: ArrayBuffer): boolean {
+  if (buffer.byteLength < 227) return false;
+  const bytes = new Uint8Array(buffer, 0, 4);
+  return bytes[0] === 0x4c && bytes[1] === 0x41 && bytes[2] === 0x53 && bytes[3] === 0x46; // "LASF"
+}
+
 /**
- * Fetches binary `.las` point cloud for an orchard from the backend.
- * In placeholder mode, streams the real repository asset `/las/grojec.las`.
+ * Fetches binary `.las` point cloud for an orchard (`<orchardId>.las`).
+ * Returns `data: null` when no `.las` file exists for that orchard so the 3D viewer
+ * seamlessly renders the geometric parcel + rows + trees fallback.
  */
 export async function fetchOrchardLasBuffer(
   orchardId: ObjectIdString = apiConfig.defaultOrchardId,
   signal?: AbortSignal,
-): Promise<ApiResult<ArrayBuffer>> {
+): Promise<ApiResult<ArrayBuffer | null>> {
   const endpoint = API_ENDPOINTS.orchard.lasPointCloud(orchardId);
   if (apiConfig.usePlaceholders) {
-    const buffer = await httpClient.getArrayBuffer(apiConfig.defaultLasAssetUrl, {
-      signal,
-      isAbsoluteUrl: true,
-    });
+    try {
+      const buffer = await httpClient.getArrayBuffer(apiConfig.lasAssetUrl(orchardId), {
+        signal,
+        isAbsoluteUrl: true,
+      });
+      return {
+        data: isValidLasMagic(buffer) ? buffer : null,
+        source: 'placeholder',
+        endpoint,
+      };
+    } catch (err) {
+      if ((err as Error).name === 'AbortError') throw err;
+      return {
+        data: null,
+        source: 'placeholder',
+        endpoint,
+      };
+    }
+  }
+
+  try {
+    const buffer = await httpClient.getArrayBuffer(endpoint, { signal });
     return {
-      data: buffer,
-      source: 'placeholder',
+      data: isValidLasMagic(buffer) ? buffer : null,
+      source: 'api',
+      endpoint,
+    };
+  } catch (err) {
+    if ((err as Error).name === 'AbortError') throw err;
+    return {
+      data: null,
+      source: 'api',
       endpoint,
     };
   }
-
-  const buffer = await httpClient.getArrayBuffer(endpoint, { signal });
-  return {
-    data: buffer,
-    source: 'api',
-    endpoint,
-  };
 }
 
 export async function fetchOrchardTrees(
@@ -237,5 +267,48 @@ export async function saveOrchardLayout(
     endpoint,
     () => httpClient.post<SaveOrchardLayoutResponse>(endpoint, payload, { signal }),
     () => getPlaceholderSaveOrchardLayoutResponse(payload),
+  );
+}
+
+/**
+ * Fetches all available orchards (`_id`, `name`, `areaHectares`, `centroid`) for the topbar selector.
+ */
+export async function fetchOrchardsList(signal?: AbortSignal): Promise<ApiResult<OrchardOption[]>> {
+  const endpoint = API_ENDPOINTS.orchard.list;
+  return withPlaceholderFallback(
+    endpoint,
+    () => httpClient.get<OrchardOption[]>(endpoint, { signal }),
+    () => getPlaceholderOrchardsList(),
+  );
+}
+
+/**
+ * Fetches persisted `User.preferences` (`theme`: Light|Dark|OS, `lang`, `activeOrchardId`).
+ */
+export async function fetchUserPreferences(
+  userId: ObjectIdString = apiConfig.defaultUserId,
+  signal?: AbortSignal,
+): Promise<ApiResult<UserPreferencesDoc>> {
+  const endpoint = API_ENDPOINTS.users.preferences(userId);
+  return withPlaceholderFallback(
+    endpoint,
+    () => httpClient.get<UserPreferencesDoc>(endpoint, { signal }),
+    () => getPlaceholderUserPreferences(),
+  );
+}
+
+/**
+ * Persists user UI preferences (`theme`, `lang`, `activeOrchardId`) to `User.preferences`.
+ */
+export async function updateUserPreferences(
+  preferences: Partial<UserPreferencesDoc>,
+  userId: ObjectIdString = apiConfig.defaultUserId,
+  signal?: AbortSignal,
+): Promise<ApiResult<UserPreferencesDoc>> {
+  const endpoint = API_ENDPOINTS.users.preferences(userId);
+  return withPlaceholderFallback(
+    endpoint,
+    () => httpClient.patch<UserPreferencesDoc>(endpoint, preferences, { signal }),
+    () => savePlaceholderUserPreferences(preferences),
   );
 }

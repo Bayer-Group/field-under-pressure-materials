@@ -9,25 +9,16 @@ import {
   type RowLineRecord,
 } from '../types/orchard';
 import { wgs84ToEpsg2180 } from '../utils/crs2180';
+import { findPlaceholderOrchard } from './orchardsCatalogPlaceholder';
 
 /**
- * [PLACEHOLDER] Scene metadata for `Grojec A` (`_id: 6b01933c1dc02a368703a020`).
+ * [PLACEHOLDER] Scene metadata for orchards from local MongoDB `field_under_pressure`.
  *
- * Uses the REAL parcel boundary, rows (`R-01`, `R-02`), and 12 `Tree` GPS coordinates
- * from local MongoDB `field_under_pressure`, paired with the real LiDAR file `/las/grojec.las`.
- * Health scores are temporary demo placeholders until the backend calculates `Tree.healthIndex`.
+ * `Grojec A` (`6b01933c1dc02a368703a020`) uses its REAL rows (`R-01`, `R-02`), 12 `Tree` GPS coordinates,
+ * and LiDAR file `/las/6b01933c1dc02a368703a020.las`. Other orchards show their real geometry.
  *
  * Remove `src/placeholders/` once the backend API is live.
  */
-
-const GROJEC_A_BOUNDARY_GEO: GeoCoord[] = [
-  { lat: 51.84447031436461, lng: 20.85185092156493 },
-  { lat: 51.845577735233036, lng: 20.85194842604751 },
-  { lat: 51.845542724553376, lng: 20.853352285976772 },
-  { lat: 51.845774353581064, lng: 20.853382621744633 },
-  { lat: 51.845798670667115, lng: 20.855111625449258 },
-  { lat: 51.84446227417943, lng: 20.853588952884014 },
-];
 
 const GROJEC_A_ROWS_GEO = [
   {
@@ -78,54 +69,63 @@ const GROJEC_LAS_ORIGIN = {
   y: (443637.04 + 443790.3) / 2,
 };
 
-let cachedScene: OrchardSceneResponse | null = null;
+const GROJEC_A_ID = '6b01933c1dc02a368703a020';
+
+const sceneCache = new Map<string, OrchardSceneResponse>();
 
 function buildPlaceholderScene(orchardId: string): OrchardSceneResponse {
-  if (cachedScene && cachedScene.orchardId === orchardId) {
-    return cachedScene;
+  const entry = findPlaceholderOrchard(orchardId);
+  const cached = sceneCache.get(entry._id);
+  if (cached) {
+    return cached;
   }
 
   const nowIso = new Date().toISOString();
+  const isGrojecA = entry._id === GROJEC_A_ID;
 
-  const rowLines: RowLineRecord[] = GROJEC_A_ROWS_GEO.map((r) => {
-    const pStart = wgs84ToEpsg2180(r.start.lat, r.start.lng);
-    const pEnd = wgs84ToEpsg2180(r.end.lat, r.end.lng);
-    return {
-      id: r.id,
-      orchardId,
-      rowLabel: r.label,
-      vertices: [
-        { x: Number((pStart.x - GROJEC_LAS_ORIGIN.x).toFixed(2)), y: 0, z: Number((-(pStart.y - GROJEC_LAS_ORIGIN.y)).toFixed(2)) },
-        { x: Number((pEnd.x - GROJEC_LAS_ORIGIN.x).toFixed(2)), y: 0, z: Number((-(pEnd.y - GROJEC_LAS_ORIGIN.y)).toFixed(2)) },
-      ],
-      treeSpacingMeters: r.spacing,
-      createdAt: nowIso,
-    };
-  });
+  const rowLines: RowLineRecord[] = isGrojecA
+    ? GROJEC_A_ROWS_GEO.map((r) => {
+        const pStart = wgs84ToEpsg2180(r.start.lat, r.start.lng);
+        const pEnd = wgs84ToEpsg2180(r.end.lat, r.end.lng);
+        return {
+          id: r.id,
+          orchardId: entry._id,
+          rowLabel: r.label,
+          vertices: [
+            { x: Number((pStart.x - GROJEC_LAS_ORIGIN.x).toFixed(2)), y: 0, z: Number((-(pStart.y - GROJEC_LAS_ORIGIN.y)).toFixed(2)) },
+            { x: Number((pEnd.x - GROJEC_LAS_ORIGIN.x).toFixed(2)), y: 0, z: Number((-(pEnd.y - GROJEC_LAS_ORIGIN.y)).toFixed(2)) },
+          ],
+          treeSpacingMeters: r.spacing,
+          createdAt: nowIso,
+        };
+      })
+    : [];
 
-  const trees: OrchardTree3D[] = GROJEC_A_TREES_RAW.map((item) => {
-    const p = wgs84ToEpsg2180(item.geo.lat, item.geo.lng);
-    return {
-      id: item.id,
-      rowId: item.rowId,
-      rowLabel: item.rowLabel,
-      indexInRow: item.indexInRow,
-      position: {
-        x: Number((p.x - GROJEC_LAS_ORIGIN.x).toFixed(2)),
-        y: 0,
-        z: Number((-(p.y - GROJEC_LAS_ORIGIN.y)).toFixed(2)),
-      },
-      geo: item.geo,
-      heightMeters: item.heightMeters,
-      canopyRadiusMeters: item.canopyRadiusMeters,
-      healthScore: item.healthScore,
-      healthStatus: scoreToHealthStatus(item.healthScore),
-    };
-  });
+  const trees: OrchardTree3D[] = isGrojecA
+    ? GROJEC_A_TREES_RAW.map((item) => {
+        const p = wgs84ToEpsg2180(item.geo.lat, item.geo.lng);
+        return {
+          id: item.id,
+          rowId: item.rowId,
+          rowLabel: item.rowLabel,
+          indexInRow: item.indexInRow,
+          position: {
+            x: Number((p.x - GROJEC_LAS_ORIGIN.x).toFixed(2)),
+            y: 0,
+            z: Number((-(p.y - GROJEC_LAS_ORIGIN.y)).toFixed(2)),
+          },
+          geo: item.geo,
+          heightMeters: item.heightMeters,
+          canopyRadiusMeters: item.canopyRadiusMeters,
+          healthScore: item.healthScore,
+          healthStatus: scoreToHealthStatus(item.healthScore),
+        };
+      })
+    : [];
 
-  // Minimal fallback PointCloudData (real rendering uses binary `/las/grojec.las` via `fetchOrchardLasBuffer`)
+  // Minimal fallback PointCloudData (real rendering uses binary `/las/<_id>.las` via `fetchOrchardLasBuffer`)
   const pointCloud: PointCloudData = {
-    orchardId,
+    orchardId: entry._id,
     pointCount: 0,
     positions: [],
     colors: [],
@@ -135,17 +135,20 @@ function buildPlaceholderScene(orchardId: string): OrchardSceneResponse {
     },
   };
 
-  cachedScene = {
-    orchardId,
-    orchardName: 'Grojec A',
-    boundaryGeo: GROJEC_A_BOUNDARY_GEO,
-    rowsGeo: GROJEC_A_ROWS_GEO.map(({ id, label, start, end }) => ({ id, label, start, end })),
+  const built: OrchardSceneResponse = {
+    orchardId: entry._id,
+    orchardName: entry.name,
+    boundaryGeo: entry.geometry,
+    rowsGeo: isGrojecA
+      ? GROJEC_A_ROWS_GEO.map(({ id, label, start, end }) => ({ id, label, start, end }))
+      : [],
     pointCloud,
     trees,
     rowLines,
   };
 
-  return cachedScene;
+  sceneCache.set(entry._id, built);
+  return built;
 }
 
 export function getPlaceholderOrchardScene(orchardId: string): OrchardSceneResponse {

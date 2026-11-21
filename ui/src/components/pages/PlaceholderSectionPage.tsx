@@ -23,7 +23,6 @@ export function PlaceholderSectionPage({ section, onBackToDashboard }: Placehold
           <Construction size={28} strokeWidth={1.7} />
         </div>
         <h1 className="placeholder-section-title">{titles[section]}</h1>
-        <p className="placeholder-section-desc">{t.placeholderView.description}</p>
         <button type="button" className="primary-btn" onClick={onBackToDashboard}>
           <ArrowLeft size={16} />
           <span>{t.placeholderView.backToDashboard}</span>

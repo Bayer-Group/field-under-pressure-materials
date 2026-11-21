@@ -12,7 +12,6 @@ import {
   Route,
   Sparkles,
   Trees,
-  Upload,
   X,
 } from 'lucide-react';
 import * as THREE from 'three';
@@ -20,9 +19,10 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { fetchOrchardLasBuffer, fetchOrchardScene } from '../../api/orchardApi';
 import { HEALTH_PALETTE, HEALTH_STATUS_ORDER } from '../../constants/healthPalette';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { useOrchard } from '../../contexts/OrchardContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import type { OrchardSceneResponse, OrchardTree3D } from '../../types/orchard';
-import { geoToLasSceneXZ } from '../../utils/crs2180';
+import type { GeoCoord, OrchardSceneResponse, OrchardTree3D } from '../../types/orchard';
+import { geoToLasSceneXZ, wgs84ToEpsg2180 } from '../../utils/crs2180';
 import { parseLasArrayBuffer, type LasColorMode, type ParsedLasCloud } from '../../utils/lasParser';
 
 interface LayerVisibility {
@@ -32,16 +32,61 @@ interface LayerVisibility {
   boundary: boolean;
 }
 
+/**
+ * Computes scene origin & metric span in EPSG:2180 from vector geometry when no `.las` file is available.
+ */
+function computeGeometricBounds(sceneData: OrchardSceneResponse): {
+  origin: { x: number; y: number; z: number };
+  spanX: number;
+  spanY: number;
+} {
+  const geoPoints: GeoCoord[] = [];
+  if (sceneData.boundaryGeo) geoPoints.push(...sceneData.boundaryGeo);
+  if (sceneData.rowsGeo) {
+    for (const r of sceneData.rowsGeo) {
+      geoPoints.push(r.start, r.end);
+    }
+  }
+  for (const t of sceneData.trees) {
+    geoPoints.push(t.geo);
+  }
+
+  if (geoPoints.length === 0) {
+    return { origin: { x: 0, y: 0, z: 0 }, spanX: 120, spanY: 120 };
+  }
+
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const g of geoPoints) {
+    const p = wgs84ToEpsg2180(g.lat, g.lng);
+    if (p.x < minX) minX = p.x;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.y > maxY) maxY = p.y;
+  }
+
+  return {
+    origin: {
+      x: (minX + maxX) / 2,
+      y: (minY + maxY) / 2,
+      z: 0,
+    },
+    spanX: Math.max(30, maxX - minX),
+    spanY: Math.max(30, maxY - minY),
+  };
+}
+
 export function Orchard3DViewerCard() {
   const { t } = useLanguage();
   const { resolvedTheme } = useTheme();
+  const { selectedOrchardId } = useOrchard();
 
   const [sceneData, setSceneData] = useState<OrchardSceneResponse | null>(null);
   const [parsedLas, setParsedLas] = useState<ParsedLasCloud | null>(null);
-  const [lasLabel, setLasLabel] = useState<string>('grojec.las');
   const [lasEndpoint, setLasEndpoint] = useState<string>('');
-  const [isLoadingLas, setIsLoadingLas] = useState<boolean>(true);
-  const [lasError, setLasError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
   const [colorMode, setColorMode] = useState<LasColorMode>('rgb');
   const [verticalExaggeration, setVerticalExaggeration] = useState<number>(1.8);
@@ -54,7 +99,6 @@ export function Orchard3DViewerCard() {
   });
 
   const mountRef = useRef<HTMLDivElement | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -74,43 +118,51 @@ export function Orchard3DViewerCard() {
   });
   const treesFocusRef = useRef<{ pos: THREE.Vector3; target: THREE.Vector3 } | null>(null);
 
-  // Load scene metadata + binary `.las` point cloud
+  // Load orchard metadata + `<orchardId>.las` binary point cloud (optional — falls back to pure geometry if absent)
   useEffect(() => {
     const controller = new AbortController();
-    setIsLoadingLas(true);
-    setLasError(null);
+    setIsLoading(true);
+    setSelectedTree(null);
 
     Promise.all([
-      fetchOrchardScene(undefined, controller.signal),
-      fetchOrchardLasBuffer(undefined, controller.signal),
+      fetchOrchardScene(selectedOrchardId, controller.signal),
+      fetchOrchardLasBuffer(selectedOrchardId, controller.signal),
     ])
       .then(([sceneRes, lasRes]) => {
         setSceneData(sceneRes.data);
         setLasEndpoint(lasRes.endpoint);
-        const parsed = parseLasArrayBuffer(lasRes.data, { maxPoints: 180_000, filterNoise: true });
-        setParsedLas(parsed);
-        setColorMode(parsed.header.hasRgb ? 'rgb' : 'elevation');
-        setLasLabel('grojec.las');
+
+        if (lasRes.data) {
+          try {
+            const parsed = parseLasArrayBuffer(lasRes.data, { maxPoints: 180_000, filterNoise: true });
+            setParsedLas(parsed);
+            setColorMode(parsed.header.hasRgb ? 'rgb' : 'elevation');
+          } catch (parseErr) {
+            console.warn('LAS parse failed, falling back to geometric orchard render:', parseErr);
+            setParsedLas(null);
+          }
+        } else {
+          setParsedLas(null);
+        }
       })
       .catch((err) => {
         if ((err as Error).name !== 'AbortError') {
-          console.error('Failed to load orchard 3D scene or LAS point cloud:', err);
-          setLasError((err as Error).message || 'Failed to parse .las point cloud');
+          console.error('Failed to load orchard 3D scene:', err);
         }
       })
       .finally(() => {
         if (!controller.signal.aborted) {
-          setIsLoadingLas(false);
+          setIsLoading(false);
         }
       });
 
     return () => controller.abort();
-  }, []);
+  }, [selectedOrchardId]);
 
-  // Build Three.js scene whenever parsedLas or sceneData updates
+  // Build Three.js scene (supports both `.las` LiDAR cloud mode AND pure geometric fallback mode)
   useEffect(() => {
     const container = mountRef.current;
-    if (!container || !parsedLas || !sceneData) return;
+    if (!container || !sceneData) return;
 
     const width = container.clientWidth || 900;
     const height = container.clientHeight || 520;
@@ -118,10 +170,17 @@ export function Orchard3DViewerCard() {
     const scene = new THREE.Scene();
     sceneRef.current = scene;
 
-    const maxSpan = Math.max(parsedLas.header.spanMeters.x, parsedLas.header.spanMeters.y, 40);
+    const geoFallback = computeGeometricBounds(sceneData);
+    const sceneOrigin = parsedLas ? parsedLas.origin : geoFallback.origin;
+    const spanX = parsedLas ? parsedLas.header.spanMeters.x : geoFallback.spanX;
+    const spanY = parsedLas ? parsedLas.header.spanMeters.y : geoFallback.spanY;
+    const sampleGroundY = parsedLas ? parsedLas.sampleGroundY : () => 0;
+    const activeZScale = parsedLas ? verticalExaggeration : 1;
+
+    const maxSpan = Math.max(spanX, spanY, 40);
     const orbitPos = new THREE.Vector3(maxSpan * 0.24, maxSpan * 0.52, maxSpan * 0.68);
     const topPos = new THREE.Vector3(0, maxSpan * 1.12, 0.01);
-    const centerTarget = new THREE.Vector3(0, 2.5, 0);
+    const centerTarget = new THREE.Vector3(0, parsedLas ? 2.5 : 1.0, 0);
     defaultCameraRef.current = { pos: orbitPos, target: centerTarget, topPos };
 
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.2, Math.max(900, maxSpan * 8));
@@ -155,66 +214,103 @@ export function Orchard3DViewerCard() {
     fillLight.position.set(-maxSpan * 0.5, maxSpan * 0.35, -maxSpan * 0.45);
     scene.add(fillLight);
 
-    // Subtle ground reference grid scaled to the LAS cloud span
+    // Subtle ground reference grid scaled to the orchard span
     const gridSize = Math.ceil((maxSpan * 1.25) / 20) * 20;
     const gridDivisions = Math.min(48, Math.max(16, Math.round(gridSize / 10)));
     const grid = new THREE.GridHelper(gridSize, gridDivisions, 0x64748b, 0x334155);
-    grid.position.y = -0.35;
+    grid.position.y = parsedLas ? -0.35 : -0.05;
     (grid.material as THREE.Material).transparent = true;
     (grid.material as THREE.Material).opacity = 0.2;
     scene.add(grid);
     gridHelperRef.current = grid;
 
-    // World root group so vertical relief scaling (Z x1 / x1.8 / x2.8) applies uniformly
+    // World root group (applies vertical relief scaling when LAS is present)
     const worldRoot = new THREE.Group();
-    worldRoot.scale.set(1, verticalExaggeration, 1);
+    worldRoot.scale.set(1, activeZScale, 1);
     scene.add(worldRoot);
     worldRootRef.current = worldRoot;
 
-    // 1. Real Binary `.las` Point Cloud Layer
+    // 1. Optional `.las` Point Cloud Layer
+    let pcGeom: THREE.BufferGeometry | null = null;
+    let pcMat: THREE.PointsMaterial | null = null;
     const pointCloudGroup = new THREE.Group();
-    const pcGeom = new THREE.BufferGeometry();
-    pcGeom.setAttribute('position', new THREE.BufferAttribute(parsedLas.positions, 3));
-    const initialColors =
-      colorMode === 'rgb'
-        ? parsedLas.rgbColors
-        : colorMode === 'classification'
-          ? parsedLas.classificationColors
-          : parsedLas.elevationColors;
-    pcGeom.setAttribute('color', new THREE.BufferAttribute(new Float32Array(initialColors), 3));
-    pointCloudGeometryRef.current = pcGeom;
 
-    const pcMat = new THREE.PointsMaterial({
-      size: Math.max(0.55, Math.min(1.4, maxSpan / 220)),
-      vertexColors: true,
-      transparent: false,
-      sizeAttenuation: true,
-    });
-    const pointCloudMesh = new THREE.Points(pcGeom, pcMat);
-    pointCloudGroup.add(pointCloudMesh);
+    if (parsedLas) {
+      pcGeom = new THREE.BufferGeometry();
+      pcGeom.setAttribute('position', new THREE.BufferAttribute(parsedLas.positions, 3));
+      const initialColors =
+        colorMode === 'rgb'
+          ? parsedLas.rgbColors
+          : colorMode === 'classification'
+            ? parsedLas.classificationColors
+            : parsedLas.elevationColors;
+      pcGeom.setAttribute('color', new THREE.BufferAttribute(new Float32Array(initialColors), 3));
+      pointCloudGeometryRef.current = pcGeom;
+
+      pcMat = new THREE.PointsMaterial({
+        size: Math.max(0.55, Math.min(1.4, maxSpan / 220)),
+        vertexColors: true,
+        transparent: false,
+        sizeAttenuation: true,
+      });
+      const pointCloudMesh = new THREE.Points(pcGeom, pcMat);
+      pointCloudGroup.add(pointCloudMesh);
+    } else {
+      pointCloudGeometryRef.current = null;
+    }
+
     worldRoot.add(pointCloudGroup);
     pointCloudGroupRef.current = pointCloudGroup;
 
-    // 2. Orchard Boundary Polygon Outline (projected from WGS 84 -> EPSG:2180 -> LAS ground)
+    // 2. Orchard Boundary Polygon (outline + flat geometric surface when `.las` is absent)
     const boundaryGroup = new THREE.Group();
     const boundaryMat = new THREE.LineBasicMaterial({
       color: 0x22c55e,
       transparent: true,
-      opacity: 0.9,
+      opacity: 0.92,
     });
+    let parcelFillGeom: THREE.ShapeGeometry | null = null;
+    let parcelFillMat: THREE.MeshStandardMaterial | null = null;
+
     if (sceneData.boundaryGeo && sceneData.boundaryGeo.length >= 3) {
-      const boundaryPts = [...sceneData.boundaryGeo, sceneData.boundaryGeo[0]].map((geo) => {
-        const { x, z } = geoToLasSceneXZ(geo, parsedLas.origin);
-        const y = parsedLas.sampleGroundY(x, z) + 0.35;
-        return new THREE.Vector3(x, y, z);
+      const projectedBoundary = sceneData.boundaryGeo.map((geo) => geoToLasSceneXZ(geo, sceneOrigin));
+
+      const boundaryPts = [...projectedBoundary, projectedBoundary[0]].map((pt) => {
+        const y = sampleGroundY(pt.x, pt.z) + (parsedLas ? 0.35 : 0.08);
+        return new THREE.Vector3(pt.x, y, pt.z);
       });
       const bGeom = new THREE.BufferGeometry().setFromPoints(boundaryPts);
       boundaryGroup.add(new THREE.Line(bGeom, boundaryMat));
+
+      // In geometric-only mode (no `.las`), render a crisp filled orchard ground plane
+      if (!parsedLas) {
+        const shape = new THREE.Shape();
+        projectedBoundary.forEach((pt, idx) => {
+          // Shape lies in XY, rotated -90deg around X -> (x, -z) maps to (x, 0, z)
+          if (idx === 0) shape.moveTo(pt.x, -pt.z);
+          else shape.lineTo(pt.x, -pt.z);
+        });
+        shape.closePath();
+
+        parcelFillGeom = new THREE.ShapeGeometry(shape);
+        parcelFillGeom.rotateX(-Math.PI / 2);
+        parcelFillMat = new THREE.MeshStandardMaterial({
+          color: 0x16a34a,
+          roughness: 0.92,
+          metalness: 0.02,
+          transparent: true,
+          opacity: 0.16,
+          side: THREE.DoubleSide,
+        });
+        const parcelMesh = new THREE.Mesh(parcelFillGeom, parcelFillMat);
+        parcelMesh.position.y = 0.01;
+        boundaryGroup.add(parcelMesh);
+      }
     }
     worldRoot.add(boundaryGroup);
     boundaryGroupRef.current = boundaryGroup;
 
-    // 3. Row Lines Layer (projected from WGS 84 -> EPSG:2180 -> LAS ground)
+    // 3. Row Lines Layer (projected from WGS 84 -> EPSG:2180 -> terrain/flat ground)
     const rowLinesGroup = new THREE.Group();
     const lineMaterial = new THREE.LineBasicMaterial({
       color: 0x38bdf8,
@@ -223,16 +319,15 @@ export function Orchard3DViewerCard() {
     });
     if (sceneData.rowsGeo && sceneData.rowsGeo.length > 0) {
       for (const row of sceneData.rowsGeo) {
-        const startXZ = geoToLasSceneXZ(row.start, parsedLas.origin);
-        const endXZ = geoToLasSceneXZ(row.end, parsedLas.origin);
-        // Subdivide row line into 12 steps so it hugs the real LiDAR terrain smoothly
+        const startXZ = geoToLasSceneXZ(row.start, sceneOrigin);
+        const endXZ = geoToLasSceneXZ(row.end, sceneOrigin);
         const pts: THREE.Vector3[] = [];
-        const steps = 12;
+        const steps = parsedLas ? 12 : 2;
         for (let s = 0; s <= steps; s += 1) {
           const tStep = s / steps;
           const px = startXZ.x + (endXZ.x - startXZ.x) * tStep;
           const pz = startXZ.z + (endXZ.z - startXZ.z) * tStep;
-          const py = parsedLas.sampleGroundY(px, pz) + 0.25;
+          const py = sampleGroundY(px, pz) + (parsedLas ? 0.25 : 0.12);
           pts.push(new THREE.Vector3(px, py, pz));
         }
         const lineGeom = new THREE.BufferGeometry().setFromPoints(pts);
@@ -242,7 +337,7 @@ export function Orchard3DViewerCard() {
     worldRoot.add(rowLinesGroup);
     rowLinesGroupRef.current = rowLinesGroup;
 
-    // 4. Individual 3D Tree Objects Layer (placed accurately on the LAS ground surface)
+    // 4. Individual 3D Tree Objects Layer
     const treesGroup = new THREE.Group();
     const sharedTrunkGeom = new THREE.CylinderGeometry(0.14, 0.22, 1, 7);
     const sharedCanopyGeom = new THREE.DodecahedronGeometry(1, 1);
@@ -283,8 +378,8 @@ export function Orchard3DViewerCard() {
     let treeSumZ = 0;
 
     for (const tree of sceneData.trees) {
-      const xz = geoToLasSceneXZ(tree.geo, parsedLas.origin);
-      const groundY = parsedLas.sampleGroundY(xz.x, xz.z);
+      const xz = geoToLasSceneXZ(tree.geo, sceneOrigin);
+      const groundY = sampleGroundY(xz.x, xz.z);
       const alignedTree: OrchardTree3D = {
         ...tree,
         position: {
@@ -343,8 +438,8 @@ export function Orchard3DViewerCard() {
       const cy = treeSumY / n;
       const cz = treeSumZ / n;
       treesFocusRef.current = {
-        target: new THREE.Vector3(cx, cy * verticalExaggeration + 2, cz),
-        pos: new THREE.Vector3(cx + 22, cy * verticalExaggeration + 24, cz + 28),
+        target: new THREE.Vector3(cx, cy * activeZScale + 2, cz),
+        pos: new THREE.Vector3(cx + 22, cy * activeZScale + 24, cz + 28),
       };
     } else {
       treesFocusRef.current = null;
@@ -354,7 +449,7 @@ export function Orchard3DViewerCard() {
     worldRoot.add(treesGroup);
     treesGroupRef.current = treesGroup;
 
-    // Selection indicator ring on terrain under the selected tree
+    // Selection indicator ring under the selected tree
     const ringGeom = new THREE.RingGeometry(1.5, 2.0, 32);
     ringGeom.rotateX(-Math.PI / 2);
     const ringMat = new THREE.MeshBasicMaterial({
@@ -441,8 +536,10 @@ export function Orchard3DViewerCard() {
       renderer.domElement.removeEventListener('pointerup', handlePointerUp);
       controls.dispose();
 
-      pcGeom.dispose();
-      pcMat.dispose();
+      pcGeom?.dispose();
+      pcMat?.dispose();
+      parcelFillGeom?.dispose();
+      parcelFillMat?.dispose();
       boundaryMat.dispose();
       boundaryGroup.traverse((obj) => {
         if (obj instanceof THREE.Line) obj.geometry.dispose();
@@ -477,7 +574,7 @@ export function Orchard3DViewerCard() {
     if (gridHelperRef.current) {
       (gridHelperRef.current.material as THREE.Material).opacity = resolvedTheme === 'dark' ? 0.2 : 0.32;
     }
-  }, [resolvedTheme, parsedLas]);
+  }, [resolvedTheme, parsedLas, sceneData]);
 
   // Sync point cloud color mode (RGB / Elevation / Classification) without rebuilding scene
   useEffect(() => {
@@ -496,12 +593,12 @@ export function Orchard3DViewerCard() {
     }
   }, [colorMode, parsedLas]);
 
-  // Sync vertical relief scale (Z x1 / x1.8 / x2.8)
+  // Sync vertical relief scale (Z x1 / x1.8 / x2.8) when LAS is active
   useEffect(() => {
     if (worldRootRef.current) {
-      worldRootRef.current.scale.set(1, verticalExaggeration, 1);
+      worldRootRef.current.scale.set(1, parsedLas ? verticalExaggeration : 1, 1);
     }
-  }, [verticalExaggeration]);
+  }, [verticalExaggeration, parsedLas]);
 
   // Sync layer visibility toggles
   useEffect(() => {
@@ -509,7 +606,7 @@ export function Orchard3DViewerCard() {
     if (treesGroupRef.current) treesGroupRef.current.visible = layers.trees;
     if (rowLinesGroupRef.current) rowLinesGroupRef.current.visible = layers.rowLines;
     if (boundaryGroupRef.current) boundaryGroupRef.current.visible = layers.boundary;
-  }, [layers, parsedLas]);
+  }, [layers, parsedLas, sceneData]);
 
   // Sync selection ring around clicked tree
   useEffect(() => {
@@ -545,31 +642,13 @@ export function Orchard3DViewerCard() {
     setLayers((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const handleImportLocalLas = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    setIsLoadingLas(true);
-    setLasError(null);
-    try {
-      const buf = await file.arrayBuffer();
-      const parsed = parseLasArrayBuffer(buf, { maxPoints: 180_000, filterNoise: true });
-      setParsedLas(parsed);
-      setLasLabel(file.name);
-      setColorMode(parsed.header.hasRgb ? 'rgb' : 'elevation');
-      setSelectedTree(null);
-    } catch (err) {
-      setLasError((err as Error).message || 'Invalid .las file');
-    } finally {
-      setIsLoadingLas(false);
-      event.target.value = '';
-    }
-  };
-
   const colorModes: Array<{ id: LasColorMode; label: string }> = [
     { id: 'rgb', label: t.orchard3d.colorRgb },
     { id: 'elevation', label: t.orchard3d.colorElevation },
     { id: 'classification', label: t.orchard3d.colorClass },
   ];
+
+  const lasFileName = sceneData ? `${sceneData.orchardId}.las` : '';
 
   return (
     <section className="card viewer-card">
@@ -578,27 +657,26 @@ export function Orchard3DViewerCard() {
           <div className="card-icon">
             <Box size={18} strokeWidth={1.9} />
           </div>
-          <div>
-            <h2 className="card-title">
-              {t.orchard3d.title}
-              {sceneData?.orchardName ? ` — ${sceneData.orchardName}` : ''}
-            </h2>
-            <p className="card-subtitle">{t.orchard3d.subtitle}</p>
-          </div>
+          <h2 className="card-title">
+            {t.orchard3d.title}
+            {sceneData?.orchardName ? ` — ${sceneData.orchardName}` : ''}
+          </h2>
         </div>
 
         <div className="viewer-toolbar">
           {/* Layer toggles */}
           <div className="viewer-toggle-group">
-            <button
-              type="button"
-              className={`toggle-pill${layers.pointCloud ? ' is-active' : ''}`}
-              onClick={() => toggleLayer('pointCloud')}
-            >
-              {layers.pointCloud ? <Eye size={14} /> : <EyeOff size={14} />}
-              <Sparkles size={14} />
-              <span>{t.orchard3d.pointCloudLayer}</span>
-            </button>
+            {parsedLas && (
+              <button
+                type="button"
+                className={`toggle-pill${layers.pointCloud ? ' is-active' : ''}`}
+                onClick={() => toggleLayer('pointCloud')}
+              >
+                {layers.pointCloud ? <Eye size={14} /> : <EyeOff size={14} />}
+                <Sparkles size={14} />
+                <span>{t.orchard3d.pointCloudLayer}</span>
+              </button>
+            )}
 
             <button
               type="button"
@@ -631,30 +709,33 @@ export function Orchard3DViewerCard() {
             </button>
           </div>
 
-          {/* LAS Color Mode switcher (RGB / Elevation / ASPRS Class) */}
-          <div className="segmented-control" role="group" aria-label={t.orchard3d.colorModeLabel}>
-            {colorModes.map((mode) => (
-              <button
-                key={mode.id}
-                type="button"
-                className={`segmented-btn${colorMode === mode.id ? ' is-active' : ''}`}
-                onClick={() => setColorMode(mode.id)}
-              >
-                {mode.label}
-              </button>
-            ))}
-          </div>
+          {/* LAS Color Mode & Relief Boost (only shown when `<_id>.las` is loaded) */}
+          {parsedLas && (
+            <>
+              <div className="segmented-control" role="group" aria-label={t.orchard3d.colorModeLabel}>
+                {colorModes.map((mode) => (
+                  <button
+                    key={mode.id}
+                    type="button"
+                    className={`segmented-btn${colorMode === mode.id ? ' is-active' : ''}`}
+                    onClick={() => setColorMode(mode.id)}
+                  >
+                    {mode.label}
+                  </button>
+                ))}
+              </div>
 
-          {/* Vertical relief boost toggle */}
-          <button
-            type="button"
-            className={`toggle-pill${verticalExaggeration > 1 ? ' is-active' : ''}`}
-            onClick={() => setVerticalExaggeration((z) => (z === 1 ? 1.8 : z === 1.8 ? 2.8 : 1))}
-            title={t.orchard3d.reliefTooltip}
-          >
-            <Mountain size={14} />
-            <span>Z ×{verticalExaggeration}</span>
-          </button>
+              <button
+                type="button"
+                className={`toggle-pill${verticalExaggeration > 1 ? ' is-active' : ''}`}
+                onClick={() => setVerticalExaggeration((z) => (z === 1 ? 1.8 : z === 1.8 ? 2.8 : 1))}
+                title={t.orchard3d.reliefTooltip}
+              >
+                <Mountain size={14} />
+                <span>Z ×{verticalExaggeration}</span>
+              </button>
+            </>
+          )}
 
           {/* Camera presets */}
           <div className="segmented-control">
@@ -685,59 +766,41 @@ export function Orchard3DViewerCard() {
               <RotateCcw size={14} />
             </button>
           </div>
-
-          {/* Import custom local .las */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".las"
-            className="visually-hidden"
-            onChange={handleImportLocalLas}
-          />
-          <button
-            type="button"
-            className="secondary-btn"
-            onClick={() => fileInputRef.current?.click()}
-            title={t.orchard3d.importLasTooltip}
-          >
-            <Upload size={14} />
-            <span>{t.orchard3d.importLas}</span>
-          </button>
         </div>
       </div>
 
       <div className="viewer-stage">
         <div ref={mountRef} className="viewer-canvas-container" />
 
-        {isLoadingLas && (
+        {isLoading && (
           <div className="viewer-loading-overlay">
             <Loader2 size={22} className="spin-icon" />
             <span>{t.orchard3d.loadingLas}</span>
           </div>
         )}
 
-        {lasError && (
-          <div className="viewer-loading-overlay viewer-error-overlay">
-            <span>{lasError}</span>
-          </div>
-        )}
-
-        {/* Top-left LAS & scene stats HUD */}
-        {parsedLas && sceneData && (
+        {/* Top-left LAS or geometric fallback HUD */}
+        {sceneData && (
           <div className="viewer-hud viewer-hud-top-left">
-            <span className="hud-chip">
-              <strong>{lasLabel}</strong> (LAS {parsedLas.header.version} · fmt {parsedLas.header.pointFormat})
-            </span>
-            <span className="hud-chip">
-              {t.orchard3d.pointsStat}:{' '}
-              <strong>
-                {parsedLas.header.renderedPointCount.toLocaleString()} /{' '}
-                {parsedLas.header.totalPointCount.toLocaleString()}
-              </strong>
-            </span>
-            <span className="hud-chip">
-              {parsedLas.header.spanMeters.x.toFixed(0)} × {parsedLas.header.spanMeters.y.toFixed(0)} m
-            </span>
+            {parsedLas ? (
+              <>
+                <span className="hud-chip">
+                  <strong>{lasFileName}</strong> (LAS {parsedLas.header.version} · fmt {parsedLas.header.pointFormat})
+                </span>
+                <span className="hud-chip">
+                  {t.orchard3d.pointsStat}:{' '}
+                  <strong>
+                    {parsedLas.header.renderedPointCount.toLocaleString()} /{' '}
+                    {parsedLas.header.totalPointCount.toLocaleString()}
+                  </strong>
+                </span>
+                <span className="hud-chip">
+                  {parsedLas.header.spanMeters.x.toFixed(0)} × {parsedLas.header.spanMeters.y.toFixed(0)} m
+                </span>
+              </>
+            ) : (
+              <span className="hud-chip">{t.orchard3d.geometricFallbackLabel}</span>
+            )}
             <span className="hud-chip">
               {t.orchard3d.treesStat}: <strong>{sceneData.trees.length}</strong>
             </span>

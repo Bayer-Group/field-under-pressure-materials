@@ -18,8 +18,10 @@ export const apiConfig = {
   binaryTimeoutMs: 25000,
   defaultOrchardId: '6b01933c1dc02a368703a020',
   defaultOrchardName: 'Grojec A',
-  /** Static repo LAS asset used while backend `.las` endpoint is in placeholder mode */
-  defaultLasAssetUrl: '/las/grojec.las',
+  /** Active user ObjectId used when persisting `User.preferences` */
+  defaultUserId: '6b00ded99a422805ed10200c',
+  /** Static repo LAS asset convention: `ui/public/las/<orchardId>.las` */
+  lasAssetUrl: (orchardId: string) => `/las/${encodeURIComponent(orchardId)}.las`,
 } as const;
 
 export const API_ENDPOINTS = {
@@ -29,7 +31,11 @@ export const API_ENDPOINTS = {
   cropPrefs: {
     list: '/api/v1/crop-prefs',
   },
+  users: {
+    preferences: (userId: string) => `/api/v1/users/${encodeURIComponent(userId)}/preferences`,
+  },
   orchard: {
+    list: '/api/v1/orchards',
     health: '/api/v1/orchard/health',
     scene: '/api/v1/orchard/scene',
     pointCloud: '/api/v1/orchard/point-cloud',

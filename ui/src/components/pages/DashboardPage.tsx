@@ -9,11 +9,7 @@ export function DashboardPage() {
   return (
     <div className="dashboard-page">
       <div className="page-intro">
-        <div>
-          <h1 className="page-title">{t.dashboard.sectionTitle}</h1>
-          <p className="page-subtitle">{t.dashboard.sectionSubtitle}</p>
-        </div>
-        <span className="page-meta-hint">{t.dashboard.moreChartsHint}</span>
+        <h1 className="page-title">{t.dashboard.sectionTitle}</h1>
       </div>
 
       {/* Top extensible dashboard charts grid */}

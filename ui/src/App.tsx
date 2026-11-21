@@ -5,7 +5,9 @@ import { DashboardPage } from './components/pages/DashboardPage';
 import { PlaceholderSectionPage } from './components/pages/PlaceholderSectionPage';
 import { RowLineEditorPage } from './components/pages/RowLineEditorPage';
 import { LanguageProvider } from './contexts/LanguageContext';
+import { OrchardProvider } from './contexts/OrchardContext';
 import { ThemeProvider } from './contexts/ThemeContext';
+import { UserPreferencesSync } from './contexts/UserPreferencesSync';
 
 function AppShell() {
   const [activeSection, setActiveSection] = useState<NavSectionId>('dashboard');
@@ -36,7 +38,10 @@ export function App() {
   return (
     <ThemeProvider>
       <LanguageProvider>
-        <AppShell />
+        <OrchardProvider>
+          <UserPreferencesSync />
+          <AppShell />
+        </OrchardProvider>
       </LanguageProvider>
     </ThemeProvider>
   );

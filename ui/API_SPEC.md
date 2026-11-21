@@ -67,12 +67,15 @@ Wymagania ogólne po stronie backendu:
 | `GET` | `/api/v1/weather/temperature` | Dashboard (wykres temp. min/max) | Dane pogodowe / `Orchard.environmentalData` |
 | `GET` | `/api/v1/orchard/health` | Dashboard (wskaźnik zdrowia sadu) | `Tree` (agregacja `healthIndex`) |
 | `GET` | `/api/v1/orchard/scene` | Dashboard (metadane 3D, granica i drzewa) | `Orchard`, `Tree` |
-| `GET` | `/api/v1/orchards/{orchardId}/point-cloud.las` | Dashboard (binarna chmura punktów `.las`) | Pliki LiDAR `.las` (np. `ui/public/las/grojec.las`) |
+| `GET` | `/api/v1/orchards/{orchardId}/point-cloud.las` | Dashboard (binarna chmura punktów `.las`) | Pliki LiDAR `ui/public/las/{_id}.las` (np. `6b01933c1dc02a368703a020.las`) |
 | `GET` | `/api/v1/orchard/point-cloud` | Dashboard / warstwy 3D (alternatywny JSON) | Chmura punktów LiDAR / fotogrametria |
 | `GET` | `/api/v1/orchard/trees` | Dashboard / warstwy 3D (granularny) | `Tree` |
 | `GET` | `/api/v1/orchard/row-lines` | Dashboard / podgląd rzędów | `Orchard.rows` |
 | `POST` | `/api/v1/orchard/row-lines` | Pomocniczy zapis samych polilinii | `Orchard.rows` |
 | `PATCH` | `/api/v1/orchard/trees/{treeId}` | Inspektor pojedynczego drzewa | `Tree` |
+| `GET` | `/api/v1/orchards` | Górny pasek (dropdown wyboru sadu) | `Orchard` |
+| `GET` | `/api/v1/users/{userId}/preferences` | Górny pasek (odczyt preferencji użytkownika) | `User.preferences` |
+| `PATCH` | `/api/v1/users/{userId}/preferences` | Górny pasek (zapis sadu, motywu i języka) | `User.preferences` |
 | `GET` | `/api/v1/crop-prefs` | Edytor linii rzędów (paleta gatunków) | `CropPref` |
 | `GET` | `/api/v1/orchards/{orchardId}` | Edytor linii rzędów (geometria pola + rzędy) | `Orchard` |
 | `POST` | `/api/v1/orchards/{orchardId}/layout` | Edytor linii rzędów (zapis rzędów i drzew) | `Orchard` + `Tree` |
@@ -192,9 +195,10 @@ Zwraca surowy binarny plik **`.las`** (nieskompresowany LAS `1.1–1.4`, obsług
 - **Path param:** `orchardId` (`ObjectIdString`, dla prezentacji: `6b01933c1dc02a368703a020` → **`Grojec A`**)
 - **Nagłówki odpowiedzi:**
   - `Content-Type: application/octet-stream`
-  - `Content-Disposition: inline; filename="grojec.las"`
+  - `Content-Disposition: inline; filename="{orchardId}.las"`
+- **Brak pliku (`404 Not Found`):** jeśli dla danego sadu nie ma jeszcze pliku `{_id}.las`, UI automatycznie i bezbłędnie przełącza się na **widok geometryczny 3D** (obrys działki + rzędy + pojedyncze drzewa 3D na płaszczyźnie terenu).
 - **Układ współrzędnych (CRS):** PUWG 1992 (**`EPSG:2180`**). UI automatycznie przelicza wektory `Orchard` / `Tree` z **WGS 84 (`EPSG:4326`)** na `EPSG:2180` (`ui/src/utils/crs2180.ts`) oraz dopasowuje wysokość posadowienia drzew `Y` do siatki punktów gruntu (klasa ASPRS `2`) z pliku `.las`.
-- **Plik referencyjny w repozytorium:** `ui/public/las/grojec.las` (`LAS 1.2`, Point Format `3` z RGB i klasyfikacją, `513 074` punktów, zasięg `220.6 × 153.3 × 8.8 m`, sad **`Grojec A`**).
+- **Konwencja plików w repozytorium:** `ui/public/las/{_id}.las`, np. `ui/public/las/6b01933c1dc02a368703a020.las` (`LAS 1.2`, Point Format `3` z RGB i klasyfikacją, `513 074` punktów, zasięg `220.6 × 153.3 × 8.8 m`, sad **`Grojec A`**).
 
 ### 3.5. Granularne endpointy danych 3D i drzew
 Przygotowane do niezależnego dociągania warstw:
@@ -266,7 +270,43 @@ Pobiera geometrię działki sadu oraz zapisane rzędy z kolekcji MongoDB `Orchar
 
 ---
 
-### 3.7. `POST /api/v1/orchards/{orchardId}/layout`
+### 3.8. `GET /api/v1/orchards`
+Zwraca listę sadów przypisanych do użytkownika do dropdownu wyboru sadu na górnym pasku.
+
+- **Response `200 OK`:** `OrchardOption[]`
+```json
+[
+  {
+    "_id": "6b01933c1dc02a368703a020",
+    "name": "Grojec A",
+    "areaHectares": 2.22,
+    "centroid": { "lat": 51.8450065, "long": 20.8530536 }
+  }
+]
+```
+
+---
+
+### 3.9. `GET` / `PATCH /api/v1/users/{userId}/preferences`
+Odczytuje i zapisuje 3 wybory użytkownika z górnego paska (wyświetlany sad, motyw i język) bezpośrednio w `User.preferences` w MongoDB.
+
+- **Path param:** `userId` (`ObjectIdString`, np. `6b00ded99a422805ed10200c`)
+- **Request body (`PATCH`) / Response `200 OK` (`GET` i `PATCH`):**
+```json
+{
+  "theme": "OS",
+  "lang": "pl",
+  "activeOrchardId": "6b01933c1dc02a368703a020"
+}
+```
+- **Walidacja MongoDB `User.preferences`:**
+  - `theme`: enum `"Light" | "Dark" | "OS"` (UI mapuje `light/dark/system` ↔ `Light/Dark/OS`)
+  - `lang`: `"pl" | "en"`
+  - `activeOrchardId`: `ObjectId` sadu lub `null`
+
+---
+
+### 3.10. `POST /api/v1/orchards/{orchardId}/layout`
 Główny endpoint zapisu z **Edytora Linii Rzędów**. Przyjmuje narysowane rzędy oraz wyliczone współrzędne pojedynczych drzew.
 
 - **Path param:** `orchardId` (`ObjectIdString`)

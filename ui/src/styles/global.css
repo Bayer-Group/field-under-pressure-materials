@@ -257,6 +257,56 @@ input {
   flex-shrink: 0;
 }
 
+.orchard-select-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 10px;
+  background-color: var(--bg-surface-muted);
+  border: 1px solid var(--border-subtle);
+  transition: border-color 0.15s ease;
+}
+
+.orchard-select-wrap:hover,
+.orchard-select-wrap:focus-within {
+  border-color: var(--border-strong);
+}
+
+.orchard-select-icon {
+  position: absolute;
+  left: 10px;
+  color: var(--accent);
+  pointer-events: none;
+}
+
+.orchard-select {
+  appearance: none;
+  -webkit-appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 7px 28px 7px 30px;
+  border-radius: 9px;
+  cursor: pointer;
+  min-width: 158px;
+  max-width: 230px;
+  outline: none;
+}
+
+.orchard-select option {
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.orchard-select-chevron {
+  position: absolute;
+  right: 9px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
 /* Segmented Controls (Theme / Language / Time Range / Camera) */
 
 .segmented-control {

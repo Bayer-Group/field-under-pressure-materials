@@ -15,3 +15,8 @@ export {
   getPlaceholderOrchardBoundary,
   getPlaceholderSaveOrchardLayoutResponse,
 } from './rowEditorPlaceholder';
+export {
+  getPlaceholderOrchardsList,
+  getPlaceholderUserPreferences,
+  savePlaceholderUserPreferences,
+} from './orchardsCatalogPlaceholder';

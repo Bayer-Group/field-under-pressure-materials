@@ -16,6 +16,7 @@ export interface Translations {
     placeholderHint: string;
   };
   topbar: {
+    orchardLabel: string;
     themeLabel: string;
     themeSystem: string;
     themeLight: string;
@@ -76,8 +77,7 @@ export interface Translations {
     viewTop: string;
     focusTrees: string;
     resetView: string;
-    importLas: string;
-    importLasTooltip: string;
+    geometricFallbackLabel: string;
     loadingLas: string;
     pointsStat: string;
     treesStat: string;
@@ -170,6 +170,7 @@ export const TRANSLATIONS: Record<Language, Translations> = {
       placeholderHint: 'Ikony tymczasowe',
     },
     topbar: {
+      orchardLabel: 'Wyświetlany sad',
       themeLabel: 'Motyw',
       themeSystem: 'System',
       themeLight: 'Jasny',
@@ -230,9 +231,8 @@ export const TRANSLATIONS: Record<Language, Translations> = {
       viewTop: 'Z góry',
       focusTrees: 'Drzewa',
       resetView: 'Resetuj kamerę',
-      importLas: 'Wczytaj .las',
-      importLasTooltip: 'Wczytaj lokalny plik LiDAR (.las) do podglądu 3D',
-      loadingLas: 'Ładowanie i parsowanie chmury punktów .las…',
+      geometricFallbackLabel: 'Widok geometryczny (brak pliku .las)',
+      loadingLas: 'Ładowanie chmury punktów .las…',
       pointsStat: 'Punktów',
       treesStat: 'Drzew 3D',
       rowsStat: 'Rzędów',
@@ -324,6 +324,7 @@ export const TRANSLATIONS: Record<Language, Translations> = {
       placeholderHint: 'Placeholder icons',
     },
     topbar: {
+      orchardLabel: 'Active orchard',
       themeLabel: 'Theme',
       themeSystem: 'System',
       themeLight: 'Light',
@@ -384,9 +385,8 @@ export const TRANSLATIONS: Record<Language, Translations> = {
       viewTop: 'Top Map',
       focusTrees: 'Trees',
       resetView: 'Reset Camera',
-      importLas: 'Load .las',
-      importLasTooltip: 'Load a local LiDAR (.las) file directly into the 3D viewer',
-      loadingLas: 'Loading & parsing .las point cloud…',
+      geometricFallbackLabel: 'Geometric view (no .las file)',
+      loadingLas: 'Loading .las point cloud…',
       pointsStat: 'Points',
       treesStat: '3D Trees',
       rowsStat: 'Rows',

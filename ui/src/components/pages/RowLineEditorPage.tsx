@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { fetchCropPrefs, fetchOrchardBoundary, saveOrchardLayout } from '../../api/orchardApi';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { useOrchard } from '../../contexts/OrchardContext';
 import type {
   CropPrefDoc,
   DraftRow,
@@ -42,6 +43,7 @@ import {
 
 export function RowLineEditorPage() {
   const { t, language } = useLanguage();
+  const { selectedOrchardId } = useOrchard();
 
   const [orchard, setOrchard] = useState<OrchardBoundaryDoc | null>(null);
   const [cropPrefs, setCropPrefs] = useState<CropPrefDoc[]>([]);
@@ -73,9 +75,14 @@ export function RowLineEditorPage() {
 
   useEffect(() => {
     const controller = new AbortController();
+    setRows([]);
+    setHistory([]);
+    setSelectedRowId(null);
+    setSelectedTreeKey(null);
+    setSaveBanner(null);
 
     Promise.all([
-      fetchOrchardBoundary(undefined, controller.signal),
+      fetchOrchardBoundary(selectedOrchardId, controller.signal),
       fetchCropPrefs(controller.signal),
     ])
       .then(([orchardRes, cropsRes]) => {
@@ -85,8 +92,8 @@ export function RowLineEditorPage() {
         setCropPrefsEndpoint(cropsRes.endpoint);
 
         if (cropsRes.data.length > 0) {
-          setActiveSpeciesId(cropsRes.data[0]._id);
-          setAverageSpacingMeters(cropsRes.data[0].recommendedSpacingMeters);
+          setActiveSpeciesId((prev) => prev || cropsRes.data[0]._id);
+          setAverageSpacingMeters((prev) => prev || cropsRes.data[0].recommendedSpacingMeters);
         }
 
         // Convert any pre-existing Orchard.rows (empty on first entry) into DraftRow[]
@@ -112,7 +119,7 @@ export function RowLineEditorPage() {
       });
 
     return () => controller.abort();
-  }, []);
+  }, [selectedOrchardId]);
 
   const cropPrefById = useMemo(() => {
     const map = new Map<ObjectIdString, CropPrefDoc>();
@@ -312,14 +319,10 @@ export function RowLineEditorPage() {
     <div className="row-editor-page">
       {/* Top Page Header: Orchard metadata + Backdrop Mode Toggle + Save Action */}
       <div className="editor-header-bar">
-        <div>
-          <h1 className="page-title">{t.rowEditor.title}</h1>
-          <p className="page-subtitle">
-            {orchard
-              ? `${orchard.name} · ${orchard.locationLabel} · ${orchard.areaHectares.toFixed(2)} ha`
-              : t.rowEditor.subtitle}
-          </p>
-        </div>
+        <h1 className="page-title">
+          {t.rowEditor.title}
+          {orchard ? ` — ${orchard.name}` : ''}
+        </h1>
 
         <div className="editor-header-actions">
           {/* Backdrop mode: Empty shape (default) vs Satellite Map */}
@@ -463,6 +466,7 @@ export function RowLineEditorPage() {
           {/* Interactive Vector + Satellite Drawing Surface */}
           {orchard && (
             <RowLineEditorCanvas
+              key={orchard._id}
               orchard={orchard}
               cropPrefs={cropPrefs}
               activeSpeciesId={activeSpeciesId}
@@ -523,7 +527,6 @@ export function RowLineEditorPage() {
               </div>
               <code className="mini-collection-tag">CropPref</code>
             </div>
-            <p className="panel-section-desc">{t.rowEditor.speciesHint}</p>
 
             <div className="species-grid">
               {cropPrefs.map((crop) => {
@@ -823,10 +826,7 @@ export function RowLineEditorPage() {
       {showPayloadPreview && layoutPayload && (
         <section className="card payload-preview-card">
           <div className="card-header">
-            <div>
-              <h2 className="card-title">{t.rowEditor.payloadPreviewTitle}</h2>
-              <p className="card-subtitle">{t.rowEditor.payloadPreviewSubtitle}</p>
-            </div>
+            <h2 className="card-title">{t.rowEditor.payloadPreviewTitle}</h2>
             <code className="endpoint-tag">
               POST /api/v1/orchards/{layoutPayload.orchardId}/layout
             </code>

@@ -3,18 +3,20 @@ import { HeartPulse } from 'lucide-react';
 import { fetchOrchardHealth } from '../../api/orchardApi';
 import { HEALTH_PALETTE, HEALTH_STATUS_ORDER } from '../../constants/healthPalette';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { useOrchard } from '../../contexts/OrchardContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import type { OrchardHealthSummary } from '../../types/orchard';
 
 export function OrchardHealthCard() {
   const { t } = useLanguage();
   const { resolvedTheme } = useTheme();
+  const { selectedOrchardId } = useOrchard();
   const [summary, setSummary] = useState<OrchardHealthSummary | null>(null);
   const [endpoint, setEndpoint] = useState<string>('');
 
   useEffect(() => {
     const controller = new AbortController();
-    fetchOrchardHealth(undefined, controller.signal)
+    fetchOrchardHealth(selectedOrchardId, controller.signal)
       .then((res) => {
         setSummary(res.data);
         setEndpoint(res.endpoint);
@@ -26,7 +28,7 @@ export function OrchardHealthCard() {
       });
 
     return () => controller.abort();
-  }, []);
+  }, [selectedOrchardId]);
 
   const score = summary?.averageScore ?? 0;
   const overallStatus = summary?.overallStatus ?? 'healthy';
@@ -49,10 +51,7 @@ export function OrchardHealthCard() {
           <div className="card-icon">
             <HeartPulse size={18} strokeWidth={1.9} />
           </div>
-          <div>
-            <h2 className="card-title">{t.health.title}</h2>
-            <p className="card-subtitle">{t.health.subtitle}</p>
-          </div>
+          <h2 className="card-title">{t.health.title}</h2>
         </div>
       </div>
 
