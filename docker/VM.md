@@ -57,7 +57,7 @@ After SSH-ing in you can write SQL right away, with no extra configuration and n
 ```bash
 sudo docker exec -it spatial_postgis psql -U gis_user -d spatial_db
 ```
-Inside: `\dt fup.*` (list tables), `SELECT count(*) FROM fup.weather_hourly;`, `\q` (quit).
+Inside: `\dt raw.*` (list tables), `SELECT count(*) FROM raw.weather_hourly;`, `\q` (quit).
 
 This is enough for inspecting data, checks after loading and simple fixes.
 
@@ -93,11 +93,11 @@ gcloud compute ssh fup-vm --zone europe-central2-a --project geo-earth-junction 
 | database | `spatial_db` |
 | user | `gis_user` |
 | password | from the machine owner (it is not in the repo) |
-| schema | `fup` |
+| schema | `raw` (organizer data), `app` (farmer data) |
 
 Test from a console (it asks for the password):
 ```bash
-psql -h localhost -p 5433 -U gis_user spatial_db -c '\dt fup.*'
+psql -h localhost -p 5433 -U gis_user spatial_db -c '\dt raw.*'
 ```
 Without a local `psql`: `docker run --rm -it --network host postgres:15 psql -h localhost -p 5433 -U gis_user spatial_db`.
 

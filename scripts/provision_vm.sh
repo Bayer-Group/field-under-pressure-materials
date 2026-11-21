@@ -144,7 +144,7 @@ for _ in $(seq 1 30); do
   sudo docker exec spatial_postgis pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1 && break
   sleep 2
 done
-sudo docker exec spatial_postgis psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c '\dt fup.*'
+sudo docker exec spatial_postgis psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c '\dt raw.*'
 REMOTE
   echo "Done. Database access: scripts/provision_vm.sh tunnel"
 }

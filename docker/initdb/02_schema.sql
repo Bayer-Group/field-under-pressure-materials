@@ -1,10 +1,10 @@
--- MVP schema: hourly weather (4 km grid) + fields + crops.
+-- Raw layer (schema raw) and farmer tables (schema app). See docker/RAW_SCHEMA.md.
 -- Weather columns map 1:1 to data/weather.md (metric units). NULL from the source stays NULL (not 0).
--- Data is loaded with its original dates. The time shift is applied AFTER loading,
--- inside the database (UPDATE), and the applied shift is recorded in fup.ingest_log.time_shift
--- so it is clear that the dates are not the original ones.
+-- Data is loaded with its original dates. The demo time shift is applied at the API, and
+-- raw.ingest_log.time_shift records any shift applied inside the database.
+-- More raw tables (daily weather, IMERG daily, soil, crop raster) are in 03_raw_layers.sql.
 
-SET search_path = fup, public;
+SET search_path = raw, public;
 
 -- 1. 4 km weather grid (grid_table from weather_grids.zip: points / cell centres only).
 CREATE TABLE grid_cell (
@@ -13,7 +13,9 @@ CREATE TABLE grid_cell (
     lon       double precision NOT NULL,
     geom      geometry(Point, 4326) NOT NULL,
     geohash4  text,
-    time_zone text
+    time_zone text,
+    l1_name   text,             -- voivodeship name (from the grid file)
+    elevation real              -- metres, constant per cell (from the weather files)
 );
 -- Geography index: nearest-cell lookup in metres (not degrees).
 CREATE INDEX grid_cell_geog_gix ON grid_cell USING gist ((geom::geography));
@@ -26,7 +28,7 @@ CREATE TABLE weather_hourly (
     local_time                timestamp   NOT NULL,           -- local time (no time zone)
     temperature               real,   -- °C, 2 m
     dew_point_temperature     real,   -- °C, 2 m
-    precipitation             real,   -- mm per hour
+    precipitation             real,   -- mm per hour (from IMERG, joined at load time)
     wind_speed                real,   -- km/h, 10 m
     wind_direction            real,   -- degrees azimuth, 10 m
     wind_gust                 real,   -- km/h, 10 m
@@ -81,45 +83,46 @@ INSERT INTO crop_class (code, name) VALUES
     (3200,  'Unclassified permanent crop'),
     (65535, 'Outside area');
 
--- 4. Fields (e.g. one farmer's fields). Any source (GeoJSON, ULDK...), recorded in the source column.
-CREATE TABLE field (
+-- 4. Data provenance: what, from where, how many rows and which time shift was applied.
+CREATE TABLE ingest_log (
+    id          bigserial PRIMARY KEY,
+    dataset     text        NOT NULL,   -- e.g. 'weather_hourly', 'grid_cell', 'cropland_cty'
+    source_file text,                   -- e.g. weather_hourly/year=2024/voivodeship=mazowieckie/....parquet
+    source_year integer,
+    row_count   bigint,
+    time_shift  interval,               -- shift applied after loading; NULL = no shift
+    loaded_at   timestamptz NOT NULL DEFAULT now(),
+    note        text
+);
+
+-- Farmer tables (schema app). To be redesigned from FARMER_INPUT_CONTRACT.md (parcels, crop areas, sprays).
+-- 5. Fields (e.g. one farmer's fields). Any source (GeoJSON, ULDK...), recorded in the source column.
+CREATE TABLE app.field (
     field_id text PRIMARY KEY,
     name     text,
     source   text,
     geom     geometry(Geometry, 4326) NOT NULL,
     CONSTRAINT field_geom_polygonal CHECK (GeometryType(geom) IN ('POLYGON', 'MULTIPOLYGON'))
 );
-CREATE INDEX field_geom_gix ON field USING gist (geom);
+CREATE INDEX field_geom_gix ON app.field USING gist (geom);
 
 -- Rule assigning a field to a weather cell: field centroid -> nearest 4 km cell, no interpolation.
-CREATE VIEW v_field_grid AS
+CREATE VIEW app.v_field_grid AS
 SELECT f.field_id, g.grid_id
-FROM field f
+FROM app.field f
 CROSS JOIN LATERAL (
     SELECT c.grid_id
-    FROM grid_cell c
+    FROM raw.grid_cell c
     ORDER BY c.geom::geography <-> ST_Centroid(f.geom)::geography
     LIMIT 1
 ) g;
 
--- 5. Share of crop classes in a field (from the 10 m CTY raster, computed at load time).
-CREATE TABLE field_crop_share (
-    field_id    text    NOT NULL REFERENCES field (field_id) ON DELETE CASCADE,
+-- 6. Share of crop classes in a field (from the 10 m CTY raster, computed at load time).
+CREATE TABLE app.field_crop_share (
+    field_id    text    NOT NULL REFERENCES app.field (field_id) ON DELETE CASCADE,
     year        integer NOT NULL,
-    class_code  integer NOT NULL REFERENCES crop_class (code),
+    class_code  integer NOT NULL REFERENCES raw.crop_class (code),
     pixel_count bigint  NOT NULL,
     share       real    NOT NULL CHECK (share >= 0 AND share <= 1),
     PRIMARY KEY (field_id, year, class_code)
-);
-
--- 6. Data provenance: what, from where, how many rows and which time shift was applied.
-CREATE TABLE ingest_log (
-    id          bigserial PRIMARY KEY,
-    dataset     text        NOT NULL,   -- e.g. 'weather_hourly', 'grid_cell', 'cropland'
-    source_file text,                   -- e.g. weather_hourly_2025_Mazowieckie.zip
-    source_year integer,
-    row_count   bigint,
-    time_shift  interval,               -- shift applied after loading; NULL = no shift
-    loaded_at   timestamptz NOT NULL DEFAULT now(),
-    note        text
 );
