@@ -30,16 +30,22 @@ export function CropList({ rows, plotId, unit, crop }: { rows: CropRiskRow[]; pl
         </Choice>
         <div className="legend">
           <span><i className="key-found" />found in this plot</span>
-          <span><i className="key-notfound" />not found here (counted at its mid-rank, about 0.47 each)</span>
+          <span><i className="key-notfound" />not found here (counted at its mid-rank: usually 0.4–0.5, lower for fungi common in other plots)</span>
         </div>
       </div>
+      {rows.some((r) => r.small_reference) && (
+        <p className="hint">Some genera are compared against fewer than 10 samples (marked * in the genus table).</p>
+      )}
       <ul className="crop-rows">
         {sortRows(rows, sort).map((r) => (
           <li key={r.crop} className={r.crop === crop ? 'on' : ''}>
             <a className="crop-name" href={riskHref(plotId, unit, r.crop)} aria-current={r.crop === crop ? 'true' : undefined}>{r.label}</a>
             {r.status === 'ok' && r.rank !== null ? (
               <>
-                <span className="rank">{rankText(r.rank, r.n_peers)}</span>
+                <span className="rank">
+                  {rankText(r.rank, r.n_peers)}
+                  {r.n_peers_too_shallow > 0 && <span className="muted"> ({r.n_peers_too_shallow} too shallow)</span>}
+                </span>
                 <DotStrip row={r} plotId={plotId} unit={unit} />
                 <SplitBar row={r} />
                 <span className="value">{r.risk_index?.toFixed(2)}</span>
@@ -47,7 +53,6 @@ export function CropList({ rows, plotId, unit, crop }: { rows: CropRiskRow[]; pl
             ) : (
               <span className="badge">{r.status === 'ok' ? STATUS_LABEL.no_scored_genera : STATUS_LABEL[r.status]}</span>
             )}
-            {r.small_reference && <span className="hint">small reference</span>}
             {r.same_as && <span className="hint">same host records as {labelOf(r.same_as)}</span>}
           </li>
         ))}

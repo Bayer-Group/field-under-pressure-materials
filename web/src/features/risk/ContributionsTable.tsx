@@ -1,5 +1,12 @@
-import { getCropContributions } from '../../api'
+import { getCropContributions, type Contribution } from '../../api'
 import { useFetch } from '../../useFetch'
+import { STATUS_LABEL } from './labels'
+
+const share = (c: Contribution) => (!c.detected ? '—' : c.share_pct < 0.01 ? '<0.01' : c.share_pct.toFixed(2))
+const lifestyle = (c: Contribution) => {
+  const l = c.lifestyle ? c.lifestyle.replace(/_/g, ' ') : '—'
+  return c.passed_by === 'secondary_lifestyle' ? `${l}; plant pathogen as secondary lifestyle` : l
+}
 
 /** The genera behind one crop's index: A (how this plot ranks on the genus) times H (how well the genus is
  *  documented on the crop). Fetched when a crop is chosen. */
@@ -8,6 +15,9 @@ export function ContributionsTable({ plotId, unit, crop }: { plotId: string; uni
   if (res.error) return <p className="message error">Could not load the genera: {res.error}</p>
   if (!res.data) return <p className="message">Loading…</p>
   const d = res.data
+  if (d.row.status !== 'ok') {
+    return <p className="message">{d.label}: {STATUS_LABEL[d.row.status]}. No genera to show.</p>
+  }
   return (
     <div className="contributions">
       <h2>Genera behind the {d.label} index</h2>
@@ -26,7 +36,7 @@ export function ContributionsTable({ plotId, unit, crop }: { plotId: string; uni
                 {c.members.length > 1 && <span className="muted"> ({c.members.join(', ')})</span>}
               </td>
               <td><span className={`pill ${c.detected ? 'found' : 'notfound'}`}>{c.detected ? 'Found' : 'Not found'}</span></td>
-              <td className="num">{c.detected ? c.share_pct.toFixed(2) : '—'}</td>
+              <td className="num">{share(c)}</td>
               <td className="num">{c.a.toFixed(2)}{c.small_reference && <span className="hint" title="Few comparison samples"> *</span>}</td>
               <td>
                 {c.species_on_crop.length > 0 ? (
@@ -42,7 +52,7 @@ export function ContributionsTable({ plotId, unit, crop }: { plotId: string; uni
                 )}
               </td>
               <td className="num">{c.contribution.toFixed(3)}</td>
-              <td className="muted">{c.lifestyle ?? '—'}</td>
+              <td className="muted">{lifestyle(c)}</td>
             </tr>
           ))}
         </tbody>
@@ -51,6 +61,7 @@ export function ContributionsTable({ plotId, unit, crop }: { plotId: string; uni
       <p className="foot">
         A = how this plot's share of the genus ranks among comparison samples (0–1). H = share of the genus's documented
         species recorded on this crop (USDA). Contribution = A × H; the index is the sum.
+        {d.contributions.some((c) => c.small_reference) && ' * A rests on fewer than 10 comparison samples.'}
       </p>
     </div>
   )

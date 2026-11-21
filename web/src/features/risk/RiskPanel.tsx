@@ -19,14 +19,19 @@ const pickInYear = (list: RiskUnitRef[], year: number) => {
 const dates = (ds: string[]) => (ds.length ? ds.map((d) => formatDate(d)).join(', ') : 'unknown date')
 
 function Notes({ data }: { data: PlotCropRisk }) {
+  const others = Math.max(0, data.n_units_in_group - 1)
+  const shallow = Math.max(0, ...data.crops.map((c) => c.n_peers_too_shallow))
   return (
     <ul className="notes">
       <li className="caution">
-        Compare this plot with the other {data.n_units_in_group} plots of {data.site} in {data.year} for the same crop.
+        Compare this plot with the other {others} {others === 1 ? 'plot' : 'plots'} of {data.site} sampled in {data.year} with
+        the same sequencing method, for the same crop
+        {shallow > 0 ? ` (${shallow} ${shallow === 1 ? 'plot' : 'plots'} in this group had too few reads to score)` : ''}.
         Comparing crops with each other mostly shows how well each crop's diseases are documented, not soil risk.
         This is a relative index, not a probability of disease.
       </li>
       {data.caveats.map((c) => <li key={c}>{c}</li>)}
+      {data.notes.map((n) => <li key={n}>{n}</li>)}
       {data.kb.map((k) => (
         <li key={k.name}>
           Knowledge: {k.name}{k.source_version ? ` ${k.source_version}` : ''}
@@ -78,7 +83,7 @@ export function RiskPanel({ plotId, unit, crop }: { plotId: string; unit: string
         )}
       </div>
       <div className="chart-head">
-        <h2>Crop disease risk, {dates(current.collect_dates)}</h2>
+        <h2>Sampled {dates(current.collect_dates)}</h2>
         <span className="legend">
           {compact.format(current.total_reads)} DNA reads · {current.n_cores} soil {current.n_cores === 1 ? 'core' : 'cores'} · {current.method_label}
         </span>

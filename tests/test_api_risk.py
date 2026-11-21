@@ -30,7 +30,7 @@ def make_core(fus_shift=0) -> pd.DataFrame:
     rows += unit_rows("STER_030", "2022-07-02", P2, 3, total=1500)        # shallow
     rows += unit_rows("STER_020", "2016-07-01", P1, 1)                    # one plot, both methods in 2016
     rows += unit_rows("STER_020", "2016-09-01", P2, 2)
-    for i, p in enumerate(("STER_021", "STER_022", "STER_023")):          # older-method peers
+    for i, p in enumerate(("STER_021", "STER_022", "STER_023", "STER_024", "STER_025")):   # older-method peers (6 ≥ 5 scored)
         rows += unit_rows(p, "2016-07-05", P1, 4 + i)
     return pd.DataFrame(rows)
 
@@ -113,12 +113,14 @@ def test_unit_response_matches_scorer(client):
 
 def test_peers_are_same_product_only(client):
     r = client.get("/api/plots/STER_020/crop-risk/2016-001").json()
-    assert r["n_units_in_group"] == 4
+    assert r["n_units_in_group"] == 6
     ww = next(c for c in r["crops"] if c["crop"] == "winter_wheat")
-    assert {p["plot_id"] for p in ww["peers"]} <= {"STER_020", "STER_021", "STER_022", "STER_023"}
+    assert ww["status"] == "ok"
+    assert {p["plot_id"] for p in ww["peers"]} == {"STER_020", "STER_021", "STER_022", "STER_023", "STER_024", "STER_025"}
+    assert ww["n_peers"] == 6
     cur = client.get("/api/plots/STER_020/crop-risk/2016-002").json()
     assert cur["n_units_in_group"] == 1
-    assert next(c for c in cur["crops"] if c["crop"] == "winter_wheat")["n_peers"] <= 1
+    assert next(c for c in cur["crops"] if c["crop"] == "winter_wheat")["n_peers"] == 1
 
 
 def test_statuses_and_shallow_units(client):
@@ -131,7 +133,7 @@ def test_statuses_and_shallow_units(client):
     assert "STER_030" not in {p["plot_id"] for p in ww["peers"]}
     sh = client.get("/api/plots/STER_030/crop-risk/2022-002").json()
     assert sh["low_depth"] and all(c["status"] == "insufficient_depth" for c in sh["crops"])
-    assert all(c["risk_index"] is None and c["rank"] is None and c["peers"] for c in sh["crops"][:1])
+    assert all(c["risk_index"] is None and c["rank"] is None for c in sh["crops"])
     assert [g["reason"] for g in sh["skipped"]] == ["insufficient_depth_unit"]
     assert sh["skipped"][0]["genera"][0]["genus"] is None
 
@@ -198,3 +200,12 @@ def test_cache_invalidated_by_new_core_table(client):
     os.utime(core, (st.st_atime, st.st_mtime + 10))
     after = client.get(url).json()["row"]["risk_index"]
     assert after != before
+
+
+def test_responses_are_strict_json(client):
+    import json
+    for unit in client.get("/api/plots/STER_020/crop-risk").json():
+        r = client.get(f"/api/plots/STER_020/crop-risk/{unit['unit']}").json()
+        json.dumps(r, allow_nan=False)
+        for c in r["crops"]:
+            json.dumps(client.get(f"/api/plots/STER_020/crop-risk/{unit['unit']}/{c['crop']}").json(), allow_nan=False)

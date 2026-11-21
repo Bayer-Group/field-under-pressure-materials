@@ -17,7 +17,7 @@ export function DotStrip({ row, plotId, unit }: { row: CropRiskRow; plotId: stri
     <svg className="dot-strip" width={W} height={H} viewBox={`0 0 ${W} ${H}`} role="group" aria-label={label}>
       <line x1={PAD} x2={W - PAD} y1={H / 2} y2={H / 2} className="axis" />
       {row.peers.filter((p) => p.plot_id !== plotId).map((p) => (
-        <a key={p.plot_id} href={riskHref(p.plot_id, unit, row.crop)}>
+        <a key={p.plot_id} href={riskHref(p.plot_id, unit, row.crop)} tabIndex={-1}>
           <title>{`${p.plot_id}: ${p.risk_index.toFixed(2)}`}</title>
           <circle cx={x(p.risk_index)} cy={H / 2} r={3.5} className="peer" />
         </a>
