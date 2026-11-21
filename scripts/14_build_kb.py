@@ -2,9 +2,9 @@
 """Build the knowledge bases for crop risk: FungalTraits genus lifestyles and USDA ARS Fungus-Host species x host.
 
 Usage:
-  .venv/bin/python scripts/12_build_kb.py                              # use cached raw files, download if missing
-  .venv/bin/python scripts/12_build_kb.py --refresh                    # re-download both raw files
-  .venv/bin/python scripts/12_build_kb.py --fungaltraits-file PATH     # use a local FungalTraits xlsx/csv copy
+  .venv/bin/python scripts/14_build_kb.py                              # use cached raw files, download if missing
+  .venv/bin/python scripts/14_build_kb.py --refresh                    # re-download both raw files
+  .venv/bin/python scripts/14_build_kb.py --fungaltraits-file PATH     # use a local FungalTraits xlsx/csv copy
 
 Sources and licences:
 - FungalTraits: Polme et al. 2020, Fungal Diversity 105:1-16, Table S1 (genus level), Springer ESM xlsx.

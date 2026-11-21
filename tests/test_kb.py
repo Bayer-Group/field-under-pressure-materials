@@ -367,7 +367,7 @@ def test_download_existing_file_without_manifest_rebuilds_entry(tmp_path):
 # ---------------------------------------------------------------------------------------------- load_kb
 
 def test_load_kb_missing_files_names_script(tmp_path):
-    with pytest.raises(FileNotFoundError, match="12_build_kb"):
+    with pytest.raises(FileNotFoundError, match="14_build_kb"):
         kb.load_kb(tmp_path)
 
 

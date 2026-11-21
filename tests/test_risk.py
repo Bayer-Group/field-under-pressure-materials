@@ -432,7 +432,7 @@ def test_load_core_genus_errors(tmp_path):
 def test_missing_kb_files_raise_naming_script_12(tmp_path, monkeypatch):
     orig = kbmod.load_kb
     monkeypatch.setattr(kbmod, "load_kb", lambda: orig(tmp_path))
-    with pytest.raises(FileNotFoundError, match="12_build_kb"):
+    with pytest.raises(FileNotFoundError, match="14_build_kb"):
         risk.compute_crop_risk("STER", 2022, core=worked_core())
 
 

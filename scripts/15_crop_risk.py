@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Crop risk index for one NEON site-year, per plot-unit and crop, from ITS fungal genera and USDA host records.
-Needs the KB (scripts/12_build_kb.py) and its_core_genus.parquet (scripts/02b_build_neon_features.py).
+Needs the KB (scripts/14_build_kb.py) and its_core_genus.parquet (scripts/02b_build_neon_features.py).
 
 Usage:
-  .venv/bin/python scripts/13_crop_risk.py --site STER --year 2022
-  .venv/bin/python scripts/13_crop_risk.py --site STER --year 2025 --min-unit-reads 3000 --out-dir DIR
+  .venv/bin/python scripts/15_crop_risk.py --site STER --year 2022
+  .venv/bin/python scripts/15_crop_risk.py --site STER --year 2025 --min-unit-reads 3000 --out-dir DIR
 
 Score: risk(unit, crop) = sum_g A(unit, g) * H(g, crop)
 - A: percentile (0-1, mid-rank) of genus g's share in the unit among the reference units (same site, same ITS

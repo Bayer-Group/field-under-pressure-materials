@@ -533,6 +533,6 @@ def load_kb(processed: Path = PROCESSED) -> KB:
     processed = Path(processed)
     files = [processed / n for n in (GENERA_TABLE, HOST_TABLE, META_FILE)]
     if not all(f.exists() for f in files):
-        raise FileNotFoundError("Knowledge base not built: run scripts/12_build_kb.py")
+        raise FileNotFoundError("Knowledge base not built: run scripts/14_build_kb.py")
     return KB(genera=pd.read_parquet(files[0]), host=pd.read_parquet(files[1]),
               synonyms=load_genus_synonyms(), meta=json.loads(files[2].read_text()))

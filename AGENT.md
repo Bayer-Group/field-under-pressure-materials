@@ -73,8 +73,8 @@ Pipeline order (what produces what):
 | Aerial photos | `scripts/09_fetch_aerial.py [naip] [aop]` (after 01; `aop` needs token) | `plot_aerial`, chips under `data/raw/imagery/` |
 | Event features | `scripts/07_build_event_features.py` (offline, last) | `event_features`, `event_table` (see 3.9) |
 | Association scan | `scripts/11_association_scan.py` (offline, after 07, under a minute) | `association_scan` (see 3.10) |
-| Knowledge base | `scripts/12_build_kb.py [--refresh]` (downloads ~1 MB + ~179 MB once) | `kb_fungaltraits_genus`, `kb_genus_crop_host`, `kb_usda_species_crop`, `kb_meta.json` |
-| Crop risk | `scripts/13_crop_risk.py --site STER --year 2022` (offline, after 02b and 12) | `crop_risk_<SITE>_<YEAR>_{summary,contributions,skipped}.parquet` + `.json` |
+| Knowledge base | `scripts/14_build_kb.py [--refresh]` (downloads ~1 MB + ~179 MB once) | `kb_fungaltraits_genus`, `kb_genus_crop_host`, `kb_usda_species_crop`, `kb_meta.json` |
+| Crop risk | `scripts/15_crop_risk.py --site STER --year 2022` (offline, after 02b and 14) | `crop_risk_<SITE>_<YEAR>_{summary,contributions,skipped}.parquet` + `.json` |
 | Inspector | `scripts/10_inspect_data.py [--standalone]` (offline) | `outputs/inspect/index.html`, a developer page to look at all of the above |
 | Joined table | `scripts/06_build_joined.py` (offline, after 02b and 05) | `joined_metagenomes`, `joined_fungi_genus` (see 3.8) |
 
@@ -400,7 +400,7 @@ Note: `03_build_plots.py` takes its plots from the event registry (the 29 plots 
 - **Sources (measured):**
   - FungalTraits = Põlme et al. 2020 Table S1, official Springer ESM xlsx (990,658 bytes), 10,771 rows → 10,765 genera, 1,758 pass the filter. The article licence is not verified, so the raw file stays local.
   - USDA Fungus-Host = Ag Data Commons snapshot `Fungus-Host-Data_20211105.csv`, DOI 10.15482/USDA.ADC/1524414, U.S. Public Domain, 187,658,073 bytes, 827,645 rows, 0 bad lines, data current to 5 Nov 2021. The live fungi.ars.usda.gov API needs a site-internal key and is not used.
-  - Each raw folder has a `manifest.json` (url, retrieved_utc, bytes, sha256, source_version). `kb_meta.json` copies them and is included in every result's `metadata.kb`. Refresh: `scripts/12_build_kb.py --refresh`.
+  - Each raw folder has a `manifest.json` (url, retrieved_utc, bytes, sha256, source_version). `kb_meta.json` copies them and is included in every result's `metadata.kb`. Refresh: `scripts/14_build_kb.py --refresh`.
 - **Built KB (measured):** `kb_genus_crop_host` has 74,240 rows (7,424 genera × 10 crops) and documents 90,873 species. Examples: Fusarium has 443 species (Gibberella merged), H = 0.19 for winter wheat, 0.17 for corn, 0.13 for soybean. Macrophomina has 8 species, H = 0.25 on corn, soybean, sorghum and sunflower.
 - **Output:** `compute_crop_risk(site, year, ...)` returns a `CropRiskResult` with `summary`, `contributions` and `skipped` DataFrames, plus `metadata`. `to_dict()` gives JSON with `schema_version` "crop_risk/1" and a `columns` block with the fixed column orders. The exact column lists are in `src/cropfit/risk.py` (`SUMMARY_COLUMNS`, `CONTRIBUTION_COLUMNS`, `SKIPPED_COLUMNS`):
   - summary: one row per unit × crop, with status `ok`, `no_knowledge`, `insufficient_depth` or `no_scored_genera`. `risk_from_detected` + `risk_from_not_detected` = `risk_index`.
