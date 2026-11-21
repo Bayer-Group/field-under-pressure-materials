@@ -1,6 +1,6 @@
-# Moduł `kw/` — Dane glebowe, pogoda Open-Meteo i ocena zabiegów
+# Moduł `kw/` — Gleba per strefa, pogoda (live/historyczna) i presja chorób
 
-Cześć odpowiedzialna za **profilowanie glebowe pól**, **pobieranie aktualnej pogody oraz 7-dniowej prognozy z Open-Meteo** i **silnik oceny warunków nawożenia oraz nawadniania** dla aplikacji MVP *Field Under Pressure* (pola `>= 3 ha`, 3 uprawy, 4 nawozy, kalendarz 7-dniowy).
+Część projektu odpowiedzialna za **profilowanie glebowe (per pole, per strefa i komórki H3)**, **pobieranie pogody z Open-Meteo (tryb bieżący i historyczny, dzienny i godzinowy) + wczytywanie godzinowych danych Bayera**, **diagnostykę stresu wodnego** oraz **Moduł 2: presję chorób roślin i okna oprysku**.
 
 ---
 
@@ -8,137 +8,94 @@ Cześć odpowiedzialna za **profilowanie glebowe pól**, **pobieranie aktualnej 
 
 | Plik | Rola |
 |---|---|
-| `soil_bonification.py` | **Główny moduł glebowy i agronomiczny** (Etap 1: agregacja SoilGrids dla wszystkich pól z GeoJSON -> `fields_soil_profiles.parquet/.json`; Etap 2: ocena nawożenia, ryzyka nawadniania i 7-dniowego kalendarza). |
-| `meteo.py` | **Pobieranie pogody z Open-Meteo** dla siatki Polski (14 dni historii + 7 dni prognozy), mapowanie głębokości wilgotności gleby na warstwy Bayera (`sm_l1..sm_l3`), suma opadów 72 h, ochrona przed limitem 429 oraz cache Parquet z datą w nazwie. |
-| `test_meteo.py` | Testy jednostkowe (`unittest`, z mockami HTTP — bez zużywania limitów API) dla `meteo.py` oraz `soil_bonification.py`. |
-| `fields.geojson` | Przykładowy zbiór granic pól używany podczas budowy i testów pipeline'u glebowego (66 poligonów w woj. lubuskim). |
-| `soil.py`, `test.py` | Wcześniejsze prototypy robocze (dla pojedynczego pola / pojedynczego województwa Mazowieckiego), zastąpione przez kompletny `soil_bonification.py`. |
+| `soil_bonification.py` | **Gleba, stres wodny i nawożenie**: profile SoilGrids per pole, **per strefa (`prepare_zone_soil_profiles`)** i per komórka H3 (`prepare_field_h3_soil_cells`), **parametry retencji Saxtona & Rawlsa (2006)** (`wilting_point`, `field_capacity`, `awc_mm_per_m`) oraz natywne klasy SoilGrids (`band_ph`, `band_om`, `band_cec`), integracja upraw z `bk/assign_crops.py`, ocena nawożenia i diagnostyka **stresu wodnego**. |
+| `meteo.py` | **Pogoda Open-Meteo + loader Bayera**: tryb bieżący (`past_days`/`forecast_days`) oraz **tryb historyczny** (`start_date`/`end_date`, automatyczne przełączanie Forecast vs Archive API), tryb dzienny i **godzinowy** (`temp`, `RH`, `punkt rosy`, `opad`, `wiatr`), loader godzinowy Bayer + IMERG oraz ochrona przed limitem `429`. |
+| `disease_risk.py` | **Moduł 2 — ochrona roślin**: przybliżenie godzin zwilżenia liści, presja głównych chorób uprawy w oknie **48 h** wg `metodyki/ryzyka_zebrane.xlsx`, wyznaczanie godzinowych okien oprysku (wg norm PIORiN/GIORiN) oraz eksport do SQL (`public.field_disease`, `public.field_spray_windows`). |
+| `fields.geojson` | Przykładowy zbiór granic pól używany podczas budowy i testów (66 poligonów w woj. lubuskim). |
+| `soil.py`, `test.py` | Wcześniejsze prototypy robocze (pojedyncze pole / pojedyncze województwo). |
 
 ---
 
-## 2. Gleba, bonitacja proxy i ocena zabiegów (`soil_bonification.py`)
+## 2. Gleba per strefa, zmienność wewnętrzna i stres wodny (`soil_bonification.py`)
 
-Moduł działa w dwóch rozdzielonych etapach: najpierw jednorazowo wylicza statyczne profile glebowe pól (Etap 1), a następnie na ich bazie oraz bieżącej/prognozowanej pogody ocenia konkretne dni zabiegów (Etap 2).
-
-### Etap 1 — Profilowanie pól (`ensure_parquets_unpacked`, `prepare_all_soil_profiles`)
-
-1. **Automatyczne rozpakowanie danych SoilGrids**:
-   `ensure_parquets_unpacked(soil_dir)` sprawdza folder `soil_data/`, rozpakowuje wszystkie archiwa `soil_*_isric_250_v2.zip` (jeśli nie zostały jeszcze wypakowane) i zbiera listę plików `.parquet` ze wszystkich województw.
-2. **Geometria, powierzchnia i centroidy pól**:
-   - Auto-detekcja układu współrzędnych (`EPSG:2180` przy współrzędnych metrowych, `EPSG:4326` przy stopniach).
-   - Wyliczenie powierzchni w hektarach w polskim układzie metrycznym `EPSG:2180` i odfiltrowanie działek mniejszych niż `min_area_ha = 3.0 ha` (założenie MVP).
-   - Wyznaczenie centroidu każdego pola w WGS84 (`centroid_lat`, `centroid_lon`) — wykorzystywane później m.in. do dopasowania najbliższego punktu pogodowego.
-3. **Przestrzenny `JOIN` przez indeks H3 (poziom 10) w DuckDB**:
-   - Każdy poligon jest zamieniany na zbiór komórek `h3` poziomu 10 (`h3.geo_to_cells`, z awaryjnym użyciem centroidu dla bardzo wąskich działek).
-   - Pojedyncze zapytanie SQL w **DuckDB** łączy wszystkie komórki pól ze wszystkimi plikami wojewódzkimi naraz i liczy średnie parametry (`sand`, `silt`, `clay`, `ph`, `om`, `cec`, `bulk_density`) oraz dominującą klasę tekstury USDA (`MODE(soilTexture)`).
-   - **Normalizacja frakcji `0–1` -> `0–100%`**: w źródłowych plikach ISRIC SoilGrids zawartość piasku, pyłu i iłu jest zapisana jako ułamek (`0.0–1.0`, np. `0.695`), dlatego zapytanie automatycznie przelicza je na procenty (`69.5%`).
-4. **Szacunkowa klasa bonitacyjna (I–VI) i parametry wodne**:
-   - Na podstawie tekstury (`TEXTURE_BASE_SCORE`), pH, materii organicznej (`om`), pojemności sorpcyjnej (`cec`) i gęstości objętościowej (`bulk_density`) wyliczany jest wskaźnik `bonitation_score` (`0–100`):
-     `0.55 * tex_score + 0.20 * ph_score + 0.10 * om_score + 0.10 * cec_score + 0.05 * bd_score`,
-     mapowany następnie na polskie klasy `VI, V, IVb, IVa, IIIb, IIIa, II, I`.
-   - Pole `bonitation_source` jawnie informuje UI/API, że jest to estymacja na bazie ISRIC SoilGrids (brak oficjalnej państwowej warstwy bonitacyjnej).
-   - Wyznaczana jest przepuszczalność (`permeability`), zdolność zatrzymywania wody (`water_retention`) oraz progi wilgotności objętościowej (`wilting_point` i `field_capacity` w `m³/m³`):
-     - gleby lekkie/piaszczyste (`sand_pct >= 65`): `wysoka` przepuszczalność, `niska` retencja, progi `0.08 / 0.18`,
-     - gleby ciężkie/ilaste (`clay_pct >= 30`): `niska` przepuszczalność, `wysoka` retencja, progi `0.18 / 0.36`,
-     - gleby średnie: `srednia` przepuszczalność i retencja, progi `0.13 / 0.28`.
-5. **Eksport i wczytywanie**:
-   Wyniki zapisywane są do `fields_soil_profiles.parquet` oraz `fields_soil_profiles.json`. Pojedyncze pole wczytuje się funkcją `load_field_profile(field_id, profiles_parquet)` jako obiekt dataclass `FieldSoilProfile`.
-
-### Etap 2 — Ocena zabiegów i kalendarza (`evaluate_fertilization_day`, `evaluate_irrigation_risk`, `evaluate_field_calendar`)
-
-Obsługiwane warianty MVP:
-- **Uprawy (`Crop`)**: `pszenica`, `kukurydza`, `rzepak`
-- **Nawozy (`Fertilizer`)**: `saletra_amonowa`, `mocznik_inhibitor`, `rsm_32`, `saletrosan_26`
-
-#### Ocena dnia nawożenia (`evaluate_fertilization_day`)
-Zwraca słownik ze statusem (`ZIELONY`, `ZOLTY`, `CZERWONY`) oraz listą konkretnych uzasadnień (`reasons`):
-- **Ograniczenia prawne i termiczne**:
-  - jeśli podano `day_date` i wypada w okresie zimowym (miesiące `11, 12, 1, 2`) → `CZERWONY` (zakaz stosowania nawozów azotowych wg Programu Azotanowego),
-  - przymrozek / zamarznięta gleba (`temp_c <= 0.0°C`) → `CZERWONY`.
-- **Warunki wodne i opadowe (wspólne)**:
-  - silny opad `precip_24h_mm > 10.0 mm` → `CZERWONY`,
-  - wysoki opad `precip_72h_mm > 20.0 mm` → `ZOLTY`,
-  - nasycenie wodą w warstwach 1–2 (`sm_l1 >= 1.05 * field_capacity` i `sm_l2 >= 1.05 * field_capacity`) → `CZERWONY`.
-- **Reguły specyficzne dla nawozów**:
-  - `saletra_amonowa` / `saletrosan_26`: na glebach o wysokiej przepuszczalności przy `precip_72h_mm > 15.0 mm` → `CZERWONY` (ryzyko wymywania); przy przesuszonej warstwie powierzchniowej (`sm_l1 <= 1.15 * wilting_point`) → `ZOLTY`.
-  - `mocznik_inhibitor`: przy `pH > 7.2` i `temp_c > 20°C` → `CZERWONY` (straty amoniaku); przy `pH > 7.0` lub przesuszeniu warstwy 1 bez lekkiego opadu (`precip_72h_mm < 3.0 mm`) → `ZOLTY`.
-  - `rsm_32`: z założenia eskaluje co najmniej do `ZOLTY` (ocena częściowa — w MVP brakuje wiatru i wilgotności powietrza do pełnej oceny oprysku/aplikacji); przy `temp_c > 22°C` lub `< 2°C` → `CZERWONY` (ryzyko poparzenia).
-
-#### Ocena ryzyka nawadniania (`evaluate_irrigation_risk`)
-Nie wylicza dawki wody (brak pełnego bilansu wodnego w MVP), lecz wskazuje ryzyko niedoboru (`NISKIE` / `UMIARKOWANE` / `WYSOKIE`) oraz procent dostępnej wody dla roślin (`paw_layer2_pct`, `paw_layer3_pct`):
-- Liczy znormalizowaną wodę dostępną `PAW = (sm - wilting_point) / (field_capacity - wilting_point)` w warstwach L2 i L3.
-- Uwzględnia większą wrażliwość kukurydzy i rzepaku (próg `0.35`) względem pszenicy (`0.30`) przy braku opadów (`precip_72h_mm < 5.0 mm`).
-- Jeśli przekazano prognozę satelitarnego wskaźnika uwilgotnienia `ndmi_forecast < 0.15` (np. z modelu LSTM), podnosi ocenę ryzyka o jeden stopień w górę i dopisuje uzasadnienie.
-
-#### Gotowy generator kalendarza (`evaluate_field_calendar`)
-Łączy obiekt `FieldSoilProfile` z tabelą dziennej pogody (z `meteo.py` lub archiwum Bayera) oraz opcjonalnymi słownikami `ndmi_by_date` / `ndvi_by_date`, zwracając listę gotowych obiektów dziennych (status, ryzyko nawadniania, PAW L2/L3, parametry pogody, uzasadnienia) pod interfejs kalendarza i panel szczegółów dnia.
+### Główne zmiany względem pierwszej wersji
+1. **Obsługa zmienności gleby wewnątrz pola i integracja upraw (`bk/assign_crops.py`)**:
+   - `prepare_all_soil_profiles(...)` poza średnimi parametrami wyznacza rozpiętość w obrębie pola (`sand_min_pct`, `sand_max_pct`, `ph_min`, `ph_max`) oraz kategorię zmienności wewnętrznej `soil_variability` (`niska` / `umiarkowana` / `wysoka`).
+   - Dołączanie upraw (`crop_code`, `crop`) działa przez `_attach_crops(...)` na trzy sposoby: (a) kolumny obecne już w GeoJSON (np. `bk/fields_crops.geojson`), (b) zewnętrzny plik `crops_geojson` dopasowany przestrzennie po geometrii, lub (c) bezpośrednie wywołanie `CropDetector(year=...)` z `bk/assign_crops.py` po podaniu `assign_crops_year`.
+   - `prepare_zone_soil_profiles(zones_input, soil_dir, ...)` liczy pełny profil glebowy **osobno dla każdej strefy 10 m z Modułu 1** (`field_id`, `zone`, `ndvi_z`, `dose_kg_n_ha`, `dose_kg_product_ha`). Dzięki temu strefa piaszczysta/słaba nie jest maskowana średnią z całego pola.
+   - `prepare_field_h3_soil_cells(...)` zwraca surowe komórki H3 poziomu 10 (`~250 m`) wewnątrz każdego pola do wizualizacji na mapie ryzyka.
+   - `export_soil_profiles_to_sql(...)` generuje gotowy plik SQL dla PostgreSQL (`public.field_soil_profiles` / `public.field_zone_soil_profiles`).
+2. **Parametry fizyczno-wodne Saxtona & Rawlsa (2006) oraz natywne pasma ISRIC (zamiast sztucznej punktacji)**:
+   - Zrezygnowano z heurystycznego słownika `TEXTURE_BASE_SCORE` oraz sztucznych wag oceny gleby i fikcyjnych klas I–VI.
+   - Zamiast nich wyliczamy:
+     - `wilting_point` (WP, 1500 kPa), `field_capacity` (FC, 33 kPa) i użyteczną pojemność wodną `awc_mm_per_m` z recenzowanych równań pedotransferowych **Saxtona & Rawlsa (2006)** (na podstawie `sand_pct`, `clay_pct`, `om`), z której wynika klasa `water_retention` (`niska` `< 110`, `srednia` `110–150`, `wysoka` `>= 150 mm/m`),
+     - natywne klasy kategoryczne bezpośrednio z plików ISRIC SoilGrids: `band_ph` (`BAND_pH`), `band_om` (`BAND_om`), `band_cec` (`BAND_cec`),
+     - `soil_method_note` (jawna adnotacja o pochodzeniu z SoilGrids 250 m i braku urzędowej klasy I–VI — w produkcji docelowo z usług WFS/EGiB GUGiK oraz IUNG-PIB).
+3. **Moduł stresu wodnego (`evaluate_water_stress`) zamiast nawadniania**:
+   - Uprawy polowe w Polsce rzadko są nawadniane, więc zamiast rekomendacji podlewania moduł diagnozuje:
+     - `water_status`: `DEFICYT` / `OPTYMALNY` / `NADMIAR` (nadmiar wykrywany przy nasyceniu warstw 1–2 powyżej pojemności polowej),
+     - `water_stress_level`: `NISKI` / `UMIARKOWANY` / `WYSOKI` (z uwzględnieniem zapasu wody dostępnej `PAW` w warstwach L2–L3 oraz opcjonalnego `ndmi_value < 0.15`).
+4. **Ocena nawożenia (`evaluate_fertilization_day`)**:
+   - Uwzględnia zakaz zimowy Programu Azotanowego (XI–II), przymrozki (`<= 0°C`), opad 24 h / 72 h, nasycenie gleby, pH i temperaturę (mocznik) oraz — jeśli podano `wind_max_kmh` i `rh_mean_pct` — pełne kryteria wiatrowe/wilgotnościowe dla **RSM 32** (`> 18 km/h` → `CZERWONY`, `14.4–18 km/h` → `ZOLTY`).
 
 ---
 
-## 3. Pobieranie pogody Open-Meteo (`meteo.py`)
+## 3. Pogoda Open-Meteo (bieżąca + historyczna, dzienna + godzinowa) i loader Bayera (`meteo.py`)
 
-Skrypt pobiera aktualną i prognozowaną pogodę z darmowego API `https://api.open-meteo.com/v1/forecast` (strefa czasowa `Europe/Warsaw`), w formacie spójnym z resztą aplikacji i danymi historycznymi Bayera.
+### Tryby działania
+1. **Tryb bieżący (`past_days=14, forecast_days=7`)** — pobiera ostatnie 14 dni + 7 dni prognozy z `/v1/forecast` do pliku `weather_cache/open_meteo_poland_daily_<YYYY-MM-DD>.parquet`.
+2. **Tryb historyczny (`start_date="2024-04-01", end_date="2024-06-30"`)** — automatycznie kieruje zapytania do `/v1/archive` (dla dat starszych niż 6 dni) lub dzieli zakres na `archive + forecast`, dzieląc długie okresy na kawałki `<= 90` dni, do pliku `weather_cache/open_meteo_poland_daily_<start>_to_<end>.parquet`.
+3. **Tryb godzinowy (`fetch_weather_hourly`)** — pobiera 5 parametrów potrzebnych w Module 2: `temperature_2m`, `relative_humidity_2m`, `dew_point_2m`, `precipitation`, `wind_speed_10m` (działa zarówno dla prognozy, jak i historii).
+4. **Loader godzinowy Bayera (`load_bayer_weather_hourly`)** — łączy pola z najbliższym `grid_id` w DuckDB i wczytuje godzinowe pliki Bayera (`2020–2025`), automatycznie podpinając opady z `imerg_hourly_parquet`, jeśli w tabelach Bayera brakuje opadów.
 
-### Co jest pobierane i jak jest agregowane (`HOURLY_VARS`, `fetch_batch_daily`)
-
-Zgodnie z założeniami MVP pobierane są wyłącznie:
-- `temperature_2m` → agregacja dzienna do `temp_mean_c`, `temp_min_c`, `temp_max_c` (°C),
-- `precipitation` → dzienna suma `precip_sum_mm` (mm) oraz wyliczona w przód 3-dniowa suma `precip_72h_mm` (`t + t+1 + t+2`, mm) wymagana bezpośrednio przez reguły nawożenia i nawadniania,
-- 5 warstw wilgotności gleby Open-Meteo (`0_to_1cm`, `1_to_3cm`, `3_to_9cm`, `9_to_27cm`, `27_to_81cm`) → mapowane za pomocą średniej ważonej miąższością (`_weighted_mean`) na warstwy kompatybilne z Bayer Poziom 1–3:
-  - `sm_l1` (**0–7 cm**, powierzchnia): wagi `1 : 2 : 4` z warstw `0–1`, `1–3`, `3–9 cm`,
-  - `sm_l2` (**7–28 cm**, płytsza strefa korzeniowa): wagi `2 : 18 : 1` z warstw `3–9`, `9–27`, `27–81 cm`,
-  - `sm_l3` (**28–81 cm**, głębszy zapas): warstwa `27–81 cm` jako przybliżenie Poziomu 3 Bayera (`28–100 cm`).
-
-Świadomie pominięto ET₀, prędkość wiatru oraz wilgotność względną powietrza (zgodnie z podsumowaniem założeń MVP).
-
-### Okno czasowe, siatka, cache i obejście limitów (`429`)
-
-- **Siatka Polski (`generate_poland_grid`)**: regularna siatka co `0.25°` szerokości i `0.35°` długości geograficznej (~25 km, `696` punktów dla `lat 49.0..54.9`, `lon 14.1..24.2`). Można też podać własną zawężoną listę `coords`.
-- **Domyślny zakres (`past_days=14`, `forecast_days=7`)**: dostarcza 14 dni bieżącej historii (np. pod okna wilgotności gleby w listopadzie 2026 r., których nie ma w archiwum Bayera 2020–2025) oraz 7 dni prognozy pod kalendarz.
-- **Ochrona przed rate limitem Open-Meteo (`429`)**:
-  - Open-Meteo na darmowym planie ogranicza ruch do **600 ważonych wywołań/min** (`waga = liczba_punktów * max(1, liczba_dni / 14)`).
-  - Między paczkami (`batch_size=50`) skrypt automatycznie utrzymuje bezpieczną pauzę `max(pause_sec, batch_weight / 8.0)` (poniżej 480 wywołań/min — np. `6.5 s` dla 14 dni × 50 pkt lub `9.375 s` dla 21 dni × 50 pkt).
-  - Gdy mimo to pojawi się HTTP `429`, backoff dla limitu minutowego startuje od **65 s** (`65 + 30 * attempt`) zamiast krótkich przerw 10 s, a przekroczenie limitu dziennego przerywa od razu z czytelnym `RuntimeError`.
-- **Cache na dysku z datą w nazwie**:
-  `fetch_poland_weather_daily()` zapisuje atomowo wynik do jednego pliku `weather_cache/open_meteo_poland_daily_<YYYY-MM-DD>.parquet`. Ponowne wywołanie tego samego dnia wczytuje dane z dysku bez odpytywania API (chyba że podano `force_refresh=True`).
-- **Dopasowanie do pola (`get_weather_for_field`)**:
-  Wybiera najbliższy punkt siatki względem `(field_lat, field_lon)` z korektą długości geograficznej przez `cos(lat)` i przy `forecast_only=True` zwraca tylko dni od dzisiaj w przód.
+### Zmienne i ochrona przed `429`
+- Dzienne wyjście (`DAILY_OUTPUT_COLS`): `temp_mean_c`, `temp_min_c`, `temp_max_c`, `rh_mean_pct`, `dew_point_mean_c`, `wind_mean_kmh`, `wind_max_kmh`, `precip_sum_mm`, `precip_72h_mm`, oraz ujednolicone warstwy wilgotności gleby Bayer L1–L3 (`sm_l1`, `sm_l2`, `sm_l3` — dla Forecast API ważone miąższością, dla Archive API bezpośrednio z `0–7`, `7–28`, `28–100 cm`).
+- Zarówno `FORECAST_HOURLY_VARS` (10 zmiennych), jak i `ARCHIVE_HOURLY_VARS` (8 zmiennych) mieszczą się w limicie `<= 10` zmiennych bez dodatkowej kary wagowej Open-Meteo; przerwy między paczkami skalują się poniżej `480 req/min`, a backoff po `429` startuje od `65 s`.
 
 ---
 
-## 4. Przykłady użycia i uruchomienie testów
+## 4. Moduł 2: Presja chorób i okno oprysku (`disease_risk.py`)
 
-### Wygenerowanie profili glebowych z katalogu głównego repozytorium
+Implementuje bez-ML-owy, w pełni wyjaśnialny system oceny ryzyka fitosanitarnego i doboru godzin zabiegu:
+
+1. **Godzina zwilżenia liści (`compute_leaf_wetness`)**:
+   Godzina jest uznawana za mokrą, gdy `rh_pct > 90%` **lub** `temp_c - dew_point_c < 2.0°C` **lub** `precip_mm > 0.0`.
+2. **Presja chorób w oknie 48 h (`evaluate_disease_pressure`)**:
+   - Reguły termiczno-wilgotnościowe z `metodyki/ryzyka_zebrane.xlsx` (dla `pszenica`: septorioza paskowana liści `4–18°C`, rdza brunatna `15–18°C`, fuzarioza kłosów `15–25°C`, mączniak prawdziwy `5–30°C`, DTR `18–28°C`; plus reguły dla `kukurydza`, `rzepak`, `burak_cukrowy`, `ziemniak`, `slonecznik`).
+   - Dla każdego dnia i choroby liczymy maksymalną liczbę mokrych godzin sprzyjających infekcji w kroczącym oknie **48 h** i nadajemy poziom `NISKI` / `SREDNI` / `WYSOKI` według **progów demonstracyjnych** (jawnie opisanych w `reason`).
+3. **Godzinowe okna oprysku (`evaluate_spray_windows`)**:
+   - Brak opadów w godzinie oprysku oraz przez kolejne `dry_after_hours = 3` h po zabiegu.
+   - Liść suchy (`~is_wet_hour`), wilgotność względna `50–90%`, temperatura `8–22°C`.
+   - Wiatr: `<= 14.4 km/h` (`4 m/s`, limit standardowy PIORiN) → `DOBRE`; `14.4–18.0 km/h` (`5 m/s` z rozpylaczami antyznoszeniowymi TOZ) → `WARUNKOWE`.
+   - Zwraca ciągłe przedziały godzinowe (np. `08:00–16:00`), najlepsze okno oraz wyjaśnienie blokad przy `BRAK_OKNA`.
+4. **Eksport do bazy PostgreSQL (`build_fields_protection_tables`, `export_protection_to_sql`)**:
+   Zapisuje `field_disease.parquet/.json`, `field_spray_windows.parquet/.json` oraz zrzut SQL dla tabel `public.field_disease (field_id, day, disease, risk, wet_hours, reason)` i `public.field_spray_windows`.
+
+---
+
+## 5. Szybkie przykłady użycia
+
 ```python
-from kw.soil_bonification import prepare_all_soil_profiles, load_field_profile
+from kw.soil_bonification import prepare_all_soil_profiles, prepare_zone_soil_profiles, evaluate_field_calendar
+from kw.meteo import fetch_weather_hourly, fetch_poland_weather_daily, get_weather_for_field
+from kw.disease_risk import build_fields_protection_tables, export_protection_to_sql
 
-prepare_all_soil_profiles(
-    geojson_path="kw/fields.geojson",   # albo "bk/fields_crops.geojson" dla wspólnego zbioru pól
-    soil_dir="soil_data",
-    output_parquet="fields_soil_profiles.parquet",
-    output_json="fields_soil_profiles.json",
-)
-soil = load_field_profile("field_0", "fields_soil_profiles.parquet")
+# 1a. Profile glebowe pól z podpięciem upraw z bk/fields_crops.geojson (lub assign_crops_year=2024)
+fields_df = prepare_all_soil_profiles("bk/fields_crops.geojson", soil_dir="soil_data")
+
+# 1b. Profile glebowe per strefa (z GeoJSON / GeoDataFrame stref 10m + dołączone uprawy)
+zones_df = prepare_zone_soil_profiles("field_zones.geojson", soil_dir="soil_data", crops_geojson="bk/fields_crops.geojson")
+
+# 2. Pogoda historyczna (np. odtworzenie sezonu 2024 lub 2025-04-14)
+w_daily = fetch_poland_weather_daily(start_date="2025-04-14", end_date="2025-04-20")
+w_hourly = fetch_weather_hourly(start_date="2025-04-12", end_date="2025-04-20", coords=[(52.64, 15.77)])
+
+# 3. Presja chorób i okna oprysku -> Parquet + SQL dla public.field_disease
+disease_df, spray_df = build_fields_protection_tables(zones_df.drop_duplicates("field_id"), w_hourly)
+export_protection_to_sql(disease_df, spray_df, "field_disease_dump.sql")
 ```
 
-### Pobranie pogody i wyliczenie 7-dniowego kalendarza dla pola
-```python
-from kw.meteo import fetch_poland_weather_daily, get_weather_for_field
-from kw.soil_bonification import load_field_profile, evaluate_field_calendar
-
-weather_pl = fetch_poland_weather_daily()
-soil = load_field_profile("field_0", "fields_soil_profiles.parquet")
-weather_7d = get_weather_for_field(soil.centroid_lat, soil.centroid_lon, weather_pl, forecast_only=True)
-
-calendar = evaluate_field_calendar(
-    soil=soil,
-    field_weather_df=weather_7d,
-    fertilizer="mocznik_inhibitor",
-    crop="kukurydza",
-)
-```
-
-### Uruchomienie testów jednostkowych modułu `kw/`
+### Uruchomienie pipeline'u glebowego
 ```bash
-.venv/bin/python -m unittest discover -s kw -p "test_meteo.py" -v
+.venv/bin/python kw/soil_bonification.py
 ```
