@@ -459,9 +459,11 @@ def same_host_taxa(host: pd.DataFrame, crops) -> dict[str, str]:
     sig = {}
     for c in crops:
         sub = host[host["crop_group"] == c]
-        sig[c] = frozenset(zip(sub["genus"], sub["species_on_crop"].fillna("")))
+        sig[c] = frozenset((g, s) for g, s in zip(sub["genus"], sub["species_on_crop"].fillna("")) if s)
     out = {}
     for i, c in enumerate(crops):
+        if not sig[c]:          # no host evidence at all: "identical" would be meaningless
+            continue
         for e in crops[:i]:
             if sig[c] == sig[e]:
                 out[c] = e

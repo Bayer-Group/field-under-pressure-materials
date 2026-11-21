@@ -521,3 +521,8 @@ def test_counts_are_integers_and_year_is_coerced():
     assert str(res.contributions["reads"].dtype) == "Int64" and str(res.summary["reference_n_min"].dtype) == "Int64"
     rec = res.to_dict()["contributions"][0]
     assert isinstance(rec["reads"], int) and isinstance(rec["reference_n"], int)
+
+
+def test_same_host_taxa_ignores_crops_without_any_host_evidence():
+    host = mk_kb().host                                   # millet and spring_wheat have no species in mk_kb
+    assert risk.same_host_taxa(host, ("winter_wheat", "millet", "spring_wheat")) == {}
