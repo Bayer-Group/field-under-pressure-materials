@@ -1,0 +1,355 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>PyQgisBridgeDockWidgetBase</class>
+ <widget class="QDockWidget" name="PyQgisBridgeDockWidgetBase">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>360</width>
+    <height>620</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Field Under Pressure</string>
+  </property>
+  <widget class="QScrollArea" name="scrollArea">
+   <property name="frameShape">
+    <enum>QFrame::NoFrame</enum>
+   </property>
+   <property name="horizontalScrollBarPolicy">
+    <enum>Qt::ScrollBarAlwaysOff</enum>
+   </property>
+   <property name="widgetResizable">
+    <bool>true</bool>
+   </property>
+   <widget class="QWidget" name="dockWidgetContents">
+   <layout class="QVBoxLayout" name="verticalLayout">
+    <property name="spacing">
+     <number>6</number>
+    </property>
+    <property name="leftMargin">
+     <number>12</number>
+    </property>
+    <property name="topMargin">
+     <number>12</number>
+    </property>
+    <property name="rightMargin">
+     <number>12</number>
+    </property>
+    <property name="bottomMargin">
+     <number>12</number>
+    </property>
+    <item>
+     <widget class="QGroupBox" name="grpBackend">
+      <property name="title">
+       <string>Backend</string>
+      </property>
+      <layout class="QVBoxLayout" name="backendLayout">
+       <item>
+        <widget class="QLabel" name="lblFarmerUrl">
+         <property name="text">
+          <string>Base URL</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLineEdit" name="txtFarmerUrl">
+         <property name="placeholderText">
+          <string>http://127.0.0.1:8000/api/v1</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <widget class="QGroupBox" name="grpFarmer">
+      <property name="title">
+       <string>Farmer fields</string>
+      </property>
+      <layout class="QVBoxLayout" name="farmerLayout">
+       <property name="spacing">
+        <number>8</number>
+       </property>
+       <item>
+        <widget class="QPushButton" name="btnLoadFarmer">
+         <property name="toolTip">
+          <string>GET {base URL}/fields and show parcels and crop areas</string>
+         </property>
+         <property name="text">
+          <string>Load from backend</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btnLoadFarmerFile">
+         <property name="toolTip">
+          <string>Use a JSON file with the same shape as the GET /fields response</string>
+         </property>
+         <property name="text">
+          <string>Load from JSON file&#8230;</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="lblFarmerStatus">
+         <property name="text">
+          <string>No farmer data loaded yet.</string>
+         </property>
+         <property name="wordWrap">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <widget class="QGroupBox" name="grpData">
+      <property name="title">
+       <string>Data layers</string>
+      </property>
+      <layout class="QVBoxLayout" name="dataLayout">
+       <item>
+        <widget class="QPushButton" name="btnLoadCatalog">
+         <property name="toolTip">
+          <string>GET {base URL}/catalog</string>
+         </property>
+         <property name="text">
+          <string>Load catalog from backend</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btnLoadCatalogFile">
+         <property name="toolTip">
+          <string>A catalog JSON file; relative paths resolve against its folder</string>
+         </property>
+         <property name="text">
+          <string>Open catalog file&#8230;</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QListWidget" name="listLayers">
+         <property name="visible">
+          <bool>false</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btnAddLayers">
+         <property name="toolTip">
+          <string>Add the ticked layers to the project</string>
+         </property>
+         <property name="text">
+          <string>Add selected layers</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btnAddLocalFiles">
+         <property name="toolTip">
+          <string>Pick GeoTIFF, GeoJSON, GeoPackage, Shapefile or CSV files</string>
+         </property>
+         <property name="text">
+          <string>Add local files&#8230;</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="lblCatalogStatus">
+         <property name="text">
+          <string>No catalog loaded yet.</string>
+         </property>
+         <property name="wordWrap">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <widget class="QGroupBox" name="grpAnalysis">
+      <property name="title">
+       <string>Parcel analysis</string>
+      </property>
+      <layout class="QVBoxLayout" name="analysisLayout">
+       <property name="spacing">
+        <number>8</number>
+       </property>
+       <item>
+        <widget class="QLabel" name="lblTeryt">
+         <property name="text">
+          <string>Parcel ID / TERYT (optional)</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLineEdit" name="txtTeryt">
+         <property name="placeholderText">
+          <string>e.g. 141201_1.0001.123/4 or PARCEL-001</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="lblLayer">
+         <property name="text">
+          <string>Polygon layer</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <layout class="QHBoxLayout" name="layerLayout">
+         <property name="spacing">
+          <number>6</number>
+         </property>
+         <item>
+          <widget class="QComboBox" name="cmbLayer"/>
+         </item>
+         <item>
+          <widget class="QPushButton" name="btnRefresh">
+           <property name="minimumSize">
+            <size>
+             <width>34</width>
+             <height>32</height>
+            </size>
+           </property>
+           <property name="maximumSize">
+            <size>
+             <width>34</width>
+             <height>32</height>
+            </size>
+           </property>
+           <property name="toolTip">
+            <string>Refresh the layer list</string>
+           </property>
+           <property name="text">
+            <string>&#8635;</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btnRun">
+         <property name="text">
+          <string>Run analysis</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QProgressBar" name="progressBar">
+         <property name="value">
+          <number>0</number>
+         </property>
+         <property name="textVisible">
+          <bool>false</bool>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <widget class="QToolButton" name="btnToggleLog">
+      <property name="cursor">
+       <cursorShape>PointingHandCursor</cursorShape>
+      </property>
+      <property name="text">
+       <string>Details</string>
+      </property>
+      <property name="checkable">
+       <bool>true</bool>
+      </property>
+      <property name="toolButtonStyle">
+       <enum>Qt::ToolButtonTextBesideIcon</enum>
+      </property>
+      <property name="arrowType">
+       <enum>Qt::RightArrow</enum>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="QWidget" name="logBody" native="true">
+      <property name="visible">
+       <bool>false</bool>
+      </property>
+      <layout class="QVBoxLayout" name="logLayout">
+       <property name="spacing">
+        <number>4</number>
+       </property>
+       <property name="leftMargin">
+        <number>0</number>
+       </property>
+       <property name="topMargin">
+        <number>0</number>
+       </property>
+       <property name="rightMargin">
+        <number>0</number>
+       </property>
+       <property name="bottomMargin">
+        <number>0</number>
+       </property>
+       <item>
+        <widget class="QTextEdit" name="txtLog">
+         <property name="minimumSize">
+          <size>
+           <width>0</width>
+           <height>130</height>
+          </size>
+         </property>
+         <property name="readOnly">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <layout class="QHBoxLayout" name="clearLayout">
+         <item>
+          <spacer name="clearSpacer">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>40</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+         <item>
+          <widget class="QPushButton" name="btnClear">
+           <property name="text">
+            <string>Clear</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <spacer name="verticalSpacer">
+      <property name="orientation">
+       <enum>Qt::Vertical</enum>
+      </property>
+      <property name="sizeHint" stdset="0">
+       <size>
+        <width>20</width>
+        <height>0</height>
+       </size>
+      </property>
+     </spacer>
+    </item>
+   </layout>
+   </widget>
+  </widget>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
