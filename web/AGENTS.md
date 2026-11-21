@@ -31,3 +31,7 @@ web/
 3. **API communication:**
    * Make network calls with the standard browser `fetch()` function.
    * Always handle network errors (`try-catch`), informing the user clearly about the status of the connection to the local server.
+
+## Farmer interface design
+
+For every frontend design and change, follow [Frontend design principles](DESIGN.md) together with [Emil Kowalski's Apple Design skill](https://www.ui-skills.com/skills/emilkowalski/apple-design). Apply the principles to the specific interaction, and preserve accessibility and reduced-motion preferences.

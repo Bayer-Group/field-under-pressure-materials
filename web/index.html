@@ -9,7 +9,7 @@
   <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
   <script src="farmer-data.js"></script>
   <style>
-    :root { color-scheme: light; --green: #176544; --ink: #15221b; --muted: #66766d; --line: rgba(32,62,45,.10); --paper: rgba(248,251,247,.93); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    :root { color-scheme: light; --green: #176544; --ink: #15221b; --muted: #66766d; --line: rgba(32,62,45,.10); --paper: rgba(248,251,247,.93); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-kerning: normal; }
     * { box-sizing: border-box; }
     body { margin: 0; color: var(--ink); background: #e8efe8; }
     button, input { font: inherit; }
@@ -30,6 +30,8 @@
     .eyebrow { color: var(--green); font-size: 11px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; margin: 0 0 8px; }
     h1 { font-size: clamp(25px, 7vw, 30px); letter-spacing: -.045em; line-height: 1.1; margin: 0; }
     .subtitle { color: var(--muted); margin: 7px 0 19px; font-size: 14px; line-height: 1.4; }
+    .sheet:has(.selected.visible) .subtitle { display: none; }
+    .sheet:has(.selected.visible) h1 { margin-bottom: 14px; }
     .options { display: grid; gap: 7px; }
     .option { width: 100%; min-height: 52px; display: flex; align-items: center; gap: 14px; padding: 0 15px; text-align: left; border: 1px solid rgba(255,255,255,.9); border-radius: 14px; background: rgba(255,255,255,.74); color: var(--ink); font-size: 14px; font-weight: 650; transition: transform 100ms ease, background 100ms ease; }
     .option .icon { color: var(--green); display: grid; place-items: center; width: 22px; }
@@ -39,12 +41,13 @@
     .selected-head { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; }
     .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
     .selected-area { margin: 6px 0 0 16px; color: #53685a; font-size: 12px; }
-    .selected-list { margin: 9px 0 0; display: grid; gap: 6px; }
+    .selected-list { margin: 9px 0 0; display: grid; gap: 6px; max-height: 100px; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
     .parcel-row { display: flex; align-items: center; gap: 4px; border-radius: 10px; background: #e7f1e9; }
     .parcel-details-button { flex: 1; min-width: 0; display: grid; gap: 3px; padding: 9px 10px; text-align: left; border: 0; background: transparent; color: #28573d; }
     .parcel-details-button strong { font-size: 12px; }
     .parcel-details-button small { overflow-wrap: anywhere; font-size: 11px; color: #61766a; }
-    .parcel-remove { width: 42px; min-height: 42px; border: 0; background: transparent; color: #53685a; font-size: 20px; }
+    .parcel-remove { width: 44px; min-height: 44px; border: 0; background: transparent; color: #53685a; font-size: 20px; }
+    .selected, .parcel-detail-list, .results { font-variant-numeric: tabular-nums; }
     .parcel-popup .maplibregl-popup-content { min-width: 235px; max-width: min(80vw, 310px); padding: 16px; border: 1px solid rgba(255,255,255,.85); border-radius: 16px; background: rgba(248,251,247,.96); box-shadow: 0 8px 28px rgba(24,50,35,.2); color: var(--ink); }
     .parcel-popup .maplibregl-popup-close-button { width: 36px; height: 36px; font-size: 22px; color: #61766a; border-radius: 0 16px 0 10px; }
     .parcel-popup h2 { padding-right: 22px; margin: 0; font-size: 16px; letter-spacing: -.02em; }
@@ -153,13 +156,13 @@
     </div>
     <div id="results" class="results" aria-label="Wyniki wyszukiwania"></div>
     <section class="sheet" aria-labelledby="heading">
-      <button id="drawer-toggle" class="drawer-toggle" type="button" aria-label="Zwiń panel" aria-expanded="true"><span class="handle" aria-hidden="true"></span><span>Twoje pola</span></button>
+      <button id="drawer-toggle" class="drawer-toggle" type="button" aria-label="Zwiń panel" aria-expanded="true"><span class="handle" aria-hidden="true"></span><span id="drawer-summary">Twoje pola</span></button>
       <p id="status" class="status" role="status" aria-live="polite"></p>
       <div id="drawer-content" class="drawer-content">
       <p class="eyebrow">Twoje pola</p>
       <h1 id="heading">Wybierz działkę</h1>
       <p class="subtitle">Znajdź działki na mapie, wyszukaj je lub dodaj z pliku.</p>
-      <div id="selected" class="selected"><div class="selected-head"><span class="dot"></span><span id="selected-count"></span></div><p id="selected-area" class="selected-area"></p><div id="selected-list" class="selected-list"></div></div>
+      <div id="selected" class="selected"><div class="selected-head"><span class="dot"></span><span id="selected-count" aria-live="polite"></span></div><p id="selected-area" class="selected-area"></p><div id="selected-list" class="selected-list"></div></div>
       <div class="options">
         <button class="option" id="search-option" type="button"><span class="icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3 7 21M17 3l-2 18M4 9h16M3 15h16"/></svg></span><span>Numer działki</span><svg class="chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>
         <button class="option" id="map-option" type="button"><span class="icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 3 14 10-7 1-3 6L5 3Z"/></svg></span><span>Wybierz na mapie</span><svg class="chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>
@@ -203,8 +206,10 @@
     let searchLocality = null;
     let suggestionTimer = null;
     let searchVersion = 0;
+    let drawerResizeAnimation = null;
     /** Expand or collapse the selection panel. */
     function setDrawer(open) {
+      if (drawerResizeAnimation) { drawerResizeAnimation.cancel(); drawerResizeAnimation = null; }
       sheet.classList.toggle('collapsed', !open);
       document.getElementById('drawer-content').inert = !open;
       drawerToggle.setAttribute('aria-expanded', String(open));
@@ -239,6 +244,7 @@
     });
     /** Render the selected parcels and their removable labels. */
     function renderSelection() {
+      const previousHeight = sheet.getBoundingClientRect().height;
       const items = [...selected.values()];
       const count = items.length;
       const parcelWord = count === 1 ? 'działka' : count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 12 || count % 100 > 14) ? 'działki' : 'działek';
@@ -247,6 +253,7 @@
       const panel = document.getElementById('selected');
       panel.classList.toggle('visible', items.length > 0);
       document.getElementById('selected-count').textContent = `Wybrano: ${count} ${parcelWord}`;
+      document.getElementById('drawer-summary').textContent = count ? `Twoje pola · ${count} ${parcelWord}` : 'Twoje pola';
       const knownAreas = items.filter(parcel => Number.isFinite(parcel.area_ha) && parcel.area_ha >= 0);
       const totalArea = knownAreas.reduce((sum, parcel) => sum + parcel.area_ha, 0);
       document.getElementById('selected-area').textContent = knownAreas.length === count ? `Łączna powierzchnia: ${totalArea.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ha` : 'Łączna powierzchnia: brak danych dla części działek';
@@ -264,6 +271,11 @@
         row.append(button, remove); list.appendChild(row);
       });
       next.disabled = items.length === 0;
+      const nextHeight = sheet.getBoundingClientRect().height;
+      if (!sheet.classList.contains('collapsed') && Math.abs(previousHeight - nextHeight) > 1 && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        if (drawerResizeAnimation) drawerResizeAnimation.cancel();
+        drawerResizeAnimation = sheet.animate([{ height: `${previousHeight}px` }, { height: `${nextHeight}px` }], { duration: 240, easing: 'cubic-bezier(.22,1,.36,1)' });
+      }
     }
     /** Calculate the centroid of a polygon's outer ring for the map annotation. */
     function parcelCentroid(geometry) {
@@ -297,7 +309,7 @@
       if (options.toggle && selected.has(parcel.parcel_id)) {
         selected.delete(parcel.parcel_id); if (popupParcelId === parcel.parcel_id && parcelPopup) parcelPopup.remove(); status.textContent = 'Działka odznaczona.'; renderSelection(); return;
       }
-      selected.set(parcel.parcel_id, parcel); results.classList.remove('visible'); status.textContent = 'Działka dodana. Możesz wybrać kolejną.'; renderSelection();
+      selected.set(parcel.parcel_id, parcel); results.classList.remove('visible'); status.textContent = ''; renderSelection();
       if (!options.focus) return;
       const bounds = parcel.geometry.coordinates[0].reduce((box, point) => box.extend(point), new maplibregl.LngLatBounds());
       const panel = document.querySelector('.sheet');
@@ -455,6 +467,7 @@
       startPoint = [event.clientX - rect.left, event.clientY - rect.top];
       cursor = startPoint;
       holdTimer = setTimeout(() => {
+        if (window.matchMedia('(max-width: 719px)').matches && !sheet.classList.contains('collapsed')) setDrawer(false);
         drawing = true; suppressMapClick = true; map.dragPan.disable();
         canvas.setPointerCapture(pointerId); anchor = map.unproject(startPoint); preview = new Map();
         selectionBox.classList.add('visible'); status.textContent = 'Przeciągnij prostokąt nad działkami.';
@@ -495,7 +508,7 @@
         await pendingScan;
         preview.forEach(parcel => selected.set(parcel.parcel_id, parcel));
         renderSelection();
-        status.textContent = preview.size ? `Zaznaczono działki: ${preview.size}.` : 'Nie znaleziono działek w zaznaczonym obszarze.';
+        status.textContent = preview.size ? '' : 'Nie znaleziono działek w zaznaczonym obszarze.';
       } else if (completed) { rectangleVersion++; preview.clear(); }
     }
     canvas.addEventListener('pointerup', endSelectionDrag);
@@ -503,6 +516,7 @@
     map.on('click', async event => {
       if (suppressMapClick) return;
       hideMapGuide();
+      if (window.matchMedia('(max-width: 719px)').matches && !sheet.classList.contains('collapsed')) { status.textContent = ''; setDrawer(false); }
       try { const result = await provider.findParcels({ lon: event.lngLat.lng, lat: event.lngLat.lat }); showMatches(result.parcels, true, { toggle: true }); }
       catch (_) { status.textContent = 'Nie można pobrać działek. Spróbuj ponownie.'; }
     });
