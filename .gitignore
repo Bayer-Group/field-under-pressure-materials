@@ -8,6 +8,7 @@ data/**
 *.nc
 *.zip
 *.SAFE/
+test
 
 # Secrets / local config
 .env
