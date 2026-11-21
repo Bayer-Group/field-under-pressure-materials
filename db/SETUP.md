@@ -4,6 +4,17 @@ Reprodukowalny obraz Docker z bazą danych MongoDB odtwarzaną automatycznie z n
 
 ## Lokalna baza i API pogody
 
+Po pobraniu gałęzi `backend` uruchom panel z katalogu głównego repozytorium. Potrzebujesz Pythona 3.10+, MongoDB 8.0 z MongoDB Database Tools oraz Node.js z npm lub pnpm.
+
+```powershell
+python -m pip install -r backend/requirements.txt
+python db/scripts/start_weather.py --with-ui
+```
+
+Panel otworzysz pod `http://127.0.0.1:5173`. Skrypt przy pierwszym starcie pobiera zależności UI z lockfile i ustawia adres API oraz tryb danych z MongoDB. Opcja `--with-ui --check` sprawdza start wszystkich usług i zamyka je po teście. Przy zajętych portach użyj `--mongo-port`, `--api-port` i `--ui-port`.
+
+### Sam backend
+
 Potrzebujesz Pythona 3.10+, MongoDB 8.0 i MongoDB Database Tools. Z katalogu głównego repozytorium uruchom:
 
 ```powershell
@@ -11,11 +22,11 @@ python -m pip install -r backend/requirements.txt
 python db/scripts/start_weather.py
 ```
 
-Przy pierwszym starcie skrypt pobiera z `origin/ml` najnowszy zrzut do odtworzenia. Uruchamia MongoDB na `127.0.0.1:27018`, importuje 14 dni pogody z punktów `Orchard.centroid`, uruchamia harmonogram i wyświetla adres działającego wykresu. API nasłuchuje domyślnie na `127.0.0.1:8000`. Kolejne starty używają tej samej bazy z `data/weather-mongodb` i uzupełniają ostatnie dni. `Ctrl+C` zamyka procesy uruchomione przez skrypt.
+Przy pierwszym starcie skrypt odtwarza zrzut `db/backups/field_under_pressure_20261121_185937.archive.gz` dołączony do gałęzi. Uruchamia MongoDB na `127.0.0.1:27018`, importuje 14 dni pogody z punktów `Orchard.centroid`, uruchamia harmonogram i wyświetla adres działającego wykresu. API nasłuchuje domyślnie na `127.0.0.1:8000`. Kolejne starty używają tej samej bazy z `data/weather-mongodb` i uzupełniają ostatnie dni. `Ctrl+C` zamyka procesy uruchomione przez skrypt.
 
 - Jeśli narzędzia MongoDB są poza `PATH`, podaj `--mongo-bin` z katalogiem `mongod` i `--tools-bin` z katalogiem `mongorestore`. Jeśli oba pliki są w jednym katalogu, wystarczy `--mongo-bin`.
 - Opcja `--archive ścieżka/do/zrzutu.archive.gz` wybiera lokalny zrzut przy odtwarzaniu pustej bazy. `--data-dir`, `--mongo-port` i `--api-port` pozwalają uruchomić drugą instancję obok istniejącej.
-- Opcja `--check` sprawdza wszystkie pięć zakresów wykresu i CORS dla UI, a następnie zamyka oba procesy. Dane zostają w katalogu wybranej instancji.
+- Opcja `--check` sprawdza wszystkie pięć zakresów wykresu i CORS dla UI, a następnie zamyka procesy. Dane zostają w katalogu wybranej instancji.
 
 W Compass otwórz `mongodb://127.0.0.1:27018/field_under_pressure`. Bieżąca pogoda, prognoza i historia znajdują się w `Orchard.environmentalData`.
 
@@ -35,8 +46,6 @@ W Compass otwórz `mongodb://127.0.0.1:27018/field_under_pressure`. Bieżąca po
 Z katalogu głównego repozytorium:
 
 ```bash
-git fetch origin ml:refs/remotes/origin/ml
-git restore --source=origin/ml --worktree -- db/backups/field_under_pressure_20261121_154819.archive.gz
 docker compose up -d --build
 ```
 

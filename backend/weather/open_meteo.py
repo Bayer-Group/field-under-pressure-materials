@@ -15,11 +15,9 @@ try:
 except ImportError:
     certifi = None
 
-_SSL_CONTEXT = (
-    ssl.create_default_context(cafile=certifi.where())
-    if certifi is not None
-    else ssl.create_default_context()
-)
+_SSL_CONTEXT = ssl.create_default_context()
+if certifi is not None:
+    _SSL_CONTEXT.load_verify_locations(cafile=certifi.where())
 
 
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"

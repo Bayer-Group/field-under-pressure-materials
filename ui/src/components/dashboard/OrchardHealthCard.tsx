@@ -16,8 +16,11 @@ export function OrchardHealthCard() {
 
   useEffect(() => {
     const controller = new AbortController();
+    setSummary(null);
+    setEndpoint('');
     fetchOrchardHealth(selectedOrchardId, controller.signal)
       .then((res) => {
+        if (controller.signal.aborted) return;
         setSummary(res.data);
         setEndpoint(res.endpoint);
       })
@@ -33,6 +36,7 @@ export function OrchardHealthCard() {
   const score = summary?.averageScore ?? null;
   const overallStatus = summary?.overallStatus ?? null;
   const totalTrees = summary?.totalTrees ?? 0;
+  const unratedTrees = summary?.distribution.unrated ?? 0;
   const statusToken = overallStatus ? HEALTH_PALETTE[overallStatus] : UNRATED_HEALTH_TOKEN;
   const statusLabel = overallStatus ? t.health.statuses[overallStatus] : t.health.statuses.unrated;
 
@@ -112,6 +116,9 @@ export function OrchardHealthCard() {
 
       <div className="health-distribution">
         <div className="health-dist-title">{t.health.scaleTitle}</div>
+        {unratedTrees > 0 && (
+          <div className="muted-caption">{t.health.statuses.unrated}: {unratedTrees}</div>
+        )}
 
         {/* Stacked horizontal bar */}
         <div className="health-stacked-bar" aria-label={t.health.scaleTitle}>

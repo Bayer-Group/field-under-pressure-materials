@@ -110,6 +110,8 @@ Pobiera szereg czasowy temperatur minimalnych i maksymalnych do wykresu linioweg
 ### 3.2. `GET /api/v1/orchard/health`
 Zwraca uśredniony wskaźnik kondycji całego sadu oraz rozkład liczby drzew w 4-stopniowej skali zdrowia.
 
+`totalTrees` obejmuje wszystkie drzewa. `distribution.unrated` liczy drzewa bez oceny, a średnia uwzględnia tylko zapisane oceny. Gdy sad nie ma jeszcze ocen, `averageScore` i `overallStatus` mają wartość `null`.
+
 - **Query params:**
   - `orchardId` (`string`, wymagany)
 - **Skala mapowania `averageScore` (0–100) → `HealthStatus` (kolory w UI):**
@@ -129,7 +131,8 @@ Zwraca uśredniony wskaźnik kondycji całego sadu oraz rozkład liczby drzew w 
     "dead": 4,
     "poor": 14,
     "moderate": 26,
-    "healthy": 73
+    "healthy": 73,
+    "unrated": 0
   }
 }
 ```
@@ -186,6 +189,8 @@ Zwraca kompletny zestaw danych do renderera 3D (chmura punktów + pojedyncze drz
 }
 ```
 > Uwaga: `positions` i `colors` to płaskie tablice o długości `3 * pointCount` (`[x0, y0, z0, ...]`, kolory znormalizowane do `[0.0, 1.0]`).
+
+Drzewo oczekujące na ocenę ma `healthScore: null` i `healthStatus: null`. UI oznacza taki punkt jako „Brak oceny”. Pole `geo` zachowuje współrzędne GPS zapisane w `Tree.coordinates`.
 
 ---
 

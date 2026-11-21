@@ -15,12 +15,7 @@ import {
   Trash2,
   Undo2,
 } from 'lucide-react';
-import {
-  fetchCropPrefs,
-  fetchOrchardBoundary,
-  fetchOrchardTrees,
-  saveOrchardLayout,
-} from '../../api/orchardApi';
+import { fetchCropPrefs, fetchOrchardBoundary, fetchOrchardTrees, saveOrchardLayout } from '../../api/orchardApi';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useOrchard } from '../../contexts/OrchardContext';
 import type {
@@ -30,7 +25,9 @@ import type {
   GeoCoord,
   ObjectIdString,
   OrchardBoundaryDoc,
+  OrchardRowDoc,
   SaveOrchardLayoutResponse,
+  TreeDoc,
 } from '../../types/orchard';
 import {
   buildOrchardLayoutPayload,
@@ -46,12 +43,21 @@ import {
   type EditorToolMode,
 } from '../editor/RowLineEditorCanvas';
 
+function sameRowGeometry(saved: OrchardRowDoc, draft: DraftRow): boolean {
+  return saved.start.lat === draft.start.lat && saved.start.lng === draft.start.lng
+    && saved.end.lat === draft.end.lat && saved.end.lng === draft.end.lng
+    && saved.averageSpacingMeters === draft.averageSpacingMeters;
+}
+
+const DEFAULT_EDGE_MARGIN_METERS = 1;
+
 export function RowLineEditorPage() {
   const { t, language } = useLanguage();
   const { selectedOrchardId } = useOrchard();
 
   const [orchard, setOrchard] = useState<OrchardBoundaryDoc | null>(null);
   const [cropPrefs, setCropPrefs] = useState<CropPrefDoc[]>([]);
+  const [storedTrees, setStoredTrees] = useState<TreeDoc[]>([]);
   const [orchardEndpoint, setOrchardEndpoint] = useState<string>('');
   const [cropPrefsEndpoint, setCropPrefsEndpoint] = useState<string>('');
 
@@ -62,7 +68,8 @@ export function RowLineEditorPage() {
   const [activeSpeciesId, setActiveSpeciesId] = useState<ObjectIdString>('');
   const [averageSpacingMeters, setAverageSpacingMeters] = useState<number>(3.5);
   const [parallelOffsetMeters, setParallelOffsetMeters] = useState<number>(4.5);
-  const [edgeMarginMeters, setEdgeMarginMeters] = useState<number>(1.0);
+  const [edgeMarginMeters, setEdgeMarginMeters] = useState(DEFAULT_EDGE_MARGIN_METERS);
+  const [savedEdgeMarginMeters, setSavedEdgeMarginMeters] = useState(DEFAULT_EDGE_MARGIN_METERS);
 
   // Drawn rows (starts empty for first-time user!) + undo stack
   const [rows, setRows] = useState<DraftRow[]>([]);
@@ -80,18 +87,33 @@ export function RowLineEditorPage() {
 
   useEffect(() => {
     const controller = new AbortController();
+    setOrchard(null);
     setRows([]);
+    setStoredTrees([]);
     setHistory([]);
     setSelectedRowId(null);
     setSelectedTreeKey(null);
     setSaveBanner(null);
+    setEdgeMarginMeters(DEFAULT_EDGE_MARGIN_METERS);
+    setSavedEdgeMarginMeters(DEFAULT_EDGE_MARGIN_METERS);
 
     Promise.all([
       fetchOrchardBoundary(selectedOrchardId, controller.signal),
       fetchCropPrefs(controller.signal),
-      fetchOrchardTrees(selectedOrchardId, controller.signal).catch(() => null),
+      fetchOrchardTrees(selectedOrchardId, controller.signal),
     ])
       .then(([orchardRes, cropsRes, treesRes]) => {
+        if (controller.signal.aborted) return;
+        const fallbackSpecies = cropsRes.data[0]?._id ?? '';
+        const trees = treesRes.data.map((tree) => ({
+          _id: tree.id,
+          orchardId: selectedOrchardId,
+          coordinates: tree.geo,
+          healthIndex: tree.healthScore,
+          species: tree.species ?? fallbackSpecies,
+        }));
+        const speciesByTree = new Map(trees.map((tree) => [tree._id, tree.species]));
+        setStoredTrees(trees);
         setOrchard(orchardRes.data);
         setOrchardEndpoint(orchardRes.endpoint);
         setCropPrefs(cropsRes.data);
@@ -102,48 +124,30 @@ export function RowLineEditorPage() {
           setAverageSpacingMeters((prev) => prev || cropsRes.data[0].recommendedSpacingMeters);
         }
 
-        // Hydrate pre-existing Orchard.rows with actual Tree.species from MongoDB
-        const fallbackSpecies = cropsRes.data[0]?._id ?? '';
-        const speciesByTreeId = new Map<string, ObjectIdString>();
-        for (const tree of treesRes?.data ?? []) {
-          if (tree.species) {
-            speciesByTreeId.set(tree.id, tree.species);
-          }
-        }
-
         if (orchardRes.data.rows.length > 0) {
           setRows(
-            orchardRes.data.rows.map((r) => {
-              const treeSpeciesList = r.treeIds.map((tid) => speciesByTreeId.get(tid) ?? fallbackSpecies);
-              // Dominant species for the row
-              const counts = new Map<string, number>();
-              for (const sp of treeSpeciesList) {
-                if (sp) counts.set(sp, (counts.get(sp) ?? 0) + 1);
+            orchardRes.data.rows.map(({ treeIds, ...row }) => {
+              const treeSpecies = treeIds.map((id) => speciesByTree.get(id) ?? fallbackSpecies);
+              const counts = new Map<ObjectIdString, number>();
+              for (const assigned of treeSpecies) {
+                counts.set(assigned, (counts.get(assigned) ?? 0) + 1);
               }
-              let dominantSpecies = fallbackSpecies;
-              let bestCount = -1;
-              for (const [sp, cnt] of counts.entries()) {
-                if (cnt > bestCount) {
-                  bestCount = cnt;
-                  dominantSpecies = sp;
+              let species = fallbackSpecies;
+              let highestCount = 0;
+              for (const [assigned, count] of counts) {
+                if (count > highestCount) {
+                  species = assigned;
+                  highestCount = count;
                 }
               }
-
-              const treeSpeciesOverrides: Record<number, ObjectIdString> = {};
-              treeSpeciesList.forEach((sp, idx) => {
-                if (sp && sp !== dominantSpecies) {
-                  treeSpeciesOverrides[idx] = sp;
-                }
-              });
-
               return {
-                id: r.id,
-                label: r.label,
-                start: r.start,
-                end: r.end,
-                averageSpacingMeters: r.averageSpacingMeters,
-                species: dominantSpecies,
-                treeSpeciesOverrides,
+                ...row,
+                species,
+                treeSpeciesOverrides: Object.fromEntries(
+                  treeSpecies.flatMap((assigned, index) =>
+                    assigned && assigned !== species ? [[index, assigned]] : [],
+                  ),
+                ),
               };
             }),
           );
@@ -169,13 +173,36 @@ export function RowLineEditorPage() {
     return orchard.geometry.map((g) => geoToLocalMeters(g, orchard.center));
   }, [orchard]);
 
-  // Recalculate all individual tree coordinates whenever rows, spacing, or margin change
+  const savedById = useMemo(() => new Map(storedTrees.map((tree) => [tree._id, tree])), [storedTrees]);
+
   const calculatedRows = useMemo<CalculatedRowResult[]>(() => {
     if (!orchard) return [];
-    return rows.map((row, idx) =>
-      calculateRowTrees(row, idx, polygonLocal, orchard.center, edgeMarginMeters),
-    );
-  }, [orchard, rows, polygonLocal, edgeMarginMeters]);
+    const savedRows = new Map(orchard.rows.map((row) => [row.id, row]));
+    return rows.map((row, idx) => {
+      const calculated = calculateRowTrees(row, idx, polygonLocal, orchard.center, edgeMarginMeters);
+      const savedRow = savedRows.get(row.id);
+      if (savedRow && sameRowGeometry(savedRow, row) && edgeMarginMeters === savedEdgeMarginMeters) {
+        const trees = savedRow.treeIds.flatMap((id, index) => {
+          const saved = savedById.get(id);
+          return saved ? [{
+            tempId: id,
+            rowId: row.id,
+            indexInRow: index,
+            coordinates: saved.coordinates,
+            healthIndex: null,
+            species: row.treeSpeciesOverrides[index] ?? row.species,
+          }] : [];
+        });
+        return { ...calculated, trees };
+      }
+      return {
+        ...calculated,
+        trees: calculated.trees.map((tree, index) => ({
+          ...tree, tempId: savedRow?.treeIds[index] ?? `${row.id}/${index + 1}`,
+        })),
+      };
+    });
+  }, [orchard, rows, polygonLocal, edgeMarginMeters, savedEdgeMarginMeters, savedById]);
 
   const totalTreesCount = useMemo(
     () => calculatedRows.reduce((sum, r) => sum + r.trees.length, 0),
@@ -206,8 +233,13 @@ export function RowLineEditorPage() {
 
   const layoutPayload = useMemo(() => {
     if (!orchard) return null;
-    return buildOrchardLayoutPayload(orchard, calculatedRows);
-  }, [orchard, calculatedRows]);
+    const payload = buildOrchardLayoutPayload(orchard, calculatedRows);
+    const previouslyInRows = new Set(orchard.rows.flatMap((row) => row.treeIds));
+    payload.trees.push(...storedTrees
+      .filter((tree) => !previouslyInRows.has(tree._id))
+      .map((tree) => ({ ...tree, healthIndex: null })));
+    return payload;
+  }, [orchard, calculatedRows, storedTrees]);
 
   const commitRowsUpdate = (updater: (prev: DraftRow[]) => DraftRow[]) => {
     setRows((prev) => {
@@ -342,6 +374,11 @@ export function RowLineEditorPage() {
     setIsSaving(true);
     try {
       const res = await saveOrchardLayout(layoutPayload);
+      setStoredTrees(res.data.trees);
+      setSavedEdgeMarginMeters(edgeMarginMeters);
+      setOrchard((current) => current?._id === res.data.orchardId ? {
+        ...current, rows: res.data.orchard.rows,
+      } : current);
       setSaveBanner({ response: res.data, endpoint: res.endpoint });
     } catch (err) {
       console.error('Failed to save orchard layout:', err);

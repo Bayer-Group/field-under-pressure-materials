@@ -4,9 +4,13 @@ Web dashboard for orchard monitoring, microclimate analytics, tree health diagno
 
 ## Running locally
 
+To start the dashboard with MongoDB and the API from the repository root, follow the [database setup](../db/SETUP.md).
+
+To start Vite with an existing API:
+
 ```bash
 cd ui
-npm install
+npm ci
 npm run dev
 ```
 
