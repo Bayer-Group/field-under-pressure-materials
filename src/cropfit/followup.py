@@ -138,8 +138,7 @@ def suggest(contributions: pd.DataFrame, summary: pd.DataFrame, unit_id: str, cr
             continue
         ctx = _context_reason(row["favoured_by"], context)
         if row["kind"] == "blind_spot":
-            reason = "No dataset in this app measures this organism, so its presence here is unknown"
-            reason += f"; {ctx}, which favours it." if ctx else "."
+            reason = f"{ctx[0].upper()}{ctx[1:]}, which favours it." if ctx else ""
             out.append(_item(row, "blind_spot", BLIND_BASE + (CONTEXT_BONUS if ctx else 0.0), reason))
             continue
         if row["kind"] not in ("species_pcr", "inoculum_count") or row["genus"] not in c.index:

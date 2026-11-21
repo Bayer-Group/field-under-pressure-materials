@@ -133,7 +133,8 @@ function Body({ data, plotId, unit, crop, across, setAcross, picked, pick }: {
         <>
           <Heatmap rows={data.crops} plotId={plotId} unit={unit} selected={sel} across={across} nUnits={data.n_units_in_group} onSelect={onSelect} />
           <Breakdown plot={sel.plot} unit={unit} crop={sel.crop} />
-          <FollowupTests plot={sel.plot} unit={unit} crop={sel.crop} />
+          <FollowupTests plot={sel.plot} unit={unit} crop={sel.crop} crops={data.crops}
+            onCrop={(c) => onSelect({ plot: sel.plot, crop: c })} />
           <p className="risk-note"><a href={planHref(sel.plot, unit, sel.crop)}>Products to consider for this crop on {sel.plot}</a></p>
         </>
       )}

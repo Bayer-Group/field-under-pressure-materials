@@ -338,6 +338,11 @@ a.heat-row:hover { color: var(--ink); text-decoration-color: currentColor; }
 .risk-bar-row .num { width: 3.6em; flex: none; text-align: right; }
 .risk .comp-table thead th { position: static; }
 .risk-tests { margin-top: 22px; }
+.risk-tests .tests-head { align-items: center; }
+.risk-tests .tests-head h2 { margin: 0; }
+.crop-pick { display: flex; align-items: center; gap: 8px; }
+.crop-pick select { font: inherit; font-size: 0.85rem; padding: 4px 8px; border: 1px solid var(--line-2); border-radius: var(--radius); background: var(--surface); color: var(--ink); cursor: pointer; }
+.crop-pick select:hover { border-color: var(--muted); }
 .risk-tests ul { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 8px; }
 .test-item { padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); font-size: 0.85rem; }
 .test-item p { margin: 6px 0; color: var(--ink-2); }
