@@ -106,7 +106,11 @@
       field: id => request(`/fields/${encodeURIComponent(id)}`),
       validateField: body => request('/fields/validate', { method: 'POST', body }),
       putField: (id, body) => request(`/fields/${encodeURIComponent(id)}`, { method: 'PUT', body }),
-      gridRisk: day => request(`/grid/risk?${new URLSearchParams({ date: day })}`)
+      gridRisk: day => request(`/grid/risk?${new URLSearchParams({ date: day })}`),
+      sprays: id => request(`/crop-areas/${encodeURIComponent(id)}/sprays`),
+      patchArea: (id, body) => request(`/crop-areas/${encodeURIComponent(id)}`, { method: 'PATCH', body }),
+      patchSpray: (id, sprayId, body) => request(`/crop-areas/${encodeURIComponent(id)}/sprays/${encodeURIComponent(sprayId)}`, { method: 'PATCH', body }),
+      deleteSpray: (id, sprayId) => request(`/crop-areas/${encodeURIComponent(id)}/sprays/${encodeURIComponent(sprayId)}`, { method: 'DELETE' })
     };
   }
   root.SandboxClient = { create, BASE_URL, STORAGE_KEY };
