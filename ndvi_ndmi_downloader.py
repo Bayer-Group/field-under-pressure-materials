@@ -10,7 +10,7 @@ from rasterio.vrt import WarpedVRT
 from shapely.geometry import mapping
 
 
-def download_clip_sentinel_ndvi(
+def download_clip_sentinel_ndvi_ndmi(
     boundary_file,
     start_date,
     end_date,
@@ -44,15 +44,16 @@ def download_clip_sentinel_ndvi(
     )
 
     saved_paths = []
+    scl_exclude = (3, 8, 9, 10)
 
     for scene in sorted_scenes:
         if len(saved_paths) >= n_scenes:
             break
+
         scene_date = scene.datetime.strftime("%Y-%m-%d") if scene.datetime else "unknown"
         bands_data = {}
         out_meta = None
         shapes = None
-        scl_exclude=(3, 8, 9, 10)
 
         for band in ("red", "nir"):
             file_url = scene.assets[band].href
@@ -74,16 +75,50 @@ def download_clip_sentinel_ndvi(
                             "height": arr.shape[0],
                             "width": arr.shape[1],
                             "transform": out_transform,
-                            "count": 1,
+                            "count": 2,
                             "dtype": "float32",
                             "nodata": np.nan,
                         }
                     )
 
+        with rasterio.open(scene.assets["swir16"].href) as swir_src:
+            with WarpedVRT(
+                swir_src,
+                crs=out_meta["crs"],
+                transform=out_meta["transform"],
+                width=out_meta["width"],
+                height=out_meta["height"],
+                resampling=Resampling.bilinear,
+            ) as swir_vrt:
+                swir_arr = swir_vrt.read(1).astype(np.float32)
+                swir_arr[swir_arr == 0] = np.nan
+
+        in_field = geometry_mask(
+            shapes,
+            out_shape=(out_meta["height"], out_meta["width"]),
+            transform=out_meta["transform"],
+            invert=True,
+        )
+        total_field_px = int(np.sum(in_field))
+        if total_field_px == 0:
+            continue
+
+        swir_arr[~in_field] = np.nan
+
         nir, red = bands_data["nir"], bands_data["red"]
-        denom = nir + red
+
+        denom_ndvi = nir + red
         ndvi = np.where(
-            (denom != 0) & ~np.isnan(denom), (nir - red) / denom, np.nan
+            (denom_ndvi != 0) & ~np.isnan(denom_ndvi),
+            (nir - red) / denom_ndvi,
+            np.nan,
+        ).astype(np.float32)
+
+        denom_ndmi = nir + swir_arr
+        ndmi = np.where(
+            (denom_ndmi != 0) & ~np.isnan(denom_ndmi),
+            (nir - swir_arr) / denom_ndmi,
+            np.nan,
         ).astype(np.float32)
 
         if "scl" in scene.assets and scl_exclude:
@@ -97,19 +132,11 @@ def download_clip_sentinel_ndvi(
                     resampling=Resampling.nearest,
                 ) as scl_vrt:
                     scl_arr = scl_vrt.read(1)
-            ndvi[np.isin(scl_arr, scl_exclude)] = np.nan
+            cloud_mask = np.isin(scl_arr, scl_exclude)
+            ndvi[cloud_mask] = np.nan
+            ndmi[cloud_mask] = np.nan
 
-        in_field = geometry_mask(
-            shapes,
-            out_shape=ndvi.shape,
-            transform=out_meta["transform"],
-            invert=True, 
-        )
-        total_field_px = int(np.sum(in_field))
-        if total_field_px == 0:
-            continue
-
-        missing_px = int(np.sum(in_field & np.isnan(ndvi)))
+        missing_px = int(np.sum(in_field & (np.isnan(ndvi) | np.isnan(ndmi))))
         missing_ratio = missing_px / total_field_px
 
         if missing_ratio > max_missing_ratio:
@@ -119,16 +146,22 @@ def download_clip_sentinel_ndvi(
             )
             continue
 
-        out_file = out_dir / f"ndvi_{scene_date}_{scene.id}.tif"
+        out_file = out_dir / f"ndvi_ndmi_{scene_date}_{scene.id}.tif"
         with rasterio.open(out_file, "w", **out_meta) as dest:
             dest.write(ndvi, 1)
+            dest.write(ndmi, 2)
             dest.set_band_description(1, "NDVI")
+            dest.set_band_description(2, "NDMI")
 
-        print(f"   Zapisano ({len(saved_paths) + 1}/{n_scenes}): {out_file.name} | braki: {missing_ratio:.1%}")
+        print(
+            f"   Zapisano ({len(saved_paths) + 1}/{n_scenes}): "
+            f"{out_file.name} | braki: {missing_ratio:.1%}"
+        )
         saved_paths.append(out_file)
 
     if len(saved_paths) < n_scenes:
-        print(f"Uwaga: udało się znaleźć tylko {len(saved_paths)} z {n_scenes} wymaganych scen.")
+        print(
+            f"Uwaga: udało się znaleźć tylko {len(saved_paths)} z {n_scenes} wymaganych scen.")
 
     return saved_paths
 
@@ -137,5 +170,5 @@ def download_clip_sentinel_ndvi(
 
 if __name__ == "__main__":
     boundary_file = Path("test/fields.geojson")
-    download_clip_sentinel_ndvi(boundary_file=boundary_file, start_date="2022-03-01", end_date="2022-06-30", out_dir="test/ndvi", n_scenes=8)
+    download_clip_sentinel_ndvi_ndmi(boundary_file=boundary_file, start_date="2022-03-01", end_date="2022-06-30", out_dir="test/ndvi", n_scenes=1)
 
