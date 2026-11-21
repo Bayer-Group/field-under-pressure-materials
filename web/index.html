@@ -99,7 +99,7 @@
     .risk-slider-label input { margin: 3px 0; } .risk-slider-ticks { display: flex; justify-content: space-between; color: #7a8a7d; font-size: 11px; font-weight: 500; }
     .risk-list-heading { margin: 4px 1px -5px; color: #344f3d; font-size: 13px; }
     .sandbox-list { max-height: 170px; overscroll-behavior: contain; }
-    .sandbox-area { min-height: 56px; padding: 9px 12px; } .sandbox-area.active { border-color: #6b9b79; background: #fff; box-shadow: 0 0 0 1px #6b9b79; }
+    .sandbox-area { min-height: 56px; padding: 9px 12px; border-color: transparent; } .sandbox-area.active { border-color: #6b9b79; background: #fff; box-shadow: 0 0 0 1px #6b9b79; }
     .risk-area-name { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 13px; }
     .risk-area-dot { width: 9px; height: 9px; flex: none; border-radius: 50%; background: #89928c; } .risk-dot-low { background: #328250; } .risk-dot-medium { background: #d2932b; } .risk-dot-high { background: #c7463e; }
     .risk-note { margin: 0 2px; font-size: 11px; } .risk-empty { color: #607266; font-size: 13px; line-height: 1.4; }
@@ -108,14 +108,22 @@
     .fc-dot { width: 9px; height: 9px; flex: none; border-radius: 50%; background: #c3cac5; box-shadow: inset 0 0 0 1px rgba(32,62,45,.25); }
     .tone-low.fc-dot, .fc-marker.tone-low { background: #328250; } .tone-medium.fc-dot, .fc-marker.tone-medium { background: #d2932b; } .tone-high.fc-dot, .fc-marker.tone-high { background: #c7463e; } .tone-unknown.fc-dot, .fc-marker.tone-unknown { background: #89928c; }
     .tone-low.fc-dot, .tone-medium.fc-dot, .tone-high.fc-dot, .tone-unknown.fc-dot { box-shadow: none; }
-    .fc-scopes { display: flex; gap: 6px; margin: 0 -20px; padding: 2px 20px 3px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; scroll-padding-inline: 20px; }
+    .fc-scope-nav { display: flex; align-items: center; min-width: 0; gap: 2px; margin: 0 -8px; }
+    .fc-scope-arrow { flex: none; display: grid; place-items: center; width: 44px; height: 44px; padding: 10px; border: 0; border-radius: 12px; color: var(--green); background: transparent; }
+    .fc-scope-arrow:disabled { opacity: .25; }
+    .fc-scope-arrow svg { width: 19px; height: 19px; }
+    .fc-scopes { flex: 1; min-width: 0; display: flex; gap: 6px; padding: 2px 2px 3px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; scroll-padding-inline: 4px; }
     .fc-scopes::-webkit-scrollbar { display: none; }
-    .fc-chip { flex: none; display: inline-flex; align-items: center; gap: 7px; min-height: 44px; padding: 0 14px; border: 1px solid rgba(32,62,45,.12); border-radius: 14px; background: rgba(255,255,255,.72); color: #2f4a39; font-size: 13px; font-weight: 650; white-space: nowrap; transition: background 160ms ease, color 160ms ease, transform 100ms ease; }
+    .fc-chip { flex: none; display: inline-flex; align-items: center; gap: 7px; min-height: 44px; padding: 0 14px; border: 1px solid transparent; border-radius: 14px; background: rgba(255,255,255,.72); color: #2f4a39; font-size: 13px; font-weight: 650; white-space: nowrap; transition: background 160ms ease, color 160ms ease, transform 100ms ease; }
     .fc-chip:active { transform: scale(.97); }
     .fc-chip[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: #fff; }
     .fc-chip[aria-pressed="true"] .fc-dot { box-shadow: 0 0 0 2px #fff; }
-    .fc-scopes + .fc-scopes { margin-top: -6px; }
-    .fc-scopes + .fc-scopes .fc-chip { min-height: 44px; border-radius: 22px; font-size: 12px; }
+    .fc-scope-nav + .fc-scope-nav { margin-top: -6px; }
+    .fc-scope-nav + .fc-scope-nav .fc-chip { min-height: 44px; border-radius: 22px; font-size: 12px; }
+    .fc-crumbs { display: flex; flex-wrap: wrap; gap: 4px 8px; margin: -6px 0 -4px -8px; }
+    .fc-crumb { display: inline-flex; align-items: center; gap: 2px; min-height: 44px; padding: 0 10px 0 4px; border: 0; border-radius: 12px; background: transparent; color: var(--green); font-size: 14px; font-weight: 700; }
+    .fc-crumb:hover { background: rgba(255,255,255,.6); }
+    .fc-crumb svg { width: 20px; height: 20px; stroke-width: 2.2; }
     .fc-day-wrap { display: grid; gap: 4px; }
     .fc-day { position: relative; display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; gap: 6px; padding: 4px; border-radius: 16px; background: rgba(214,229,218,.7); touch-action: pan-y; user-select: none; }
     .fc-day-step { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 12px; background: #fff; color: var(--green); box-shadow: 0 1px 4px rgba(20,50,33,.1); transition: opacity 160ms ease, transform 100ms ease; }
@@ -173,11 +181,16 @@
     .fc-index-head h2 { margin: 0; }
     .fc-index-value { font-size: 20px; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
     .fc-index-note { margin: 8px 0 0; color: #5f7266; font-size: 12px; line-height: 1.4; }
-    .risk-legend { display: none; position: absolute; z-index: 2; top: max(16px, env(safe-area-inset-top)); left: 80px; width: 168px; padding: 9px 11px; border: 1px solid rgba(255,255,255,.85); border-radius: 15px; background: rgba(248,251,247,.92); box-shadow: 0 4px 16px rgba(24,50,35,.14); backdrop-filter: blur(16px); color: #344f3d; font-size: 10px; font-weight: 650; pointer-events: none; }
-    .app.sandbox-mode .risk-legend { display: grid; gap: 4px; }
+    .risk-legend { display: none; position: absolute; z-index: 2; right: 86px; bottom: calc(var(--drawer-height, 370px) + max(26px, env(safe-area-inset-bottom) + 12px)); height: 106px; width: max-content; min-width: 200px; align-content: center; padding: 12px 14px; white-space: nowrap; border: 1px solid rgba(255,255,255,.85); border-radius: 15px; background: rgba(248,251,247,.92); box-shadow: 0 4px 16px rgba(24,50,35,.14); backdrop-filter: blur(16px); color: #344f3d; font-size: 10px; font-weight: 650; pointer-events: none; }
+    .app.sandbox-mode:has(.sheet.collapsed) .risk-legend { display: grid; gap: 5px; }
+    .compass-ctrl { position: absolute; z-index: 2; top: calc(max(16px, env(safe-area-inset-top)) + 62px); right: 16px; margin: 0 !important; }
+    .app.sandbox-mode .compass-ctrl { top: max(16px, env(safe-area-inset-top)); }
+    @media (min-width: 720px) { .compass-ctrl { top: 86px; right: 24px; } .app.sandbox-mode .compass-ctrl { top: 24px; } }
     .risk-legend-title { font-size: 11px; font-weight: 750; }
     .risk-legend-bar, .risk-legend-labels { display: grid; grid-template-columns: 44fr 44fr 12fr; gap: 2px; }
-    .risk-legend-bar { height: 8px; }
+    .risk-legend-bar { height: 10px; }
+    .risk-legend-title { font-size: 12px; line-height: 1; }
+    .risk-legend-none { gap: 6px; }
     .risk-legend-labels span:last-child { text-align: right; }
     .risk-legend-none { display: flex; align-items: center; gap: 4px; color: #5f7266; font-weight: 600; }
     .risk-legend-swatch { width: 10px; height: 10px; border-radius: 3px; background: #89928c; }
@@ -194,6 +207,14 @@
     .fc-marker-flag { padding: 3px 6px; border-radius: 9px; background: #fff; color: #a23730; font-size: 10px; letter-spacing: .02em; }
     .fc-marker.tone-high { box-shadow: 0 0 0 4px rgba(199,70,62,.28), 0 3px 12px rgba(20,44,30,.3); }
     .fc-marker.active { outline: 3px solid #15221b; outline-offset: 1px; }
+    .fc-area-marker { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; background: transparent; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+    .fc-area-dot { position: relative; z-index: 1; width: 16px; height: 16px; border: 2.5px solid #fff; border-radius: 50%; background: #e3e7e4; box-shadow: 0 1px 5px rgba(20,44,30,.5); transition: transform 160ms cubic-bezier(.22,1,.36,1); }
+    .fc-area-marker.tone-none .fc-area-dot { border-style: dashed; border-color: #5d6c63; }
+    .fc-area-marker.tone-high .fc-area-dot { box-shadow: 0 0 0 3px rgba(199,70,62,.4), 0 1px 5px rgba(20,44,30,.5); }
+    .fc-area-marker:active .fc-area-dot { transform: scale(.88); }
+    .fc-area-marker.active .fc-area-dot { width: 20px; height: 20px; border-color: #15221b; border-width: 3px; }
+    .fc-area-marker:focus-visible { outline: 3px solid #2d815d; outline-offset: -4px; border-radius: 50%; }
+    .fc-area-leader { position: absolute; left: 50%; top: 50%; height: 1.5px; margin-top: -.75px; background: rgba(21,34,27,.75); transform-origin: 0 50%; pointer-events: none; }
     .area-dialog { max-height: min(88dvh, 720px); overflow-y: auto; }
     .area-dialog h2 { margin-bottom: 2px; }
     .area-dialog-sub { margin: 0 0 12px; }
@@ -204,6 +225,7 @@
     .area-spray-row .crop-label { margin: 6px 0; }
     .area-spray-row .crop-remove-icon { margin-bottom: 9px; font-size: 22px; }
     .area-spray-static { margin: 6px 0; color: var(--ink); font-size: 14px; font-variant-numeric: tabular-nums; }
+    .area-no-spray { background: #edf5ee; color: var(--ink); font-weight: 650; }
     .area-changes { margin: 4px 0 10px; padding-left: 18px; color: var(--ink); font-size: 14px; line-height: 1.5; font-variant-numeric: tabular-nums; }
     .area-dialog-actions { display: grid; gap: 8px; margin-top: 14px; }
     .area-dialog-actions .primary { margin-top: 0; }
@@ -568,7 +590,7 @@
     .results button:hover { background: #edf5ee; }
     .maplibregl-ctrl-bottom-right { bottom: min(68dvh, 570px); }
     .maplibregl-ctrl-attrib { font-size: 10px !important; }
-    @media (min-width: 720px) { .risk-legend { top: 24px; left: 88px; } .top { left: 24px; right: 24px; width: auto; top: 24px; } .sheet { left: 24px; bottom: 0; right: auto; width: 390px; max-height: calc(100dvh - 115px); border-radius: 25px 25px 0 0; border-bottom: 0; } .sheet.search-hidden { transform: translateY(calc(100% + 12px)); } .maplibregl-ctrl-top-right { bottom: max(26px, env(safe-area-inset-bottom) + 12px); } .maplibregl-ctrl-bottom-right { bottom: 0; } .results, .parcel-step { left: 24px; right: 84px; width: auto; top: 82px; } .results.after-parcel-step { top: 140px; } .parcel-step.searching { top: calc(50% + 38px); } .results.searching.after-parcel-step { top: calc(50% + 96px); } }
+    @media (min-width: 720px) { .risk-legend { bottom: max(26px, env(safe-area-inset-bottom) + 12px); } .top { left: 24px; right: 24px; width: auto; top: 24px; } .sheet { left: 24px; bottom: 0; right: auto; width: 390px; max-height: calc(100dvh - 115px); border-radius: 25px 25px 0 0; border-bottom: 0; } .sheet.search-hidden { transform: translateY(calc(100% + 12px)); } .maplibregl-ctrl-top-right { bottom: max(26px, env(safe-area-inset-bottom) + 12px); } .maplibregl-ctrl-bottom-right { bottom: 0; } .results, .parcel-step { left: 24px; right: 84px; width: auto; top: 82px; } .results.after-parcel-step { top: 140px; } .parcel-step.searching { top: calc(50% + 38px); } .results.searching.after-parcel-step { top: calc(50% + 96px); } }
     @media (prefers-reduced-motion: reduce) { .vertex-demo-shape, .vertex-demo-pointer, .vertex-demo-added, .vertex-demo-first { animation: none; } .vertex-demo-added { opacity: 1; } .vertex-demo-pointer { transform: translate(105px,42px); } .demo-marquee-parcel { animation: none !important; fill: rgba(23,101,68,.35); } .demo-draw-triangle { display: none; } .demo-tap-pointer, .demo-draw-pointer { opacity: 1; animation: none; transform: translate(92px, 72px); } .demo-draw-line, .demo-draw-point { opacity: 1; animation: none !important; } .demo-tap-fill { animation: none; fill: rgba(23,101,68,.35); } .demo-tap-ring { animation: none; opacity: 0; } *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; scroll-behavior: auto !important; } .demo-marquee { opacity: 1; transform: none; stroke-dashoffset: 0; } .demo-pointer { opacity: 1; transform: translate(157px, 94px); } }
   </style>
 </head>
@@ -751,6 +773,7 @@
     let suggestionTimer = null;
     let searchVersion = 0;
     let drawerResizeAnimation = null;
+    let sandboxAutoFit = false;   // the camera still shows an automatic fit of the current view (not moved by the farmer)
     let previewParcel = null;
     let previewRequest = 0;
     /** Animate between measured panel heights without showing temporary scrollbars. */
@@ -781,6 +804,7 @@
       drawerToggle.setAttribute('aria-expanded', String(open));
       drawerToggle.setAttribute('aria-label', open ? 'Collapse panel' : 'Open panel');
       animateDrawerResize(previousHeight);
+      sandboxRefitAfterDrawer();
     }
     /** Open or dismiss the centred parcel search. */
     function setSearch(open) {
@@ -851,6 +875,13 @@
       drawerToggle.setAttribute('aria-label', open ? 'Collapse panel' : 'Open panel');
       animateDrawerResize(currentHeight);
       if (open && previewParcel) fitParcelPreview(previewParcel, { onlyIfObscured: true });
+      sandboxRefitAfterDrawer();
+    }
+    /** After the drawer opens or closes, fit an automatically framed view again to the new visible map area. */
+    function sandboxRefitAfterDrawer() {
+      if (!sandboxActive || !sandboxAutoFit) return;
+      const geometry = sandboxScopeGeometry();
+      if (geometry) fitParcelPreview({ geometry }, { camera: sandboxView.mode === 'farm' ? 'north' : 'rotate', labelPadding: sandboxView.mode === 'farm' ? sandboxLabelPadding() : null });
     }
     drawerToggle.addEventListener('pointerup', finishDrawerGesture);
     drawerToggle.addEventListener('pointercancel', finishDrawerGesture);
@@ -860,9 +891,10 @@
       if (previewParcel) fitParcelPreview(previewParcel, { onlyIfObscured: true });
     });
     document.addEventListener('click', event => {
-      if (document.getElementById('crop-panel').hidden || sheet.contains(event.target) || sheet.classList.contains('collapsed') || event.target.closest('dialog')) return;
-      // Let the map or other control process the same click before collapsing the crop drawer.
-      setTimeout(() => { if (!document.getElementById('crop-panel').hidden) setDrawer(false); }, 0);
+      if (sheet.contains(event.target) || sheet.classList.contains('collapsed') || event.target.closest('dialog, .maplibregl-ctrl, .maplibregl-marker, .compass-ctrl, .top')) return;
+      if (document.getElementById('crop-panel').hidden && !sandboxActive) return;
+      // Process a map selection first, then collapse in the area and conditions views.
+      setTimeout(() => { if (!document.getElementById('crop-panel').hidden || sandboxActive) setDrawer(false); }, 0);
     }, true);
     searchBackdrop.addEventListener('click', () => setSearch(false));
     document.addEventListener('keydown', event => { if (event.key === 'Escape' && topControls.classList.contains('searching')) setSearch(false); });
@@ -886,11 +918,7 @@
       const polygons = parcel.geometry.type === 'MultiPolygon' ? parcel.geometry.coordinates : [parcel.geometry.coordinates];
       polygons.forEach(polygon => polygon[0].forEach(point => bounds.extend(point)));
       const mapRect = map.getContainer().getBoundingClientRect();
-      const drawerRect = sheet.getBoundingClientRect();
-      const mobile = window.matchMedia('(max-width: 719px)').matches;
-      const padding = { top: sandboxActive ? 118 : 85, right: 24, bottom: 24, left: 24 };   // room for the risk legend
-      if (mobile) padding.bottom = Math.max(24, mapRect.bottom - Math.max(mapRect.top, drawerRect.top) + 20);
-      else if (drawerRect.right > mapRect.left && drawerRect.left < mapRect.right) padding.left = Math.max(24, drawerRect.right - mapRect.left + 20);
+      const padding = mapVisiblePadding();
       if (options.onlyIfObscured) {
         const visible = polygons.every(polygon => polygon[0].every(point => {
           const screen = map.project(point);
@@ -898,8 +926,83 @@
         }));
         if (visible) return;
       }
+      if (sandboxActive && options.camera) {
+        const label = options.labelPadding || { x: 0, y: 0 };
+        sandboxFlyTo(polygons.flatMap(polygon => polygon[0]), { top: padding.top + label.y, bottom: padding.bottom + label.y, left: padding.left + label.x, right: padding.right + label.x }, options.camera === 'rotate');
+        return;
+      }
       map.fitBounds(bounds, { padding, maxZoom: 17, duration: 450 });
     }
+    /** Padding of the part of the map that is not covered by the drawer, the controls or the legend. */
+    function mapVisiblePadding() {
+      const mapRect = map.getContainer().getBoundingClientRect();
+      const drawerRect = sheet.getBoundingClientRect();
+      const mobile = window.matchMedia('(max-width: 719px)').matches;
+      const padding = { top: 85, right: 24, bottom: 24, left: 24 };
+      if (mobile) padding.bottom = Math.max(24, mapRect.bottom - Math.max(mapRect.top, drawerRect.top) + 20);
+      if (mobile && sandboxActive) padding.right = 86;           // keep the focused area clear of the zoom controls
+      if (sandboxActive && sheet.classList.contains('collapsed')) padding.bottom += 118;   // the risk legend and zoom buttons sit there
+      else if (!mobile && drawerRect.right > mapRect.left && drawerRect.left < mapRect.right) padding.left = Math.max(24, drawerRect.right - mapRect.left + 20);
+      return padding;
+    }
+    /** Map centre that puts `lngLat` in the middle of the padded area at the given zoom and bearing. */
+    function centerForPadded(lngLat, zoom, bearing, padding) {
+      const m = maplibregl.MercatorCoordinate.fromLngLat(lngLat);
+      const perPx = 1 / (512 * Math.pow(2, zoom)), b = bearing * Math.PI / 180;
+      const ox = (padding.left - padding.right) / 2 * perPx, oy = (padding.top - padding.bottom) / 2 * perPx;
+      return new maplibregl.MercatorCoordinate(m.x - (ox * Math.cos(b) - oy * Math.sin(b)), m.y - (ox * Math.sin(b) + oy * Math.cos(b))).toLngLat();
+    }
+    /** Convex hull of points (monotone chain). */
+    function convexHull(points) {
+      const sorted = points.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+      if (sorted.length < 3) return sorted;
+      const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+      const half = list => { const out = []; list.forEach(point => { while (out.length >= 2 && cross(out[out.length - 2], out[out.length - 1], point) <= 0) out.pop(); out.push(point); }); out.pop(); return out; };
+      return half(sorted).concat(half(sorted.slice().reverse()));
+    }
+    /**
+     * Camera that shows the points as large as possible inside the padded viewport. With `rotate`, every hull edge is
+     * tried as horizontal or vertical, so north is not kept up; without it, north stays up.
+     */
+    function bestCamera(lngLats, padding, rotate) {
+      const rect = map.getContainer().getBoundingClientRect();
+      const width = Math.max(40, rect.width - padding.left - padding.right), height = Math.max(40, rect.height - padding.top - padding.bottom);
+      const points = lngLats.map(point => { const m = maplibregl.MercatorCoordinate.fromLngLat(point); return [m.x, m.y]; });
+      const hull = convexHull(points);
+      const angles = rotate ? [0, Math.PI / 2] : [0];
+      if (rotate) hull.forEach((point, i) => { const next = hull[(i + 1) % hull.length]; const a = Math.atan2(next[1] - point[1], next[0] - point[0]); angles.push(a, a + Math.PI / 2); });
+      let best = null;
+      angles.forEach(raw => {
+        let angle = ((raw % Math.PI) + Math.PI) % Math.PI; if (angle > Math.PI / 2) angle -= Math.PI;   // the smallest turn that gives the same fit
+        const cos = Math.cos(angle), sin = Math.sin(angle);
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        hull.forEach(([x, y]) => { const sx = x * cos + y * sin, sy = -x * sin + y * cos; minX = Math.min(minX, sx); maxX = Math.max(maxX, sx); minY = Math.min(minY, sy); maxY = Math.max(maxY, sy); });
+        const zoom = Math.min(17.5, Math.log2(Math.min(width / Math.max(1e-12, (maxX - minX) * 512), height / Math.max(1e-12, (maxY - minY) * 512))));
+        // Prefer north-up unless turning gains a visible amount of size.
+        const score = zoom - Math.abs(angle) * .02;
+        if (!best || score > best.score) {
+          // Centre of the shape, moved so that it lands in the middle of the padded area at the final zoom and bearing
+          // (flyTo's own offset is measured at the starting camera, which misses after large zoom or bearing changes).
+          const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+          const perPx = 1 / (512 * Math.pow(2, zoom));
+          const ox = (padding.left - padding.right) / 2 * perPx, oy = (padding.top - padding.bottom) / 2 * perPx;
+          const tx = cx - ox, ty = cy - oy;
+          const center = new maplibregl.MercatorCoordinate(tx * cos - ty * sin, tx * sin + ty * cos).toLngLat();
+          best = { score, zoom, center, bearing: angle * 180 / Math.PI };
+        }
+      });
+      return best;
+    }
+    /** Fly to the points with a smooth, interruptible camera move (instant when reduced motion is preferred). */
+    function sandboxFlyTo(lngLats, padding, rotate) {
+      if (!lngLats.length) return;
+      const camera = bestCamera(lngLats, padding, rotate);
+      const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      map.flyTo({ center: camera.center, zoom: camera.zoom, bearing: rotate ? camera.bearing : 0, pitch: 0, speed: 1.4, curve: 1.3, maxDuration: 1600, essential: false, ...(reduce ? { duration: 0 } : {}) });
+      sandboxAutoFit = true;
+    }
+    // Any camera move by the farmer (drag, pinch, wheel, rotate) ends the automatic framing.
+    map.on('movestart', event => { if (event.originalEvent) sandboxAutoFit = false; });
     map.on('dragstart', event => { if (event.originalEvent) { previewParcel = null; previewRequest++; } });
     /** Render the selected parcels and their removable labels. */
     function renderSelection() {
@@ -1108,9 +1211,21 @@
           const zoomButton = document.createElement('button'); zoomButton.type = 'button';
           zoomButton.setAttribute('aria-label', label); zoomButton.title = label;
           zoomButton.textContent = symbol; zoomButton.style.fontSize = '24px';
-          zoomButton.addEventListener('click', () => mapInstance.zoomTo(mapInstance.getZoom() + change));
+          zoomButton.addEventListener('click', () => {
+            sandboxAutoFit = false;
+            const target = change > 0 && sandboxActive && sandboxView.mode !== 'farm' ? sandboxScopeGeometry() : null;
+            if (!target) { mapInstance.zoomTo(mapInstance.getZoom() + change); return; }
+            // Zoom in towards the centre of the selected group or area, kept in the part of the map above the drawer.
+            const box = turf.bbox({ type: 'Feature', properties: {}, geometry: target });
+            const zoom = Math.min(mapInstance.getMaxZoom(), mapInstance.getZoom() + change);
+            const center = centerForPadded([(box[0] + box[2]) / 2, (box[1] + box[3]) / 2], zoom, mapInstance.getBearing(), mapVisiblePadding());
+            mapInstance.easeTo({ center, zoom, duration: 300 });
+          });
           this.element.appendChild(zoomButton);
         }
+        // The north arrow sits on its own at the top right; the zoom buttons stay above the drawer.
+        this.compass = document.createElement('div'); this.compass.className = 'maplibregl-ctrl maplibregl-ctrl-group compass-ctrl';
+        ['pointerdown', 'pointerup', 'click', 'dblclick'].forEach(type => this.compass.addEventListener(type, event => event.stopPropagation()));
         const button = document.createElement('button'); button.type = 'button'; button.className = 'maplibregl-ctrl-compass';
         button.setAttribute('aria-label', 'Face north; press again for a top-down view');
         button.title = 'Face north and view from above';
@@ -1122,9 +1237,11 @@
         mapInstance.on('rotate', () => { icon.style.transform = `rotate(${-mapInstance.getBearing()}deg)`; });
         mapInstance.on('rotatestart', event => { if (event.originalEvent) compassNorthSelected = false; });
         mapInstance.on('pitchstart', event => { if (event.originalEvent) compassNorthSelected = false; });
-        this.element.appendChild(button); return this.element;
+        button.addEventListener('click', () => { sandboxAutoFit = false; });
+        this.compass.appendChild(button); mapInstance.getContainer().appendChild(this.compass);
+        return this.element;
       },
-      onRemove() { this.element.remove(); }
+      onRemove() { this.element.remove(); this.compass?.remove(); }
     };
     map.addControl(compassControl, 'top-right');
     const zoomHint = document.getElementById('zoom-hint');
@@ -1614,14 +1731,22 @@
       return chip;
     }
     function sandboxChips(label, chips, previous) {
+      const wrap = sandboxElement('div', 'fc-scope-nav');
       const row = sandboxElement('div', 'fc-scopes'); row.setAttribute('role', 'group'); row.setAttribute('aria-label', label);
       row.dataset.key = label; row.append(...chips);
+      const left = sandboxElement('button', 'fc-scope-arrow'); left.type = 'button'; left.dataset.key = `${label}:left`; left.setAttribute('aria-label', `Scroll ${label} left`); left.append(sandboxChevron(-1));
+      const right = sandboxElement('button', 'fc-scope-arrow'); right.type = 'button'; right.dataset.key = `${label}:right`; right.setAttribute('aria-label', `Scroll ${label} right`); right.append(sandboxChevron(1));
+      const update = () => { left.disabled = row.scrollLeft <= 1; right.disabled = row.scrollLeft + row.clientWidth >= row.scrollWidth - 1; };
+      const move = direction => row.scrollBy({ left: direction * Math.max(120, row.clientWidth * .75), behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+      left.addEventListener('click', () => move(-1)); right.addEventListener('click', () => move(1)); row.addEventListener('scroll', update, { passive: true });
+      wrap.append(left, row, right);
       requestAnimationFrame(() => {
         row.scrollLeft = previous || 0;
         const active = row.querySelector('[aria-pressed="true"]');
-        if (active && (active.offsetLeft < row.scrollLeft || active.offsetLeft + active.offsetWidth > row.scrollLeft + row.clientWidth)) row.scrollLeft = active.offsetLeft - 20;
+        if (active) { const a = active.getBoundingClientRect(), r = row.getBoundingClientRect(); if (a.left < r.left || a.right > r.right) row.scrollLeft += a.left - r.left - 4; }
+        update();
       });
-      return row;
+      return wrap;
     }
     const sandboxChevron = direction => {
       const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('aria-hidden', 'true');
@@ -1756,10 +1881,6 @@
         const head = sandboxElement('div', 'fc-index-head');
         head.append(sandboxElement('h2', '', 'Risk index'), sandboxElement('strong', 'fc-index-value', sandboxIndexText(index)));
         scale.append(head, sandboxScale([{ index, tone }], { label: `Risk index ${sandboxIndexText(index)} on a scale from 0 to 1` }));
-        scale.append(sandboxElement('p', 'fc-index-note', index.range
-          ? 'Some weather hours are missing, so the index lies somewhere in this range. '
-          : ''));
-        scale.lastChild.textContent += 'The index follows the longest wet spell: 0 means no wet hours, 0.5 is where moderate risk starts and 1 is where high risk starts. It stops at 1 and is not a probability of disease.';
         parts.push(scale);
       }
       if (row && typeof row === 'object') {
@@ -1869,8 +1990,9 @@
         state.original = link ? { sowing: link.area.sowing_date, sprays: Array.isArray(link.area.past_sprays) ? link.area.past_sprays.map(item => ({ ...item })) : null } : null;
         state.sowing = state.original?.sowing || sandboxDetails.get(state.id)?.sowing || '';
         state.sprays = (state.original?.sprays || []).map((item, index) => ({ key: `s${index}`, from: index, date: item.date, days: String(item.protection_duration_days) }));
+        state.noSprays = Array.isArray(state.original?.sprays) && !state.original.sprays.length ? true : null;
         state.readOnly = !link ? 'This area could not be matched to its field record, so it cannot be edited here.'
-          : !Array.isArray(link.field.parcel_ids) || !link.field.parcel_ids.length ? 'Changing the sowing date or earlier sprays is not available for this example field yet. You can still record a new spray.'
+          : !Array.isArray(link.field.parcel_ids) || !link.field.parcel_ids.length ? 'This example was created without parcel links. Start a new example farm after the service update to edit its details.'
           : link.field.crop_areas.some(area => area !== link.area && (!Array.isArray(area.past_sprays) || !area.geometry || !area.crop?.farmer_crop_id || !AREA_DATE.test(area.sowing_date || '')))
             ? 'Another area in this field has incomplete data, so the field cannot be saved safely here.' : '';
         state.step = 'form';
@@ -1899,6 +2021,7 @@
         else if (before[item.from].date !== next.date || before[item.from].protection_duration_days !== next.protection_duration_days) changes.push(`Change spray: ${sandboxSprayText(before[item.from])} → ${sandboxSprayText(next)}`);
       });
       before.forEach((item, index) => { if (!state.sprays.some(entry => entry.from === index)) changes.push(`Remove spray: ${sandboxSprayText(item)}`); });
+      if (!state.sprays.length && state.noSprays !== true) return { error: 'Add the sprays made on this area, or confirm that there were none.' };
       if (state.original.sprays === null && !state.sprays.length) changes.push('Confirm that no sprays were made');
       return changes.length ? { changes } : { error: 'Nothing has changed yet.' };
     }
@@ -1935,7 +2058,16 @@
           else body.append(sandboxField('Sowing date', sandboxDateInput(state.sowing, value => { state.sowing = value; })));
           const history = sandboxElement('section', 'area-sprays');
           history.append(sandboxElement('h3', '', 'Spray history'));
-          if (!state.sprays.length) history.append(sandboxElement('p', 'crop-muted', state.original?.sprays === null ? 'No spray history has been confirmed for this area yet.' : 'No sprays recorded.'));
+          if (!state.sprays.length && state.readOnly) history.append(sandboxElement('p', 'crop-muted', state.original?.sprays === null ? 'No spray history has been confirmed for this area yet.' : 'No sprays recorded.'));
+          if (!state.sprays.length && !state.readOnly) {
+            // An empty list is saved only as an explicit answer; an unanswered history never becomes "no sprays".
+            if (state.original?.sprays === null) history.append(sandboxElement('p', 'crop-muted', 'The spray history has not been answered yet. Add the sprays made, or confirm that there were none.'));
+            const none = sandboxElement('label', 'geometry-confirm area-no-spray');
+            const check = document.createElement('input'); check.type = 'checkbox'; check.checked = state.noSprays === true;
+            check.addEventListener('change', () => { state.noSprays = check.checked; });
+            none.append(check, sandboxElement('span', '', 'No sprays were made on this area'));
+            history.append(none);
+          }
           state.sprays.forEach((item, index) => {
             if (state.readOnly) { history.append(sandboxElement('p', 'area-spray-static', sandboxSprayText({ date: item.date, protection_duration_days: Number(item.days) }))); return; }
             const row = sandboxElement('div', 'area-spray-row');
@@ -1946,6 +2078,7 @@
           });
           if (!state.readOnly) {
             const add = sandboxElement('button', 'crop-link', '+ Add a spray entry'); add.type = 'button';
+            add.addEventListener('click', () => { state.noSprays = false; });
             add.addEventListener('click', () => { state.sprays.push({ key: `n${Date.now()}`, date: '', days: '' }); sandboxRenderEditor(); });
             history.append(add);
           }
@@ -1963,6 +2096,10 @@
         const list = sandboxElement('ul', 'area-changes'); state.changes.forEach(text => list.append(sandboxElement('li', '', text))); body.append(list);
         body.append(sandboxElement('p', 'crop-muted', 'The farm service recalculates the assessment after saving.'));
         button('Save', 'primary', () => sandboxSaveEditor(state)); button('Back', 'crop-outline', () => { state.step = 'form'; sandboxRenderEditor(); });
+      } else if (state.step === 'confirm-gaps') {
+        body.append(sandboxElement('p', 'crop-notice', 'Some land inside these parcels is not covered by a crop area and will remain excluded from analysis.'));
+        button('Confirm excluded land', 'primary', () => { state.confirmedGaps = state.pendingGaps.slice(); sandboxSaveEditor(state); });
+        button('Back', 'crop-outline', () => { state.step = 'review'; sandboxRenderEditor(); });
       } else if (state.step === 'saving') {
         body.append(sandboxElement('p', 'risk-loading', 'Saving and recalculating…')); button('Saving…', 'primary', () => {}, true);
       } else if (state.step === 'error') {
@@ -2004,10 +2141,19 @@
           past_sprays: area === link.area ? state.sprays.map(item => ({ date: item.date, protection_duration_days: Number(item.days) })) : area.past_sprays.map(item => ({ date: item.date, protection_duration_days: item.protection_duration_days }))
         }));
         const validation = await sandboxClient.validateField({ parcel_ids: link.field.parcel_ids, crop_areas: areas.map(area => ({ crop_area_id: area.crop_area_id, geometry: area.geometry })) });
-        if (!validation?.validation_id || validation.errors?.length || validation.overlaps?.length) throw Object.assign(new Error('The stored boundary of this field no longer passes validation, so nothing was saved.'), { status: 422 });
+        if (!validation?.validation_id || !['crop_areas', 'overlaps', 'gaps', 'outside', 'errors'].every(key => Array.isArray(validation[key])) ||
+            validation.crop_areas.length !== areas.length || areas.some(area => !validation.crop_areas.some(item => item.crop_area_id === area.crop_area_id)) ||
+            validation.gaps.some(gap => !gap.gap_id || !gap.geometry)) throw Object.assign(new Error('The service returned incomplete boundary information, so nothing was saved.'), { status: 422 });
+        if (validation.errors.length || validation.overlaps.length) throw Object.assign(new Error('The stored boundary of this field no longer passes validation, so nothing was saved.'), { status: 422 });
+        if (validation.outside?.length || validation.crop_areas?.some(area => area.repair?.requires_review)) throw Object.assign(new Error('The field boundary needs review before its details can be saved.'), { status: 422 });
+        const gaps = (validation.gaps || []).map(gap => gap.gap_id);
+        if (gaps.some(id => !id)) throw Object.assign(new Error('The service returned incomplete boundary information.'), { status: 422 });
+        if (gaps.some(id => !(state.confirmedGaps || []).includes(id))) {
+          state.pendingGaps = gaps; state.step = 'confirm-gaps'; sandboxRenderEditor(); return;
+        }
         state.intended = areas.find(area => area.crop_area_id === link.area.crop_area_id);
         state.fieldId = link.field.field_id;
-        await sandboxClient.putField(link.field.field_id, { field_id: link.field.field_id, name: link.field.name, parcel_ids: link.field.parcel_ids, validation_id: validation.validation_id, crop_areas: areas });
+        await sandboxClient.putField(link.field.field_id, { field_id: link.field.field_id, name: link.field.name, parcel_ids: link.field.parcel_ids, validation_id: validation.validation_id, confirmations: gaps.map(id => `gap:${id}`), crop_areas: areas });
       } catch (error) {
         if (areaEdit !== state) return;
         if (!error.status && state.intended) {
@@ -2088,6 +2234,13 @@
       const day = sandboxDay;
       const title = sandboxView.mode === 'area' ? sandboxAreaName(sandboxSelected) : sandboxView.mode === 'set' && set ? set.name : 'Whole farm';
       const heading = sandboxElement('h1', 'risk-heading', title); heading.id = 'sandbox-heading';
+      if (sandboxView.mode !== 'farm' && sandboxFeatures.length) {
+        const crumbs = sandboxElement('nav', 'fc-crumbs'); crumbs.setAttribute('aria-label', 'Back to a wider view');
+        const back = (key, text, onClick) => { const button = sandboxElement('button', 'fc-crumb'); button.type = 'button'; button.dataset.key = key; button.append(sandboxChevron(-1), sandboxElement('span', '', text)); button.addEventListener('click', onClick); crumbs.append(button); };
+        back('crumb:farm', 'Whole farm', () => sandboxShow({ mode: 'farm' }, { focus: true }));
+        if (sandboxView.mode === 'area' && set && set.areaIds.length > 1) back('crumb:set', set.name, () => sandboxShow({ mode: 'set', setId: set.id }, { focus: true }));
+        sandboxPanel.append(crumbs);
+      }
       sandboxPanel.append(sandboxElement('p', 'risk-eyebrow', 'SEPTORIA · WHEAT'), heading);
       if (sandboxNotice) { const notice = sandboxElement('p', 'fc-notice', sandboxNotice); notice.setAttribute('role', 'status'); sandboxPanel.append(notice); }
       const earliest = sandboxMinDay(sandboxScope());
@@ -2122,6 +2275,7 @@
     }
     /** Switch between the whole farm, an area group and a single area. */
     function sandboxShow(view, options = {}) {
+      const previousView = { ...sandboxView, areaId: sandboxSelected };
       let next = { mode: view.mode, setId: null };
       if (view.mode === 'set') {
         const set = sandboxSets.find(item => item.id === view.setId); if (!set) return;
@@ -2138,7 +2292,25 @@
       sandboxRender(); sandboxPaint();
       if (!sheet.classList.contains('collapsed')) animateDrawerResize(previousHeight);
       const geometry = sandboxScopeGeometry();
-      if (options.focus && geometry) fitParcelPreview({ geometry }, { onlyIfObscured: Boolean(options.fromMap) });
+      if (options.focus && geometry) fitParcelPreview({ geometry }, { onlyIfObscured: Boolean(options.fromMap), camera: sandboxView.mode === 'farm' ? 'north' : 'rotate', labelPadding: sandboxView.mode === 'farm' ? sandboxLabelPadding() : null });
+      sandboxAnimatePanel(previousView, { ...sandboxView, areaId: sandboxSelected });
+    }
+    /** Half of the widest group label and its height, so whole labels stay on screen in the farm view. */
+    function sandboxLabelPadding() {
+      const context = document.createElement('canvas').getContext('2d');
+      context.font = "700 12px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      const widest = Math.max(0, ...sandboxSets.map(set => context.measureText(set.name + (set.areaIds.length > 1 ? ` · ${set.areaIds.length} areas` : '')).width + 80));
+      return { x: Math.ceil(widest / 2), y: 26 };
+    }
+    /** Slide the panel content in from the direction of travel: deeper views from the right, back from the left. */
+    function sandboxAnimatePanel(from, to) {
+      if (!from || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      const depth = view => ({ farm: 0, set: 1, area: 2 })[view.mode];
+      const order = view => view.mode === 'farm' ? -1 : sandboxSets.findIndex(set => set.id === view.setId) * 100 + (view.mode === 'area' ? 1 + (sandboxSets.find(set => set.id === view.setId)?.areaIds.indexOf(view.areaId) ?? 0) : 0);
+      const direction = depth(to) !== depth(from) ? Math.sign(depth(to) - depth(from)) : Math.sign(order(to) - order(from) || 1);
+      [...sandboxPanel.children].forEach((element, index) => element.animate(
+        [{ opacity: 0, transform: `translateX(${direction * 28}px)` }, { opacity: 1, transform: 'translateX(0)' }],
+        { duration: 280, delay: Math.min(index, 4) * 25, easing: 'cubic-bezier(.22,1,.36,1)', fill: 'backwards' }));
     }
     function sandboxSelect(id, options = {}) { sandboxShow({ mode: 'area', areaId: id }, options); }
     function sandboxSelectAt(point) {
@@ -2165,11 +2337,15 @@
     function sandboxUpdateMarkers() {
       sandboxMarkers.forEach(marker => marker.remove()); sandboxMarkers = [];
       if (!sandboxActive || !sandboxSets.length) return;
-      const clusters = [];
+      const clusters = [], tinySets = new Set();
       sandboxSets.forEach(set => {
         const [west, south, east, north] = set.bbox;
         const a = map.project([west, south]), b = map.project([east, north]);
-        if (Math.abs(b.x - a.x) > 28 && Math.abs(b.y - a.y) > 28) return;
+        // A group becomes one tag when it is tiny, or as soon as the points of its small areas would crowd each other.
+        const points = Math.abs(b.x - a.x) > 28 || Math.abs(b.y - a.y) > 28 ? sandboxAreaCandidates(set) : null;
+        const focused = sandboxView.mode !== 'farm' && sandboxView.setId === set.id;   // the open group spreads its points instead
+        if (points && (focused || !points.some((item, i) => points.some((other, j) => j > i && Math.hypot(item.point.x - other.point.x, item.point.y - other.point.y) < SANDBOX_POINT_GAP)))) return;
+        tinySets.add(set.id);
         const center = [(west + east) / 2, (south + north) / 2], point = map.project(center);
         const near = clusters.find(cluster => Math.abs(cluster.point.x - point.x) < 96 && Math.abs(cluster.point.y - point.y) < 40);
         if (near) near.sets.push(set); else clusters.push({ point, center, sets: [set] });
@@ -2183,7 +2359,8 @@
         const worstIndex = sandboxIndex(worst); if (worstIndex) element.style.background = sandboxIndexColor(sandboxTone(worst), worstIndex.value);
         element.classList.toggle('active', Boolean(single) && sandboxView.mode !== 'farm' && sandboxView.setId === single.id);
         const name = single ? single.name : `${cluster.sets.length} groups`;
-        element.append(sandboxElement('span', 'fc-marker-dot'), sandboxElement('span', '', name));
+        const count = single && single.areaIds.length > 1 ? ` · ${single.areaIds.length} areas` : '';
+        element.append(sandboxElement('span', 'fc-marker-dot'), sandboxElement('span', '', name + count));
         if (highCount) element.append(sandboxElement('span', 'fc-marker-flag', single && ids.length === 1 ? 'High' : `${highCount} high`));
         element.setAttribute('aria-label', `${name}: ${sandboxSummary(worst)}${single ? '' : '. Zoom in to separate the groups.'}`);
         element.addEventListener('click', event => {
@@ -2193,15 +2370,94 @@
         });
         sandboxMarkers.push(new maplibregl.Marker({ element }).setLngLat(cluster.center).addTo(map));
       });
+      sandboxAreaMarkers(tinySets);
+    }
+    // An area gets its own point while it is hard to tap on screen: smaller than about 80 × 80 px, or thinner than 24 px.
+    const SANDBOX_TAPPABLE_PX2 = 6400, SANDBOX_TAPPABLE_WIDTH = 24, SANDBOX_POINT_GAP = 40;
+    /** Narrowest on-screen width of a geometry (minimum over hull edges of the farthest point from that edge), in px. */
+    function sandboxScreenWidth(geometry) {
+      const hull = convexHull(sandboxPolygons(geometry).flatMap(polygon => polygon[0]).map(point => { const p = map.project(point); return [p.x, p.y]; }));
+      if (hull.length < 3) return 0;
+      let best = Infinity;
+      hull.forEach((point, i) => {
+        const next = hull[(i + 1) % hull.length], length = Math.hypot(next[0] - point[0], next[1] - point[1]) || 1;
+        best = Math.min(best, Math.max(...hull.map(other => Math.abs((next[0] - point[0]) * (point[1] - other[1]) - (point[0] - other[0]) * (next[1] - point[1])) / length)));
+      });
+      return best;
+    }
+    /** Small areas of a group that need a point, with an anchor inside each area. */
+    function sandboxAreaCandidates(set) {
+      const rect = map.getContainer().getBoundingClientRect();
+      const out = [];
+      set.areaIds.forEach(id => {
+        const feature = sandboxFeature(id);
+        if (!feature?.geometry || (sandboxScreenArea(feature.geometry) >= SANDBOX_TAPPABLE_PX2 && sandboxScreenWidth(feature.geometry) >= SANDBOX_TAPPABLE_WIDTH)) return;
+        let anchor; try { anchor = turf.pointOnFeature(feature).geometry.coordinates; } catch (_) { return; }
+        const point = map.project(anchor);
+        if (point.x < -40 || point.y < -40 || point.x > rect.width + 40 || point.y > rect.height + 40) return;
+        out.push({ id, anchor, point });
+      });
+      return out;
+    }
+    /** Screen area of a polygon geometry at the current camera, in px². */
+    function sandboxScreenArea(geometry) {
+      let total = 0;
+      sandboxPolygons(geometry).forEach(polygon => polygon.forEach((ring, index) => {
+        const points = ring.map(point => map.project(point));
+        let sum = 0; for (let i = 0; i < points.length - 1; i++) sum += points[i].x * points[i + 1].y - points[i + 1].x * points[i].y;
+        total += (index ? -1 : 1) * Math.abs(sum) / 2;
+      }));
+      return total;
+    }
+    /**
+     * Compact, tappable points for areas that are too small on screen, in groups large enough to show their areas.
+     * Points that would overlap are moved around their anchor on rings and joined to it by a short line.
+     */
+    function sandboxAreaMarkers(tinySets) {
+      const candidates = sandboxSets.filter(set => !tinySets.has(set.id)).flatMap(sandboxAreaCandidates);
+      const gap = SANDBOX_POINT_GAP, taken = [];
+      const free = (x, y) => taken.every(item => Math.hypot(item.x - x, item.y - y) >= gap);
+      candidates.sort((a, b) => a.point.y - b.point.y || a.point.x - b.point.x).forEach(candidate => {
+        let dx = 0, dy = 0;
+        if (!free(candidate.point.x, candidate.point.y)) {
+          search: for (let ring = 1; ring <= 4; ring++) {
+            const steps = 6 * ring;
+            for (let k = 0; k < steps; k++) {
+              const angle = -Math.PI / 2 + k * 2 * Math.PI / steps;
+              const x = candidate.point.x + Math.cos(angle) * gap * ring, y = candidate.point.y + Math.sin(angle) * gap * ring;
+              if (free(x, y)) { dx = x - candidate.point.x; dy = y - candidate.point.y; break search; }
+            }
+          }
+        }
+        taken.push({ x: candidate.point.x + dx, y: candidate.point.y + dy });
+        const row = sandboxAssessment(candidate.id, sandboxDay), tone = sandboxTone(row), index = sandboxIndex(row);
+        const element = sandboxElement('button', `fc-area-marker tone-${tone}`); element.type = 'button';
+        element.classList.toggle('active', sandboxView.mode === 'area' && sandboxSelected === candidate.id);
+        const label = `${sandboxAreaName(candidate.id)}: ${sandboxSummary(row)}${index ? ` ${sandboxIndexText(index)}` : ''}`;
+        element.setAttribute('aria-label', label); element.title = label;
+        if (dx || dy) {
+          const leader = sandboxElement('span', 'fc-area-leader');
+          leader.style.width = `${Math.hypot(dx, dy)}px`; leader.style.transform = `rotate(${Math.atan2(-dy, -dx)}rad)`;
+          element.append(leader);
+        }
+        const dot = sandboxElement('span', 'fc-area-dot'); if (tone !== 'none') dot.style.background = sandboxIndexColor(tone, index ? index.value : null);
+        element.append(dot);
+        element.addEventListener('click', event => {
+          event.stopPropagation();
+          setDrawer(true);
+          sandboxSelect(candidate.id, { focus: true });
+        });
+        sandboxMarkers.push(new maplibregl.Marker({ element, offset: [dx, dy] }).setLngLat(candidate.anchor).addTo(map));
+      });
     }
     function sandboxSource() {
       if (map.getSource('sandbox-areas')) return;
       const tone = ['to-color', ['get', 'color']];
       map.addSource('sandbox-areas', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
       map.addLayer({ id: 'sandbox-fill', type: 'fill', source: 'sandbox-areas', paint: { 'fill-color': tone, 'fill-opacity': ['case', ['boolean', ['get', 'focus'], false], .72, .3] } });
-      map.addLayer({ id: 'sandbox-outline', type: 'line', source: 'sandbox-areas', paint: { 'line-color': ['case', ['==', ['get', 'tone'], 'none'], '#6f7a73', '#31493a'], 'line-width': 1.5 } });
-      map.addLayer({ id: 'sandbox-scope', type: 'line', source: 'sandbox-areas', filter: ['==', ['get', 'crop_area_id'], ''], paint: { 'line-color': '#15221b', 'line-width': 2.5 } });
-      map.addLayer({ id: 'sandbox-highlight', type: 'line', source: 'sandbox-areas', filter: ['==', ['get', 'crop_area_id'], ''], paint: { 'line-color': '#fff', 'line-width': 4 } });
+      map.addLayer({ id: 'sandbox-outline', type: 'line', source: 'sandbox-areas', paint: { 'line-color': ['case', ['==', ['get', 'tone'], 'none'], '#6f7a73', '#31493a'], 'line-width': ['interpolate', ['linear'], ['zoom'], 9, .4, 14, .7, 17, 1.1] } });
+      map.addLayer({ id: 'sandbox-scope', type: 'line', source: 'sandbox-areas', filter: ['==', ['get', 'crop_area_id'], ''], paint: { 'line-color': '#15221b', 'line-width': ['interpolate', ['linear'], ['zoom'], 9, .6, 14, 1, 17, 1.6] } });
+      map.addLayer({ id: 'sandbox-highlight', type: 'line', source: 'sandbox-areas', filter: ['==', ['get', 'crop_area_id'], ''], paint: { 'line-color': '#fff', 'line-width': ['interpolate', ['linear'], ['zoom'], 9, 1, 14, 1.8, 17, 2.6] } });
       map.on('moveend', () => { if (sandboxActive) sandboxUpdateMarkers(); });
     }
     /** Hide the field-conditions layers and markers when leaving the farm view. */
