@@ -158,20 +158,19 @@ def crop_area_changes(crop_area_id: str, user=Depends(current_user), con=Depends
 def grid_risk(day: Optional[date] = Query(None, alias="date"), user=Depends(current_user), con=Depends(get_db)):
     """Weather and risk per grid cell: public data, nothing of a farmer, so every signed-in user may read it."""
     enforce(_surface_limit, user["owner_id"])
-    key = ("grid", day, date.today())
-    hit = _RESPONSES.get(key)
-    if hit is not None:
-        return Response(hit, media_type="application/json")
-    rows = con.execute(
-        "SELECT jsonb_build_object('type', 'Feature', 'geometry', ST_AsGeoJSON(geom, 6)::jsonb, "
-        "'properties', to_jsonb(g) - 'geom' - 'data_date') AS f FROM serve.grid_risk_daily g "
-        "WHERE data_date = COALESCE(%s::date, current_date) - serve.shift_days() ORDER BY grid_id", (day,)).fetchall()
-    collection = _collection(rows)
-    for feature in collection["features"]:
-        _add_index(feature["properties"], "h_low", "h_low", "h_high")
-    body = json.dumps(collection, separators=(",", ":"), default=str).encode()
-    if rows:
-        _RESPONSES.put(key, body)
+    def build():
+        rows = con.execute(
+            "SELECT jsonb_build_object('type', 'Feature', 'geometry', ST_AsGeoJSON(geom, 6)::jsonb, "
+            "'properties', to_jsonb(g) - 'geom' - 'data_date') AS f FROM serve.grid_risk_daily g "
+            "WHERE data_date = COALESCE(%s::date, current_date) - serve.shift_days() ORDER BY grid_id", (day,)).fetchall()
+        collection = _collection(rows)
+        for feature in collection["features"]:
+            _add_index(feature["properties"], "h_low", "h_low", "h_high")
+        return json.dumps(collection, separators=(",", ":"), default=str).encode() if rows else None
+
+    body = _RESPONSES.get_or_build(("grid", day, date.today()), build)
+    if body is None:                                              # nothing for this day: an empty collection, as before
+        body = json.dumps(_collection([]), separators=(",", ":")).encode()
     return Response(body, media_type="application/json")
 
 
@@ -193,52 +192,52 @@ def grid_risk_surface(day: Optional[date] = Query(None, alias="date"),
     if method == "smooth" and (resolution < 0.02 or sigma_km > 10.0):
         raise HTTPException(status_code=422, detail="method=smooth needs resolution >= 0.02 (it takes seconds per request)")
     rkey = ("surface", day, date.today(), format, method, value, resolution, sigma_km if method == "smooth" else None)
-    hit = _RESPONSES.get(rkey)
-    if hit is not None:
-        body, media_type, headers = hit
-        return Response(body, media_type=media_type, headers=headers)
-    rows = con.execute(
-        "SELECT ST_X(ST_Centroid(geom)) AS lon, ST_Y(ST_Centroid(geom)) AS lat, h_low, date FROM serve.grid_risk_daily "
-        "WHERE data_date = COALESCE(%s::date, current_date) - serve.shift_days()", (day,)).fetchall()
-    if not rows:
-        raise HTTPException(status_code=404, detail="no grid data for this date")
-    rules = _rules()
-    points = [(r["lon"], r["lat"], r["h_low"]) for r in rows]
-    key = (method, resolution, sigma_km if method == "smooth" else None, risk_surface.fingerprint(points))
 
-    def build():
-        if method != "smooth":
-            return risk_surface.build(points, method=method, resolution_deg=resolution, sigma_km=sigma_km)
-        if not _SMOOTH_SLOT.acquire(blocking=False):             # never queue behind a heavy computation (it would hold a connection)
-            raise HTTPException(status_code=503, detail="another smoothing is running, try again in a moment (method=interpolate is instant)")
-        try:
-            return risk_surface.build(points, method=method, resolution_deg=resolution, sigma_km=sigma_km)
-        finally:
-            _SMOOTH_SLOT.release()
+    def build_response():
+        rows = con.execute(
+            "SELECT ST_X(ST_Centroid(geom)) AS lon, ST_Y(ST_Centroid(geom)) AS lat, h_low, date FROM serve.grid_risk_daily "
+            "WHERE data_date = COALESCE(%s::date, current_date) - serve.shift_days()", (day,)).fetchall()
+        if not rows:
+            raise HTTPException(status_code=404, detail="no grid data for this date")
+        rules = _rules()
+        points = [(r["lon"], r["lat"], r["h_low"]) for r in rows]
+        key = (method, resolution, sigma_km if method == "smooth" else None, risk_surface.fingerprint(points))
 
-    grid = risk_surface.cached(key, build)
-    if grid is None:
-        raise HTTPException(status_code=404, detail="no grid data for this date")
-    index_values = risk_surface.to_index(grid["values"], lambda h: septoria.risk_index(h, rules))
-    date_text = rows[0]["date"].isoformat()
-    if format == "png":
-        body, media_type = risk_surface.to_png(index_values), "image/png"
-        headers = {"X-Bounds": ",".join(str(v) for v in grid["bounds"]), "X-Date": date_text, "X-Method": grid["method"],
-                   "Access-Control-Expose-Headers": "X-Bounds, X-Date, X-Method"}
-    else:
-        carried = index_values if value == "index" else grid["values"]
-        if format == "asc":
-            body, media_type = risk_surface.to_asc(carried, grid["bounds"], grid["resolution_deg"]).encode(), "text/plain"
-            headers = {"X-Date": date_text, "X-Value": value, "Access-Control-Expose-Headers": "X-Date, X-Value"}
+        def build():
+            if method != "smooth":
+                return risk_surface.build(points, method=method, resolution_deg=resolution, sigma_km=sigma_km)
+            if not _SMOOTH_SLOT.acquire(blocking=False):             # never queue behind a heavy computation (it would hold a connection)
+                raise HTTPException(status_code=503, detail="another smoothing is running, try again in a moment (method=interpolate is instant)")
+            try:
+                return risk_surface.build(points, method=method, resolution_deg=resolution, sigma_km=sigma_km)
+            finally:
+                _SMOOTH_SLOT.release()
+
+        grid = risk_surface.cached(key, build)
+        if grid is None:
+            raise HTTPException(status_code=404, detail="no grid data for this date")
+        index_values = risk_surface.to_index(grid["values"], lambda h: septoria.risk_index(h, rules))
+        date_text = rows[0]["date"].isoformat()
+        if format == "png":
+            body, media_type = risk_surface.to_png(index_values), "image/png"
+            headers = {"X-Bounds": ",".join(str(v) for v in grid["bounds"]), "X-Date": date_text, "X-Method": grid["method"],
+                       "Access-Control-Expose-Headers": "X-Bounds, X-Date, X-Method"}
         else:
-            out = {k: v for k, v in grid.items() if k != "values"}
-            out.update({"date": date_text, "model_version": rules.model_version, "value": value, "values": carried,
-                        "class_thresholds": {"hours": {"medium": rules.threshold_medium, "high": rules.threshold_high},
-                                             "index": {"medium": 0.5, "high": 1.0}},
-                        "index_scale": {"low": [0.0, 0.5], "medium": [0.5, 1.0], "high": [1.0, 1.0]},
-                        "class_note": "The classes belong to the cells (GET /grid/risk). A pixel is a continuous estimate between cell "
-                                      "centres: colour it by value, and read the thresholds in class_thresholds as landmarks, not as a "
-                                      "new assessment."})
-            body, media_type, headers = json.dumps(out, separators=(",", ":")).encode(), "application/json", {}
-    _RESPONSES.put(rkey, (body, media_type, headers))
+            carried = index_values if value == "index" else grid["values"]
+            if format == "asc":
+                body, media_type = risk_surface.to_asc(carried, grid["bounds"], grid["resolution_deg"]).encode(), "text/plain"
+                headers = {"X-Date": date_text, "X-Value": value, "Access-Control-Expose-Headers": "X-Date, X-Value"}
+            else:
+                out = {k: v for k, v in grid.items() if k != "values"}
+                out.update({"date": date_text, "model_version": rules.model_version, "value": value, "values": carried,
+                            "class_thresholds": {"hours": {"medium": rules.threshold_medium, "high": rules.threshold_high},
+                                                 "index": {"medium": 0.5, "high": 1.0}},
+                            "index_scale": {"low": [0.0, 0.5], "medium": [0.5, 1.0], "high": [1.0, 1.0]},
+                            "class_note": "The classes belong to the cells (GET /grid/risk). A pixel is a continuous estimate between cell "
+                                          "centres: colour it by value, and read the thresholds in class_thresholds as landmarks, not as a "
+                                          "new assessment."})
+                body, media_type, headers = json.dumps(out, separators=(",", ":")).encode(), "application/json", {}
+        return body, media_type, headers
+
+    body, media_type, headers = _RESPONSES.get_or_build(rkey, build_response)
     return Response(body, media_type=media_type, headers=headers)

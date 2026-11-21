@@ -6,7 +6,7 @@ from __future__ import annotations
 import threading
 import time
 from collections import OrderedDict
-from typing import Any, Hashable, Optional
+from typing import Any, Callable, Hashable, Optional
 
 
 class TtlCache:
@@ -16,6 +16,7 @@ class TtlCache:
         self.ttl, self.max_items = ttl_seconds, max_items
         self._items: "OrderedDict[Hashable, tuple[float, Any]]" = OrderedDict()
         self._lock = threading.Lock()
+        self._building: dict[Hashable, threading.Lock] = {}
 
     def get(self, key: Hashable, now: Optional[float] = None) -> Any:
         now = time.monotonic() if now is None else now
@@ -36,6 +37,25 @@ class TtlCache:
             self._items.move_to_end(key)
             while len(self._items) > self.max_items:
                 self._items.popitem(last=False)
+
+    def get_or_build(self, key: Hashable, builder: Callable[[], Any]) -> Any:
+        """The value for `key`; when it is missing exactly one caller builds it and the others wait for that result (without this,
+        a burst of requests that all miss at the same moment builds the same answer dozens of times). A builder that returns None
+        is not cached; an exception from it reaches only the caller that built."""
+        value = self.get(key)
+        if value is not None:
+            return value
+        with self._lock:
+            lock = self._building.setdefault(key, threading.Lock())
+        with lock:
+            value = self.get(key)                              # built by another caller while this one waited
+            if value is None:
+                value = builder()
+                if value is not None:
+                    self.put(key, value)
+        with self._lock:
+            self._building.pop(key, None)
+        return value
 
     def clear(self) -> None:
         with self._lock:

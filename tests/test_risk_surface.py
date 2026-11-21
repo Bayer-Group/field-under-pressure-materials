@@ -182,6 +182,21 @@ class Cache(unittest.TestCase):
         self.assertIsNone(rs.cached(("none",), lambda: None))                  # nothing is cached for "no data"
         self.assertNotIn(("none",), rs._CACHE)
 
+    def test_a_burst_of_misses_builds_the_grid_once(self):
+        import threading
+        import time
+        calls, out = [], []
+
+        def builder():
+            calls.append(1)
+            time.sleep(0.15)
+            return {"grid": 1}
+
+        ts = [threading.Thread(target=lambda: out.append(rs.cached(("burst",), builder))) for _ in range(6)]
+        [t.start() for t in ts]
+        [t.join() for t in ts]
+        self.assertEqual((len(calls), out), (1, [{"grid": 1}] * 6))
+
     def test_fingerprint_follows_the_data(self):
         a = [(20.0, 52.0, 10), (20.044, 52.0, 12)]
         self.assertEqual(rs.fingerprint(a), rs.fingerprint(list(reversed(a))))

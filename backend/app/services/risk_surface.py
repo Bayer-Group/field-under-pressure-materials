@@ -176,22 +176,31 @@ def to_index(values: Sequence[Sequence[Optional[float]]], index_fn: Callable[[Op
 # ---------------------------------------------------------------- cache: one computation per day and parameters
 _CACHE: "OrderedDict[tuple, dict]" = OrderedDict()
 _LOCK = threading.Lock()
+_BUILDING: dict[tuple, threading.Lock] = {}
 _CACHE_MAX = 24
 
 
 def cached(key: tuple, builder: Callable[[], Optional[dict]]) -> Optional[dict]:
-    """The grid for `key` (built once; the least recently used entry goes when there are more than 24). The key must contain
-    everything the grid depends on, including a fingerprint of the input points."""
+    """The grid for `key`, built once: when several requests miss at the same moment one builds and the others wait for its result.
+    The least recently used entry goes when there are more than 24. The key must contain everything the grid depends on, including a
+    fingerprint of the input points."""
     with _LOCK:
         if key in _CACHE:
             _CACHE.move_to_end(key)
             return _CACHE[key]
-    grid = builder()
-    if grid is not None:
+        lock = _BUILDING.setdefault(key, threading.Lock())
+    with lock:
         with _LOCK:
-            _CACHE[key] = grid
-            while len(_CACHE) > _CACHE_MAX:
-                _CACHE.popitem(last=False)
+            grid = _CACHE.get(key)
+        if grid is None:
+            grid = builder()
+            if grid is not None:
+                with _LOCK:
+                    _CACHE[key] = grid
+                    while len(_CACHE) > _CACHE_MAX:
+                        _CACHE.popitem(last=False)
+    with _LOCK:
+        _BUILDING.pop(key, None)
     return grid
 
 
