@@ -343,7 +343,7 @@ st.markdown(
     f"""
     <div class="farm-header">
         <div>
-            <h1 class="farm-title">FieldGuard 33UXR</h1>
+            <h1 class="farm-title">farmIT</h1>
             <div class="farm-sub">Spokojny podgląd pogody, prac na polach i doboru upraw dla gospodarstwa</div>
         </div>
         <div class="farm-sub" style="text-align:right;">

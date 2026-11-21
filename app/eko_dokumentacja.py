@@ -226,16 +226,29 @@ def render_eko_documentation_tab(
         "Dziennik Zabiegów (z wykazem IUNG / UE 2018/848), bilans magazynowy oraz ocenę ryzyka."
     )
 
-    # 1. Wybór pól prowadzonych ekologicznie
+    if result_df is None or result_df.empty:
+        st.info("Brak danych pól do wygenerowania dokumentacji.")
+        return
+
+    # 1. Wybór pól prowadzonych ekologicznie (domyślnie zaciągane z oznaczeń 'Działka EKO' w Moim Gospodarstwie)
     all_ids = result_df["h3_index"].astype(str).tolist()
-    labels_map = {
-        str(r.h3_index): f"{r.h3_index} — {r.crop_name} ({getattr(r, 'area_ha', 1.5):.2f} ha, pH {r.soil_ph:.1f})"
-        for r in result_df.itertuples(index=False)
-    }
+    labels_map = {}
+    preselected_eco_ids = []
+
+    for r in result_df.itertuples(index=False):
+        h3_str = str(r.h3_index)
+        uid_str = str(getattr(r, "field_uid", "")).strip()
+        prefix = f"{uid_str} ({h3_str})" if uid_str else h3_str
+        labels_map[h3_str] = f"{prefix} — {r.crop_name} ({getattr(r, 'area_ha', 1.5):.2f} ha, pH {r.soil_ph:.1f})"
+        if bool(getattr(r, "is_eco_field", False)):
+            preselected_eco_ids.append(h3_str)
+
+    default_selection = preselected_eco_ids if preselected_eco_ids else all_ids[: min(5, len(all_ids))]
+
     selected_eco_ids = st.multiselect(
-        "1. Zaznacz pola prowadzone w sposób ekologiczny:",
+        "1. Zaznacz pola prowadzone w sposób ekologiczny (domyślnie zaznaczone działki EKO z Mojego Gospodarstwa):",
         options=all_ids,
-        default=all_ids[: min(5, len(all_ids))],
+        default=default_selection,
         format_func=lambda x: labels_map.get(x, x),
     )
 
@@ -251,11 +264,14 @@ def render_eko_documentation_tab(
     m2.metric("Powierzchnia EKO", f"{eco_area:.2f} ha")
     m3.metric("Zgodność nawozów", "100% IUNG / UE 2018/848")
 
+    saved_profile = st.session_state.get("farm_profile", {})
+    default_farm_name = saved_profile.get("farm_name") or "Gospodarstwo Ekologiczne Zielone Pole"
+
     # 2. Dane nagłówkowe gospodarstwa (do Arkusza 1)
     with st.expander("2. Dane gospodarstwa i doradcy (uzupełniane w Planie Działalności EKO)", expanded=False):
         c1, c2 = st.columns(2)
         farm_meta = {
-            "nazwa_gospodarstwa": c1.text_input("Imię i nazwisko / Nazwa gospodarstwa", value="Gospodarstwo Ekologiczne Zielone Pole"),
+            "nazwa_gospodarstwa": c1.text_input("Imię i nazwisko / Nazwa gospodarstwa", value=default_farm_name),
             "numer_arimr": c2.text_input("Numer producenta ARiMR (EP)", value="045129874"),
             "lokalizacja": c1.text_input("Lokalizacja / Adres", value=location_label),
             "jednostka_cert": c2.text_input("Jednostka certyfikująca (nr upoważnienia)", value="PL-EKO-01"),
@@ -270,7 +286,7 @@ def render_eko_documentation_tab(
     # 3. Podgląd automatycznie wygenerowanego Dziennika Zabiegów EKO + możliwość dopisania własnego wpisu
     st.markdown("**3. Automatyczny Dziennik Zabiegów EKO (zasilony z mapy, gleby i pogody)**")
     preview_cols = [
-        c for c in ["h3_index", "crop_name", "area_ha", "decyzja", "zalecany_nawoz", "nawozy_eko", "dawka_nawozu_kg_ha", "ilosc_nawozu_kg"]
+        c for c in ["field_uid", "h3_index", "crop_name", "area_ha", "decyzja", "zalecany_nawoz", "nawozy_eko", "dawka_nawozu_kg_ha", "ilosc_nawozu_kg"]
         if c in eco_df.columns
     ]
     st.dataframe(eco_df[preview_cols], use_container_width=True, hide_index=True)
