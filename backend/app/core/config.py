@@ -19,5 +19,14 @@ DATABASE_URL = os.environ.get("DATABASE_URL") or os.environ.get("LOAD_DB_DSN", "
 AUTH_SECRET = os.environ.get("AUTH_SECRET") or os.urandom(32).hex()
 TOKEN_TTL_SECONDS = int(os.environ.get("TOKEN_TTL_SECONDS", "28800"))
 
+# Tryb demo (sandbox dla publiczności): limity i wyłącznik zapisu
+DEMO_READONLY = os.environ.get("DEMO_READONLY", "0") == "1"                  # 1: nikt nic nie zapisuje, sala tylko ogląda
+SANDBOX_TTL_HOURS = int(os.environ.get("SANDBOX_TTL_HOURS", "8"))            # ważność tokenu i czas życia danych sandboxu
+SANDBOX_MAX_OWNERS = int(os.environ.get("SANDBOX_MAX_OWNERS", "300"))        # tylu sandboxów z danymi naraz
+MAX_AREAS_SANDBOX = int(os.environ.get("MAX_AREAS_SANDBOX", "10"))           # pól na sandbox
+MAX_AREAS_OTHER = int(os.environ.get("MAX_AREAS_OTHER", "50"))               # pól na zwykłego rolnika demo
+MAX_AREA_HA = float(os.environ.get("MAX_AREA_HA", "150"))                    # maks. powierzchnia jednego pola
+MAX_PARALLEL_REFRESH = int(os.environ.get("MAX_PARALLEL_REFRESH", "4"))      # równoległe przeliczenia pól
+
 # Dozwolone originy CORS
 CORS_ORIGINS = ["*"]
