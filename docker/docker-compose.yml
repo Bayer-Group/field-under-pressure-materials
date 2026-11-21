@@ -52,7 +52,7 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy:/etc/caddy:ro            # a directory, not a single file: a file replaced by git pull would stay stale in the container
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
