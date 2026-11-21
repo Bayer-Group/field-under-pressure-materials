@@ -41,10 +41,11 @@ The package is `cropfit` in `src/cropfit/` (the name is historical). Scripts add
 | `e1.py` | Open-Meteo / NASA POWER climate for EU points, plus modelling helpers used by the LUCAS experiment (needs scikit-learn). |
 | `kb.py` | FungalTraits and USDA Fungus-Host downloads, name normalisation, genus x crop host table (see 3.12). |
 | `risk.py` | Crop risk index per plot-unit x crop (see 3.12). |
+| `followup.py` | Follow-up test suggestions per plot-unit x crop from the risk result and `rules/followup_tests.csv` (see 3.13). |
 | `api_risk.py` | GUI endpoints for the crop risk index (`/api/plots/{id}/crop-risk[/{unit}[/{crop}]]`), computed on demand from `risk.py` |
-| `microbe_roles.py` | Microbe roles (3.13): ontology, genus role annotations and hover descriptions; per-sample roll-up into role classes. Used by the Soil microbes "Roles" view and the Soil functions tab. |
+| `microbe_roles.py` | Microbe roles (3.14): ontology, genus role annotations and hover descriptions; per-sample roll-up into role classes. Used by the Soil microbes "Roles" view and the Soil functions tab. |
 
-Lookup tables in `rules/` (generic, read by the code): `cdl_codes.csv` (all 132 CDL codes to a crop-group vocabulary), `ko_panel.csv` (KEGG KOs of interest with function group and caveat), `lucas_lc1_groups.csv` (LUCAS land-cover codes with `is_cereal`; documentation only, `e1_match.py` hard-codes its own cereal rule B11-B19), `genus_synonyms.csv` (alias -> canonical genus: Rhizoctonia/Thanatephorus/Ceratobasidium -> Rhizoctonia_complex, Gibberella -> Fusarium) and `crop_host_taxa.csv` (USDA host taxon -> crop_group). Microbe roles (3.13): `microbe_ontology.csv` (32 role terms in a tree under useful / harmful / context (nitrogen cyclers) / background / unknown, with `ko_group` linking to `ko_panel.csv` function groups), `microbe_annotations.csv` (genus -> role rows with confidence, evidence, source and species examples), `microbe_genera.csv` (a plain-language description of at most two sentences per genus, shown on hover) and `microbe_annotation_prompt.md` (instructions for the annotator agents). Small input tables in `resources/` are listed under each dataset.
+Lookup tables in `rules/` (generic, read by the code): `cdl_codes.csv` (all 132 CDL codes to a crop-group vocabulary), `ko_panel.csv` (KEGG KOs of interest with function group and caveat), `lucas_lc1_groups.csv` (LUCAS land-cover codes with `is_cereal`; documentation only, `e1_match.py` hard-codes its own cereal rule B11-B19), `genus_synonyms.csv` (alias -> canonical genus: Rhizoctonia/Thanatephorus/Ceratobasidium -> Rhizoctonia_complex, Gibberella -> Fusarium) and `crop_host_taxa.csv` (USDA host taxon -> crop_group). Microbe roles (3.14): `microbe_ontology.csv` (32 role terms in a tree under useful / harmful / context (nitrogen cyclers) / background / unknown, with `ko_group` linking to `ko_panel.csv` function groups), `microbe_annotations.csv` (genus -> role rows with confidence, evidence, source and species examples), `microbe_genera.csv` (a plain-language description of at most two sentences per genus, shown on hover) and `microbe_annotation_prompt.md` (instructions for the annotator agents). Small input tables in `resources/` are listed under each dataset.
 
 ### Where things land (all gitignored except `resources/`, `rules/`, `config/`)
 
@@ -453,7 +454,20 @@ For a quick start (or a small laptop), switch light mode on **before** downloadi
   - The caveats in section 5 apply: relative abundance, genus level, and a host record means the fungus can infect the crop, not that it does in this field. Fungi only, no bacteria.
 - **GUI:** the "Crop disease risk" tab shows these results per plot. The unit key is `YYYY-00N` (e.g. `2016-002`, one per ITS product). A plot is ranked only against plots of the same site, year and product. Comparing crops with each other mostly reflects how well each crop's diseases are documented, not soil risk.
 
-### 3.13 Microbe roles (LLM-annotated, POC)
+### 3.13 Follow-up test suggestions (prototype)
+
+- **What:** `followup.suggest(contributions, summary, unit_id, crop, context=...)` lists measurements that would close a gap in one crop's risk assessment, most useful first. API: `GET /api/plots/{plot}/crop-risk/{unit}/{crop}/tests`. GUI: the "What to test next" block under the breakdown in the "Crop disease risk" tab.
+- **Triggers** (constants at the top of `src/cropfit/followup.py`):
+  - `resolve_species`: a catalogued genus is detected, not weak, and A ≥ 0.75. ITS cannot tell its species apart.
+  - `confirm_detection`: a catalogued genus is detected with ≤ 10 reads, or in one core when the unit has two or more.
+  - `blind_spot`: oomycetes and nematodes, which no dataset here measures. Always listed for the crop; ranked higher when the row is `favoured_by` wet and the plot has `p_wet_may` ≥ 0.5 or a poorly drained map unit (from `plots.parquet`, optional).
+  - `sampling`: the unit has one core (listed first), or is below the read floor (then it is the only suggestion).
+- **Catalogue:** `rules/followup_tests.csv`, one row per test (`kind`, `genus`, `target`, `crops`, `disease`, `inoculum` soil or residue, `favoured_by`, `method`, `sample`, `tells_you`, `source`, `verified`). The 19 pathogen rows were written from general knowledge on 21 Nov 2026 and are **not verified** (`verified` = no; a unit test keeps that flag honest). Replace `source` with a citation and set `verified` = yes only after checking a row.
+- **Priority** (0-1) only orders the list: A × (0.5 + 0.5 × log host records on the crop, scaled to the crop's maximum), × 0.8 for residue-borne diseases; half of that scale for weak detections; 0.35 for blind spots, + 0.25 on wet sites. The weights are not tuned.
+- **Measured (21 Nov 2026, KONA 2017, KONA 2024, STER 2016, STER 2022):** 3.4 suggestions per unit × crop on average (1 to 8); soybean has the most (5.2), millet the fewest (2.2).
+- **Limits:** no result thresholds; a suggestion means "this is unknown", not "disease is expected". Only genera in the catalogue can trigger a pathogen test. The triggers inherit the weaknesses of the risk score (3.12).
+
+### 3.14 Microbe roles (LLM-annotated, POC)
 
 - **What:** a GO-like role ontology for genera. It has 32 terms in a tree under five roots: useful, harmful, context (nitrogen cyclers), background and unknown. Each genus has zero or more role annotations (genus -> term, with confidence, evidence, source and named species examples), and one plain-language description for hover text. Files: `rules/microbe_ontology.csv`, `rules/microbe_annotations.csv`, `rules/microbe_genera.csv`. Code: `src/cropfit/microbe_roles.py` (contract: `docs/microbe_roles.md`).
 - **Rank:** genus is the finest rank. The data has no species abundances, so species appear only as named examples (e.g. *Pseudomonas syringae*). One genus can have several roles.

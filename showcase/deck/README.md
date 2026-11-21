@@ -1,10 +1,10 @@
-# Field explorer presentation (reveal.js + GSAP)
+# Terranos presentation (reveal.js + GSAP)
 
 A slide deck that runs in the browser. reveal.js handles navigation, speaker notes, the overview and PDF export. GSAP handles the animations. No build step and no network: both libraries are copied into `vendor/`.
 
 ## Run it
 
-The screenshots in `../shots/` and the video `../field-explorer-showcase.mp4` are generated, so they aren't in git. On a fresh clone, start the GUI and create them first (see `../README.md`):
+The screenshots in `../shots/` and the video `../terranos-showcase.mp4` are generated, so they aren't in git. On a fresh clone, start the GUI and create them first (see `../README.md`):
 
 ```bash
 node showcase/capture.mjs http://127.0.0.1:8000
@@ -21,7 +21,7 @@ Then open <http://127.0.0.1:8090/deck/>. In the desktop app, the `deck` entry in
 
 Opening `index.html` directly from disk also works, but the speaker view and the live demo slide behave better over http.
 
-For the live demo slide, also start the GUI on port 8000 (launch config `gui`). If the GUI isn't running, that slide plays `../field-explorer-showcase.mp4` instead.
+For the live demo slide, also start the GUI on port 8000 (launch config `gui`). If the GUI isn't running, that slide plays `../terranos-showcase.mp4` instead.
 
 | Key | Action |
 |---|---|

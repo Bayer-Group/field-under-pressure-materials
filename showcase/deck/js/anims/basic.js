@@ -1,12 +1,10 @@
 // Small reusable animations for text-only slides.
 
-// Title: the leaf draws itself, the title rises letter by letter, the rest follows.
-Deck.anim('title', (slide) => {
+// Title: the logo builds (letters wipe in, globe rolls into the "o"), then the rest rises.
+Deck.anim('title', (slide, D) => {
   const tl = gsap.timeline({ defaults: { ease: 'power3.out' } })
-  const title = SplitText.create(slide.querySelector('.title'), { type: 'chars', mask: 'chars' })
-  tl.from(slide.querySelectorAll('.leaf path'), { drawSVG: 0, duration: 1.3, ease: 'power2.inOut', stagger: 0.2 })
-    .from(title.chars, { yPercent: 115, duration: 0.9, stagger: 0.035 }, 0.25)
-    .from(slide.querySelectorAll('.rise'), { y: 40, autoAlpha: 0, duration: 0.8, stagger: 0.12 }, '-=0.45')
+  tl.add(D.lockupIn(slide.querySelector('.lockup')), 0.1)
+    .from(slide.querySelectorAll('.rise'), { y: 40, autoAlpha: 0, duration: 0.8, stagger: 0.12 }, '-=0.5')
   return tl
 })
 
@@ -25,11 +23,12 @@ Deck.anim('text', (slide) => {
   return tl
 })
 
-// Outro: words rise, numbers count up.
+// Outro: logo builds, words rise, numbers count up.
 Deck.anim('outro', (slide, D) => {
   const tl = gsap.timeline({ defaults: { ease: 'power3.out' } })
   const split = SplitText.create(slide.querySelector('.heading'), { type: 'words', mask: 'words' })
-  tl.from(split.words, { yPercent: 110, duration: 0.9, stagger: 0.08 })
+  tl.add(D.lockupIn(slide.querySelector('.lockup')))
+    .from(split.words, { yPercent: 110, duration: 0.9, stagger: 0.08 }, '-=0.6')
     .from(slide.querySelectorAll('.stat'), { y: 60, autoAlpha: 0, duration: 0.7, stagger: 0.12 }, '-=0.3')
   slide.querySelectorAll('.stat .n[data-to]').forEach((n, i) => {
     tl.add(D.countUp(n, +n.dataset.to), `<+=${i * 0.04}`)

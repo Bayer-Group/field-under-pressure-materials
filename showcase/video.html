@@ -1,6 +1,6 @@
 <!doctype html>
 <!--
-  Field explorer: 30-second showcase video, written as code.
+  Terranos: 30-second showcase video, written as code.
   Every frame is a pure function of time: seek(t) lays out the whole stage for second t.
   - Open this file in a browser to watch it play (Space pauses, arrow keys step, click the bar to scrub).
   - showcase/render.mjs calls seek() frame by frame and pipes screenshots into ffmpeg.
@@ -9,7 +9,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Field explorer showcase</title>
+<title>Terranos showcase</title>
 <style>
   :root {
     --ink: #0b1a12; --deep: #0f2a1c; --green: #1f6f43; --leaf: #34a865; --lime: #b5f26b;
@@ -92,6 +92,7 @@
   body.render #ui { display: none; }
 </style>
 <script src="shots/rects.js"></script>
+<script src="brand/logo.js"></script>
 </head>
 <body>
 <div id="fit"><div id="stage"></div></div>
@@ -175,7 +176,7 @@ function tile(parent, shot, rect, scale) {
 function browserWindow(parent, shots, x, y, vw, vh) {
   const win = el('div', 'win', parent)
   css(win, { width: vw + 'px', height: vh + 44 + 'px', left: x + 'px', top: y + 'px' })
-  el('div', 'bar', win, '<i></i><i></i><i></i><div class="url">🔒 localhost · Field explorer</div>')
+  el('div', 'bar', win, '<i></i><i></i><i></i><div class="url">🔒 localhost · Terranos</div>')
   const vp = el('div', 'vp', win)
   css(vp, { width: vw + 'px', height: vh + 'px' })
   const imgs = Object.fromEntries(shots.map((s) => {
@@ -214,18 +215,30 @@ function scene(start, end, build) {
   scenes.push({ start, end, root, update })
 }
 
-// Brand mark, as in the GUI's top bar.
-const LEAF = `<svg viewBox="0 0 24 24" width="100%" height="100%"><path class="leaf-fill" d="M5 19c0-8 5-13 15-14-1 10-6 15-14 15" fill="#b5f26b"/>
-  <path class="leaf-line" d="M5 19c0-8 5-13 15-14-1 10-6 15-14 15M5 19 14 10" fill="none" stroke="#b5f26b" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" pathLength="1"/></svg>`
+// Brand mark: the Terranos wordmark as two images (letters, globe) so the globe can roll into the "o".
+// Globe position comes from brand/logo.js (scripts/make_brand_assets.py).
+function lockup(parent, width) {
+  const L = window.LOGO
+  const box = el('div', 'abs', parent); css(box, { width: width + 'px', height: width * L.aspect + 'px' })
+  const letters = el('img', 'abs', box); letters.src = 'brand/terranos-dark-letters.png'; css(letters, { width: '100%', height: '100%' })
+  const globe = el('img', 'abs', box); globe.src = 'brand/terranos-globe.png'
+  const d = L.d * width
+  css(globe, { width: d + 'px', height: d + 'px', left: L.x * width - d / 2 + 'px', top: L.y * width * L.aspect - d / 2 + 'px' })
+  const ROLL = 640, TURNS = ROLL / (Math.PI * d)
+  /** p: 0..1 letters wipe; g: 0..1 globe roll (may overshoot with outBack). */
+  const set = (p, g) => {
+    letters.style.clipPath = `inset(0 ${(1 - clamp(p)) * 100}% 0 0)`
+    globe.style.opacity = clamp(g * 4)
+    globe.style.transform = `translateX(${(1 - g) * ROLL}px) rotate(${(1 - g) * TURNS * 360}deg)`
+  }
+  return { box, set, width, height: width * L.aspect }
+}
 
 // =====================================================================================
 // 0-4 s  Intro: logo builds, then four beat-synced word flashes
 // =====================================================================================
 scene(0, 4, (root) => {
-  const logo = el('div', 'abs', root, LEAF); css(logo, { width: '150px', height: '150px' })
-  const line = logo.querySelector('.leaf-line'), fill = logo.querySelector('.leaf-fill')
-  const title = el('div', 'abs', root); css(title, { fontSize: '128px', fontWeight: 900, letterSpacing: '-0.035em', whiteSpace: 'nowrap' })
-  const letters = [...'Field explorer'].map((c) => { const s = el('span', '', title, c === ' ' ? '&nbsp;' : c); s.style.display = 'inline-block'; return s })
+  const logo = lockup(root, 1100)
   const sub = el('div', 'sub abs', root, 'Your fields, <b style="color:#b5f26b;font-weight:700">from orbit to the microbe</b>')
   css(sub, { fontSize: '36px' })
 
@@ -246,18 +259,9 @@ scene(0, 4, (root) => {
   return (t) => {
     // logo + title (0-2 s)
     const out = E.in3(prog(t, 1.75, 2.0))
-    const lp = E.outBack(prog(t, 0.05, 0.6))
-    place(logo, 960 - 75, 300 - out * 40, `scale(${lp * (1 - out * 0.4)}) rotate(${(1 - lp) * -40}deg)`)
-    line.style.strokeDasharray = '1 1'; line.style.strokeDashoffset = 1 - E.out3(prog(t, 0.1, 1.0))
-    fill.style.opacity = 0.22 * E.out3(prog(t, 0.6, 1.1))
-    logo.style.opacity = 1 - out
-    title.style.left = '0'; title.style.width = '1920px'; title.style.textAlign = 'center'
-    place(title, 0, 470 - out * 40)
-    title.style.opacity = 1 - out
-    letters.forEach((s, i) => {
-      const p = E.outBack(prog(t, 0.35 + i * 0.035, 0.85 + i * 0.035))
-      s.style.transform = `translateY(${(1 - p) * 90}px) scale(${0.6 + 0.4 * p})`; s.style.opacity = clamp(p * 1.5)
-    })
+    logo.set(E.inout3(prog(t, 0.05, 0.85)), E.outBack(prog(t, 0.2, 1.15)))
+    place(logo.box, 960 - logo.width / 2, 520 - logo.height - out * 40)
+    logo.box.style.opacity = 1 - out
     css(sub, { left: '0', width: '1920px', textAlign: 'center' })
     place(sub, 0, 640 + (1 - E.out3(prog(t, 0.9, 1.4))) * 30 - out * 40)
     sub.style.opacity = E.out3(prog(t, 0.9, 1.4)) * (1 - out)
@@ -423,14 +427,14 @@ scene(18, 21, (root) => {
   const head = words(root, 'What can your soil <span class="hl">do for you?</span>', 'heading', 0, 96)
   const sub = words(root, 'Plain-language cards · what it means · what you can do · how sure we are', 'sub', 0, 190)
   for (const x of [kick, head, sub]) css(x.box, { width: '1920px', textAlign: 'center' })
-  const S = 0.98, cardR = R.functions.card
+  const S = 0.8, cardR = R.functions.card.slice(0, 6)
   const cards = cardR.map((r) => tile(root, 'functions', r, S))
-  const cw = cardR[0][2] * S, ch = cardR[0][3] * S, gap = 26
-  const pos = cards.map((_, i) => i < 3
-    ? [960 - (3 * cw + 2 * gap) / 2 + i * (cw + gap), 262]
-    : [960 - (2 * cw + gap) / 2 + (i - 3) * (cw + gap), 262 + ch + gap])
-  const badges = R.functions.statusBadge
-  const stamps = [0, 4].map((i) => ({ i, e: el('div', 'glow', root) }))
+  const cw = cardR[0][2] * S, gap = 26
+  const rowH = [0, 1].map((row) => Math.max(...cardR.slice(row * 3, row * 3 + 3).map((r) => r[3] * S)))
+  const pos = cards.map((_, i) => [960 - (3 * cw + 2 * gap) / 2 + (i % 3) * (cw + gap), 262 + (i >= 3 ? rowH[0] + gap : 0)])
+  // "Watch"/"Fine" badges, matched to the card that contains them
+  const inside = (b, r) => b[0] >= r[0] && b[1] >= r[1] && b[0] < r[0] + r[2] && b[1] < r[1] + r[3]
+  const stamps = (R.functions.statusBadge ?? []).map((b) => ({ b, i: cardR.findIndex((r) => inside(b, r)), e: el('div', 'glow', root) })).filter((s) => s.i >= 0)
   return (t) => {
     kick.update(t, 18.05, 21.2); head.update(t, 18.1, 21.2, 0.06); sub.update(t, 18.35, 21.2, 0.025)
     cards.forEach((c, i) => {
@@ -439,14 +443,13 @@ scene(18, 21, (root) => {
       c.style.opacity = clamp(p * 1.3)
       place(c, x, y + (1 - p) * 520, `rotate(${rot}deg) scale(${0.85 + 0.15 * p})`)
     })
-    // pulse the "Watch" badges
-    for (const s of stamps) {
-      const b = badges[s.i], card = cardR[s.i], [x, y] = pos[s.i]
+    stamps.forEach((s, k) => {
+      const card = cardR[s.i], [x, y] = pos[s.i], b = s.b
       const bx = x + (b[0] - card[0]) * S, by = y + (b[1] - card[1]) * S
-      const ph = life(t, 19.6 + (s.i ? 0.2 : 0), 21.1, 0.3, 0.25, E.outBack)
+      const ph = life(t, 19.6 + k * 0.2, 21.1, 0.3, 0.25, E.outBack)
       css(s.e, { width: b[2] * S + 16 + 'px', height: b[3] * S + 16 + 'px', opacity: clamp(ph), borderColor: '#fbbf24', boxShadow: '0 0 30px rgba(251,191,36,.8)' })
       place(s.e, bx - 8, by - 8, `scale(${0.6 + 0.4 * ph + 0.06 * Math.sin(t * 14)})`)
-    }
+    })
   }
 })
 
@@ -454,44 +457,36 @@ scene(18, 21, (root) => {
 // 21-24 s  Nitrogen cycle
 // =====================================================================================
 scene(21, 24, (root) => {
-  const kick = words(root, '<b>06</b>The nitrogen story', 'kicker', 132, 62)
-  const head = words(root, 'Follow the <span class="hl">nitrogen.</span>', 'heading', 132, 96)
-  const nc = R['functions-ncycle'].ncycle[0], S = 1.25, X = 132, Y = 222
-  const diagram = tile(root, 'functions-ncycle', nc, S)
-  const box = R['functions-ncycle'].ncBox  // 0 air, 1 urea, 2 ammonium, 3 nitrate, 4 N2O, 5 N2
-  const toStage = (r) => [X + (r[0] - nc[0]) * S, Y + (r[1] - nc[1]) * S, r[2] * S, r[3] * S]
-  const steps = [
-    { b: 1, t0: 21.75, text: 'Fertiliser & manure', color: '#b5f26b' },
-    { b: 2, t0: 22.3, text: 'Ammonium · kept in the field', color: '#b5f26b' },
-    { b: 3, t0: 22.85, text: 'Nitrate · washes out with rain', color: '#fbbf24' },
-    { b: 4, t0: 23.35, text: 'N₂O · greenhouse gas', color: '#fb923c' },
-  ].map((s) => ({ ...s, r: toStage(box[s.b]), glow: el('div', 'glow', root), pill: el('div', 'pill', root, s.text) }))
-  const particle = el('div', 'abs', root)
-  css(particle, { width: '26px', height: '26px', borderRadius: '50%', background: '#fff', boxShadow: '0 0 0 6px rgba(181,242,107,.5), 0 0 40px #b5f26b', zIndex: 5 })
+  const kick = words(root, '<b>06</b>The nitrogen story', 'kicker', 0, 62)
+  const head = words(root, 'Follow the <span class="hl">nitrogen.</span>', 'heading', 0, 96)
+  for (const x of [kick, head]) css(x.box, { width: '1920px', textAlign: 'center' })
+  // The "Nitrogen cycle microbes" decision card, blown up, then its findings one by one.
+  const all = R.functions.card, r = all[4] ?? all[0], S = 2.1
+  const card = tile(root, 'functions', r, S)
+  const W = r[2] * S, H = r[3] * S, X = 960 - W / 2, Y = 250
+  const items = [
+    ['Full denitrification', '#fb923c'], ['Nitrate kept as ammonium', '#b5f26b'], ['Nitrification', '#fbbf24'],
+    ['Urea breakdown', '#60a5fa'], ['No N fixation found', '#b9d3c3'],
+  ].map(([text, c]) => el('div', 'tag', root, `<span class="dot" style="background:${c}"></span>${text}`))
+  let widths = null
   return (t) => {
     kick.update(t, 21.05, 24.2); head.update(t, 21.1, 24.2)
-    const rv = E.outExpo(prog(t, 20.95, 21.7))
-    diagram.style.clipPath = `circle(${rv * 120}% at 50% 50%)`
-    const z = 1 + 0.035 * prog(t, 21, 24)
-    place(diagram, X, Y, `scale(${z})`); diagram.style.transformOrigin = '50% 50%'
-    let current = null
-    steps.forEach((s, i) => {
-      const next = steps[i + 1]
-      const on = life(t, s.t0, next ? next.t0 + 0.1 : 24.1, 0.25, 0.2, E.outBack)
-      const [x, y, w, h] = s.r
-      css(s.glow, { width: w + 20 + 'px', height: h + 20 + 'px', opacity: clamp(on), borderColor: s.color, boxShadow: `0 0 0 6px ${s.color}44, 0 0 44px ${s.color}` })
-      place(s.glow, x - 10, y - 10)
-      s.pill.style.opacity = clamp(on)
-      const below = s.b === 4 || s.b === 1
-      place(s.pill, x + w / 2 - 170, below ? y + h + 22 : y - 74, `scale(${0.8 + 0.2 * on})`)
-      if (t >= s.t0) current = i
+    const p = E.outExpo(prog(t, 21.0, 21.7))
+    card.style.opacity = clamp(p * 1.5)
+    place(card, X, Y + (1 - p) * 80, `scale(${0.9 + 0.1 * p + 0.02 * prog(t, 21.7, 24)})`); card.style.transformOrigin = '50% 50%'
+    widths ??= items.map((e) => e.offsetWidth)
+    const rows = [items.slice(0, 3), items.slice(3)]
+    let k = 0
+    rows.forEach((row, ri) => {
+      const ws = row.map((_, j) => widths[k + j]), total = ws.reduce((a, b) => a + b, 0) + 18 * (row.length - 1)
+      let x = 960 - total / 2
+      row.forEach((e, j) => {
+        const q = E.outBack(prog(t, 21.8 + (k + j) * 0.35, 22.2 + (k + j) * 0.35))
+        e.style.opacity = clamp(q); place(e, x, Y + H + 60 + ri * 90 + (1 - q) * 30, `scale(${0.7 + 0.3 * q})`)
+        x += ws[j] + 18
+      })
+      k += row.length
     })
-    // a nitrogen atom travels box to box
-    const centers = steps.map((s) => [s.r[0] + s.r[2] / 2, s.r[1] + s.r[3] / 2])
-    const path = [[21.6, centers[0]], [21.75, centers[0]], [22.3, centers[1]], [22.85, centers[2]], [23.35, centers[3]], [24, centers[3]]]
-    const [px, py] = kf(t, path, E.inout3)
-    particle.style.opacity = life(t, 21.6, 24, 0.2, 0.2)
-    place(particle, px - 13, py - 13)
   }
 })
 
@@ -520,9 +515,7 @@ scene(24, 26, (root) => {
 // 26-30 s  Outro
 // =====================================================================================
 scene(26, 30, (root) => {
-  const logo = el('div', 'abs', root, LEAF); css(logo, { width: '120px', height: '120px' })
-  logo.querySelector('.leaf-fill').style.opacity = 0.22
-  const title = el('div', 'abs', root, 'Field explorer'); css(title, { fontSize: '150px', fontWeight: 900, letterSpacing: '-0.04em', width: '1920px', textAlign: 'center' })
+  const logo = lockup(root, 1000)
   const tag = el('div', 'sub abs', root, 'Your fields, <b style="color:#b5f26b;font-weight:700">from orbit to the microbe.</b>')
   css(tag, { width: '1920px', textAlign: 'center', fontSize: '40px' })
   const feats = [
@@ -533,11 +526,8 @@ scene(26, 30, (root) => {
   const fade = el('div', 'abs', root); css(fade, { width: '1920px', height: '1080px', background: '#000' })
   let widths = null
   return (t) => {
-    const lp = E.outElastic(prog(t, 26.05, 26.9))
-    place(logo, 960 - 60, 210, `scale(${lp}) rotate(${(1 - clamp(lp)) * 90}deg)`)
-    const tp = E.outExpo(prog(t, 26.15, 26.9))
-    title.style.opacity = tp; place(title, 0, 330 + (1 - tp) * 60, `scale(${1.25 - 0.25 * tp})`); title.style.transformOrigin = '50% 50%'
-    title.style.letterSpacing = `${-0.04 + (1 - tp) * 0.08}em`
+    logo.set(E.inout3(prog(t, 26.05, 26.8)), E.outBack(prog(t, 26.15, 27.0)))
+    place(logo.box, 960 - logo.width / 2, 300)
     const sp = E.out3(prog(t, 26.6, 27.1)); tag.style.opacity = sp; place(tag, 0, 525 + (1 - sp) * 20)
     widths ??= feats.map((f) => f.offsetWidth)
     const total = widths.reduce((a, b) => a + b, 0) + 18 * (feats.length - 1)

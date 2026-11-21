@@ -1,6 +1,6 @@
-# Field explorer showcase video (30 s, written in code)
+# Terranos showcase video (30 s, written in code)
 
-Output: `field-explorer-showcase.mp4` (1920×1080, 30 fps, H.264 + AAC).
+Output: `terranos-showcase.mp4` (1920×1080, 30 fps, H.264 + AAC).
 
 | File | What it does |
 |---|---|
