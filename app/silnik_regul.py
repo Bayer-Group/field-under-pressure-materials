@@ -109,7 +109,82 @@ def load_weather_timeseries() -> pd.DataFrame:
     return df
 
 
+def ensure_base_reference_data() -> dict[str, bool]:
+    """Gwarantuje obecność plików bazowych (gminy Polski + reguły) nawet bez folderu data_local."""
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    gminy_path = DATA_DIR / "gminy_polska.parquet"
+    rules_path = DATA_DIR / "reguly_agronomiczne.csv"
+
+    if not gminy_path.exists():
+        try:
+            import json
+            import ssl
+            import urllib.request
+            from shapely.geometry import shape
+
+            ctx = ssl._create_unverified_context()
+            url = "https://github.com/wmgeolab/geoBoundaries/raw/main/releaseData/gbOpen/POL/ADM2/geoBoundaries-POL-ADM2_simplified.geojson"
+            with urllib.request.urlopen(url, context=ctx, timeout=25) as resp:
+                geo = json.loads(resp.read().decode("utf-8"))
+            rows = []
+            for feat in geo.get("features", []):
+                props = feat.get("properties", {})
+                geom = shape(feat["geometry"])
+                minx, miny, maxx, maxy = geom.bounds
+                c = geom.centroid
+                name = str(props.get("shapeName", "Gmina")).strip()
+                rows.append({
+                    "wojewodztwo": "Polska",
+                    "powiat": name,
+                    "gmina": name,
+                    "typ_gminy": "Jednostka ADM2",
+                    "min_lon": round(minx, 5),
+                    "min_lat": round(miny, 5),
+                    "max_lon": round(maxx, 5),
+                    "max_lat": round(maxy, 5),
+                    "center_lat": round(c.y, 5),
+                    "center_lon": round(c.x, 5),
+                })
+            if rows:
+                pd.DataFrame(rows).to_parquet(gminy_path, index=False)
+        except Exception:
+            pass
+
+    if not rules_path.exists():
+        default_rules = pd.DataFrame([
+            {
+                "rule_id": "R-001", "uprawa": "WSZYSTKIE", "zagrozenie": "Zbyt silny wiatr do oprysku",
+                "temp_min_c": "", "temp_max_c": "", "wilgotnosc_min_pct": "", "opad_24h_min_mm": "",
+                "wiatr_max_ms": 4.0, "ndvi_prog": "", "decyzja": "CZEKAJ", "poziom_ryzyka": "WYSOKI",
+                "komunikat": "Wstrzymaj oprysk: wiatr przekracza 4 m/s", "ph_min": "", "ph_max": "",
+                "soc_max_g_kg": "", "zalecany_nawoz": "", "nawozy_eko": "TAK",
+            },
+            {
+                "rule_id": "R-002", "uprawa": "WSZYSTKIE", "zagrozenie": "Zakwaszenie gleby (pH < 5.6)",
+                "temp_min_c": 2.0, "temp_max_c": 26.0, "wilgotnosc_min_pct": "", "opad_24h_min_mm": "",
+                "wiatr_max_ms": 4.5, "ndvi_prog": "", "decyzja": "NAWOŹ", "poziom_ryzyka": "ŚREDNI",
+                "komunikat": "Zalecane wapnowanie EKO w celu podniesienia pH gleby", "ph_min": "", "ph_max": 5.6,
+                "soc_max_g_kg": "", "zalecany_nawoz": "Wapno kredowe / Dolomit (EKO)", "nawozy_eko": "TAK (wykaz IUNG)",
+            },
+            {
+                "rule_id": "R-003", "uprawa": "Pszenica ozima", "zagrozenie": "Presja chorób grzybowych / dokarmianie",
+                "temp_min_c": 8.0, "temp_max_c": 24.0, "wilgotnosc_min_pct": 55.0, "opad_24h_min_mm": 0.0,
+                "wiatr_max_ms": 4.0, "ndvi_prog": 0.45, "decyzja": "PRYSKAJ TERAZ", "poziom_ryzyka": "ŚREDNI",
+                "komunikat": "Optymalne okno pogodowe na zabieg biologiczny EKO", "ph_min": "", "ph_max": "",
+                "soc_max_g_kg": "", "zalecany_nawoz": "Preparat biologiczny / Siarka (EKO)", "nawozy_eko": "TAK (rozp. UE 2018/848)",
+            },
+        ])
+        default_rules.to_csv(rules_path, sep=";", index=False, encoding="utf-8-sig")
+
+    return {
+        "gminy_ok": gminy_path.exists(),
+        "rules_ok": rules_path.exists(),
+        "has_data_local": (Path(__file__).resolve().parents[1] / "data_local").exists(),
+    }
+
+
 def load_admin_hierarchy() -> dict[str, dict[str, list[dict]]]:
+    ensure_base_reference_data()
     base_dir = Path(__file__).parent
     candidates = [
         DATA_DIR / "gminy_polska.parquet",
@@ -117,25 +192,20 @@ def load_admin_hierarchy() -> dict[str, dict[str, list[dict]]]:
         base_dir / "data" / "gminy_polska.parquet",
     ]
     gminy_path = next((p for p in candidates if p.exists()), None)
-
-    hierarchy: dict[str, dict[str, list[dict]]] = {
-        "Małopolskie": {
-            "proszowicki": [
-                {"gmina": "Wszystkie gminy (33UXR)", "bbox": [20.10, 50.00, 20.60, 50.36]},
-            ]
-        }
-    }
+    hierarchy: dict[str, dict[str, list[dict]]] = {}
     if gminy_path is not None:
         gdf = pd.read_parquet(gminy_path)
         for r in gdf.itertuples(index=False):
-            woj = str(getattr(r, "wojewodztwo", "Małopolskie")).strip()
-            powiat = str(getattr(r, "powiat", "proszowicki")).strip()
-            gmina = str(getattr(r, "gmina", "Proszowice")).strip()
+            woj = str(getattr(r, "wojewodztwo", "")).strip()
+            powiat = str(getattr(r, "powiat", "")).strip()
+            gmina = str(getattr(r, "gmina", "")).strip()
+            if not (woj and powiat and gmina):
+                continue
             bbox = [
-                float(getattr(r, "min_lon", 20.15)),
-                float(getattr(r, "min_lat", 50.05)),
-                float(getattr(r, "max_lon", 20.55)),
-                float(getattr(r, "max_lat", 50.32)),
+                float(getattr(r, "min_lon", 19.0)),
+                float(getattr(r, "min_lat", 50.0)),
+                float(getattr(r, "max_lon", 20.0)),
+                float(getattr(r, "max_lat", 51.0)),
             ]
             hierarchy.setdefault(woj, {}).setdefault(powiat, []).append(
                 {"gmina": gmina, "bbox": bbox}
