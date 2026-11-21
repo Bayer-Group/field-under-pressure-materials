@@ -1,6 +1,7 @@
 /** Farmer crop-area editor. Data and crop suggestions come from the configured provider. */
 (function (root) {
   'use strict';
+
   const copy = value => JSON.parse(JSON.stringify(value));
   const el = (tag, className, text) => {
     const node = document.createElement(tag);
@@ -9,165 +10,1518 @@
     return node;
   };
 
-  function create({ map, provider, selected, panel, status, setDrawer, fitParcelPreview, animateDrawerResize }) {
-    let drafts = new Map(), crops = [], currentId = null, editing = false, drawing = false;
-    let drawPoints = [], markers = [], sequence = 0, drawParcelId = null;
+  function requiredLabel(text) {
+    const label = el('span', '', text);
+    const star = el('span', 'required-star', ' *');
+    star.setAttribute('aria-hidden', 'true');
+    label.append(star);
+    return label;
+  }
+
+  const monthNamesPl = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+  const monthShortPl = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  function formatDisplayDate(isoStr) {
+    if (!isoStr || !/^\d{4}-\d{2}-\d{2}$/.test(isoStr)) return 'Select a date';
+    const [y, m, d] = isoStr.split('-').map(Number);
+    return `${d} ${monthShortPl[m - 1]} ${y}`;
+  }
+
+  function create({ map, provider, selected, panel, status, setDrawer, fitParcelPreview, animateDrawerResize, onParcelChange }) {
+    let draft = null;
+    let crops = [];
+    let editing = false;
+    let drawing = false;
+    let drawPoints = [];
+    let geometryArea = null;
+    let explicitGeometryEdit = false;
+    let markers = [];
+    let sequence = 0;
+    let snappingEnabled = true;
+    let snapIndicator = null;
+    let snapIndicatorTimer = null;
+    let areaLabels = new Map();
+    let activeAreaId = null;
+    let validation = null;
+    let validationBusy = false;
+    let localPreview = null;
+    let previewFingerprint = null;
+    let previewTimer = null;
+    let findingPopup = null;
+    let displayedFindings = [];
+    let splitByParcel = false;
+
     const toolbar = document.getElementById('crop-draw-toolbar');
-    const toolbarText = document.getElementById('crop-draw-text');
     const finish = document.getElementById('crop-draw-finish');
     const cancel = document.getElementById('crop-draw-cancel');
-    const palette = ['#4e8c5c', '#c4933a', '#6781ad', '#a9759c'];
+    const magnet = document.getElementById('crop-draw-magnet');
+    const cropGuide = document.getElementById('crop-guide');
+    const editGuide = document.getElementById('crop-edit-guide');
+    const vertexNotice = document.getElementById('crop-vertex-notice');
+
+    const palette = ['#36784c', '#c7892b', '#486e99', '#935887', '#d06941'];
     const mapSource = () => map.getSource('crop-areas');
-    const selectedDraft = () => drafts.get(currentId);
     const newId = () => `area-local-${Date.now()}-${++sequence}`;
-    const label = (text, control) => { const node = el('label', 'crop-label'); node.append(el('span', '', text), control); return node; };
-    const button = (text, action, cls = 'crop-action') => { const node = el('button', cls, text); node.type = 'button'; node.addEventListener('click', action); return node; };
-    const dateInput = (value, onChange) => { const input = el('input', 'crop-input'); input.type = 'date'; input.value = value || ''; input.addEventListener('input', () => onChange(input.value)); return input; };
-    const showError = message => { status.textContent = message; panel.closest('.sheet').scrollTo({ top: 0, behavior: 'smooth' }); };
-    function clearMarkers() { markers.forEach(marker => marker.remove()); markers = []; }
-    function mapData() {
-      const draft = selectedDraft();
-      const features = draft ? draft.areas.map((area, index) => ({ type: 'Feature', geometry: area.geometry, properties: { id: area.crop_area_id, color: palette[index % palette.length] } })) : [];
-      if (drawPoints.length >= 2) features.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: drawPoints }, properties: { id: 'drawing' } });
-      if (mapSource()) mapSource().setData({ type: 'FeatureCollection', features });
+
+    function updateMagnetUI() {
+      if (magnet) {
+        magnet.classList.toggle('active', snappingEnabled);
+        magnet.setAttribute('aria-pressed', String(snappingEnabled));
+      }
     }
+    if (magnet) {
+      magnet.addEventListener('click', () => {
+        snappingEnabled = !snappingEnabled;
+        updateMagnetUI();
+      });
+    }
+
+    const showError = message => {
+      status.textContent = message;
+      panel.closest('.sheet').scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    function clearMarkers() {
+      markers.forEach(marker => marker.remove());
+      markers = [];
+    }
+
+    function showSnapFeedback(lngLat) {
+      if (!snapIndicator) {
+        const dot = el('div', 'crop-snap-indicator');
+        snapIndicator = new maplibregl.Marker({ element: dot });
+      }
+      snapIndicator.setLngLat([lngLat.lng, lngLat.lat]).addTo(map);
+      clearTimeout(snapIndicatorTimer);
+      snapIndicatorTimer = setTimeout(() => {
+        if (snapIndicator) snapIndicator.remove();
+      }, 500);
+    }
+
+    function getSnapTargets(excludeAreaId = null, excludePointIndex = null) {
+      const vertices = [];
+      const segments = [];
+
+      function addRing(ring) {
+        if (!ring || ring.length < 3) return;
+        for (let i = 0; i < ring.length - 1; i++) {
+          vertices.push(ring[i]);
+          segments.push([ring[i], ring[i + 1]]);
+        }
+      }
+
+      if (draft && draft.parcels) {
+        draft.parcels.forEach(p => {
+          const geom = p.geometry;
+          if (geom.type === 'Polygon') {
+            addRing(geom.coordinates[0]);
+          } else if (geom.type === 'MultiPolygon') {
+            geom.coordinates.forEach(poly => addRing(poly[0]));
+          }
+        });
+      }
+
+      if (draft && draft.areas) {
+        draft.areas.forEach(a => {
+          if (a.crop_area_id === excludeAreaId) return;
+          if (a.geometry && a.geometry.coordinates) {
+            addRing(a.geometry.coordinates[0]);
+          }
+        });
+      }
+
+      if (drawPoints.length > 0) {
+        drawPoints.forEach((pt, i) => { if (i !== excludePointIndex) vertices.push(pt); });
+        for (let i = 0; i < drawPoints.length - 1; i++) {
+          if (i !== excludePointIndex && i + 1 !== excludePointIndex) segments.push([drawPoints[i], drawPoints[i + 1]]);
+        }
+      }
+
+      return { vertices, segments };
+    }
+
+    function snap(lngLat, excludeAreaId = null, excludePointIndex = null) {
+      if (!snappingEnabled) return { lng: lngLat.lng, lat: lngLat.lat, snapped: false };
+      const p = map.project(lngLat);
+      const targets = getSnapTargets(excludeAreaId, excludePointIndex);
+
+      let bestVertex = null;
+      let bestVertexDist = 24;
+      for (const v of targets.vertices) {
+        const vp = map.project(v);
+        const dist = Math.hypot(p.x - vp.x, p.y - vp.y);
+        if (dist < bestVertexDist) {
+          bestVertexDist = dist;
+          bestVertex = v;
+        }
+      }
+      if (bestVertex) {
+        const res = { lng: bestVertex[0], lat: bestVertex[1], snapped: true };
+        showSnapFeedback(res);
+        return res;
+      }
+
+      let bestSegPoint = null;
+      let bestSegDist = 18;
+      for (const [a, b] of targets.segments) {
+        const ap = map.project(a);
+        const bp = map.project(b);
+        const dx = bp.x - ap.x;
+        const dy = bp.y - ap.y;
+        const lenSq = dx * dx + dy * dy;
+        if (lenSq < 1e-4) continue;
+        const t = Math.max(0, Math.min(1, ((p.x - ap.x) * dx + (p.y - ap.y) * dy) / lenSq));
+        const projX = ap.x + t * dx;
+        const projY = ap.y + t * dy;
+        const dist = Math.hypot(p.x - projX, p.y - projY);
+        if (dist < bestSegDist) {
+          bestSegDist = dist;
+          const unp = map.unproject([projX, projY]);
+          bestSegPoint = [unp.lng, unp.lat];
+        }
+      }
+      if (bestSegPoint) {
+        const res = { lng: bestSegPoint[0], lat: bestSegPoint[1], snapped: true };
+        showSnapFeedback(res);
+        return res;
+      }
+      return { lng: lngLat.lng, lat: lngLat.lat, snapped: false };
+    }
+
+    /** Find a point inside a polygon using horizontal scanlines, including holes. */
+    function labelPoint(geometry) {
+      const rings = geometry.coordinates;
+      const ys = rings[0].map(point => point[1]);
+      const minY = Math.min(...ys), maxY = Math.max(...ys);
+      let best = null;
+      for (let n = 1; n <= 15; n++) {
+        const y = minY + (maxY - minY) * n / 16;
+        const intersections = [];
+        for (const ring of rings) {
+          for (let i = 0; i < ring.length - 1; i++) {
+            const a = ring[i], b = ring[i + 1];
+            if ((a[1] > y) !== (b[1] > y)) intersections.push(a[0] + (y - a[1]) * (b[0] - a[0]) / (b[1] - a[1]));
+          }
+        }
+        intersections.sort((a, b) => a - b);
+        for (let i = 0; i + 1 < intersections.length; i += 2) {
+          const width = intersections[i + 1] - intersections[i];
+          if (!best || width > best.width + 1e-12 || (Math.abs(width - best.width) <= 1e-12 && Math.abs(y - (minY + maxY) / 2) < Math.abs(best.point[1] - (minY + maxY) / 2))) {
+            best = { width, point: [(intersections[i] + intersections[i + 1]) / 2, y] };
+          }
+        }
+      }
+      return best ? best.point : rings[0][0];
+    }
+
+    function geometryRequest() {
+      return {
+        parcel_ids: draft.parcels.map(parcel => parcel.parcel_id),
+        crop_areas: draft.areas.map(area => ({ crop_area_id: area.crop_area_id, geometry: copy(area.geometry) }))
+      };
+    }
+
+    function geometryFingerprint() { return draft ? JSON.stringify(geometryRequest()) : ''; }
+
+    function showFindings(response) {
+      const source = map.getSource('geometry-findings');
+      if (!source) return;
+      const findings = findingsFrom(response);
+      displayedFindings = findings;
+      source.setData({ type: 'FeatureCollection', features: findings.map((item, index) => ({ type: 'Feature', geometry: item.geometry, properties: { index } })) });
+      if (findings.length && map.getLayer('geometry-findings-fill') && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        map.setPaintProperty('geometry-findings-fill', 'fill-opacity-transition', { duration: 300 });
+        map.setPaintProperty('geometry-findings-fill', 'fill-opacity', .7);
+        setTimeout(() => { if (map.getLayer('geometry-findings-fill')) map.setPaintProperty('geometry-findings-fill', 'fill-opacity', .45); }, 320);
+      }
+    }
+
+    /** Measure visible distance of returned outside vertices from selected parcel edges. */
+    function outsideDistancePixels(findings) {
+      const edges = [];
+      draft.parcels.forEach(parcel => {
+        const geom = parcel.geometry;
+        const polygons = geom.type === 'MultiPolygon' ? geom.coordinates : [geom.coordinates];
+        polygons.forEach(polygon => polygon.forEach(ring => {
+          for (let i = 0; i < ring.length - 1; i++) edges.push([map.project(ring[i]), map.project(ring[i + 1])]);
+        }));
+      });
+      if (!edges.length) return null;
+      let max = 0;
+      function distanceToBoundary(p) {
+        let nearest = Infinity;
+        edges.forEach(([a, b]) => {
+          const dx = b.x - a.x, dy = b.y - a.y, length = dx * dx + dy * dy;
+          const t = length ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / length)) : 0;
+          nearest = Math.min(nearest, Math.hypot(p.x - a.x - t * dx, p.y - a.y - t * dy));
+        });
+        max = Math.max(max, nearest);
+      }
+      findings.forEach(item => {
+        const geom = item.geometry;
+        if (!geom || !['Polygon', 'MultiPolygon'].includes(geom.type)) return;
+        const polygons = geom.type === 'MultiPolygon' ? geom.coordinates : [geom.coordinates];
+        polygons.forEach(polygon => polygon.forEach(ring => {
+          for (let i = 0; i < ring.length - 1; i++) {
+            const a = map.project(ring[i]), b = map.project(ring[i + 1]);
+            const steps = Math.min(512, Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / 4)));
+            for (let n = 0; n <= steps; n++) distanceToBoundary({ x: a.x + (b.x - a.x) * n / steps, y: a.y + (b.y - a.y) * n / steps });
+          }
+        }));
+      });
+      return max;
+    }
+
+    /** Add a decorative icon while keeping the action's text accessible. */
+    function addActionIcon(button, paths) {
+      const ns = 'http://www.w3.org/2000/svg';
+      const icon = document.createElementNS(ns, 'svg');
+      icon.setAttribute('viewBox', '0 0 24 24');
+      icon.setAttribute('aria-hidden', 'true');
+      paths.forEach(d => { const path = document.createElementNS(ns, 'path'); path.setAttribute('d', d); icon.append(path); });
+      button.prepend(icon);
+      button.classList.add('geometry-icon-action');
+    }
+
+    /** Display one finding at its geometry, using the parcel-details map card. */
+    function showFinding(finding, { review = false, preserveDrawer = false, serviceUnavailable = false } = {}) {
+      if (!finding || !editing) return;
+      const content = el('div', 'geometry-popup-content');
+      const labels = {
+        overlap: ['Crop areas overlap', 'Adjust the boundaries so each place has only one crop.'],
+        gap: ['Area without a crop', 'This part of your land will not be included in the analysis.'],
+        outside: ['Outside selected parcels', 'This area extends beyond the parcels you selected.'],
+        repair: ['Review boundary change', 'The backend proposes this change to the crop boundary.'],
+        invalid: ['Check this boundary', 'The boundary crosses itself or has no valid area. Adjust it before continuing.'],
+        error: ['Boundary needs attention', 'The backend could not prepare this area. Please adjust its boundary.'],
+        unavailable: ['Unable to save yet', 'The boundary checking service is unavailable. Your changes are still here.']
+      };
+      const [title, message] = labels[finding.kind];
+      content.append(el('h2', '', title), el('p', 'geometry-popup-message', message));
+      if (serviceUnavailable && finding.kind !== 'unavailable') content.append(el('p', 'geometry-popup-message', 'The boundary checking service is unavailable. You can still adjust this area.'));
+      const actions = el('div', 'geometry-fix-actions');
+      let offersMultipart = false;
+      const cropName = area => {
+        const index = draft.areas.indexOf(area) + 1;
+        const crop = crops.find(item => item.id === area.crop?.farmer_crop_id);
+        return `Area ${index}${crop ? ` · ${crop.label}` : ''}`;
+      };
+      const offerFix = (text, area, kind) => {
+        let proposed;
+        try { proposed = GeometryPreview.propose(kind, area.geometry, finding.geometry, draft.parcels, window.turf); }
+        catch (_) { return; }
+        if (proposed.type === 'MultiPolygon') offersMultipart = true;
+        const button = el('button', 'crop-outline geometry-nearby-candidate', text + (proposed.type === 'MultiPolygon' ? ' (multiple parts)' : ''));
+        button.type = 'button';
+        if (kind === 'clip') addActionIcon(button, ['M4 4h7v7H4zM13 13h7v7h-7z', 'M8 11v5a3 3 0 0 0 3 3h2M13 5h4a2 2 0 0 1 2 2v4', 'm17 9 2 2 2-2']);
+        const fingerprint = geometryFingerprint();
+        button.addEventListener('click', () => {
+          if (!draft || fingerprint !== geometryFingerprint() || !draft.areas.includes(area)) return;
+          area.geometry = copy(proposed);
+          activeAreaId = null;
+          validation = null; closeFinding(); showFindings(null);
+          stopDrawing(); render();
+        });
+        actions.append(button);
+      };
+      if (finding.kind === 'outside') {
+        const area = draft.areas.find(item => item.crop_area_id === finding.cropAreaId);
+        if (area) offerFix('Clip to selected parcels', area, 'clip');
+      }
+      if (finding.kind === 'gap') draft.areas.forEach(area => offerFix(`Add to ${cropName(area)}`, area, 'fill'));
+      if (finding.kind === 'overlap') (finding.cropAreaIds || []).forEach(id => {
+        const area = draft.areas.find(item => item.crop_area_id === id);
+        if (area) offerFix(`Remove overlap from ${cropName(area)}`, area, 'subtract');
+      });
+      if (['invalid', 'error'].includes(finding.kind)) {
+        const area = draft.areas.find(item => item.crop_area_id === finding.cropAreaId);
+        if (area?.geometry?.type === 'Polygon') {
+          const button = el('button', 'crop-outline geometry-nearby-candidate', 'Adjust boundary'); button.type = 'button';
+          button.addEventListener('click', () => editGeometry(area)); actions.append(button);
+        }
+      }
+      if (actions.childElementCount) content.append(actions);
+      if (offersMultipart) content.append(el('p', 'geometry-popup-message', 'Multiple-part areas can be displayed, but their points cannot yet be edited.'));
+      const token = finding.id ? `${finding.kind}:${finding.id}` : null;
+      if (review && validation && token && ['gap', 'outside', 'repair'].includes(finding.kind)) {
+        const label = el('label', 'geometry-confirm');
+        const input = el('input'); input.type = 'checkbox'; input.checked = validation.accepted.has(token);
+        input.addEventListener('change', () => input.checked ? validation.accepted.add(token) : validation.accepted.delete(token));
+        const copyText = { gap: 'Exclude this area from analysis', outside: 'Clip to my selected parcels', repair: 'Accept this boundary change' };
+        label.append(input, el('span', '', copyText[finding.kind])); content.append(label);
+        const next = el('button', 'crop-link geometry-popup-action', 'Continue'); next.type = 'button';
+        next.addEventListener('click', () => { if (input.checked) save(); else input.focus(); });
+        content.append(next);
+      }
+      if (finding.kind === 'outside' && outsideDistancePixels([finding]) > 24) {
+        const nearby = el('div', 'geometry-nearby');
+        const button = el('button', 'crop-outline geometry-nearby-candidate geometry-popup-action', 'Find nearby parcels'); button.type = 'button';
+        addActionIcon(button, ['M3 3h7v7H3zM3 13h7v7H3zM13 13h7v7h-7z', 'M17 2v8M13 6h8']);
+        button.addEventListener('click', async () => {
+          button.disabled = true;
+          const fingerprint = geometryFingerprint();
+          try {
+            const point = findingPoint(finding.geometry);
+            const { parcels } = await provider.findParcels({ lon: point[0], lat: point[1] });
+            if (!draft || !editing || fingerprint !== geometryFingerprint()) return;
+            const candidates = parcels.filter(parcel => !selected.has(parcel.parcel_id));
+            if (!candidates.length) nearby.append(el('p', 'geometry-popup-message', 'No nearby parcels found here.'));
+            candidates.forEach(parcel => {
+              const add = el('button', 'crop-outline geometry-nearby-candidate', `Add parcel ${parcel.parcel_number} · ${parcel.locality}`);
+              add.type = 'button';
+              add.addEventListener('click', () => {
+                selected.set(parcel.parcel_id, copy(parcel)); draft.parcels.push(copy(parcel)); onParcelChange?.();
+                validation = null; closeFinding(); showFindings(null); render();
+              });
+              nearby.append(add);
+            });
+          } catch (_) { nearby.append(el('p', 'geometry-popup-message', 'Could not load nearby parcels. Please try again.')); button.disabled = false; }
+        });
+        nearby.append(button); content.append(nearby);
+      }
+      closeFinding();
+      findingPopup = new maplibregl.Popup({ className: 'parcel-popup geometry-map-popup', closeButton: true, closeOnClick: false, offset: 8, maxWidth: '310px' })
+        .setLngLat(findingPoint(finding.geometry)).setDOMContent(content).addTo(map);
+      findingPopup.getElement().querySelector('.maplibregl-popup-close-button')?.setAttribute('aria-label', 'Close boundary message');
+      if (review && !preserveDrawer) setDrawer(false);
+      const popup = findingPopup;
+      requestAnimationFrame(() => {
+        if (findingPopup !== popup || !popup.isOpen()) return;
+        const rect = popup.getElement().getBoundingClientRect();
+        const drawer = panel.closest('.sheet').getBoundingClientRect();
+        const mapRect = map.getContainer().getBoundingClientRect();
+        const overlapsDrawer = rect.right > drawer.left && rect.left < drawer.right && rect.bottom > drawer.top && rect.top < drawer.bottom;
+        let dx = rect.right > mapRect.right - 12 ? rect.right - (mapRect.right - 12) : rect.left < mapRect.left + 12 ? rect.left - (mapRect.left + 12) : 0;
+        let dy = rect.top < mapRect.top + 80 ? rect.top - (mapRect.top + 80) : 0;
+        if (overlapsDrawer) {
+          if (window.matchMedia('(max-width: 719px)').matches) dy = Math.max(dy, rect.bottom - drawer.top + 12);
+          else dx = Math.min(dx, rect.left - drawer.right - 12);
+        }
+        if (dx || dy) map.panBy([dx, dy], { duration: 250 });
+      });
+    }
+
+    function closeFinding() { if (findingPopup) { findingPopup.remove(); findingPopup = null; } }
+
+    /** Find a point inside the first component of a polygon or multipolygon. */
+    function findingPoint(geometry) {
+      return labelPoint(geometry.type === 'MultiPolygon' ? { type: 'Polygon', coordinates: geometry.coordinates[0] } : geometry);
+    }
+
+    function findingsFrom(response) {
+      if (!response || response.error) return [];
+      const findings = [];
+      (response.overlaps || []).forEach(item => findings.push({ kind: 'overlap', cropAreaIds: item.crop_area_ids, geometry: item.geometry }));
+      (response.gaps || []).forEach(item => findings.push({ kind: 'gap', id: item.gap_id, geometry: item.geometry }));
+      (response.outside || []).forEach(item => findings.push({ kind: 'outside', id: item.outside_id, cropAreaId: item.crop_area_id, geometry: item.geometry }));
+      (response.crop_areas || []).filter(item => item.repair?.requires_review && item.geometry).forEach(item => findings.push({ kind: 'repair', id: item.repair.repair_id, geometry: item.geometry }));
+      (response.invalid || []).forEach(id => { const area = draft?.areas.find(item => item.crop_area_id === id); if (area?.geometry) findings.push({ kind: 'invalid', cropAreaId: id, geometry: area.geometry }); });
+      (response.errors || []).forEach(item => { const area = draft?.areas.find(value => value.crop_area_id === item.crop_area_id); if (area?.geometry) findings.push({ kind: 'error', cropAreaId: area.crop_area_id, geometry: area.geometry }); });
+      return findings.filter(item => item.geometry && ['Polygon', 'MultiPolygon'].includes(item.geometry.type));
+    }
+
+    /** Only backend results authorize saving; local results are visual feedback. */
+    async function validateForSave() {
+      if (validationBusy) return false;
+      const request = geometryRequest(), fingerprint = geometryFingerprint();
+      validationBusy = true;
+      try {
+        const response = await provider.validateGeometry(request);
+        if (!response || typeof response.validation_id !== 'string' || !response.validation_id ||
+            !['crop_areas', 'overlaps', 'gaps', 'outside', 'errors'].every(key => Array.isArray(response[key])) ||
+            response.gaps.some(item => !item.gap_id || !item.geometry) ||
+            response.outside.some(item => !item.outside_id || !item.geometry) ||
+            response.crop_areas.some(item => item.repair?.requires_review && !item.repair.repair_id) ||
+            response.crop_areas.length !== request.crop_areas.length ||
+            request.crop_areas.some(area => !response.crop_areas.some(item => item.crop_area_id === area.crop_area_id))) throw new Error('Incomplete validation response');
+        if (!draft || !editing || fingerprint !== geometryFingerprint()) return false;
+        validation = { response, fingerprint, accepted: new Set() };
+        showFindings(response);
+        return true;
+      } catch (_) {
+        if (draft && editing && fingerprint === geometryFingerprint()) {
+          if (!localPreview || previewFingerprint !== fingerprint) {
+            try { localPreview = GeometryPreview.inspect(draft.parcels, draft.areas, window.turf); }
+            catch (_) { localPreview = { error: true }; }
+          }
+          showFindings(localPreview.error ? null : localPreview);
+          const finding = displayedFindings[0] || (draft.areas[0]?.geometry && { kind: 'unavailable', geometry: draft.areas[0].geometry });
+          if (finding) showFinding(finding, { review: true, serviceUnavailable: true });
+          else showError('The boundary checking service is unavailable. Your changes are still here.');
+        }
+        return false;
+      } finally { validationBusy = false; }
+    }
+
+    /** Inspect current draft locally; backend approval remains required for saving. */
+    function runPreview(fingerprint) {
+      if (!draft || !editing || fingerprint !== geometryFingerprint()) return;
+      try { localPreview = GeometryPreview.inspect(draft.parcels, draft.areas, window.turf); }
+      catch (_) { localPreview = { error: true }; status.textContent = 'Live boundary preview is unavailable. Backend validation is still required.'; }
+      showFindings(validation ? validation.response : localPreview.error ? null : localPreview);
+      if (displayedFindings.length && !drawing && !explicitGeometryEdit) showFinding(displayedFindings[0], { review: Boolean(validation), preserveDrawer: true });
+    }
+
+    /** Recalculate only after geometry changes; never use this preview as backend approval. */
+    function schedulePreview() {
+      if (!draft || !editing) return;
+      const fingerprint = geometryFingerprint();
+      if (fingerprint === previewFingerprint) return;
+      previewFingerprint = fingerprint;
+      closeFinding();
+      if (!validation) showFindings(null);
+      localPreview = null;
+      clearTimeout(previewTimer);
+      previewTimer = setTimeout(() => runPreview(fingerprint), 220);
+    }
+
+    function mapData() {
+      if (validation && validation.fingerprint !== geometryFingerprint()) {
+        validation = null; showFindings(null);
+        closeFinding();
+      }
+      schedulePreview();
+      const features = draft
+        ? draft.areas.map((area, index) => ({
+            type: 'Feature',
+            geometry: area.geometry,
+            properties: { id: area.crop_area_id, color: palette[index % palette.length], selected: area.crop_area_id === activeAreaId }
+          }))
+        : [];
+      if (drawPoints.length >= 2) {
+        const geometry = drawPoints.length >= 3
+          ? { type: 'Polygon', coordinates: [[...drawPoints, drawPoints[0]]] }
+          : { type: 'LineString', coordinates: drawPoints };
+        features.push({ type: 'Feature', geometry, properties: { id: 'drawing', color: '#176544' } });
+      }
+      if (mapSource()) mapSource().setData({ type: 'FeatureCollection', features });
+      const liveIds = new Set();
+      if (editing && draft) draft.areas.forEach((area, index) => {
+        const ring = area.geometry?.type === 'Polygon' ? area.geometry.coordinates[0] : area.geometry?.type === 'MultiPolygon' ? area.geometry.coordinates[0]?.[0] : null;
+        if (!ring || ring.length < 4) return;
+        liveIds.add(area.crop_area_id);
+        let label = areaLabels.get(area.crop_area_id);
+        if (!label) {
+          const button = el('button', 'crop-map-label');
+          button.type = 'button';
+          button.addEventListener('click', event => {
+            event.stopPropagation();
+            if (!drawing) focusArea(area.crop_area_id, { openPanel: true });
+          });
+          label = { button, marker: new maplibregl.Marker({ element: button, anchor: 'center' }), added: false };
+          areaLabels.set(area.crop_area_id, label);
+        }
+        const center = findingPoint(area.geometry);
+        label.marker.setLngLat(center);
+        if (!label.added) { label.marker.addTo(map); label.added = true; }
+        const crop = crops.find(item => item.id === area.crop.farmer_crop_id);
+        label.button.replaceChildren(document.createTextNode(String(index + 1)));
+        if (crop) label.button.append(el('span', 'crop-map-label-name', crop.label));
+        label.button.style.setProperty('--area-color', palette[index % palette.length]);
+        label.button.setAttribute('aria-label', `Show area ${index + 1}${crop ? `, ${crop.label}` : ''}`);
+        label.button.classList.toggle('active', area.crop_area_id === activeAreaId);
+      });
+      for (const [id, label] of areaLabels) if (!liveIds.has(id)) { label.marker.remove(); areaLabels.delete(id); }
+    }
+
+    function focusArea(id, { openPanel = false, preview = false } = {}) {
+      if (!draft) return;
+      const area = draft.areas.find(item => item.crop_area_id === id);
+      if (!area) return;
+      activeAreaId = id;
+      if (area.geometry?.type === 'Polygon' && !drawing) {
+        geometryArea = area;
+        explicitGeometryEdit = false;
+        const points = area.geometry.coordinates[0].slice(0, -1).map(point => [...point]);
+        showVertexHandles(points, area);
+      }
+      if (splitByParcel && area.parcel_id && draft.currentParcel !== area.parcel_id) {
+        draft.currentParcel = area.parcel_id;
+        render();
+      } else {
+        panel.querySelectorAll('.crop-card').forEach(card => card.classList.toggle('active', card.dataset.areaId === id));
+        mapData();
+      }
+      if (openPanel) {
+        setDrawer(true);
+        requestAnimationFrame(() => {
+          const card = [...panel.querySelectorAll('.crop-card')].find(item => item.dataset.areaId === id);
+          card?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+      }
+      if (preview) fitParcelPreview({ geometry: area.geometry });
+    }
+
     function drawToolbar() {
       toolbar.hidden = !drawing;
-      toolbarText.textContent = `Dotknij mapy, aby dodać punkty granicy (${drawPoints.length}). Potrzebne są co najmniej 3.`;
       finish.disabled = drawPoints.length < 3;
+      updateMagnetUI();
     }
-    function stopDrawing() { drawing = false; drawPoints = []; drawParcelId = null; clearMarkers(); drawToolbar(); mapData(); }
-    function closeEditor() { editing = false; stopDrawing(); clearMarkers(); if (mapSource()) mapSource().setData({ type: 'FeatureCollection', features: [] }); }
+
+    function hideGuides() {
+      [cropGuide, editGuide].forEach(guide => { guide.classList.remove('visible'); guide.setAttribute('aria-hidden', 'true'); });
+    }
+
+    function stopDrawing() {
+      hideGuides();
+      geometryArea = null;
+      explicitGeometryEdit = false;
+      vertexNotice.textContent = '';
+      cropGuide.classList.remove('visible');
+      cropGuide.setAttribute('aria-hidden', 'true');
+      drawing = false;
+      drawPoints = [];
+      clearMarkers();
+      drawToolbar();
+      mapData();
+    }
+
+    function closeEditor() {
+      editing = false;
+      clearTimeout(previewTimer); previewFingerprint = null; localPreview = null;
+      validation = null; closeFinding(); showFindings(null);
+      activeAreaId = null;
+      stopDrawing();
+      clearMarkers();
+      if (mapSource()) mapSource().setData({ type: 'FeatureCollection', features: [] });
+    }
+
     function startDrawing() {
-      clearMarkers(); finish.hidden = false; cancel.textContent = 'Anuluj'; drawing = true; drawPoints = []; drawParcelId = currentId; status.textContent = ''; drawToolbar(); mapData(); setDrawer(false);
+      closeFinding();
+      clearMarkers();
+      geometryArea = null;
+      explicitGeometryEdit = false;
+      finish.hidden = false;
+      cancel.textContent = 'Cancel';
+      drawing = true;
+      drawPoints = [];
+      status.textContent = '';
+      drawToolbar();
+      mapData();
+      setDrawer(false);
+      cropGuide.classList.add('visible');
+      cropGuide.setAttribute('aria-hidden', 'false');
     }
-    function addPoint(lngLat) {
-      if (!drawing) return false;
-      drawPoints.push([lngLat.lng, lngLat.lat]);
-      const dot = el('span', 'crop-draw-dot');
-      markers.push(new maplibregl.Marker({ element: dot }).setLngLat([lngLat.lng, lngLat.lat]).addTo(map));
-      drawToolbar(); mapData(); return true;
+
+    /** Locate the closest polygon edge in screen pixels. */
+    function closestEdge(points, lngLat, closed = true) {
+      if (points.length < 2) return null;
+      const p = map.project(lngLat);
+      let best = null;
+      const count = closed ? points.length : points.length - 1;
+      for (let i = 0; i < count; i++) {
+        const a = map.project(points[i]);
+        const b = map.project(points[(i + 1) % points.length]);
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const length = dx * dx + dy * dy;
+        const t = length ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / length)) : 0;
+        const projected = { x: a.x + t * dx, y: a.y + t * dy };
+        const distance = Math.hypot(p.x - projected.x, p.y - projected.y);
+        if (!best || distance < best.distance) best = { index: i + 1, distance, position: [points[i][0] + t * (points[(i + 1) % points.length][0] - points[i][0]), points[i][1] + t * (points[(i + 1) % points.length][1] - points[i][1])] };
+      }
+      return best;
     }
-    finish.addEventListener('click', () => {
-      const draft = drafts.get(drawParcelId);
-      if (!draft || drawPoints.length < 3) return;
-      const ring = [...drawPoints.map(point => [...point]), [...drawPoints[0]]];
-      draft.areas.push({ crop_area_id: newId(), geometry: { type: 'Polygon', coordinates: [ring] }, crop: { farmer_crop_id: null, map_crop_id: null }, sowing_date: null, past_sprays: [] });
-      stopDrawing(); status.textContent = ''; setDrawer(true); render();
-    });
-    cancel.addEventListener('click', () => { stopDrawing(); finish.hidden = false; cancel.textContent = 'Anuluj'; status.textContent = ''; setDrawer(true); render(); });
-    function editGeometry(area) {
-      stopDrawing(); clearMarkers();
-      const ring = area.geometry.coordinates[0];
-      ring.slice(0, -1).forEach((point, index) => {
-        const handle = el('button', 'crop-vertex'); handle.type = 'button'; handle.setAttribute('aria-label', `Punkt granicy ${index + 1}`);
+
+    /** Replace a closed exterior ring without changing any interior rings. */
+    function updateRing(area, points) {
+      area.geometry.coordinates[0] = [...points.map(point => [...point]), [...points[0]]];
+    }
+
+    /** Rebuild handles after inserting or removing a vertex. */
+    function showVertexHandles(points, area = null) {
+      clearMarkers();
+      points.forEach((point, index) => {
+        const handle = el('button', 'crop-vertex');
+        handle.type = 'button';
+        handle.setAttribute('aria-label', `Move point ${index + 1}`);
+        handle.addEventListener('click', event => event.stopPropagation());
         const marker = new maplibregl.Marker({ element: handle, draggable: true }).setLngLat(point).addTo(map);
+        let rawPosition = null;
+        let original = [...point];
+        marker.on('dragstart', () => { original = [...points[index]]; hideGuides(); vertexNotice.textContent = ''; });
         marker.on('drag', () => {
-          const position = marker.getLngLat(); ring[index] = [position.lng, position.lat];
-          if (index === 0) ring[ring.length - 1] = [...ring[0]];
+          rawPosition = marker.getLngLat();
+          const position = snap(rawPosition, area ? area.crop_area_id : null, area ? null : index);
+          marker.setLngLat([position.lng, position.lat]);
+          points[index] = [position.lng, position.lat];
+          if (area) updateRing(area, points);
           mapData();
+        });
+        marker.on('dragend', () => {
+          if (!rawPosition) return;
+          const raw = map.project(rawPosition);
+          const target = points.findIndex((other, i) => i !== index && Math.hypot(map.project(other).x - raw.x, map.project(other).y - raw.y) <= 22);
+          if (target !== -1) {
+            if (points.length > 3) {
+              points.splice(index, 1);
+              vertexNotice.textContent = 'Point removed.';
+            } else {
+              points[index] = original;
+              vertexNotice.textContent = 'An area needs at least three points.';
+            }
+            if (area) updateRing(area, points);
+            showVertexHandles(points, area);
+            drawToolbar();
+            if (area && explicitGeometryEdit) { toolbar.hidden = false; finish.hidden = true; }
+            mapData();
+          }
         });
         markers.push(marker);
       });
+    }
+
+    function addPoint(lngLat) {
+      if (!drawing) return false;
+      hideGuides();
+      vertexNotice.textContent = '';
+      const pt = snap(lngLat);
+      const edge = drawPoints.length >= 3 ? closestEdge(drawPoints, lngLat) : null;
+      drawPoints.splice(edge ? edge.index : drawPoints.length, 0, [pt.lng, pt.lat]);
+      showVertexHandles(drawPoints);
+      drawToolbar();
+      mapData();
+      return true;
+    }
+
+    function addEditPoint(lngLat) {
+      if (!geometryArea) return false;
+      hideGuides();
+      const points = geometryArea.geometry.coordinates[0].slice(0, -1).map(point => [...point]);
+      const edge = closestEdge(points, lngLat);
+      if (!edge || edge.distance > 24) return false;
+      points.splice(edge.index, 0, edge.position);
+      updateRing(geometryArea, points);
+      showVertexHandles(points, geometryArea);
+      vertexNotice.textContent = 'Point added. Drag it to adjust the boundary.';
+      mapData();
+      return true;
+    }
+
+    /** Check the drawn exterior ring for obvious zero-area or crossing edges. */
+    function hasInvalidDrawnRing(points) {
+      let twiceArea = 0;
+      const orientation = (a, b, c) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+      const onSegment = (a, b, p) => p[0] >= Math.min(a[0], b[0]) && p[0] <= Math.max(a[0], b[0]) && p[1] >= Math.min(a[1], b[1]) && p[1] <= Math.max(a[1], b[1]);
+      for (let i = 0; i < points.length; i++) {
+        const a = points[i], b = points[(i + 1) % points.length];
+        if (a[0] === b[0] && a[1] === b[1]) return true;
+        twiceArea += a[0] * b[1] - b[0] * a[1];
+        for (let j = i + 1; j < points.length; j++) {
+          if (j === i + 1 || (i === 0 && j === points.length - 1)) continue;
+          const c = points[j], d = points[(j + 1) % points.length];
+          const abC = orientation(a, b, c), abD = orientation(a, b, d);
+          const cdA = orientation(c, d, a), cdB = orientation(c, d, b);
+          if ((abC * abD < 0 && cdA * cdB < 0) ||
+              (abC === 0 && onSegment(a, b, c)) || (abD === 0 && onSegment(a, b, d)) ||
+              (cdA === 0 && onSegment(c, d, a)) || (cdB === 0 && onSegment(c, d, b))) return true;
+        }
+      }
+      return Math.abs(twiceArea) < 1e-12;
+    }
+
+    finish.addEventListener('click', () => {
+      if (!draft || drawPoints.length < 3) return;
+      const ring = [...drawPoints.map(point => [...point]), [...drawPoints[0]]];
+      const geometry = GeometryPreview.removeRedundantVertices({ type: 'Polygon', coordinates: [ring] });
+      if (hasInvalidDrawnRing(geometry.coordinates[0].slice(0, -1))) {
+        vertexNotice.textContent = 'The boundary crosses itself or has no area. Move the points to continue.';
+        return;
+      }
+      const id = newId();
+      draft.areas.push({
+        crop_area_id: id,
+        parcel_id: null,
+        geometry,
+        crop: { farmer_crop_id: null, map_crop_id: null },
+        sowing_date: null,
+        past_sprays: [],
+        spray_choice: null
+      });
+      activeAreaId = id;
+      stopDrawing();
+      status.textContent = '';
+      setDrawer(true);
+      render();
+    });
+
+    cancel.addEventListener('click', () => {
+      const wasEditingBoundary = explicitGeometryEdit;
+      if (wasEditingBoundary && geometryArea?.geometry) geometryArea.geometry = GeometryPreview.removeRedundantVertices(geometryArea.geometry);
+      stopDrawing();
+      finish.hidden = false;
+      cancel.textContent = 'Cancel';
+      status.textContent = '';
+      setDrawer(true);
+      render();
+      if (wasEditingBoundary && draft) {
+        clearTimeout(previewTimer);
+        previewFingerprint = geometryFingerprint();
+        runPreview(previewFingerprint);
+      }
+      const area = draft?.areas.find(item => item.crop_area_id === activeAreaId);
+      if (area) fitParcelPreview({ geometry: area.geometry });
+    });
+
+    function editGeometry(area) {
+      closeFinding();
+      if (area.geometry?.type !== 'Polygon') {
+        showError('Editing multipart areas is not available yet.');
+        return;
+      }
+      activeAreaId = area.crop_area_id;
+      stopDrawing();
+      geometryArea = area;
+      explicitGeometryEdit = true;
+      const points = area.geometry.coordinates[0].slice(0, -1).map(point => [...point]);
+      showVertexHandles(points, area);
       status.textContent = '';
       setDrawer(false);
-      toolbar.hidden = false; toolbarText.textContent = 'Przeciągnij punkty granicy obszaru uprawy.';
-      finish.hidden = true; cancel.textContent = 'Gotowe';
+      toolbar.hidden = false;
+      finish.hidden = true;
+      cancel.textContent = 'Done';
+      updateMagnetUI();
+      editGuide.classList.add('visible');
+      editGuide.setAttribute('aria-hidden', 'false');
     }
-    function renderArea(draft, area, index) {
-      const card = el('article', 'crop-card');
-      const header = el('div', 'crop-card-heading');
-      const areaTitle = el('strong', 'crop-area-title', `Obszar ${index + 1}`);
-      const color = el('span', 'crop-area-color'); color.style.backgroundColor = palette[index % palette.length]; color.setAttribute('aria-hidden', 'true'); areaTitle.prepend(color); header.append(areaTitle);
-      if (draft.areas.length > 1) header.append(button('Usuń', () => { clearMarkers(); draft.areas.splice(index, 1); render(); }, 'crop-link'));
-      card.append(header);
-      const select = el('select', 'crop-input');
-      const empty = el('option', '', 'Wybierz uprawę'); empty.value = ''; select.appendChild(empty);
-      crops.forEach(crop => { const option = el('option', '', crop.label); option.value = crop.id; select.appendChild(option); });
-      select.value = area.crop.farmer_crop_id || '';
-      select.addEventListener('change', () => { area.crop.farmer_crop_id = select.value || null; });
-      if (area.crop.map_crop_id) {
-        const suggested = crops.find(crop => crop.id === area.crop.map_crop_id);
-        const suggestion = el('div', 'crop-suggestion');
-        suggestion.append(el('span', '', `Z mapy: ${suggested ? suggested.label : area.crop.map_crop_id}`));
-        suggestion.append(button('Przyjmij', () => { area.crop.farmer_crop_id = area.crop.map_crop_id; select.value = area.crop.map_crop_id; }, 'crop-link'));
-        card.append(suggestion);
+
+    function createDatePicker({ value, labelText, onChange, initiallyOpen = true }) {
+      const wrap = el('div', 'crop-label apple-date-control');
+      const titleSpan = requiredLabel(labelText);
+      let currentDate = value || '';
+      let viewDate = currentDate ? new Date(currentDate) : new Date();
+      if (isNaN(viewDate.getTime())) viewDate = new Date();
+
+      const trigger = el('button', 'apple-date-pill');
+      trigger.type = 'button';
+      trigger.setAttribute('aria-expanded', String(initiallyOpen));
+
+      const left = el('div', 'apple-date-pill-left');
+      left.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M16 2v4M8 2v4M3 10h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
+      const dateText = el('span', 'apple-date-value', formatDisplayDate(currentDate));
+      left.appendChild(dateText);
+
+      const chevron = el('span', 'apple-date-pill-chevron');
+      chevron.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+      trigger.append(left, chevron);
+
+      const popover = el('div', 'apple-calendar-popover');
+      popover.hidden = !initiallyOpen;
+      popover.style.display = initiallyOpen ? 'block' : 'none';
+
+      function renderCalendar() {
+        popover.replaceChildren();
+
+        const nav = el('div', 'cal-nav');
+        const title = el('span', 'cal-nav-title', `${monthNamesPl[viewDate.getMonth()]} ${viewDate.getFullYear()}`);
+
+        const actions = el('div', 'cal-nav-actions');
+        const prevBtn = el('button', 'cal-nav-btn', '‹');
+        prevBtn.type = 'button';
+        prevBtn.setAttribute('aria-label', 'Previous month');
+        prevBtn.addEventListener('click', e => {
+          e.stopPropagation();
+          viewDate.setMonth(viewDate.getMonth() - 1);
+          renderCalendar();
+        });
+
+        const nextBtn = el('button', 'cal-nav-btn', '›');
+        nextBtn.type = 'button';
+        nextBtn.setAttribute('aria-label', 'Next month');
+        nextBtn.addEventListener('click', e => {
+          e.stopPropagation();
+          viewDate.setMonth(viewDate.getMonth() + 1);
+          renderCalendar();
+        });
+
+        const todayBtn = el('button', 'cal-today-btn', 'Today');
+        todayBtn.type = 'button';
+        todayBtn.addEventListener('click', e => {
+          e.stopPropagation();
+          const now = new Date();
+          viewDate = new Date(now.getFullYear(), now.getMonth(), 1);
+          const iso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+          setDate(iso);
+          setCalendarVisibility(false, false);
+          trigger.focus({ preventScroll: true });
+        });
+
+        actions.append(prevBtn, nextBtn, todayBtn);
+        nav.append(title, actions);
+        popover.appendChild(nav);
+
+        const weekdays = el('div', 'cal-weekdays');
+        ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].forEach(w => weekdays.appendChild(el('span', '', w)));
+        popover.appendChild(weekdays);
+
+        const grid = el('div', 'cal-days-grid');
+        grid.setAttribute('role', 'grid');
+
+        const year = viewDate.getFullYear();
+        const month = viewDate.getMonth();
+        const firstDayIndex = (new Date(year, month, 1).getDay() + 6) % 7;
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        const daysInPrevMonth = new Date(year, month, 0).getDate();
+
+        for (let i = firstDayIndex - 1; i >= 0; i--) {
+          const dayNum = daysInPrevMonth - i;
+          const cell = el('button', 'cal-day-cell out-of-month', String(dayNum));
+          cell.type = 'button';
+          const prevM = month === 0 ? 11 : month - 1;
+          const prevY = month === 0 ? year - 1 : year;
+          const iso = `${prevY}-${String(prevM + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+          cell.addEventListener('click', e => {
+            e.stopPropagation();
+            viewDate = new Date(prevY, prevM, 1);
+            setDate(iso);
+            setCalendarVisibility(false, false);
+            trigger.focus({ preventScroll: true });
+          });
+          grid.appendChild(cell);
+        }
+
+        const todayStr = new Date().toISOString().slice(0, 10);
+        for (let d = 1; d <= daysInMonth; d++) {
+          const iso = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+          const cell = el('button', 'cal-day-cell', String(d));
+          cell.type = 'button';
+          if (iso === currentDate) cell.classList.add('is-selected');
+          if (iso === todayStr) cell.classList.add('is-today');
+          cell.addEventListener('click', e => {
+            e.stopPropagation();
+            setDate(iso);
+            setCalendarVisibility(false, false);
+            trigger.focus({ preventScroll: true });
+          });
+          grid.appendChild(cell);
+        }
+
+        const totalCells = firstDayIndex + daysInMonth;
+        const remaining = (7 - (totalCells % 7)) % 7;
+        for (let n = 1; n <= remaining; n++) {
+          const cell = el('button', 'cal-day-cell out-of-month', String(n));
+          cell.type = 'button';
+          const nextM = month === 11 ? 0 : month + 1;
+          const nextY = month === 11 ? year + 1 : year;
+          const iso = `${nextY}-${String(nextM + 1).padStart(2, '0')}-${String(n).padStart(2, '0')}`;
+          cell.addEventListener('click', e => {
+            e.stopPropagation();
+            viewDate = new Date(nextY, nextM, 1);
+            setDate(iso);
+            setCalendarVisibility(false, false);
+            trigger.focus({ preventScroll: true });
+          });
+          grid.appendChild(cell);
+        }
+        popover.appendChild(grid);
+
+        const manualRow = el('div', 'cal-manual-box');
+        manualRow.append(el('span', '', 'Enter date:'));
+        const manualInput = el('input', 'cal-manual-input');
+        manualInput.type = 'text';
+        manualInput.placeholder = 'YYYY-MM-DD';
+        manualInput.value = currentDate;
+        manualInput.autocomplete = 'off';
+        manualInput.addEventListener('input', () => {
+          const val = manualInput.value.trim();
+          if (/^\d{4}-\d{2}-\d{2}$/.test(val)) {
+            const parsed = new Date(val);
+            if (!isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === val) {
+              currentDate = val;
+              viewDate = new Date(parsed.getFullYear(), parsed.getMonth(), 1);
+              dateText.textContent = formatDisplayDate(val);
+              onChange(val);
+              renderCalendar();
+            }
+          }
+        });
+        manualRow.appendChild(manualInput);
+        popover.appendChild(manualRow);
       }
-      card.append(label('Uprawa', select));
-      card.append(label('Data siewu', dateInput(area.sowing_date, value => { area.sowing_date = value || null; })));
-      card.append(button('Popraw granicę na mapie', () => editGeometry(area), 'crop-outline'));
-      const sprays = el('div', 'crop-sprays'); sprays.append(el('strong', '', 'Wykonane opryski'));
-      if (!area.past_sprays.length) sprays.append(el('p', 'crop-muted', 'Brak wykonanych oprysków.'));
-      area.past_sprays.forEach((spray, sprayIndex) => {
-        const group = el('div', 'spray-row');
-        const duration = el('input', 'crop-input'); duration.type = 'number'; duration.min = '1'; duration.step = '1'; duration.inputMode = 'numeric'; duration.placeholder = 'np. 14'; duration.value = spray.protection_duration_days || '';
-        duration.addEventListener('input', () => { spray.protection_duration_days = duration.value === '' ? null : Number(duration.value); });
-        group.append(label('Data oprysku', dateInput(spray.date, value => { spray.date = value || null; })), label('Ochrona (dni)', duration));
-        group.append(button('Usuń oprysk', () => { area.past_sprays.splice(sprayIndex, 1); render(); }, 'crop-link'));
-        sprays.append(group);
+
+      function setDate(iso) {
+        currentDate = iso;
+        dateText.textContent = formatDisplayDate(iso);
+        onChange(iso);
+      }
+
+      function centerInDrawer(element) {
+        requestAnimationFrame(() => {
+          const sheet = panel.closest('.sheet');
+          if (!sheet) return;
+          const sheetRect = sheet.getBoundingClientRect();
+          const elemRect = element.getBoundingClientRect();
+          const currentScroll = sheet.scrollTop;
+          const offset = (elemRect.top - sheetRect.top) - (sheetRect.height - elemRect.height) / 2;
+          sheet.scrollTo({
+            top: Math.max(0, currentScroll + offset),
+            behavior: 'smooth'
+          });
+        });
+      }
+
+      let calendarAnimation = null;
+      let calendarOpen = initiallyOpen;
+      function setCalendarVisibility(show, shouldCenter = true) {
+        if (calendarAnimation) { calendarAnimation.cancel(); calendarAnimation = null; }
+        calendarOpen = show;
+        trigger.setAttribute('aria-expanded', String(show));
+        const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (show) {
+          popover.hidden = false;
+          popover.style.display = 'block';
+          popover.style.pointerEvents = '';
+          if (currentDate) {
+            const parsed = new Date(currentDate);
+            if (!isNaN(parsed.getTime())) viewDate = new Date(parsed.getFullYear(), parsed.getMonth(), 1);
+          }
+          renderCalendar();
+          if (!reduceMotion) {
+            const height = popover.getBoundingClientRect().height;
+            calendarAnimation = popover.animate([
+              { height: '0px', opacity: 0, overflow: 'hidden' },
+              { height: `${height}px`, opacity: 1, overflow: 'hidden' }
+            ], { duration: 200, easing: 'cubic-bezier(.22,1,.36,1)' });
+            calendarAnimation.onfinish = () => { calendarAnimation = null; };
+          }
+          if (shouldCenter) centerInDrawer(popover);
+        } else {
+          popover.style.pointerEvents = 'none';
+          const hide = () => { popover.hidden = true; popover.style.display = 'none'; calendarAnimation = null; };
+          if (reduceMotion || popover.hidden) hide();
+          else {
+            const height = popover.getBoundingClientRect().height;
+            calendarAnimation = popover.animate([
+              { height: `${height}px`, opacity: 1, overflow: 'hidden' },
+              { height: '0px', opacity: 0, overflow: 'hidden' }
+            ], { duration: 170, easing: 'cubic-bezier(.4,0,1,1)' });
+            calendarAnimation.onfinish = hide;
+          }
+        }
+      }
+
+      trigger.addEventListener('click', e => {
+        e.stopPropagation();
+        setCalendarVisibility(!calendarOpen, true);
       });
-      sprays.append(button('+ Dodaj wykonany oprysk', () => { area.past_sprays.push({ date: null, protection_duration_days: null }); render(); }, 'crop-link'));
-      card.append(sprays); return card;
+
+      document.addEventListener('click', e => {
+        if (!wrap.contains(e.target) && calendarOpen) {
+          setCalendarVisibility(false, false);
+        }
+      });
+
+      if (initiallyOpen) {
+        renderCalendar();
+      }
+
+      wrap.append(titleSpan, trigger, popover);
+      return wrap;
     }
+
+    function createCropDropdown(value, onChange) {
+      const select = el('select', 'crop-input crop-select');
+      select.setAttribute('aria-label', 'Crop');
+      select.required = true;
+      const placeholder = el('option', '', 'Select a crop');
+      placeholder.value = '';
+      select.append(placeholder);
+      crops.forEach(crop => {
+        const option = el('option', '', crop.label);
+        option.value = crop.id;
+        select.append(option);
+      });
+      select.value = value || '';
+      select.addEventListener('change', () => onChange(select.value || null));
+      return select;
+    }
+
+    function revealSection(element) {
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      requestAnimationFrame(() => {
+        if (!element.isConnected) return;
+        const height = element.getBoundingClientRect().height;
+        element.animate([
+          { height: '0px', opacity: 0, overflow: 'hidden' },
+          { height: `${height}px`, opacity: 1, overflow: 'hidden' }
+        ], { duration: 220, easing: 'cubic-bezier(.22,1,.36,1)' });
+      });
+    }
+
+    function renderArea(area, index) {
+      const card = el('article', 'crop-card');
+      card.dataset.areaId = area.crop_area_id;
+      card.classList.toggle('active', area.crop_area_id === activeAreaId);
+      const header = el('div', 'crop-card-heading');
+      const globalIndex = draft.areas.indexOf(area);
+      const identify = el('button', 'crop-area-identify');
+      identify.type = 'button';
+      identify.setAttribute('aria-label', `Show area ${globalIndex + 1} on the map`);
+      const marker = el('span', 'crop-area-number', String(globalIndex + 1));
+      marker.style.setProperty('--area-color', palette[globalIndex % palette.length]);
+      const title = el('span', 'crop-area-heading');
+      const crop = crops.find(item => item.id === area.crop.farmer_crop_id);
+      title.append(el('span', 'crop-area-kicker', `AREA ${globalIndex + 1}`), el('strong', '', crop ? crop.label : 'Select a crop'));
+      identify.append(marker, title);
+      identify.addEventListener('click', () => focusArea(area.crop_area_id, { preview: true }));
+      header.append(identify);
+      const actions = el('div', 'crop-area-actions');
+      const outline = el('button', 'crop-edit-icon');
+      outline.type = 'button';
+      outline.setAttribute('aria-label', `Edit the boundary of area ${globalIndex + 1} on the map`);
+      outline.title = 'Edit boundary on the map';
+      outline.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 5.5 10 4 4 7v9l7 4 7-4v-4"/><path d="m13 10 6-6 2 2-6 6-3 1Z"/></svg>';
+      outline.addEventListener('click', () => editGeometry(area));
+      actions.append(outline);
+      const currentAreas = draft.areas;
+      header.append(actions);
+      card.append(header);
+
+      const cropLabel = el('label', 'crop-label');
+      cropLabel.append(requiredLabel('What grows here?'), createCropDropdown(area.crop.farmer_crop_id, value => {
+        area.crop.farmer_crop_id = value;
+        const chosen = crops.find(item => item.id === value);
+        title.querySelector('strong').textContent = chosen ? chosen.label : 'Select a crop';
+        mapData();
+      }));
+      card.append(cropLabel);
+      card.append(createDatePicker({
+        value: area.sowing_date,
+        labelText: 'When was it sown?',
+        initiallyOpen: false,
+        onChange: value => { area.sowing_date = value; }
+      }));
+      const sprays = el('section', 'crop-sprays crop-sprays-compact');
+      const sprayQuestion = requiredLabel('Was the crop sprayed?');
+      sprayQuestion.className = 'spray-question-label';
+      sprays.append(sprayQuestion);
+      const choices = el('div', 'spray-binary');
+      choices.setAttribute('role', 'radiogroup');
+      choices.setAttribute('aria-required', 'true');
+      choices.setAttribute('aria-label', 'Was the crop sprayed?');
+      const switchChoice = (choice, focusAfter = false) => {
+        const update = () => {
+          area.spray_choice = choice;
+          area.past_sprays = choice === 'recorded' ? [{ date: null, protection_duration_days: null }] : [];
+          render();
+          if (focusAfter) {
+            const newCard = [...panel.querySelectorAll('.crop-card')].find(item => item.dataset.areaId === area.crop_area_id);
+            newCard?.querySelector('[role=radio][aria-checked=true]')?.focus();
+          }
+        };
+        const details = sprays.querySelector('.spray-details');
+        if (!details || window.matchMedia('(prefers-reduced-motion: reduce)').matches) { update(); return; }
+        const height = details.getBoundingClientRect().height;
+        const animation = details.animate([
+          { height: `${height}px`, opacity: 1, overflow: 'hidden' },
+          { height: '0px', opacity: 0, overflow: 'hidden' }
+        ], { duration: 160, easing: 'cubic-bezier(.4,0,1,1)' });
+        animation.onfinish = update;
+      };
+      [['recorded', 'Yes'], ['none', 'No']].forEach(([choice, label]) => {
+        const button = el('button', 'spray-binary-option', label);
+        button.type = 'button';
+        button.setAttribute('role', 'radio');
+        button.setAttribute('aria-checked', String(area.spray_choice === choice));
+        button.tabIndex = area.spray_choice ? (area.spray_choice === choice ? 0 : -1) : (choice === 'recorded' ? 0 : -1);
+        button.addEventListener('keydown', event => {
+          if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
+          event.preventDefault();
+          const other = choice === 'recorded' ? 'none' : 'recorded';
+          if (area.spray_choice !== other) switchChoice(other, true);
+        });
+        button.addEventListener('click', () => { if (area.spray_choice !== choice) switchChoice(choice); });
+        choices.append(button);
+      });
+      sprays.append(choices);
+      if (area.spray_choice === 'recorded') {
+        const details = el('div', 'spray-details');
+        area.past_sprays.forEach((spray, sprayIndex) => {
+          const group = el('div', 'spray-compact-row');
+          if (area.past_sprays.length > 1) group.append(el('strong', 'spray-number', `Spray ${sprayIndex + 1}`));
+          const durationWrap = el('label', 'crop-label spray-duration');
+          durationWrap.hidden = !spray.date;
+          const duration = el('input', 'crop-input');
+          duration.type = 'number'; duration.required = true; duration.min = '1'; duration.step = '1'; duration.inputMode = 'numeric';
+          duration.placeholder = 'Number of days';
+          duration.value = spray.protection_duration_days ?? '';
+          duration.addEventListener('input', () => { spray.protection_duration_days = duration.value === '' ? null : Number(duration.value); });
+          durationWrap.append(requiredLabel('How long does the treatment protect the crop? (days)'), duration);
+          const date = createDatePicker({ value: spray.date, labelText: 'When was it sprayed?', initiallyOpen: false, onChange: value => {
+            spray.date = value;
+            if (durationWrap.hidden) {
+              const delay = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 180;
+              setTimeout(() => { if (durationWrap.isConnected && durationWrap.hidden) { durationWrap.hidden = false; revealSection(durationWrap); } }, delay);
+            }
+          }});
+          group.append(date, durationWrap);
+          if (area.past_sprays.length > 1) {
+            const remove = el('button', 'crop-link spray-remove', 'Remove spray');
+            remove.type = 'button';
+            remove.addEventListener('click', () => { area.past_sprays.splice(sprayIndex, 1); render(); });
+            group.append(remove);
+          }
+          details.append(group);
+        });
+        const add = el('button', 'crop-link spray-add', '+ Add another spray');
+        add.type = 'button';
+        add.addEventListener('click', () => { area.past_sprays.push({ date: null, protection_duration_days: null }); render(); });
+        details.append(add);
+        sprays.append(details);
+        revealSection(details);
+      }
+      card.append(sprays);
+      if (currentAreas.length > 1) {
+        const footer = el('div', 'crop-card-footer');
+        const remove = el('button', 'crop-remove-icon');
+        remove.type = 'button';
+        remove.setAttribute('aria-label', `Remove area ${globalIndex + 1}`);
+        remove.title = 'Remove area';
+        remove.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m-9 0 1 13h10l1-13M10 11v5m4-5v5"/></svg>';
+        remove.addEventListener('click', () => {
+          clearMarkers();
+          if (activeAreaId === area.crop_area_id) { activeAreaId = null; geometryArea = null; }
+          draft.areas.splice(draft.areas.indexOf(area), 1);
+          render();
+        });
+        footer.append(remove);
+        card.append(footer);
+      }
+      return card;
+    }
+
+    function renderCombinedSummary() {
+      const summary = el('div', 'crop-selection-summary');
+      const count = draft.parcels.length;
+      const parcelWord = count === 1 ? 'parcel' : 'parcels';
+      const known = draft.parcels.every(parcel => Number.isFinite(parcel.area_ha) && parcel.area_ha >= 0);
+      const total = known ? draft.parcels.reduce((sum, parcel) => sum + parcel.area_ha, 0) : null;
+      const line = `${count} ${parcelWord}${known ? ` · ${total.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ha` : ''}`;
+      summary.append(el('strong', '', line));
+      const list = el('div', 'crop-selection-parcels');
+      draft.parcels.forEach(parcel => list.append(el('span', '', `${parcel.parcel_number} · ${parcel.locality || 'locality'}`)));
+      summary.append(list);
+      return summary;
+    }
+
     function render() {
       const previousHeight = panel.closest('.sheet').getBoundingClientRect().height;
+      status.textContent = '';
       panel.replaceChildren();
+
       const header = el('div', 'crop-workflow-head');
-      header.append(button('‹  Działki', () => { const height = panel.closest('.sheet').getBoundingClientRect().height; closeEditor(); panel.hidden = true; document.getElementById('drawer-content').hidden = false; document.querySelector('.app').classList.remove('cropping'); document.querySelector('.sheet').setAttribute('aria-labelledby', 'heading'); status.textContent = ''; animateDrawerResize(height); }, 'crop-back'));
-      const heading = el('h1', '', 'Co rośnie na działkach?'); heading.id = 'crop-heading';
-      header.append(el('p', 'eyebrow', 'Twoje uprawy'), heading, el('p', 'crop-intro', 'Sprawdź obszary i uzupełnij dane dla każdej uprawy.'));
+      const backBtn = el('button', 'crop-back crop-back-icon');
+      backBtn.type = 'button';
+      backBtn.setAttribute('aria-label', 'Back to parcel selection');
+      backBtn.title = 'Back to parcel selection';
+      backBtn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5m6-6-6 6 6 6"/></svg>';
+      backBtn.addEventListener('click', () => {
+        const height = panel.closest('.sheet').getBoundingClientRect().height;
+        closeEditor();
+        panel.hidden = true;
+        document.getElementById('drawer-content').hidden = false;
+        document.querySelector('.app').classList.remove('cropping');
+        document.querySelector('.sheet').setAttribute('aria-labelledby', 'heading');
+        status.textContent = '';
+        animateDrawerResize(height);
+      });
+
+      const heading = el('h1', '', 'What grows on your land?');
+      heading.id = 'crop-heading';
+      header.append(backBtn, heading);
       panel.append(header);
-      const parcelSelector = el('select', 'crop-input');
-      drafts.forEach(draft => { const option = el('option', '', `Działka ${draft.parcel.parcel_number} · ${draft.parcel.locality || 'obręb'}`); option.value = draft.parcel.parcel_id; parcelSelector.appendChild(option); });
-      parcelSelector.value = currentId;
-      parcelSelector.addEventListener('change', () => { clearMarkers(); stopDrawing(); currentId = parcelSelector.value; render(); fitParcelPreview(selectedDraft().parcel); });
-      panel.append(label('Wybrana działka', parcelSelector));
-      const draft = selectedDraft();
+
       if (!draft) return;
-      if (draft.suggested && !draft.saved) panel.append(el('p', 'crop-notice', 'Proponowany podział z mapy. Sprawdź granice i potwierdź uprawy.'));
-      if (!draft.suggested && !draft.saved) panel.append(el('p', 'crop-notice', 'Brak propozycji z mapy. Wskaż uprawę i dostosuj jej obszar.'));
-      draft.areas.forEach((area, index) => panel.append(renderArea(draft, area, index)));
-      panel.append(button('+ Narysuj kolejny obszar', startDrawing, 'crop-outline'));
-      panel.append(button('Zapisz dane działek', save, 'primary'));
+      const selectionBox = el('section', 'crop-selection-box');
+      selectionBox.setAttribute('aria-label', 'Selected parcels');
+      selectionBox.append(renderCombinedSummary());
+
+      if (draft.parcels.length > 1) {
+        const picker = el('div', 'crop-parcel-picker');
+        const toggle = el('button', 'crop-split-toggle');
+        toggle.type = 'button';
+        toggle.setAttribute('aria-pressed', String(splitByParcel));
+        toggle.append(el('span', '', 'Show parcels separately'), el('span', 'crop-switch'));
+        toggle.addEventListener('click', () => { splitByParcel = !splitByParcel; render(); });
+        picker.append(toggle);
+        if (splitByParcel) {
+          const tabs = el('div', 'crop-parcel-tabs');
+          draft.parcels.forEach(parcel => {
+            const button = el('button', 'crop-parcel-tab', `Parcel ${parcel.parcel_number} · ${parcel.locality}`);
+            button.type = 'button';
+            button.setAttribute('aria-pressed', String(parcel.parcel_id === draft.currentParcel));
+            button.addEventListener('click', () => { draft.currentParcel = parcel.parcel_id; render(); fitParcelPreview(parcel); });
+            tabs.append(button);
+          });
+          picker.append(tabs);
+        }
+        selectionBox.append(picker);
+      }
+      panel.append(selectionBox);
+      const visibleAreas = splitByParcel ? draft.areas.filter(area => !area.parcel_id || area.parcel_id === draft.currentParcel) : draft.areas;
+      visibleAreas.forEach((area, index) => panel.append(renderArea(area, index)));
+
+      const areaActions = el('div', 'crop-area-actions-row');
+      const addAreaBtn = el('button', 'crop-outline crop-action');
+      addAreaBtn.innerHTML = '<svg viewBox="0 0 28 24" aria-hidden="true"><defs><mask id="add-area-cutout"><rect width="28" height="24" fill="white" stroke="none"/><circle cx="20" cy="6" r="6.5" fill="black" stroke="none"/></mask></defs><path d="M13 3 3 6v11l9 4 8-5V9Z" mask="url(#add-area-cutout)"/><circle cx="20" cy="6" r="4.5"/><path d="M20 3.8v4.4m-2.2-2.2h4.4"/></svg><span>Add area</span>';
+      addAreaBtn.type = 'button';
+      addAreaBtn.addEventListener('click', startDrawing);
+      areaActions.append(addAreaBtn);
+      const importArea = el('button', 'crop-outline crop-action');
+      importArea.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3m-4 4 4-4 4 4M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg><span>Import</span>';
+      importArea.type = 'button';
+      importArea.addEventListener('click', () => {
+        const dialog = document.getElementById('import-dialog');
+        document.getElementById('import-title').textContent = 'Import crop boundaries';
+        document.getElementById('import-note').textContent = 'Choose a file to see a preview.';
+        document.getElementById('import-file').value = '';
+        document.getElementById('use-import').hidden = true;
+        dialog.showModal();
+      });
+      areaActions.append(importArea);
+      panel.append(areaActions);
+
+
+      const saveBtn = el('button', 'primary', 'Save crop details');
+      saveBtn.type = 'button';
+      saveBtn.addEventListener('click', save);
+      panel.append(saveBtn);
+
       mapData();
       animateDrawerResize(previousHeight);
     }
+
     async function open() {
       try {
-        status.textContent = 'Pobieramy dane upraw…';
-        const [cropResponse, fieldResponse] = await Promise.all([provider.getCrops(), provider.listFields()]);
+        status.textContent = 'Loading crop details…';
         const parcels = [...selected.values()];
-        const suggestions = await Promise.all(parcels.map(parcel => provider.getCropSuggestions(parcel.parcel_id)));
+        if (!parcels.length) {
+          showError('Select at least one parcel first.');
+          return;
+        }
+
+        const [cropResponse, fieldResponse, groupResponse] = await Promise.all([
+          provider.getCrops(),
+          provider.listFields(),
+          provider.listCropGroups ? provider.listCropGroups() : Promise.resolve({ groups: [] })
+        ]);
         crops = cropResponse.crops;
-        const nextDrafts = new Map();
+
+        const suggestions = await Promise.all(
+          parcels.map(parcel => provider.getCropSuggestions(parcel.parcel_id))
+        );
+
+        const areas = [];
+        const fieldIds = {};
+        let isSuggested = false;
         parcels.forEach((parcel, index) => {
-          if (drafts.has(parcel.parcel_id)) { nextDrafts.set(parcel.parcel_id, drafts.get(parcel.parcel_id)); return; }
           const saved = fieldResponse.fields.find(field => field.parcel.parcel_id === parcel.parcel_id);
-          const suggestedAreas = suggestions[index].areas;
-          const areas = saved ? copy(saved.crop_areas) : suggestedAreas.length ? suggestedAreas.map(area => ({ crop_area_id: area.crop_area_id, geometry: area.geometry, crop: { farmer_crop_id: null, map_crop_id: area.map_crop_id }, sowing_date: null, past_sprays: [] })) : [{ crop_area_id: newId(), geometry: copy(parcel.geometry), crop: { farmer_crop_id: null, map_crop_id: null }, sowing_date: null, past_sprays: [] }];
-          nextDrafts.set(parcel.parcel_id, { parcel: copy(parcel), fieldId: saved ? saved.field_id : `field-${parcel.parcel_id}`, areas, saved: Boolean(saved), suggested: suggestedAreas.length > 0 });
+          if (saved && Array.isArray(saved.crop_areas) && saved.crop_areas.length) {
+            fieldIds[parcel.parcel_id] = saved.field_id;
+            copy(saved.crop_areas).forEach(area => {
+              area.parcel_id = parcel.parcel_id;
+              area.spray_choice = Array.isArray(area.past_sprays) ? (area.past_sprays.length ? 'recorded' : 'none') : null;
+              if (!Array.isArray(area.past_sprays)) area.past_sprays = [];
+              areas.push(area);
+            });
+          } else {
+            const suggestedAreas = suggestions[index]?.areas || [];
+            if (suggestedAreas.length) {
+              isSuggested = true;
+              suggestedAreas.forEach(suggestion => areas.push({
+                crop_area_id: suggestion.crop_area_id,
+                parcel_id: parcel.parcel_id,
+                geometry: copy(suggestion.geometry),
+                crop: { farmer_crop_id: crops.some(crop => crop.id === suggestion.map_crop_id) ? suggestion.map_crop_id : null, map_crop_id: suggestion.map_crop_id || null },
+                sowing_date: null, past_sprays: [], spray_choice: null
+              }));
+            } else {
+              areas.push({
+                crop_area_id: newId(), parcel_id: parcel.parcel_id,
+                geometry: copy(parcel.geometry),
+                crop: { farmer_crop_id: null, map_crop_id: null },
+                sowing_date: null, past_sprays: [], spray_choice: null
+              });
+            }
+          }
         });
-        drafts = nextDrafts; currentId = drafts.has(currentId) ? currentId : parcels[0].parcel_id;
-        editing = true; document.getElementById('drawer-content').hidden = true; panel.hidden = false; document.querySelector('.app').classList.add('cropping'); document.querySelector('.sheet').setAttribute('aria-labelledby', 'crop-heading'); status.textContent = ''; setDrawer(true); render();
-        fitParcelPreview(drafts.get(currentId).parcel);
-      } catch (_) { showError('Nie można pobrać danych upraw. Spróbuj ponownie.'); }
+        const chosenIds = parcels.map(parcel => parcel.parcel_id).sort().join('|');
+        const savedGroup = (groupResponse.groups || []).find(group => Array.isArray(group.parcel_ids) && [...group.parcel_ids].sort().join('|') === chosenIds);
+        const conflictingGroup = !savedGroup && (groupResponse.groups || []).some(group => Array.isArray(group.parcel_ids) && group.parcel_ids.some(id => parcels.some(parcel => parcel.parcel_id === id)));
+        if (conflictingGroup) throw new Error('GROUP_SELECTION_MISMATCH');
+        if (savedGroup && Array.isArray(savedGroup.crop_areas)) {
+          areas.length = 0;
+          copy(savedGroup.crop_areas).forEach(area => {
+            area.parcel_id = null;
+            area.spray_choice = Array.isArray(area.past_sprays) ? (area.past_sprays.length ? 'recorded' : 'none') : null;
+            if (!Array.isArray(area.past_sprays)) area.past_sprays = [];
+            areas.push(area);
+          });
+        }
+        draft = { parcels: copy(parcels), areas, fieldIds, currentParcel: parcels[0].parcel_id, saved: Boolean(savedGroup), suggested: isSuggested };
+        splitByParcel = false;
+        activeAreaId = null;
+
+        editing = true;
+        document.getElementById('drawer-content').hidden = true;
+        panel.hidden = false;
+        document.querySelector('.app').classList.add('cropping');
+        document.querySelector('.sheet').setAttribute('aria-labelledby', 'crop-heading');
+        status.textContent = '';
+        setDrawer(true);
+        render();
+
+        const compositeBounds = {
+          geometry: {
+            type: 'MultiPolygon',
+            coordinates: parcels.map(p =>
+              p.geometry.type === 'MultiPolygon' ? p.geometry.coordinates[0] : p.geometry.coordinates
+            )
+          }
+        };
+        fitParcelPreview(compositeBounds);
+      } catch (error) {
+        showError(error?.message === 'GROUP_SELECTION_MISMATCH' ? 'Some parcels belong to a saved group. Select the entire group to preserve its crop data.' : 'Could not load crop details. Please try again.');
+      }
     }
+
     async function save() {
-      for (const draft of drafts.values()) {
-        if (!draft.areas.length || draft.areas.some(area => !area.crop.farmer_crop_id || !area.sowing_date || area.past_sprays.some(spray => !spray.date || !Number.isInteger(spray.protection_duration_days) || spray.protection_duration_days < 1))) {
-          currentId = draft.parcel.parcel_id; render(); showError('Uzupełnij uprawę i datę siewu. Każdy oprysk wymaga daty i liczby dni ochrony.'); return;
+      if (!draft || !draft.areas.length) {
+        showError('Add at least one crop area.');
+        return;
+      }
+      for (let i = 0; i < draft.areas.length; i++) {
+        const area = draft.areas[i];
+        const parcel = draft.parcels.find(item => item.parcel_id === area.parcel_id);
+        const parcelAreas = draft.areas.filter(item => item.parcel_id === area.parcel_id);
+        const areaLabel = parcel ? `Parcel ${parcel.parcel_number}, area ${parcelAreas.indexOf(area) + 1}: ` : `Area ${i + 1}: `;
+        const invalid = message => {
+          if (area.parcel_id) draft.currentParcel = area.parcel_id;
+          activeAreaId = area.crop_area_id;
+          render();
+          showError(areaLabel + message);
+          const card = [...panel.querySelectorAll('.crop-card')].find(item => item.dataset.areaId === area.crop_area_id);
+          if (card) {
+            const error = el('p', 'crop-inline-error', message);
+            error.setAttribute('role', 'alert');
+            card.prepend(error);
+            card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        };
+        if (!area.crop.farmer_crop_id) {
+          invalid('Choose a crop from the list.');
+          return;
+        }
+        if (!area.sowing_date) {
+          invalid('Enter the sowing date.');
+          return;
+        }
+        if (!area.spray_choice) {
+          invalid('Choose whether the crop was sprayed.');
+          return;
+        }
+        if (area.spray_choice === 'recorded') {
+          if (!area.past_sprays.length) {
+            invalid('Add a spray or confirm there were none.');
+            return;
+          }
+          for (let s = 0; s < area.past_sprays.length; s++) {
+            const spray = area.past_sprays[s];
+            if (!spray.date) {
+              invalid(`Spray ${s + 1}: select a date.`);
+              return;
+            }
+            if (!Number.isInteger(spray.protection_duration_days) || spray.protection_duration_days < 1) {
+              invalid(`Spray ${s + 1}: enter the number of days of protection (at least 1).`);
+              return;
+            }
+          }
         }
       }
-      let savedCount = 0;
+
+      if (!validation || validation.fingerprint !== geometryFingerprint()) {
+        if (!await validateForSave()) return;
+      }
+      const result = validation.response;
+      if ((result.errors || []).length || (result.overlaps || []).length) {
+        const issue = displayedFindings.find(item => item.kind === 'overlap' || item.kind === 'error');
+        if (issue) showFinding(issue, { review: true }); else showError('Fix the geometry problems before saving.');
+        return;
+      }
+      const required = [
+        ...(result.gaps || []).map(item => `gap:${item.gap_id}`),
+        ...(result.outside || []).map(item => `outside:${item.outside_id}`),
+        ...(result.crop_areas || []).filter(item => item.repair?.requires_review).map(item => `repair:${item.repair.repair_id}`)
+      ];
+      if (required.some(id => !validation.accepted.has(id))) {
+        const issue = displayedFindings.find(item => item.id && !validation.accepted.has(`${item.kind}:${item.id}`));
+        if (issue) showFinding(issue, { review: true }); else showError('Confirm the boundary changes before saving.');
+        return;
+      }
       try {
-        for (const draft of drafts.values()) {
-          const saved = await provider.saveField(draft.fieldId, { field_id: draft.fieldId, parcel: draft.parcel, crop_areas: copy(draft.areas) });
-          draft.areas = copy(saved.crop_areas); draft.saved = true; savedCount++;
-        }
-        render(); showError(provider.mode === 'mock' ? 'Zapisano dane w podglądzie. Znikną po odświeżeniu strony.' : 'Zapisano dane działek.');
-      } catch (_) { showError(savedCount ? `Zapisano ${savedCount} działek. Pozostałych nie udało się zapisać — spróbuj ponownie.` : 'Nie udało się zapisać danych. Sprawdź granice i spróbuj ponownie.'); }
+        if (typeof provider.saveCropGroup !== 'function') throw new Error('Group save is not available');
+        await provider.saveCropGroup({
+          ...geometryRequest(), validation_id: result.validation_id,
+          confirmations: [...validation.accepted],
+          crop_areas: draft.areas.map(({ parcel_id, spray_choice, ...area }) => copy(area))
+        });
+        draft.saved = true; closeFinding();
+        render(); showError('Crop details saved.');
+      } catch (_) { showError('Could not save the data. Your drawing is still here.'); }
+
     }
-    return { open, isEditing: () => editing, isDrawing: () => drawing, addPoint };
+
+    return {
+      open,
+      isEditing: () => editing,
+      isDrawing: () => drawing,
+      addPoint,
+      addImportedAreas(areas) {
+        if (!draft || !Array.isArray(areas)) return;
+        areas.forEach(item => {
+          if (!item.geometry || !['Polygon', 'MultiPolygon'].includes(item.geometry.type)) return;
+          draft.areas.push({
+            crop_area_id: newId(), parcel_id: null, geometry: copy(item.geometry),
+            crop: { farmer_crop_id: crops.some(crop => crop.id === item.map_crop_id) ? item.map_crop_id : null, map_crop_id: item.map_crop_id || null },
+            sowing_date: null, past_sprays: [], spray_choice: null
+          });
+        });
+        render(); setDrawer(true);
+      },
+      addEditPoint,
+      dismissGuide() {
+        if (!cropGuide.classList.contains('visible') && !editGuide.classList.contains('visible')) return false;
+        hideGuides();
+        return true;
+      },
+      deselectArea() {
+        if (!editing || drawing || !activeAreaId) return false;
+        activeAreaId = null;
+        stopDrawing();
+        closeFinding();
+        panel.querySelectorAll('.crop-card').forEach(card => card.classList.remove('active'));
+        mapData();
+        return true;
+      },
+      showFindingAt(point) {
+        if (!editing || drawing || !map.getLayer('geometry-findings-fill')) return false;
+        const feature = map.queryRenderedFeatures(point, { layers: ['geometry-findings-fill'] })[0];
+        const finding = feature && displayedFindings[Number(feature.properties.index)];
+        if (!finding) return false;
+        showFinding(finding, { review: Boolean(validation), preserveDrawer: true });
+        return true;
+      },
+      selectAt(point) {
+        if (!editing || drawing || !map.getLayer('crop-fill')) return;
+        const feature = map.queryRenderedFeatures(point, { layers: ['crop-fill'] })[0];
+        if (!feature?.properties?.id || feature.properties.id === 'drawing') return false;
+        focusArea(feature.properties.id, { openPanel: true });
+        return true;
+      }
+    };
   }
+
   root.CropWorkflow = { create };
 })(globalThis);

@@ -16,9 +16,7 @@ if (!/^\d+$/.test(portText) || !Number.isInteger(port) || port < 1 || port > 655
 async function buildFeatures() {
   const provider = createMockProvider();
   const { fields } = await provider.listFields();
-  const { parcels } = await Promise.all(
-    Array.from({ length: 5 }, (_, index) => provider.findParcels({ number: `DEMO-${String(index + 1).padStart(3, '0')}` }))
-  ).then(results => ({ parcels: results.flatMap(result => result.parcels) }));
+  const { parcels } = await provider.listMockParcels();
   const byParcel = new Map(fields.map(field => [field.parcel.parcel_id, field]));
   return {
     type: 'FeatureCollection',
