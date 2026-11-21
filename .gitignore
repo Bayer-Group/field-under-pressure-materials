@@ -11,7 +11,6 @@ data/**
 
 # Secrets / local config
 .env
-.env.*
 *.pem
 
 # Python
