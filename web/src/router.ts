@@ -3,17 +3,20 @@ import { useSyncExternalStore } from 'react'
 // Hash routes, so the app works from any static server and links can be bookmarked:
 //   #/                                    overview map
 //   #/plot/<plot_id>                      map zoomed to one plot, with its greenness chart
-//   #/plot/<plot_id>/microbes[/<sample>]  the same plot with its soil microbiome composition
+//   #/plot/<plot_id>/microbes[/<sample>][?view=roles]  the same plot with its soil microbiome composition (or roles)
 //   #/plot/<plot_id>/functions[/<sample>] the same plot with what its soil microbes are equipped to do
 //   #/plot/<plot_id>/risk[/<unit>[/<crop>]]  the same plot with its crop disease risk
 //   #/event/<event_id>                    details of one sampling visit
+export type MicrobeView = 'taxonomy' | 'roles'
 export type PlotTab = 'greenness' | 'microbes' | 'functions' | 'risk'
 export type Route =
-  | { page: 'map'; plotId: string | null; tab: PlotTab; sampleId: string | null; unit: string | null; crop: string | null }
+  | { page: 'map'; plotId: string | null; tab: PlotTab; sampleId: string | null; unit: string | null; crop: string | null; view: MicrobeView }
   | { page: 'event'; eventId: string }
 
 export function parseRoute(hash: string): Route {
-  const [page, arg, tab, third, fourth] = hash.replace(/^#\/?/, '').split('/').map(decodeURIComponent)
+  const [path, query = ''] = hash.replace(/^#\/?/, '').split('?')
+  const [page, arg, tab, third, fourth] = path.split('/').map(decodeURIComponent)
+  const view: MicrobeView = new URLSearchParams(query).get('view') === 'roles' ? 'roles' : 'taxonomy'
   if (page === 'event' && arg) return { page: 'event', eventId: arg }
   const plotId = page === 'plot' && arg ? arg : null
   const microbes = plotId !== null && tab === 'microbes'
@@ -22,13 +25,13 @@ export function parseRoute(hash: string): Route {
   return {
     page: 'map', plotId, tab: microbes ? 'microbes' : functions ? 'functions' : risk ? 'risk' : 'greenness',
     sampleId: (microbes || functions) && third ? third : null,
-    unit: risk && third ? third : null, crop: risk && third && fourth ? fourth : null,
+    unit: risk && third ? third : null, crop: risk && third && fourth ? fourth : null, view,
   }
 }
 
 export const plotHref = (plotId: string) => `#/plot/${encodeURIComponent(plotId)}`
-export const microbesHref = (plotId: string, sampleId?: string) =>
-  `${plotHref(plotId)}/microbes${sampleId ? `/${encodeURIComponent(sampleId)}` : ''}`
+export const microbesHref = (plotId: string, sampleId?: string, view?: MicrobeView) =>
+  `${plotHref(plotId)}/microbes${sampleId ? `/${encodeURIComponent(sampleId)}` : ''}${view === 'roles' ? '?view=roles' : ''}`
 export const riskHref = (plotId: string, unit?: string | null, crop?: string | null) =>
   `${plotHref(plotId)}/risk${unit ? `/${encodeURIComponent(unit)}${crop ? `/${encodeURIComponent(crop)}` : ''}` : ''}`
 export const functionsHref = (plotId: string, sampleId?: string) =>

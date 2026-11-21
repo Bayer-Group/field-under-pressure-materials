@@ -1,0 +1,33 @@
+term_id,parent_id,label,polarity,ko_group,description
+useful,,Useful,useful,,Genera with well-documented benefits for crops or soil fertility.
+nutrient_supply,useful,Nutrient suppliers,useful,,"Make nutrients available to crops; use directly only when no child fits (e.g. potassium or iron mobilisation)."
+n_fixation,nutrient_supply,Nitrogen fixers,useful,n_fixation,"Turn nitrogen gas from the air into ammonium, free-living in soil or loosely associated with grass roots."
+legume_symbiont,n_fixation,Legume nodule partners,useful,,"Rhizobia that fix nitrogen inside root nodules of soybean, alfalfa, beans and other legumes."
+p_mobilisation,nutrient_supply,Phosphorus solubilisers,useful,p_mobilisation,"Free phosphorus bound in minerals or organic matter with acids, phosphatases or phytases."
+mycorrhizal_partner,nutrient_supply,Arbuscular mycorrhizal fungi,useful,,Glomeromycota fungi that live in crop roots and extend them to reach phosphorus and water.
+plant_growth_promotion,useful,Growth promoters,useful,,"Promote root or plant growth directly; use directly only when no child fits (e.g. induced systemic resistance)."
+acdS,plant_growth_promotion,Root stress relievers,useful,acdS,"Carry ACC deaminase, which lowers the stress hormone ethylene in roots under drought, heat or salt."
+phytohormone,plant_growth_promotion,Plant hormone makers,useful,,"Make auxin, gibberellin or cytokinin in amounts shown to change root or shoot growth."
+biocontrol,useful,Pest and disease suppressors,useful,,"Hold crop pathogens or pests in check; use directly only when no child fits (e.g. competition for roots or iron)."
+antibiotic_producer,biocontrol,Antimicrobial producers,useful,phlD;hcnA,"Make antifungal or antibacterial compounds (e.g. DAPG, hydrogen cyanide, phenazines, lipopeptides) that suppress root pathogens."
+mycoparasite,biocontrol,Parasites of other fungi,useful,,"Attack and feed on other fungi, crop pathogens included (e.g. Trichoderma, Clonostachys)."
+chitinase,biocontrol,Chitin digesters,useful,chitinase,"Notable for breaking down chitin of fungal walls and insect shells, which can weaken fungal pathogens."
+pest_antagonist,biocontrol,Insect and nematode enemies,useful,,"Kill or trap insect pests or plant-parasitic nematodes (e.g. Bacillus thuringiensis, Beauveria, Metarhizium)."
+harmful,,Potentially harmful,harmful,,"Genera that include species harmful to crops, livestock or people."
+plant_pathogen,harmful,Genera with plant pathogens,harmful,,Include species that cause crop or plant diseases; use directly only when the disease type is unclear or mixed.
+root_soilborne_pathogen,plant_pathogen,Root and soilborne pathogens,harmful,,"Cause root, crown, tuber or seedling rots, damping-off, scab, or wilts that enter through the roots."
+foliar_pathogen,plant_pathogen,"Leaf, stem, head and seed pathogens",harmful,,"Cause leaf spots, blights, rusts, head blight, stalk or ear rots; soil and crop residue serve as their reservoir."
+mycotoxin_producer,harmful,Mycotoxin producers,harmful,,"Include species that can leave toxins in grain or forage (e.g. deoxynivalenol, fumonisins, aflatoxins)."
+animal_human_pathogen,harmful,Human or animal pathogens,harmful,,"Include species that cause disease in people or livestock, mostly opportunistic infections from soil, dust or manure."
+context,,Nitrogen cyclers,context,,"Move nitrogen between forms; good or bad for the crop depending on timing, water and fertiliser management."
+nitrification,context,Nitrifiers,context,nitrification,"Turn ammonium into nitrite and nitrate (ammonia- and nitrite-oxidising bacteria and archaea, comammox Nitrospira); nitrate feeds crops but can leach."
+denitrification,context,Denitrifiers,context,denitrification,"Turn nitrate into nitrogen gases, a nitrogen loss and a source of the greenhouse gas N2O, mostly in wet soil."
+nosZ,context,N2O reducers,context,nosZ,"Turn the greenhouse gas N2O into harmless nitrogen gas (N2), the last step of denitrification."
+dnra,context,Nitrate-to-ammonium (DNRA),context,dnra,"Turn nitrate back into ammonium, which stays in the soil instead of leaching or escaping as gas."
+background,,Neutral / background,background,,Ordinary soil life with no direct and well-documented effect on crops.
+decomposer,background,Decomposers,background,,"Notable for breaking down crop residues and organic matter (saprotrophs), recycling nutrients."
+endophyte,background,Endophytes,background,,Live inside plant tissues without known disease; effect on the crop unclear.
+tree_mycorrhizal,background,Tree mycorrhizal fungi,background,,"Ecto-, ericoid or orchid mycorrhizal fungi that partner with trees or shrubs, not with field crops."
+common_soil_microbe,background,Common soil microbes,background,,"Known, often common soil microbes with no specific crop-related role."
+unknown,,Role unknown,unknown,,Too little is known about the genus to give it a role.
+doubtful_assignment,unknown,Probably misnamed reads,unknown,,"Genus not expected in cropland soil (e.g. obligate insect symbionts, hyperthermophiles, extreme halophiles); reads are likely misassigned or incidental."

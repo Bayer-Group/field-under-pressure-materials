@@ -6,8 +6,8 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-from cropfit import api, funguild
-from cropfit.api_functions import Measured, _cards, _pathways
+from cropfit import api, funguild, microbe_roles
+from cropfit.api_functions import AGREEMENT_TEXT, CARRIER_TERMS, Measured, _agreement, _cards, _pathways
 
 
 @pytest.fixture
@@ -150,3 +150,102 @@ def test_nitrogen_card_flags_missing_n2o_removal():
     card = next(c for c in _cards(copies, _pathways(copies, True), None, None, True, pd.DataFrame())
                 if c.card == "nitrogen")
     assert card.status == "notice" and "no N2O-removing gene" in card.flag
+
+
+# ---------------------------------------------------------------- named carriers (docs/microbe_roles.md 6.3)
+@pytest.fixture
+def with_names(client, role_files):
+    """The functions fixture plus a Kraken2 genus table for the same metagenome (the roles fixture genera)."""
+    L = lambda rank, name, phylum, reads: dict(metagenome_key="nmdc:dobj-a", rank=rank, name=name, domain="Bacteria",  # noqa: E731
+                                               phylum=phylum, reads=reads)
+    pd.DataFrame([L("domain", "Bacteria", None, 90_000), L("domain", "Archaea", None, 10_000),
+                  L("genus", "Streptomyces", "Actinobacteria", 20_000), L("genus", "Bradyrhizobium", "Proteobacteria", 10_000),
+                  L("genus", "Nitrososphaera", "Thaumarchaeota", 5_000)]).to_parquet(api.PROCESSED / "taxa_lineage.parquet")
+    return client
+
+
+def test_no_carriers_without_taxa_lineage(client):
+    p = client.get("/api/functions/mg-dobj-a").json()
+    assert p["carriers"] == [] and not any(c["card"] == "bacteria_pathogens" for c in p["cards"])
+    assert all(g["term_id"] is not None for g in p["groups"] if g["group"] in ("phlD", "hcnA", "nosZ"))
+    assert next(g for g in p["groups"] if g["group"] == "urease")["term_id"] is None
+    assert {x["name"]: x["term_id"] for x in p["pathways"]}["Urea breakdown"] is None
+    assert {x["name"]: x["term_id"] for x in p["pathways"]}["Denitrification"] == "denitrification"
+    assert {r["role"]: (r["label"], r["term_id"]) for r in p["fungi"]["roles"]}["saprotroph"] == ("Decomposers", "decomposer")
+    cards = {c["card"]: c for c in p["cards"]}
+    assert cards["nitrogen"]["carrier_terms"] == ["n_fixation", "nitrification", "denitrification", "nosZ", "dnra"]
+    assert cards["p_release"]["carrier_terms"] == ["p_mobilisation"] and cards["fungi"]["carrier_terms"] == []
+
+
+def test_carriers_next_to_genes(with_names):
+    p = with_names.get("/api/functions/mg-dobj-a").json()
+    assert [c["term_id"] for c in p["carriers"]] == CARRIER_TERMS
+    c = {x["term_id"]: x for x in p["carriers"]}
+    fix = c["n_fixation"]                                       # nifH 2 copies: trace; Bradyrhizobium 10%
+    assert (fix["genes"], fix["agreement"], fix["pct"], fix["label"]) == ("trace", "both", 10.0, "Nitrogen fixers")
+    assert fix["top"][0]["name"] == "Bradyrhizobium" and fix["top"][0]["term_id"] == "legume_symbiont"
+    assert fix["top"][0]["pct"] == 10.0 and fix["agreement_text"].startswith("Only a trace of the genes")  # not "found"
+    assert c["nitrification"]["agreement"] == "both" and c["nitrification"]["top"][0]["name"] == "Nitrososphaera"
+    assert c["denitrification"]["agreement"] == "genes_only" and c["denitrification"]["top"] == []   # Bradyrhizobium's row is low
+    assert c["chitinase"]["genes"] == "not_found" and c["chitinase"]["agreement"] == "neither"
+    ab = c["antibiotic_producer"]                               # phlD 0, hcnA missing: not found, yet Streptomyces is named
+    assert ab["agreement"] == "names_only" and ab["agreement_text"].endswith("cover only some antimicrobial producers.")
+    assert ab["ko_groups"] == ["phlD", "hcnA"] and ab["top"][0]["species_examples"] == ["Streptomyces griseus"]
+    assert ab["top"][0]["description"].startswith("Thread-forming")
+    assert any(n.startswith("Who may carry it:") for n in p["notes"])
+    assert next(g for g in p["groups"] if g["group"] == "phlD")["term_id"] == "antibiotic_producer"
+
+
+def test_stub_cards_keep_their_carrier_terms(with_names):
+    cards = {c["card"]: c for c in with_names.get("/api/functions/mg-dobj-s").json()["cards"]}
+    assert cards["root_health"]["carrier_terms"] == ["antibiotic_producer", "acdS", "chitinase"]
+    assert cards["root_health"]["headline"] == "Too few genes to tell"
+
+
+def test_agreement_table_has_one_case_per_value():
+    assert _agreement("nosZ", "found", 0.5)[0] == "both" and _agreement("nosZ", "trace", 0.5)[0] == "both"
+    assert _agreement("nosZ", "found", 0.05)[0] == "genes_only" and _agreement("nosZ", "found", 0.1)[0] == "both"
+    assert _agreement("nosZ", "not_found", 0.5)[0] == "names_only"
+    assert _agreement("nosZ", "not_found", 0.0)[0] == "neither"
+    assert _agreement("nosZ", "too_few_genes", 5.0) == ("unknown", "Too few genes to compare with the named carriers.")
+    assert _agreement("antibiotic_producer", "not_found", 0.0)[1].startswith(AGREEMENT_TEXT["neither"] + " The marker")
+
+
+# ---------------------------------------------------------------- bacteria that include plant pathogens
+def roll(*rows_, **pct):
+    ann = pd.DataFrame([dict(domain="Bacteria", genus=g, term_id="root_soilborne_pathogen", confidence="high",
+                             evidence=ev, source="llm:test", species_examples=sp, note="") for g, ev, sp in rows_],
+                       columns=microbe_roles.ANNOTATION_COLUMNS)
+    t = pd.DataFrame([dict(name=n, phylum=None, pct=p, reads=int(p * 1000)) for n, p in pct.items()])
+    return microbe_roles.roll_up(t, "bacteria", ann=ann, descriptions={})
+
+
+def pathogen_card(ru, reads=100_000):
+    return next(c for c in _cards({}, _pathways({}, False), None, None, False, pd.DataFrame(), ru, reads)
+                if c.card == "bacteria_pathogens")
+
+
+def test_bacteria_pathogen_card_flags_only_mostly_pathogenic_genera():
+    small = pathogen_card(roll(("Xanthomonas", "well_known_genus", "Xanthomonas campestris"), Xanthomonas=1.2))
+    assert small.status == "notice" and small.flag == "Xanthomonas alone is 1.2% of bacterial DNA"
+    assert small.basis == "names" and small.carrier_terms == [] and small.confidence == "low"
+    assert small.headline == "1% from genera that include plant pathogens · 1% from mostly pathogenic genera"
+    assert small.finding.endswith("plant pathogens: Xanthomonas 1% (X. campestris).") and small.implications[0].kind == "risk"
+    assert small.evidence[0].startswith("Xanthomonas 1.20%: Root and soilborne pathogens, high confidence, llm:test")
+    assert small.evidence[-1].startswith("Roles from the microbe role annotation")
+    big = pathogen_card(roll(("Pseudomonas", "some_species", "Pseudomonas syringae"), Pseudomonas=20.0))
+    assert big.status == "info" and big.flag is None                       # 20% of a some-species genus: no colour
+    assert [i.kind for i in big.implications] == ["neutral", "neutral"]
+    assert "only some species cause disease (Pseudomonas 20%)" in big.implications[0].text
+    none = pathogen_card(roll(("Bacillus", "some_species", ""), Other=10.0))
+    assert none.headline == "No genera known for plant pathogens" and none.status == "info"
+    few = pathogen_card(roll(("Xanthomonas", "well_known_genus", ""), Xanthomonas=1.2), reads=500)
+    assert few.evidence[-1] == "Few bacterial reads: small shares may be noise."
+
+
+def test_pathogen_card_in_the_profile(with_names):
+    p = with_names.get("/api/functions/mg-dobj-a").json()
+    card = next(c for c in p["cards"] if c["card"] == "bacteria_pathogens")
+    assert card["title"] == "Bacteria that include plant pathogens" and card["status"] == "info"   # Streptomyces: some species
+    assert card["headline"].startswith("20% from genera that include plant pathogens")
+    assert "Streptomyces 20% (S. scabies)" in card["finding"]
