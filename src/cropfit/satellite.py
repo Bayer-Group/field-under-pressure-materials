@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 
 from . import stac
-from .config import RAW
+from .config import RAW, light_filter
 
 SAT_DIR = RAW / "satellite"
 CLEAR_MIN = 0.99
@@ -147,9 +147,10 @@ def fetch(sensor: str, geom: pd.DataFrame, workers: int = 12, start: str = START
 
 
 def load_observations() -> pd.DataFrame:
-    """All stored scene results of all sensors."""
+    """All stored scene results of all sensors (in light mode only its plots)."""
     files = sorted(f for s in SENSORS for f in (SAT_DIR / s).glob("*.parquet") if f.name != "manifest.parquet")
-    return pd.concat([pd.read_parquet(f) for f in files], ignore_index=True) if files else pd.DataFrame()
+    obs = pd.concat([pd.read_parquet(f) for f in files], ignore_index=True) if files else pd.DataFrame()
+    return light_filter(obs).reset_index(drop=True)
 
 
 def timeseries(obs: pd.DataFrame) -> pd.DataFrame:

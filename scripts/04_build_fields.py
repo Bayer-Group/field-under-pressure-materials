@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 
 from cropfit import csb, fields
-from cropfit.config import PROCESSED, RESOURCES
+from cropfit.config import PROCESSED, RESOURCES, light_filter
 
 MIN_HA = 2.0
 
@@ -63,6 +63,7 @@ def build_plot_csb() -> pd.DataFrame:
     p = pd.read_csv(RESOURCES / "neon_soil_plots_landcover.csv")
     p = p[(p["site"].isin(csb.SITES)) & (p["nlcd"] == "cultivatedCrops")].copy()
     p["plotID"] = p["plot"].str.replace(".basePlot.bgc", "", regex=False)
+    p = light_filter(p)
     rows = []
     for _, r in p.iterrows():
         d = csb.plot_to_csb(r["lat"], r["lon"]) or {}

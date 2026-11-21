@@ -19,6 +19,10 @@ Usage:
     uv run scripts/pull_nmdc_cropland.py                 # STER + KONA
     uv run scripts/pull_nmdc_cropland.py --dry-run       # list, don't download
     uv run scripts/pull_nmdc_cropland.py --sites KONA --out data/nmdc
+    uv run scripts/pull_nmdc_cropland.py --plots STER_006 STER_010   # these plots only
+
+Light mode: while data/light_mode.txt exists (scripts/00_light_mode.py on), only the plots listed there
+are pulled, unless --plots or --all-plots is given.
 
 Re-running is safe: files that already exist with the expected size are skipped.
 """
@@ -78,6 +82,21 @@ DO_FIELDS = [
     "data_object_type", "name", "file_size_bytes", "md5_checksum", "url",
     "selected", "local_path",
 ]
+
+LIGHT_FILE = Path(__file__).resolve().parents[1] / "data" / "light_mode.txt"
+
+
+def light_plots() -> list[str] | None:
+    """Plots of light mode (data/light_mode.txt, 'STER_006' or 'STER 006' per line), None when it is off."""
+    if not LIGHT_FILE.exists():
+        return None
+    out = set()
+    for line in LIGHT_FILE.read_text().splitlines():
+        m = re.match(r"^([A-Z]{4})[\s_-]*(\d{3})", line.split("#")[0].strip().upper())
+        if m:
+            out.add(f"{m[1]}_{m[2]}")
+    return sorted(out)
+
 
 session = requests.Session()
 # NMDC rejects some default client user agents; use a generic one.
@@ -243,7 +262,9 @@ def write_csv(path: Path, fields: list[str], rows: list[dict]) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("--sites", nargs="+", default=["STER", "KONA"])
+    ap.add_argument("--sites", nargs="+", help="default: STER KONA, or the sites of --plots")
+    ap.add_argument("--plots", nargs="+", help="only these plots, e.g. STER_006 (default: light mode's plots)")
+    ap.add_argument("--all-plots", action="store_true", help="ignore light mode")
     ap.add_argument("--out", type=Path, default=Path("data/nmdc"))
     ap.add_argument("--dry-run", action="store_true", help="list only, no downloads")
     ap.add_argument("--types", nargs="+", default=DEFAULT_TYPES, choices=sorted(TYPE_KEYS),
@@ -251,6 +272,12 @@ def main() -> None:
     ap.add_argument("--workers", type=int, default=4)
     args = ap.parse_args()
     wanted_types = {TYPE_KEYS[k] for k in args.types}
+    plots = None if args.all_plots else (
+        sorted({p.upper().replace(" ", "_") for p in args.plots}) if args.plots else light_plots())
+    if args.sites is None:
+        args.sites = sorted({p[:4] for p in plots}) if plots else ["STER", "KONA"]
+    if plots is not None:
+        print(f"light mode: {len(plots)} plots ({', '.join(plots)})", file=sys.stderr)
 
     samples: list[dict] = []
     do_rows: list[dict] = []
@@ -258,6 +285,8 @@ def main() -> None:
 
     for site in args.sites:
         bios = fetch_biosamples(site)
+        if plots is not None:
+            bios = [b for b in bios if b["name"].split("-")[0] in plots]
         print(f"{site}: {len(bios)} cropland biosamples", file=sys.stderr)
         with ThreadPoolExecutor(args.workers) as ex:
             futs = {ex.submit(fetch_data_objects, b["id"]): b for b in bios}
