@@ -1,0 +1,265 @@
+{
+  "fields": [
+    {
+      "field_id": "field-demo-1",
+      "parcel": {
+        "parcel_id": "parcel-demo-1",
+        "parcel_number": "DEMO-001",
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                20.75,
+                52.17
+              ],
+              [
+                20.76,
+                52.17
+              ],
+              [
+                20.76,
+                52.18
+              ],
+              [
+                20.75,
+                52.18
+              ],
+              [
+                20.75,
+                52.17
+              ]
+            ]
+          ]
+        }
+      },
+      "crop_areas": [
+        {
+          "crop_area_id": "area-demo-1",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  20.75,
+                  52.17
+                ],
+                [
+                  20.755,
+                  52.17
+                ],
+                [
+                  20.755,
+                  52.18
+                ],
+                [
+                  20.75,
+                  52.18
+                ],
+                [
+                  20.75,
+                  52.17
+                ]
+              ]
+            ]
+          },
+          "crop": {
+            "farmer_crop_id": "wheat",
+            "map_crop_id": "maize"
+          },
+          "sowing_date": "2024-09-15",
+          "past_sprays": [
+            {
+              "date": "2024-10-10",
+              "protection_duration_days": 14
+            }
+          ]
+        },
+        {
+          "crop_area_id": "area-demo-1b",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  20.755,
+                  52.17
+                ],
+                [
+                  20.76,
+                  52.17
+                ],
+                [
+                  20.76,
+                  52.18
+                ],
+                [
+                  20.755,
+                  52.18
+                ],
+                [
+                  20.755,
+                  52.17
+                ]
+              ]
+            ]
+          },
+          "crop": {
+            "farmer_crop_id": "soy",
+            "map_crop_id": null
+          },
+          "sowing_date": "2024-09-20",
+          "past_sprays": []
+        }
+      ],
+      "data_status": "mock"
+    },
+    {
+      "field_id": "field-demo-2",
+      "parcel": {
+        "parcel_id": "parcel-demo-2",
+        "parcel_number": "DEMO-002",
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                20.76,
+                52.17
+              ],
+              [
+                20.770000000000003,
+                52.17
+              ],
+              [
+                20.770000000000003,
+                52.18
+              ],
+              [
+                20.76,
+                52.18
+              ],
+              [
+                20.76,
+                52.17
+              ]
+            ]
+          ]
+        }
+      },
+      "crop_areas": [
+        {
+          "crop_area_id": "area-demo-2",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  20.76,
+                  52.17
+                ],
+                [
+                  20.770000000000003,
+                  52.17
+                ],
+                [
+                  20.770000000000003,
+                  52.18
+                ],
+                [
+                  20.76,
+                  52.18
+                ],
+                [
+                  20.76,
+                  52.17
+                ]
+              ]
+            ]
+          },
+          "crop": {
+            "farmer_crop_id": "soy",
+            "map_crop_id": null
+          },
+          "sowing_date": "2024-09-15",
+          "past_sprays": []
+        }
+      ],
+      "data_status": "mock"
+    },
+    {
+      "field_id": "field-demo-3",
+      "parcel": {
+        "parcel_id": "parcel-demo-3",
+        "parcel_number": "DEMO-003",
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                20.77,
+                52.17
+              ],
+              [
+                20.78,
+                52.17
+              ],
+              [
+                20.78,
+                52.18
+              ],
+              [
+                20.77,
+                52.18
+              ],
+              [
+                20.77,
+                52.17
+              ]
+            ]
+          ]
+        }
+      },
+      "crop_areas": [
+        {
+          "crop_area_id": "area-demo-3",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  20.77,
+                  52.17
+                ],
+                [
+                  20.78,
+                  52.17
+                ],
+                [
+                  20.78,
+                  52.18
+                ],
+                [
+                  20.77,
+                  52.18
+                ],
+                [
+                  20.77,
+                  52.17
+                ]
+              ]
+            ]
+          },
+          "crop": {
+            "farmer_crop_id": "wheat",
+            "map_crop_id": null
+          },
+          "sowing_date": "2024-09-15",
+          "past_sprays": []
+        }
+      ],
+      "data_status": "mock"
+    }
+  ],
+  "data_status": "mock"
+}
