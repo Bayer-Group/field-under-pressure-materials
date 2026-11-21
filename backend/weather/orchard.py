@@ -30,6 +30,7 @@ class Orchard:
     def update_current(
         self, *, latitude: float, longitude: float, timezone: str = "auto"
     ) -> Future[int]:
+        """Refresh current conditions for the orchard and its trees, plus hourly history."""
         return self.workers.current.submit(
             refresh_current, self.orchard_id, latitude, longitude, timezone
         )
@@ -43,6 +44,7 @@ class Orchard:
         forecast_days: int = 3,
         history_days: int = 2,
     ) -> Future[int]:
+        """Refresh daily weather, fill recent history and replace the hourly forecast."""
         return self.workers.hourly.submit(
             refresh_daily,
             self.orchard_id,
@@ -56,6 +58,7 @@ class Orchard:
     def backfill_history(
         self, *, latitude: float, longitude: float, timezone: str = "auto", days: int = 14
     ) -> Future[int]:
+        """Import hourly and daily records from the preceding full days."""
         return self.workers.hourly.submit(
             backfill_history, self.orchard_id, latitude, longitude, timezone, days
         )

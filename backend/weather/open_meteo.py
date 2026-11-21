@@ -1,8 +1,8 @@
 """Fetch and validate weather for one orchard point from Open-Meteo."""
 
 import json
-from dataclasses import dataclass
-from datetime import datetime, timezone as datetime_timezone
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone as datetime_timezone
 from http.client import HTTPException
 from math import isfinite
 from urllib.error import HTTPError
@@ -20,6 +20,10 @@ HOURLY_FIELDS = (
     "snowfall", "showers", "rain", "precipitation", "relative_humidity_2m",
     "temperature_2m", "snow_depth",
 )
+DAILY_FIELDS = (
+    "temperature_2m_min", "temperature_2m_max", "relative_humidity_2m_mean",
+    "precipitation_sum", "rain_sum", "showers_sum", "snowfall_sum", "snow_depth_max",
+)
 
 WeatherValue = int | float | None
 
@@ -32,6 +36,14 @@ class OpenMeteoError(Exception):
 class WeatherPoint:
     valid_at: datetime
     values: dict[str, WeatherValue]
+
+
+@dataclass(frozen=True)
+class WeatherDay:
+    date: str
+    valid_at: datetime
+    values: dict[str, WeatherValue]
+    is_forecast: bool
 
 
 @dataclass(frozen=True)
@@ -48,6 +60,8 @@ class HourlyWeather:
     points: list[WeatherPoint]
     units: dict[str, str]
     forecast_start: datetime
+    days: list[WeatherDay] = field(default_factory=list)
+    daily_units: dict[str, str] = field(default_factory=dict)
 
 
 class OpenMeteoClient:
@@ -65,61 +79,55 @@ class OpenMeteoClient:
             "current": ",".join(CURRENT_FIELDS),
             "forecast_days": 1,
         })
-        current = _response_object(data, "current")
-        interval = current.get("interval")
-        if type(interval) is not int or interval <= 0:
-            raise OpenMeteoError("Invalid current interval in the Open-Meteo response")
-        missing_fields = set(CURRENT_FIELDS).difference(current)
-        if missing_fields:
-            raise OpenMeteoError(f"Missing current fields: {', '.join(sorted(missing_fields))}")
+        return _current_weather(data)
 
-        return CurrentWeather(
-            valid_at=_timestamp(current.get("time")),
-            interval_seconds=interval,
-            values={field: _weather_value(current[field], field) for field in CURRENT_FIELDS},
-            units=_units(data, "current_units", CURRENT_FIELDS),
-        )
+    def fetch_current_and_hourly(
+        self, latitude: float, longitude: float, timezone: str
+    ) -> tuple[CurrentWeather, list[WeatherPoint], dict[str, str]]:
+        """Fetch current conditions and hourly points through the current time."""
+        past_hours = 24
+        forecast_hours = 1
+        data = self._fetch(latitude, longitude, timezone, {
+            "current": ",".join(CURRENT_FIELDS),
+            "hourly": ",".join(HOURLY_FIELDS),
+            "past_hours": past_hours,
+            "forecast_hours": forecast_hours,
+        })
+        current = _current_weather(data)
+        points = _series_rows(data, "hourly", HOURLY_FIELDS, past_hours + forecast_hours, 3600)
+        completed = [point for point in points if point.valid_at <= current.valid_at]
+        if not completed:
+            raise OpenMeteoError("No hourly timestamps at or before the current weather time")
+        return current, completed, _units(data, "hourly_units", HOURLY_FIELDS)
 
     def fetch_hourly(
         self, latitude: float, longitude: float, timezone: str, *,
-        past_days: int, forecast_days: int,
+        past_days: int, forecast_days: int, include_daily: bool = False,
     ) -> HourlyWeather:
         if type(past_days) is not int or not 0 <= past_days <= 92:
             raise ValueError("past_days must be an integer between 0 and 92")
         if type(forecast_days) is not int or not 1 <= forecast_days <= 15:
             raise ValueError("forecast_days must be an integer between 1 and 15")
-        data = self._fetch(latitude, longitude, timezone, {
+        parameters: dict[str, str | int] = {
             "hourly": ",".join(HOURLY_FIELDS),
             "past_days": past_days,
             "forecast_days": forecast_days,
-        })
-        hourly = _response_object(data, "hourly")
-        timestamps = hourly.get("time")
-        expected_hours = 24 * (past_days + forecast_days)
-        if not isinstance(timestamps, list) or len(timestamps) != expected_hours:
-            raise OpenMeteoError("Unexpected number of hours in the Open-Meteo response")
-        if any(type(timestamp) is not int for timestamp in timestamps):
-            raise OpenMeteoError("Expected hourly Unix timestamps in the Open-Meteo response")
-        if any(right - left != 3600 for left, right in zip(timestamps, timestamps[1:])):
-            raise OpenMeteoError("Non-contiguous hourly timestamps in the Open-Meteo response")
+        }
+        if include_daily:
+            parameters["daily"] = ",".join(DAILY_FIELDS)
+        data = self._fetch(latitude, longitude, timezone, parameters)
+        total_days = past_days + forecast_days
+        points = _series_rows(data, "hourly", HOURLY_FIELDS, total_days * 24, 3600)
 
-        series = {}
-        for field in HOURLY_FIELDS:
-            values = hourly.get(field)
-            if not isinstance(values, list) or len(values) != expected_hours:
-                raise OpenMeteoError(f"Hourly series for {field} does not match the timestamps")
-            series[field] = values
-
-        points = [
-            WeatherPoint(
-                valid_at=_timestamp(timestamp),
-                values={field: _weather_value(series[field][index], field) for field in HOURLY_FIELDS},
-            )
-            for index, timestamp in enumerate(timestamps)
-        ]
         response_timezone = data.get("timezone")
         if not isinstance(response_timezone, str) or not response_timezone:
             raise OpenMeteoError("Missing timezone in the Open-Meteo response")
+
+        days = []
+        daily_units = {}
+        if include_daily:
+            days = _daily_weather(data, points, past_days, total_days)
+            daily_units = _units(data, "daily_units", DAILY_FIELDS)
 
         # The API uses the offset at request time for the whole response, including day boundaries.
         return HourlyWeather(
@@ -127,6 +135,8 @@ class OpenMeteoClient:
             points=points,
             units=_units(data, "hourly_units", HOURLY_FIELDS),
             forecast_start=points[past_days * 24].valid_at,
+            days=days,
+            daily_units=daily_units,
         )
 
     def _fetch(
@@ -167,6 +177,68 @@ def _response_object(data: dict, key: str) -> dict:
     if not isinstance(value, dict):
         raise OpenMeteoError(f"Missing {key} object in the Open-Meteo response")
     return value
+
+
+def _current_weather(data: dict) -> CurrentWeather:
+    current = _response_object(data, "current")
+    interval = current.get("interval")
+    if type(interval) is not int or interval <= 0:
+        raise OpenMeteoError("Invalid current interval in the Open-Meteo response")
+    missing_fields = set(CURRENT_FIELDS).difference(current)
+    if missing_fields:
+        raise OpenMeteoError(f"Missing current fields: {', '.join(sorted(missing_fields))}")
+    return CurrentWeather(
+        valid_at=_timestamp(current.get("time")),
+        interval_seconds=interval,
+        values={field: _weather_value(current[field], field) for field in CURRENT_FIELDS},
+        units=_units(data, "current_units", CURRENT_FIELDS),
+    )
+
+
+def _series_rows(
+    data: dict, key: str, fields: tuple[str, ...], count: int, step_seconds: int
+) -> list[WeatherPoint]:
+    source = _response_object(data, key)
+    timestamps = source.get("time")
+    if not isinstance(timestamps, list) or len(timestamps) != count:
+        raise OpenMeteoError(f"Unexpected number of {key} timestamps in the Open-Meteo response")
+    if any(type(timestamp) is not int for timestamp in timestamps):
+        raise OpenMeteoError(f"Expected {key} Unix timestamps in the Open-Meteo response")
+    if any(right - left != step_seconds for left, right in zip(timestamps, timestamps[1:])):
+        raise OpenMeteoError(f"Non-contiguous {key} timestamps in the Open-Meteo response")
+
+    for field in fields:
+        values = source.get(field)
+        if not isinstance(values, list) or len(values) != count:
+            raise OpenMeteoError(f"{key.capitalize()} series for {field} does not match the timestamps")
+    return [
+        WeatherPoint(
+            valid_at=_timestamp(timestamp),
+            values={field: _weather_value(source[field][index], field) for field in fields},
+        )
+        for index, timestamp in enumerate(timestamps)
+    ]
+
+
+def _daily_weather(
+    data: dict, hourly: list[WeatherPoint], past_days: int, total_days: int
+) -> list[WeatherDay]:
+    daily = _series_rows(data, "daily", DAILY_FIELDS, total_days, 86_400)
+    if any(day.valid_at != hour.valid_at for day, hour in zip(daily, hourly[::24])):
+        raise OpenMeteoError("Daily and hourly timestamps have different day boundaries")
+    offset_seconds = data.get("utc_offset_seconds")
+    if type(offset_seconds) is not int or not -86_400 < offset_seconds < 86_400:
+        raise OpenMeteoError("Invalid UTC offset in the Open-Meteo response")
+    offset = datetime_timezone(timedelta(seconds=offset_seconds))
+    return [
+        WeatherDay(
+            date=point.valid_at.astimezone(offset).date().isoformat(),
+            valid_at=point.valid_at,
+            values=point.values,
+            is_forecast=index >= past_days,
+        )
+        for index, point in enumerate(daily)
+    ]
 
 
 def _timestamp(value: object) -> datetime:

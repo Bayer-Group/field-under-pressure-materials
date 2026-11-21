@@ -31,9 +31,12 @@ def refresh_current(
 ) -> int:
     repository = _worker_repository()
     fetched_at = datetime.now(dt_timezone.utc)
-    current = OpenMeteoClient().fetch_current(latitude, longitude, timezone)
+    current, points, hourly_units = OpenMeteoClient().fetch_current_and_hourly(
+        latitude, longitude, timezone
+    )
+    repository.save_history(orchard_id, points, hourly_units, fetched_at)
     repository.save_current(orchard_id, current, fetched_at)
-    return 1
+    return 1 + len(points)
 
 
 def refresh_daily(
@@ -47,13 +50,19 @@ def refresh_daily(
     repository = _worker_repository()
     fetched_at = datetime.now(dt_timezone.utc)
     hourly = OpenMeteoClient().fetch_hourly(
-        latitude, longitude, timezone, past_days=history_days, forecast_days=forecast_days
+        latitude,
+        longitude,
+        timezone,
+        past_days=history_days,
+        forecast_days=forecast_days,
+        include_daily=True,
     )
     past = [point for point in hourly.points if point.valid_at < hourly.forecast_start]
     forecast = [point for point in hourly.points if point.valid_at >= hourly.forecast_start]
     repository.save_history(orchard_id, past, hourly.units, fetched_at)
+    repository.save_daily(orchard_id, hourly.days, hourly.daily_units, fetched_at)
     repository.save_forecast(orchard_id, forecast, hourly.units, fetched_at)
-    return len(hourly.points)
+    return len(hourly.points) + len(hourly.days)
 
 
 def backfill_history(
@@ -62,8 +71,10 @@ def backfill_history(
     repository = _worker_repository()
     fetched_at = datetime.now(dt_timezone.utc)
     hourly = OpenMeteoClient().fetch_hourly(
-        latitude, longitude, timezone, past_days=days, forecast_days=1
+        latitude, longitude, timezone, past_days=days, forecast_days=1, include_daily=True
     )
     past = [point for point in hourly.points if point.valid_at < hourly.forecast_start]
+    past_days = [day for day in hourly.days if not day.is_forecast]
     repository.save_history(orchard_id, past, hourly.units, fetched_at)
-    return len(past)
+    repository.save_daily(orchard_id, past_days, hourly.daily_units, fetched_at)
+    return len(past) + len(past_days)

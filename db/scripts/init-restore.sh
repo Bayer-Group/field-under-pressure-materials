@@ -5,7 +5,7 @@
 (
   set -euo pipefail
 
-  BACKUP_DIR="/backups"
+  BACKUP_DIR="${MONGO_INITDB_BACKUP_DIR:-/backups}"
   DB_NAME="${MONGO_INITDB_DATABASE:-field_under_pressure}"
   ARCHIVE_FILE=""
 
@@ -26,10 +26,11 @@
 
   RESTORE_ARGS=(
     --host 127.0.0.1
-    --port 27017
+    --port "${MONGO_INITDB_PORT:-27017}"
     --archive
     --gzip
     --nsInclude "${DB_NAME}.*"
+    --stopOnError
   )
 
   if [[ -n "${MONGO_INITDB_ROOT_USERNAME:-}" && -n "${MONGO_INITDB_ROOT_PASSWORD:-}" ]]; then

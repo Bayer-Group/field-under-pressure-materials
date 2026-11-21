@@ -17,6 +17,7 @@ from pymongo.errors import PyMongoError
 
 from .http_api import create_app
 from .weather.jobs import initialize_worker
+from .weather.migration import migrate_weather
 from .weather.orchard import Orchard, WeatherWorkers
 from .weather.repository import WeatherRepository
 
@@ -138,7 +139,7 @@ def _serve(db: Database, args: argparse.Namespace, workers: WeatherWorkers) -> N
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=("backfill", "current", "daily", "run"))
+    parser.add_argument("mode", choices=("backfill", "current", "daily", "migrate", "run"))
     parser.add_argument("--point-field", default="centroid", help="Path to the orchard center")
     parser.add_argument("--timezone", default="auto", help="Open-Meteo timezone for each request")
     parser.add_argument("--history-days", type=int, help="History window for backfill, daily or run")
@@ -163,7 +164,17 @@ def main() -> int:
     try:
         with MongoClient(mongo_uri, serverSelectionTimeoutMS=5_000, timeoutMS=15_000) as client:
             db = client[database_name]
-            WeatherRepository(db).ensure_indexes()
+            repository = WeatherRepository(db)
+            repository.ensure_indexes()
+            if args.mode == "migrate":
+                current_count, forecast_count, history_count = migrate_weather(db, repository)
+                log.info(
+                    "Migrated %d current snapshots, %d forecast hours and %d history hours",
+                    current_count,
+                    forecast_count,
+                    history_count,
+                )
+                return 0
             with (
                 ProcessPoolExecutor(**worker_options) as current,
                 ProcessPoolExecutor(**worker_options) as hourly,

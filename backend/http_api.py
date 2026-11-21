@@ -10,6 +10,8 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pymongo.database import Database
 
+from .orchard_api import create_orchard_router
+
 _UTC = timezone.utc
 _EPOCH = datetime(1970, 1, 1, tzinfo=_UTC)
 # History window, bucket size and display format for each UI preset.
@@ -60,19 +62,20 @@ def _points(documents, step: timedelta, label_format: str, label_timezone) -> li
 
 
 def create_app(db: Database, *, lifespan=None) -> FastAPI:
-    """Create a read-only weather API backed by the MongoDB synchronization cache."""
+    """Create the orchard and weather API backed by MongoDB."""
     try:
         label_timezone = ZoneInfo("Europe/Warsaw")
     except ZoneInfoNotFoundError:
         label_timezone = _UTC
 
-    app = FastAPI(title="Orchard weather", lifespan=lifespan)
+    app = FastAPI(title="Orchard API", lifespan=lifespan)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
         allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Content-Type", "Accept"],
     )
+    app.include_router(create_orchard_router(db))
 
     @app.get("/api/v1/weather/temperature")
     def temperature_series(
@@ -85,20 +88,47 @@ def create_app(db: Database, *, lifespan=None) -> FastAPI:
             raise HTTPException(status_code=400, detail="range must be 24h, 7d, 30d, 90d or 1y")
 
         identifier = ObjectId(orchard_id)
-        if db["Orchard"].find_one({"_id": identifier}, {"_id": 1}) is None:
-            raise HTTPException(status_code=404, detail="Orchard not found")
-
         window, step, label_format = _RANGES[period]
         end = datetime.now(_UTC)
-        documents = db["weather_history"].find(
-            {"orchard_id": identifier, "valid_at": {"$gte": end - window, "$lt": end}},
-            {"_id": 0, "valid_at": 1, "values.temperature_2m": 1},
-        ).sort("valid_at", 1)
+        pipeline = [
+            {"$match": {"_id": identifier}},
+            {
+                "$project": {
+                    "_id": 0,
+                    "samples": {
+                        "$map": {
+                            "input": {
+                                "$filter": {
+                                    "input": {"$ifNull": ["$environmentalData.history", []]},
+                                    "as": "sample",
+                                    "cond": {
+                                        "$and": [
+                                            {"$gte": ["$$sample.valid_at", end - window]},
+                                            {"$lt": ["$$sample.valid_at", end]},
+                                        ]
+                                    },
+                                }
+                            },
+                            "as": "sample",
+                            "in": {
+                                "valid_at": "$$sample.valid_at",
+                                "values": {"temperature_2m": "$$sample.values.temperature_2m"},
+                            },
+                        }
+                    },
+                }
+            },
+        ]
+        with db["Orchard"].aggregate(pipeline) as cursor:
+            orchard = next(cursor, None)
+        if orchard is None:
+            raise HTTPException(status_code=404, detail="Orchard not found")
+
         return {
             "orchardId": str(identifier),
             "range": period,
             "unit": "C",
-            "points": _points(documents, step, label_format, label_timezone),
+            "points": _points(orchard["samples"], step, label_format, label_timezone),
         }
 
     return app
