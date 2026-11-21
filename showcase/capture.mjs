@@ -49,7 +49,7 @@ try {
   await page.goto(`${BASE}/#/`, 4000)
   await shot('overview')
 
-  await page.goto(`${BASE}/#/plot/${PLOT}`, 5000)
+  await page.goto(`${BASE}/#/plot/${PLOT}/greenness`, 5000)
   await shot('greenness')
   await click('.layer-card button', 'Greenness'); await sleep(1500)
   // A midsummer map is greener than the latest (November) one.
