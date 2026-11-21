@@ -32,6 +32,7 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-gis_user}:${POSTGRES_PASSWORD:-secretpassword}@postgis:5432/${POSTGRES_DB:-spatial_db}
       AUTH_SECRET: ${AUTH_SECRET:-}      # empty: random at start (tokens expire on restart)
+      DEMO_READONLY: ${DEMO_READONLY:-0}  # 1: nobody saves anything (kill switch for the audience demo)
     ports:
       - "127.0.0.1:${BACKEND_PORT:-8000}:8000"   # only this machine; the internet reaches the API through caddy (HTTPS)
     depends_on:

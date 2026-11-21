@@ -9,6 +9,7 @@ RUN pip install --no-cache-dir -r backend/requirements.txt
 
 COPY backend backend
 COPY shared shared
+COPY config config
 
 RUN useradd --create-home app
 USER app
