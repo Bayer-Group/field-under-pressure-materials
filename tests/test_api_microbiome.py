@@ -61,6 +61,8 @@ def test_bacteria_composition_shares_add_up(client):
         ("Streptomyces", "Actinobacteria", 20.0), ("Bradyrhizobium", "Proteobacteria", 10.0)]
     assert c["other_pct"] == 5.0 and c["unassigned_pct"] == 65.0 and c["n_taxa"] == 3
     assert sum(t["pct"] for t in c["taxa"]) + c["other_pct"] + c["unassigned_pct"] == pytest.approx(100)
+    a = client.get("/api/microbiome/mg-dobj-1?rank=genus").json()  # without top: every taxon, nothing folded
+    assert [t["name"] for t in a["taxa"]] == ["Streptomyces", "Bradyrhizobium", "Nitrososphaera"] and a["other_pct"] == 0
     p = client.get("/api/microbiome/mg-dobj-1").json()           # phylum is the default rank
     assert p["rank"] == "phylum" and p["taxa"][0] == dict(name="Actinobacteria", phylum="Actinobacteria", pct=50.0, reads=50_000)
     assert p["unassigned_pct"] == 10.0

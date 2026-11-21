@@ -69,8 +69,8 @@ export interface Composition {
   rank: TaxonRank
   reads: number
   n_taxa: number
-  taxa: Taxon[] // largest first
-  other_pct: number // named taxa beyond `taxa`
+  taxa: Taxon[] // every named taxon, largest first
+  other_pct: number // named taxa beyond `taxa` (0 unless the API was asked for the top ones only)
   unassigned_pct: number // reads with no name at this rank
   notes: string[]
 }
@@ -96,6 +96,6 @@ export const api = {
     get<{ ndvi: number | null }>(`/greenness-maps/${id(mapId)}/value?lat=${lat}&lon=${lon}`),
   microbiome: (plotId: string, s?: AbortSignal) => get<MicrobiomeSample[]>(`/plots/${id(plotId)}/microbiome`, s),
   composition: (sampleId: string, rank: TaxonRank, s?: AbortSignal) =>
-    get<Composition>(`/microbiome/${id(sampleId)}?rank=${rank}&top=12`, s),
+    get<Composition>(`/microbiome/${id(sampleId)}?rank=${rank}`, s),
   event: (eventId: string, s?: AbortSignal) => get<EventDetail>(`/events/${id(eventId)}`, s),
 }

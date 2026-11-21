@@ -29,6 +29,7 @@ function closestInSeason(options: MicrobiomeSample[], from: MicrobiomeSample): M
 export function MicrobiomePanel({ plotId, sampleId }: { plotId: string; sampleId: string | null }) {
   const samples = useFetch(`microbiome:${plotId}`, (s) => api.microbiome(plotId, s))
   const [rank, setRank] = useState<TaxonRank>('phylum')
+  const [query, setQuery] = useState('') // kept while switching sample, so one taxon can be followed over the years
   const list = samples.data ?? []
   const current = list.find((s) => s.sample_id === sampleId) ?? defaultSample(list)
   const comp = useFetch(current ? `${current.sample_id}|${rank}` : null, (s) => api.composition(current!.sample_id, rank, s))
@@ -99,7 +100,7 @@ export function MicrobiomePanel({ plotId, sampleId }: { plotId: string; sampleId
               {comp.data.notes.map((n) => <li key={n} className={n.startsWith('Few DNA reads') ? 'caution' : ''}>{n}</li>)}
             </ul>
           )}
-          <CompositionView data={comp.data} />
+          <CompositionView data={comp.data} query={query} onQuery={setQuery} />
         </>
       )}
     </div>

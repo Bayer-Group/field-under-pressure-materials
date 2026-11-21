@@ -104,13 +104,17 @@ h2 { font-size: 1rem; margin: 0; }
 .notes li.caution::marker { content: '⚠ '; }
 
 .composition { margin-top: 6px; }
-.seg-bar { display: flex; gap: 2px; height: 28px; }
+.seg-bar { position: relative; height: 28px; }
 .seg {
-  min-width: 0; flex: 0 1 0; border-radius: 4px; display: flex; align-items: center; padding-left: 6px;
-  font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; transition: opacity 0.1s;
+  position: absolute; top: 0; bottom: 0; display: flex; align-items: center; padding-left: 6px;
+  font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden;
 }
+.seg.round { border-radius: 4px; }
 .seg.dim { opacity: 0.45; }
-.comp-legend { margin: 8px 0 10px; }
+.seg.on { box-shadow: 0 0 0 2px var(--ink); z-index: 1; }
+.seg-readout { margin: 6px 0 0; min-height: 1.3em; font-size: 0.8rem; color: var(--muted); }
+.seg-readout b { color: var(--ink); font-weight: 600; }
+.comp-legend { margin: 6px 0 10px; }
 .comp-legend i { border-radius: 2px; }
 .comp-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
 .comp-table th { text-align: left; font-weight: 500; color: var(--muted); font-size: 0.75rem; padding: 4px 6px; border-bottom: 1px solid var(--line); }
@@ -124,3 +128,11 @@ h2 { font-size: 1rem; margin: 0; }
   .panel-head .tabs { order: 3; margin-left: 0; width: 100%; }
 }
 .card .card-sub { margin-top: 14px; }
+
+.taxon-search { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 0 0 8px; }
+.taxon-search input {
+  font: inherit; font-size: 0.85rem; width: min(100%, 320px); padding: 5px 9px;
+  border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink);
+}
+.taxon-search input:focus { outline: 2px solid var(--green); outline-offset: -1px; border-color: transparent; }
+.search-count { font-size: 0.8rem; color: var(--muted); }

@@ -54,8 +54,8 @@ class Composition(BaseModel):
     rank: Rank
     reads: int
     n_taxa: int                      # named taxa at this rank, including the ones folded into "other"
-    taxa: list[Taxon]                # largest first, at most `top`
-    other_pct: float                 # named taxa beyond the top ones
+    taxa: list[Taxon]                # largest first: all of them, or the `top` largest when asked
+    other_pct: float                 # named taxa beyond `top` (0 without `top`)
     unassigned_pct: float            # reads without a name at this rank
     notes: list[str]                 # plain-language caveats for this sample
 
@@ -173,7 +173,9 @@ def plot_microbiome(plot_id: str):
 
 
 @router.get("/microbiome/{sample_id}", response_model=Composition)
-def composition(sample_id: str, rank: Rank = "phylum", top: int = Query(12, ge=1, le=50)):
+def composition(sample_id: str, rank: Rank = "phylum", top: int | None = Query(None, ge=1)):
+    """Composition of one sample at `rank`: every named taxon, largest first (or only the `top` largest, the
+    rest summed in `other_pct`)."""
     s = _samples()
     hit = s[s["sample_id"] == sample_id]                # looked up in the tables, never parsed into a path
     if hit.empty:
@@ -181,9 +183,9 @@ def composition(sample_id: str, rank: Rank = "phylum", top: int = Query(12, ge=1
     r = next(hit.itertuples())
     t = _bacteria_taxa(r.key, rank) if r.kind == "bacteria" else _fungi_taxa(r.plotID, r.date, rank)
     t = t[t["reads"] > 0].sort_values(["pct", "name"], ascending=[False, True])
-    head, rest = t.head(top), t.iloc[top:]
+    head, rest = (t, t.iloc[:0]) if top is None else (t.head(top), t.iloc[top:])
     named = float(t["pct"].sum())
-    taxa = [Taxon(name=x.name, phylum=None if pd.isna(x.phylum) else x.phylum, pct=round(float(x.pct), 2),
+    taxa = [Taxon(name=x.name, phylum=None if pd.isna(x.phylum) else x.phylum, pct=round(float(x.pct), 4),
                   reads=int(x.reads)) for x in head.itertuples()]
     return Composition(sample_id=r.sample_id, kind=r.kind, plot_id=r.plotID, date=r.date, rank=rank,
                        reads=int(r.reads), n_taxa=len(t), taxa=taxa, other_pct=round(float(rest["pct"].sum()), 2),
