@@ -90,9 +90,16 @@ SELECT c.change_id, c.crop_area_id, c.disease, c.date + serve.shift_days() AS da
        c.old_class, c.new_class, c.old_status, c.new_status, c.old_conditions_met, c.new_conditions_met
 FROM curated.risk_change c;
 
--- The whole voivodeship, per cell and day: 4 km squares built around the grid points (EPSG:2180, axis-aligned).
+-- The whole voivodeship, per cell and day. The weather grid is regular, 0.044 degrees in both directions (about 3.0 km east-west and
+-- 4.9 km north-south at 52 N); the source coordinates are rounded (the step is sometimes 0.043), so each point is put on the nominal
+-- lattice (anchor and step 0.044) and a cell is the rectangle of half a step around its node, with vertices snapped to 1e-5 degrees:
+-- neighbouring cells share their edges exactly, with no overlaps and no gaps. (Squares of 4 x 4 km around the points overlapped
+-- east-west by 1 km and left gaps north-south.)
 CREATE OR REPLACE VIEW serve.grid_risk_daily AS
+WITH o AS (SELECT min(lon) AS lon0, min(lat) AS lat0 FROM raw.grid_cell)
 SELECT d.grid_id, d.date + serve.shift_days() AS date, d.h_low, d.h_high, d.risk_class, d.uncertain, d.coverage,
-       ST_Transform(ST_Buffer(ST_Transform(g.geom, 2180), 2000, 'endcap=square'), 4326)::geometry(Polygon, 4326) AS geom
+       ST_SnapToGrid(ST_MakeEnvelope(n.x - 0.022, n.y - 0.022, n.x + 0.022, n.y + 0.022, 4326), 0.00001)::geometry(Polygon, 4326) AS geom
 FROM curated.septoria_cell_day d
-JOIN raw.grid_cell g ON g.grid_id = d.grid_id;
+JOIN raw.grid_cell g ON g.grid_id = d.grid_id
+CROSS JOIN o
+CROSS JOIN LATERAL (SELECT o.lon0 + round((g.lon - o.lon0) / 0.044) * 0.044 AS x, o.lat0 + round((g.lat - o.lat0) / 0.044) * 0.044 AS y) n;

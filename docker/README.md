@@ -159,7 +159,7 @@ to every date, so a reader sees "today" and needs no knowledge of it. Dates a fa
 | `serve.risk_daily` | crop area × day: class, status, `conditions_met`, growth stage, reasons |
 | `serve.crop_area_today` | crop area with the assessment of today (the map layer of a farmer) |
 | `serve.risk_change_log` | a change of class, status or `conditions_met` (from `curated.risk_change`) |
-| `serve.grid_risk_daily` | grid cell × day: 4 km square and class for the whole voivodeship (analysts) |
+| `serve.grid_risk_daily` | grid cell × day: the cell (a rectangle of 0.044°, tiling the plane) and its class for the whole voivodeship (analysts) |
 | `serve.clock` | the current shift |
 
 The shift is one row, `serve.demo_time`: `pinned` (today shows the data day `pinned_data_date`; stable demo, default 2024-05-20) or

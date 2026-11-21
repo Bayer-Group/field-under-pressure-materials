@@ -25,7 +25,9 @@ docker/
 │   ├── 002_app_farmer_input.sql  # farmer input tables in app (idempotent)
 │   ├── 003_curated.sql      # curated layer tables (idempotent)
 │   ├── 004_serve.sql        # serving layer: change log, cell-day table, demo shift, views (idempotent)
-│   └── 005_demo_users.sql   # app.demo_user for the API login (idempotent)
+│   ├── 005_demo_users.sql   # app.demo_user for the API login (idempotent)
+│   ├── 006_sprays_confirmed.sql  # app.crop_area.sprays_confirmed (idempotent)
+│   └── 007_grid_cells.sql   # the cells of serve.grid_risk_daily tile the plane (idempotent)
 └── initdb/                  # SQL scripts run on the first PostGIS start (empty volume)
     ├── 01_extensions.sql    # PostGIS, PostGIS raster, schemas raw / curated / app
     ├── 02_schema.sql        # raw: grid_cell, weather_hourly, crop_class, ingest_log; app: field, field_crop_share
