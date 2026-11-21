@@ -9,7 +9,7 @@ from typing import Iterable
 
 
 def _sanitize_proj_env() -> None:
-    """Clear external PROJ_LIB/PROJ_DATA so venv wheels use their bundled proj.db."""
+    """Clear external PROJ_LIB/PROJ_DATA so venv wheels use their bundled proj.db"""
     prefix = Path(sys.prefix).resolve()
     for var in ("PROJ_LIB", "PROJ_DATA"):
         val = os.environ.get(var)
