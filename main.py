@@ -11,6 +11,7 @@ import urllib.parse
 import urllib.request
 from zoneinfo import ZoneInfo
 import zipfile
+from bk.crop_detector import CropDetector
 
 # Wymagane PRZED importem rasterio (publiczne COG Sentinel-2 / GeoParquet z AWS)
 os.environ.setdefault("AWS_NO_SIGN_REQUEST", "YES")
@@ -268,8 +269,6 @@ def run_stage_crops(
             "przekazuję granice pól bez kolumny crop_code."
         )
         return fields_geojson
-
-    from bk.crop_detector import CropDetector
 
     detector = CropDetector(
         year=crop_year,

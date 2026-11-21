@@ -1,14 +1,3 @@
-"""Przypisanie typu uprawy do pól z fields.geojson.
-
-Źródło: Copernicus CLMS "Crop Types" (raster 10 m, EPSG:4326), roczna mapa
-Polski podzielona na kafle w archiwum ZIP. Dla każdego pola liczony jest udział
-klas pikseli wewnątrz poligonu; typ uprawy to klasa dominująca.
-
-    detector = CropDetector(2024)
-    fields = detector.detect("fields.geojson")
-    detector.plot(fields, "tmp/fields_crops_preview.png")
-"""
-
 import json
 import re
 import shutil
@@ -17,25 +6,16 @@ import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
 
-import matplotlib
-
-matplotlib.use("Agg")  # zapis do pliku, bez okna
-
 import geopandas as gpd
-import matplotlib.pyplot as plt
 import numpy as np
 import rasterio
 import rasterio.mask
-import rasterio.merge
 import requests
-from matplotlib.colors import to_rgb
-from matplotlib.patches import Patch
 from shapely.geometry import box
 
 ROOT = Path(__file__).parent
 URLS_FILE = ROOT / "cropland_urls.txt"
 DATA_DIR = ROOT / "data"
-TMP_DIR = ROOT / "tmp"
 
 NO_CROPLAND = 0
 OUTSIDE_AREA = 65535
@@ -80,7 +60,6 @@ class CropDetector:
         self.verbose = verbose
         self._start = time.perf_counter()
         self.legend: dict[int, str] = {}  # kod klasy -> nazwa
-        self.colors: dict[int, str] = {}  # kod klasy -> kolor "#rrggbb"
 
     def detect(self, fields_path: str | Path = ROOT / "fields.geojson") -> gpd.GeoDataFrame:
         """Pola z kolumnami crop_code, crop_type, crop_share i candidates.
@@ -102,70 +81,6 @@ class CropDetector:
         found = fields["crop_type"].notna().sum()
         self._log(f"gotowe: typ uprawy dla {found}/{len(fields)} pól")
         return fields
-
-    def plot(self, fields: gpd.GeoDataFrame, path: str | Path, dpi: int = 150) -> None:
-        """Raster cropland (półprzezroczysty) i pola w kolorze przypisanej uprawy.
-
-        Pola bez crop_code mają tylko kreskowany obrys, żeby było widać raster pod nimi.
-        """
-        fields = fields.to_crs(4326)
-        min_x, min_y, max_x, max_y = fields.total_bounds
-        margin = 0.1 * max(max_x - min_x, max_y - min_y)
-        bounds = (min_x - margin, min_y - margin, max_x + margin, max_y + margin)
-        # Kafle mają 0 poza swoim zasięgiem, więc 0 jako nodata pozwala sąsiadowi go uzupełnić
-        mosaic, transform = rasterio.merge.merge(
-            [str(p) for p in self._tiles(bounds)], bounds=bounds, nodata=NO_CROPLAND
-        )
-        mosaic = mosaic[0]
-
-        rgba = np.zeros((*mosaic.shape, 4), np.float32)
-        present = [int(code) for code in np.unique(mosaic) if code in self.colors]
-        for code in present:
-            if code in (NO_CROPLAND, OUTSIDE_AREA):
-                continue
-            rgba[mosaic == code] = (*to_rgb(self.colors[code]), 0.45)
-        left, top = transform * (0, 0)
-        right, bottom = transform * (mosaic.shape[1], mosaic.shape[0])
-
-        width_in = 14
-        aspect = 1 / np.cos(np.radians((min_y + max_y) / 2))  # stopnie -> mniej więcej metry
-        height_in = width_in * (bounds[3] - bounds[1]) * aspect / (bounds[2] - bounds[0])
-        fig, ax = plt.subplots(figsize=(width_in, height_in), dpi=dpi)
-        ax.set_facecolor("#f4f4f4")
-        ax.imshow(rgba, extent=(left, right, bottom, top), interpolation="nearest")
-
-        known = fields[fields["crop_code"].notna()]
-        if len(known):
-            known.plot(
-                ax=ax,
-                color=[self.colors[int(code)] for code in known["crop_code"]],
-                alpha=0.75,
-            )
-        fields[fields["crop_code"].isna()].plot(
-            ax=ax, facecolor="none", edgecolor="#333333", hatch="///", linewidth=0
-        )
-        fields.boundary.plot(ax=ax, color="black", linewidth=0.7)
-
-        ax.set_xlim(bounds[0], bounds[2])
-        ax.set_ylim(bounds[1], bounds[3])
-        ax.set_aspect(aspect)
-        ax.set_title(
-            f"Uprawy {self.year}: wypełnienie = crop_code pola, "
-            "półprzezroczyste tło = raster cropland",
-            fontsize=10,
-        )
-        handles = [
-            Patch(color=self.colors[code], label=f"{code} {self.legend[code]}")
-            for code in sorted(set(present) | set(known["crop_code"].astype(int)))
-            if code not in (NO_CROPLAND, OUTSIDE_AREA)
-        ]
-        handles.append(Patch(facecolor="none", edgecolor="#333333", hatch="///", label="crop_code = null"))
-        ax.legend(handles=handles, loc="upper left", bbox_to_anchor=(1.01, 1), fontsize=8)
-        fig.tight_layout()
-        Path(path).parent.mkdir(parents=True, exist_ok=True)
-        fig.savefig(path)
-        plt.close(fig)
-        self._log(f"zapisano podgląd {path}")
 
     def download(self) -> Path:
         """Pobiera ZIP z rasterem dla self.year do data_dir."""
@@ -237,7 +152,7 @@ class CropDetector:
         with zipfile.ZipFile(archive) as zf:
             qml = next(n for n in zf.namelist() if n.endswith(".qml"))
             items = ET.fromstring(zf.read(qml)).iter("item")
-            legend = {item.get("value"): [item.get("label"), item.get("color")] for item in items}
+            legend = {item.get("value"): item.get("label") for item in items}
             members = [n for n in zf.namelist() if n.endswith(".tif")]
             for name in members:
                 with rasterio.open(f"/vsizip/{archive}/{name}") as src:
@@ -254,8 +169,11 @@ class CropDetector:
         return {"tiles": tiles, "legend": legend}
 
     def _set_legend(self, legend):
-        self.legend = {int(code): label for code, (label, _) in legend.items()}
-        self.colors = {int(code): color for code, (_, color) in legend.items()}
+        # Starsze index.json trzymają [nazwa, kolor] — kolor był tylko do podglądu.
+        self.legend = {
+            int(code): (entry[0] if isinstance(entry, (list, tuple)) else entry)
+            for code, entry in legend.items()
+        }
 
     def _classify(self, geom, tiles):
         """(kod, nazwa, udział, możliwości) dla jednego poligonu."""
@@ -318,9 +236,8 @@ if __name__ == "__main__":
     fields.drop(columns=["crop_type", "crop_share", "candidates"]).to_file(
         ROOT / "fields_crops.geojson"
     )
-    detector.plot(fields, TMP_DIR / "fields_crops_preview.png")
     print(fields["crop_type"].value_counts(dropna=False).to_string())
     unknown = fields[fields["crop_type"].isna()]
     for index, row in unknown.iterrows():
         print(f"pole {index} ({row['area_ha']:.1f} ha): możliwości: {row['candidates']}")
-    print(f"Zapisano {len(fields)} pól do fields_crops.geojson i tmp/fields_crops_preview.png")
+    print(f"Zapisano {len(fields)} pól do fields_crops.geojson")
