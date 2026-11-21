@@ -4,6 +4,9 @@ export type HealthStatus = 'dead' | 'poor' | 'moderate' | 'healthy';
 
 export type DataSourceMode = 'api' | 'placeholder';
 
+/** 24-character hexadecimal MongoDB ObjectId string */
+export type ObjectIdString = string;
+
 export interface ApiResult<T> {
   data: T;
   source: DataSourceMode;
@@ -107,6 +110,125 @@ export interface TreeUpdatePayload {
   healthStatus?: HealthStatus;
   healthScore?: number;
   notes?: string;
+}
+
+/* ==========================================================================
+   MongoDB-aligned Row Line Editor contracts: CropPref, Tree, Orchard
+   ========================================================================== */
+
+/** Document from MongoDB collection `CropPref` */
+export interface CropPrefDoc {
+  _id: ObjectIdString;
+  code: string;
+  /** Botanical species name matching MongoDB `CropPref.species` */
+  scientificName: string;
+  namePl: string;
+  nameEn: string;
+  variety: string;
+  category: 'pome' | 'stone' | 'nut';
+  recommendedSpacingMeters: number;
+  colorHex: string;
+}
+
+/** Document to be persisted into MongoDB collection `Tree` */
+export interface TreeDoc {
+  _id: ObjectIdString;
+  orchardId: ObjectIdString;
+  coordinates: GeoCoord;
+  /** Computed asynchronously by the backend; null when created by UI */
+  healthIndex: number | null;
+  /** Reference (`ObjectId`) to `CropPref._id` */
+  species: ObjectIdString;
+}
+
+/**
+ * Row entry embedded inside MongoDB collection `Orchard.rows`.
+ * Stores the two endpoints (`start`, `end`) plus ordered `treeIds` referencing `Tree._id`.
+ */
+export interface OrchardRowDoc {
+  id: string;
+  label: string;
+  start: GeoCoord;
+  end: GeoCoord;
+  averageSpacingMeters: number;
+  /** Ordered list of MongoDB ObjectIds pointing to documents in the `Tree` collection */
+  treeIds: ObjectIdString[];
+}
+
+/** Georeferenced satellite/orthophoto image aligned in WGS 84 (EPSG:4326) */
+export interface SatelliteOverlayMeta {
+  imageUrl: string;
+  crs: 'EPSG:4326';
+  bounds: {
+    westLng: number;
+    southLat: number;
+    eastLng: number;
+    northLat: number;
+  };
+  sourceLabel: string;
+}
+
+/** Orchard parcel geometry & current rows from MongoDB collection `Orchard` */
+export interface OrchardBoundaryDoc {
+  _id: ObjectIdString;
+  name: string;
+  locationLabel: string;
+  /** Ordered boundary polygon vertices in WGS 84 / EPSG:4326 (closed implicitly) */
+  geometry: GeoCoord[];
+  center: GeoCoord;
+  areaHectares: number;
+  shapeAreaM2?: number;
+  shapeLengthM?: number;
+  satelliteOverlay?: SatelliteOverlayMeta;
+  rows: OrchardRowDoc[];
+}
+
+/** Draft tree calculated client-side before backend persistence */
+export interface DraftTree {
+  tempId: ObjectIdString;
+  rowId: string;
+  indexInRow: number;
+  coordinates: GeoCoord;
+  healthIndex: null;
+  species: ObjectIdString;
+}
+
+/** Draft straight row drawn by the user on the orchard canvas */
+export interface DraftRow {
+  id: string;
+  label: string;
+  start: GeoCoord;
+  end: GeoCoord;
+  averageSpacingMeters: number;
+  species: ObjectIdString;
+  /** Optional per-tree species overrides keyed by tree index in row (0-based) */
+  treeSpeciesOverrides: Record<number, ObjectIdString>;
+}
+
+/**
+ * Request payload sent to backend to persist calculated `Tree` docs
+ * and update `Orchard.rows` with ordered `treeIds`.
+ */
+export interface SaveOrchardLayoutRequest {
+  orchardId: ObjectIdString;
+  orchardRows: Array<{
+    id: string;
+    label: string;
+    start: GeoCoord;
+    end: GeoCoord;
+    averageSpacingMeters: number;
+    treeIds: ObjectIdString[];
+  }>;
+  trees: TreeDoc[];
+}
+
+export interface SaveOrchardLayoutResponse {
+  orchardId: ObjectIdString;
+  savedRowsCount: number;
+  savedTreesCount: number;
+  updatedAt: string;
+  orchard: Pick<OrchardBoundaryDoc, '_id' | 'rows'>;
+  trees: TreeDoc[];
 }
 
 export function scoreToHealthStatus(score: number): HealthStatus {

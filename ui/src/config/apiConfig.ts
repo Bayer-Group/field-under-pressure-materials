@@ -8,7 +8,7 @@ export const apiConfig = {
   /** Controls orchard and temperature demo widgets. */
   usePlaceholders: rawUsePlaceholders !== 'false',
   requestTimeoutMs: 4000,
-  defaultOrchardId: 'orchard-pl-01',
+  defaultOrchardId: '6b01933c1dc02a368703a020',
 } as const;
 
 export const API_ENDPOINTS = {
@@ -20,6 +20,9 @@ export const API_ENDPOINTS = {
   weather: {
     temperature: '/api/v1/weather/temperature',
   },
+  cropPrefs: {
+    list: '/api/v1/crop-prefs',
+  },
   orchard: {
     health: '/api/v1/orchard/health',
     scene: '/api/v1/orchard/scene',
@@ -27,5 +30,7 @@ export const API_ENDPOINTS = {
     trees: '/api/v1/orchard/trees',
     treeById: (treeId: string) => `/api/v1/orchard/trees/${encodeURIComponent(treeId)}`,
     rowLines: '/api/v1/orchard/row-lines',
+    byId: (orchardId: string) => `/api/v1/orchards/${encodeURIComponent(orchardId)}`,
+    layout: (orchardId: string) => `/api/v1/orchards/${encodeURIComponent(orchardId)}/layout`,
   },
 } as const;

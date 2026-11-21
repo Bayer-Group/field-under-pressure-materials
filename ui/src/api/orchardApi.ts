@@ -1,17 +1,25 @@
 import { API_ENDPOINTS, apiConfig } from '../config/apiConfig';
 import {
+  getPlaceholderCropPrefs,
+  getPlaceholderOrchardBoundary,
   getPlaceholderOrchardHealth,
   getPlaceholderOrchardScene,
+  getPlaceholderSaveOrchardLayoutResponse,
   getPlaceholderTemperatureSeries,
 } from '../placeholders';
 import type {
   ApiResult,
+  CropPrefDoc,
+  ObjectIdString,
+  OrchardBoundaryDoc,
   OrchardHealthSummary,
   OrchardSceneResponse,
   OrchardTree3D,
   PointCloudData,
   RowLineInput,
   RowLineRecord,
+  SaveOrchardLayoutRequest,
+  SaveOrchardLayoutResponse,
   TemperatureSeriesResponse,
   TimeRange,
   TreeUpdatePayload,
@@ -155,5 +163,50 @@ export async function updateTreeMetadata(
     endpoint,
     () => httpClient.patch<{ id: string; updated: boolean }>(endpoint, payload, { signal }),
     () => ({ id: treeId, updated: true }),
+  );
+}
+
+/**
+ * Fetches available tree species definitions from MongoDB `CropPref` collection.
+ */
+export async function fetchCropPrefs(signal?: AbortSignal): Promise<ApiResult<CropPrefDoc[]>> {
+  const endpoint = API_ENDPOINTS.cropPrefs.list;
+  return withPlaceholderFallback(
+    endpoint,
+    () => httpClient.get<CropPrefDoc[]>(endpoint, { signal }),
+    () => getPlaceholderCropPrefs(),
+  );
+}
+
+/**
+ * Fetches orchard parcel geometry and existing rows from MongoDB `Orchard` collection.
+ * For a first-time user, `rows` starts empty so they can draw rows onto the field shape.
+ */
+export async function fetchOrchardBoundary(
+  orchardId: ObjectIdString = apiConfig.defaultOrchardId,
+  signal?: AbortSignal,
+): Promise<ApiResult<OrchardBoundaryDoc>> {
+  const endpoint = API_ENDPOINTS.orchard.byId(orchardId);
+  return withPlaceholderFallback(
+    endpoint,
+    () => httpClient.get<OrchardBoundaryDoc>(endpoint, { signal }),
+    () => getPlaceholderOrchardBoundary(orchardId),
+  );
+}
+
+/**
+ * Persists user-drawn rows (`Orchard.rows` with start/end points & ordered `treeIds`)
+ * and calculated individual trees (`Tree` collection with coordinates, `healthIndex: null`,
+ * and `species` ObjectId pointing to `CropPref`).
+ */
+export async function saveOrchardLayout(
+  payload: SaveOrchardLayoutRequest,
+  signal?: AbortSignal,
+): Promise<ApiResult<SaveOrchardLayoutResponse>> {
+  const endpoint = API_ENDPOINTS.orchard.layout(payload.orchardId);
+  return withPlaceholderFallback(
+    endpoint,
+    () => httpClient.post<SaveOrchardLayoutResponse>(endpoint, payload, { signal }),
+    () => getPlaceholderSaveOrchardLayoutResponse(payload),
   );
 }

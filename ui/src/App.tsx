@@ -3,6 +3,7 @@ import { Sidebar, type NavSectionId } from './components/layout/Sidebar';
 import { TopBar } from './components/layout/TopBar';
 import { DashboardPage } from './components/pages/DashboardPage';
 import { PlaceholderSectionPage } from './components/pages/PlaceholderSectionPage';
+import { RowLineEditorPage } from './components/pages/RowLineEditorPage';
 import { SoilMoisturePage } from './components/pages/SoilMoisturePage';
 import { LanguageProvider } from './contexts/LanguageContext';
 import { ThemeProvider } from './contexts/ThemeContext';
@@ -18,6 +19,8 @@ function AppShell() {
         <main className="app-content">
           {activeSection === 'dashboard' ? (
             <DashboardPage />
+          ) : activeSection === 'row-editor' ? (
+            <RowLineEditorPage />
           ) : activeSection !== 'analytics' ? (
             <PlaceholderSectionPage
               section={activeSection}

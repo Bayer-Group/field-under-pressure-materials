@@ -2,7 +2,7 @@ import { ArrowLeft, Construction } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
 import type { NavSectionId } from '../layout/Sidebar';
 
-type PlaceholderSection = Exclude<NavSectionId, 'dashboard' | 'analytics'>;
+type PlaceholderSection = Exclude<NavSectionId, 'dashboard' | 'row-editor' | 'analytics'>;
 
 interface PlaceholderSectionPageProps {
   section: PlaceholderSection;
@@ -13,7 +13,6 @@ export function PlaceholderSectionPage({ section, onBackToDashboard }: Placehold
   const { t } = useLanguage();
 
   const titles: Record<PlaceholderSection, string> = {
-    'row-editor': t.nav.rowEditor,
     layers: t.nav.layers,
     settings: t.nav.settings,
   };
@@ -25,9 +24,7 @@ export function PlaceholderSectionPage({ section, onBackToDashboard }: Placehold
           <Construction size={28} strokeWidth={1.7} />
         </div>
         <h1 className="placeholder-section-title">{titles[section]}</h1>
-        <p className="placeholder-section-desc">
-          {section === 'row-editor' ? t.placeholderView.rowEditorNote : t.placeholderView.description}
-        </p>
+        <p className="placeholder-section-desc">{t.placeholderView.description}</p>
         <button type="button" className="primary-btn" onClick={onBackToDashboard}>
           <ArrowLeft size={16} />
           <span>{t.placeholderView.backToDashboard}</span>

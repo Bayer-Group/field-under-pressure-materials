@@ -10,3 +10,8 @@
 
 export { getPlaceholderTemperatureSeries } from './temperaturePlaceholder';
 export { getPlaceholderOrchardHealth, getPlaceholderOrchardScene } from './orchard3dPlaceholder';
+export {
+  getPlaceholderCropPrefs,
+  getPlaceholderOrchardBoundary,
+  getPlaceholderSaveOrchardLayoutResponse,
+} from './rowEditorPlaceholder';
