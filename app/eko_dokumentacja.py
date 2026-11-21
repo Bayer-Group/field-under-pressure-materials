@@ -71,6 +71,16 @@ def build_filled_eko_workbook(
 
     # --- ARKUSZ 2: Dziennik Zabiegów Agrotechnicznych EKO ---
     ws2 = wb["2_Dziennik_Zabiegow_EKO"]
+
+    # Zabezpieczenie przed limitem 255 znakow listy inline w Excelu
+    for dv in ws2.data_validations.dataValidation:
+        if dv.type == "list" and dv.formula1 and len(str(dv.formula1)) > 255:
+            dv.formula1 = (
+                '"Uprawa roli,Siew / Sadzenie,Nawożenie przedsiewne,'
+                'Nawożenie pogłówne,Wapnowanie,Ochrona EKO / biologiczna,'
+                'Ochrona mechaniczna,Lustracja polowa,Zbiór,Poplon"'
+            )
+
     ts_str = pd.to_datetime(selected_timestamp).strftime("%Y-%m-%d %H:%M")
     row_cursor = 5
 
@@ -218,16 +228,35 @@ def render_eko_documentation_tab(
     location_label: str = "Małopolskie (kafel 33UXR)",
 ) -> None:
     """
-    Renderuje osobną zakładkę 'Dokumentacja EKO i Audyt' w Streamlit.
+    Renderuje osobną zakładkę 'Dokumentacja EKO i Audyt' w Streamlit (PL / EN).
     """
-    st.subheader("Dokumentacja Rolnictwa Ekologicznego i Audyt (ARiMR / IJHARS)")
+    is_en = st.session_state.get("lang", "pl") == "en"
+
+    def _t(pl: str, en: str) -> str:
+        return en if is_en else pl
+
+    st.subheader(
+        _t(
+            "Dokumentacja Rolnictwa Ekologicznego i Audyt (ARiMR / IJHARS)",
+            "Organic Farming Documentation & Audit (ARiMR / IJHARS)",
+        )
+    )
     st.caption(
-        "Wybierz pola prowadzone w systemie ekologicznym. System automatycznie uzupełni Plan 5-letni, "
-        "Dziennik Zabiegów (z wykazem IUNG / UE 2018/848), bilans magazynowy oraz ocenę ryzyka."
+        _t(
+            "Wybierz pola prowadzone w systemie ekologicznym. System automatycznie uzupełni Plan 5-letni, "
+            "Dziennik Zabiegów (z wykazem IUNG / UE 2018/848), bilans magazynowy oraz ocenę ryzyka.",
+            "Select fields managed under the organic system. The app automatically fills the 5-year Plan, "
+            "Treatment Logbook (IUNG / EU 2018/848 list), warehouse balance, and risk assessment.",
+        )
     )
 
     if result_df is None or result_df.empty:
-        st.info("Brak danych pól do wygenerowania dokumentacji.")
+        st.info(
+            _t(
+                "Brak danych pól do wygenerowania dokumentacji.",
+                "No field data available to generate documentation.",
+            )
+        )
         return
 
     # 1. Wybór pól prowadzonych ekologicznie (domyślnie zaciągane z oznaczeń 'Działka EKO' w Moim Gospodarstwie)
@@ -239,71 +268,209 @@ def render_eko_documentation_tab(
         h3_str = str(r.h3_index)
         uid_str = str(getattr(r, "field_uid", "")).strip()
         prefix = f"{uid_str} ({h3_str})" if uid_str else h3_str
-        labels_map[h3_str] = f"{prefix} — {r.crop_name} ({getattr(r, 'area_ha', 1.5):.2f} ha, pH {r.soil_ph:.1f})"
+        labels_map[h3_str] = (
+            f"{prefix} — {r.crop_name} ({getattr(r, 'area_ha', 1.5):.2f} ha, pH {r.soil_ph:.1f})"
+        )
         if bool(getattr(r, "is_eco_field", False)):
             preselected_eco_ids.append(h3_str)
 
-    default_selection = preselected_eco_ids if preselected_eco_ids else all_ids[: min(5, len(all_ids))]
+    default_selection = (
+        preselected_eco_ids if preselected_eco_ids else all_ids[: min(5, len(all_ids))]
+    )
 
     selected_eco_ids = st.multiselect(
-        "1. Zaznacz pola prowadzone w sposób ekologiczny (domyślnie zaznaczone działki EKO z Mojego Gospodarstwa):",
+        _t(
+            "1. Zaznacz pola prowadzone w sposób ekologiczny (domyślnie zaznaczone działki EKO z Mojego Gospodarstwa):",
+            "1. Select organically managed fields (ECO fields from My Farm are preselected by default):",
+        ),
         options=all_ids,
         default=default_selection,
         format_func=lambda x: labels_map.get(x, x),
     )
 
     if not selected_eco_ids:
-        st.warning("Zaznacz przynajmniej jedno pole ekologiczne, aby wygenerować dokumentację.")
+        st.warning(
+            _t(
+                "Zaznacz przynajmniej jedno pole ekologiczne, aby wygenerować dokumentację.",
+                "Select at least one organic field to generate the documentation.",
+            )
+        )
         return
 
     eco_df = result_df[result_df["h3_index"].astype(str).isin(selected_eco_ids)].copy()
-    eco_area = float(eco_df["area_ha"].sum()) if "area_ha" in eco_df.columns else len(eco_df) * 1.5
+    eco_area = (
+        float(eco_df["area_ha"].sum())
+        if "area_ha" in eco_df.columns
+        else len(eco_df) * 1.5
+    )
 
     m1, m2, m3 = st.columns(3)
-    m1.metric("Wybrane pola EKO", f"{len(eco_df)} działek")
-    m2.metric("Powierzchnia EKO", f"{eco_area:.2f} ha")
-    m3.metric("Zgodność nawozów", "100% IUNG / UE 2018/848")
+    m1.metric(
+        _t("Wybrane pola EKO", "Selected ECO fields"),
+        f"{len(eco_df)} {_t('działek', 'fields')}",
+    )
+    m2.metric(
+        _t("Powierzchnia EKO", "ECO area"),
+        f"{eco_area:.2f} ha",
+    )
+    m3.metric(
+        _t("Zgodność nawozów", "Fertilizer compliance"),
+        _t("100% IUNG / UE", "100% IUNG / EU"),
+    )
 
     saved_profile = st.session_state.get("farm_profile", {})
-    default_farm_name = saved_profile.get("farm_name") or "Gospodarstwo Ekologiczne Zielone Pole"
+    default_farm_name = (
+        saved_profile.get("farm_name")
+        or _t("Gospodarstwo Ekologiczne Zielone Pole", "Green Field Organic Farm")
+    )
 
     # 2. Dane nagłówkowe gospodarstwa (do Arkusza 1)
-    with st.expander("2. Dane gospodarstwa i doradcy (uzupełniane w Planie Działalności EKO)", expanded=False):
+    with st.expander(
+        _t(
+            "2. Dane gospodarstwa i doradcy (uzupełniane w Planie Działalności EKO)",
+            "2. Farm and advisor details (used in the ECO Activity Plan)",
+        ),
+        expanded=False,
+    ):
         c1, c2 = st.columns(2)
         farm_meta = {
-            "nazwa_gospodarstwa": c1.text_input("Imię i nazwisko / Nazwa gospodarstwa", value=default_farm_name),
-            "numer_arimr": c2.text_input("Numer producenta ARiMR (EP)", value="045129874"),
-            "lokalizacja": c1.text_input("Lokalizacja / Adres", value=location_label),
-            "jednostka_cert": c2.text_input("Jednostka certyfikująca (nr upoważnienia)", value="PL-EKO-01"),
-            "doradca": c1.text_input("Doradca rolnośrodowiskowy", value=""),
-            "nr_doradcy": c2.text_input("Nr wpisu doradcy", value=""),
-            "okres_planu": c1.text_input("Okres realizacji planu (5 lat)", value="2026–2030"),
-            "data_konwersji": c2.text_input("Data rozpoczęcia konwersji", value="2024-03-15"),
+            "nazwa_gospodarstwa": c1.text_input(
+                _t("Imię i nazwisko / Nazwa gospodarstwa", "Full name / Farm name"),
+                value=default_farm_name,
+            ),
+            "numer_arimr": c2.text_input(
+                _t("Numer producenta ARiMR (EP)", "ARiMR Producer Number (EP)"),
+                value="045129874",
+            ),
+            "lokalizacja": c1.text_input(
+                _t("Lokalizacja / Adres", "Location / Address"),
+                value=location_label,
+            ),
+            "jednostka_cert": c2.text_input(
+                _t("Jednostka certyfikująca (nr upoważnienia)", "Certification body (ID)"),
+                value="PL-EKO-01",
+            ),
+            "doradca": c1.text_input(
+                _t("Doradca rolnośrodowiskowy", "Agri-environmental advisor"),
+                value="",
+            ),
+            "nr_doradcy": c2.text_input(
+                _t("Nr wpisu doradcy", "Advisor registration no."),
+                value="",
+            ),
+            "okres_planu": c1.text_input(
+                _t("Okres realizacji planu (5 lat)", "Plan period (5 years)"),
+                value="2026–2030",
+            ),
+            "data_konwersji": c2.text_input(
+                _t("Data rozpoczęcia konwersji", "Conversion start date"),
+                value="2024-03-15",
+            ),
             "przeznaczenie_plonow": "Sprzedaż certyfikowana EKO / Pasza własna",
             "domyslna_maszyna": "Rozsiewacz / Opryskiwacz (umyty EKO)",
         }
 
     # 3. Podgląd automatycznie wygenerowanego Dziennika Zabiegów EKO + możliwość dopisania własnego wpisu
-    st.markdown("**3. Automatyczny Dziennik Zabiegów EKO (zasilony z mapy, gleby i pogody)**")
+    st.markdown(
+        f"**{_t('3. Automatyczny Dziennik Zabiegów EKO (zasilony z mapy, gleby i pogody)', '3. Automated ECO Treatment Logbook (populated from map, soil & weather)')}**"
+    )
     preview_cols = [
-        c for c in ["field_uid", "h3_index", "crop_name", "area_ha", "decyzja", "zalecany_nawoz", "nawozy_eko", "dawka_nawozu_kg_ha", "ilosc_nawozu_kg"]
+        c
+        for c in [
+            "field_uid",
+            "h3_index",
+            "crop_name",
+            "area_ha",
+            "decyzja",
+            "zalecany_nawoz",
+            "nawozy_eko",
+            "dawka_nawozu_kg_ha",
+            "ilosc_nawozu_kg",
+        ]
         if c in eco_df.columns
     ]
-    st.dataframe(eco_df[preview_cols], use_container_width=True, hide_index=True)
+    st.dataframe(
+        eco_df[preview_cols],
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "field_uid": st.column_config.TextColumn(_t("Działka", "Field ID")),
+            "h3_index": st.column_config.TextColumn("H3"),
+            "crop_name": st.column_config.TextColumn(_t("Uprawa", "Crop")),
+            "area_ha": st.column_config.NumberColumn(_t("Pow. (ha)", "Area (ha)"), format="%.2f"),
+            "decyzja": st.column_config.TextColumn(_t("Decyzja", "Decision")),
+            "zalecany_nawoz": st.column_config.TextColumn(_t("Zalecany nawóz", "Recommended fertilizer")),
+            "nawozy_eko": st.column_config.TextColumn(_t("Status EKO", "ECO status")),
+            "dawka_nawozu_kg_ha": st.column_config.NumberColumn(_t("Dawka (kg/ha)", "Dose (kg/ha)")),
+            "ilosc_nawozu_kg": st.column_config.NumberColumn(_t("Łącznie (kg)", "Total (kg)")),
+        },
+    )
 
-    with st.expander("Dodaj własny zabieg lub wykaz maszyn (opcjonalnie)"):
+    with st.expander(
+        _t(
+            "Dodaj własny zabieg lub wykaz maszyn (opcjonalnie)",
+            "Add custom treatment or machinery list (optional)",
+        )
+    ):
         custom_treatments = st.data_editor(
-            pd.DataFrame(columns=["Data", "Dzialka", "Uprawa", "Zabieg", "Srodek_EKO", "Dawka", "Podstawa_EKO", "Maszyna_Paliwo", "Plon_Straty"]),
+            pd.DataFrame(
+                columns=[
+                    "Data",
+                    "Dzialka",
+                    "Uprawa",
+                    "Zabieg",
+                    "Srodek_EKO",
+                    "Dawka",
+                    "Podstawa_EKO",
+                    "Maszyna_Paliwo",
+                    "Plon_Straty",
+                ]
+            ),
             num_rows="dynamic",
             use_container_width=True,
+            column_config={
+                "Data": st.column_config.TextColumn(_t("Data", "Date")),
+                "Dzialka": st.column_config.TextColumn(_t("Działka", "Field")),
+                "Uprawa": st.column_config.TextColumn(_t("Uprawa", "Crop")),
+                "Zabieg": st.column_config.TextColumn(_t("Zabieg", "Treatment")),
+                "Srodek_EKO": st.column_config.TextColumn(_t("Środek EKO", "ECO product")),
+                "Dawka": st.column_config.TextColumn(_t("Dawka", "Dose")),
+                "Podstawa_EKO": st.column_config.TextColumn(_t("Podstawa EKO", "ECO basis")),
+                "Maszyna_Paliwo": st.column_config.TextColumn(_t("Maszyna / Paliwo", "Machine / Fuel")),
+                "Plon_Straty": st.column_config.TextColumn(_t("Plon / Straty", "Yield / Losses")),
+            },
         )
         machines_df = st.data_editor(
-            pd.DataFrame([
-                {"Maszyna": "Rozsiewacz nawozów", "Wlasnosc": "Własna", "Zabezpieczenie_EKO": "Mycie ciśnieniowe przed pracą EKO", "Data_mycia": str(selected_timestamp)[:10]},
-                {"Maszyna": "Opryskiwacz polowy", "Wlasnosc": "Własna", "Zabezpieczenie_EKO": "Płukanie potrójne + dedykowane dysze", "Data_mycia": str(selected_timestamp)[:10]},
-            ]),
+            pd.DataFrame(
+                [
+                    {
+                        "Maszyna": _t("Rozsiewacz nawozów", "Fertilizer spreader"),
+                        "Wlasnosc": _t("Własna", "Owned"),
+                        "Zabezpieczenie_EKO": _t(
+                            "Mycie ciśnieniowe przed pracą EKO",
+                            "Pressure washing before ECO work",
+                        ),
+                        "Data_mycia": str(selected_timestamp)[:10],
+                    },
+                    {
+                        "Maszyna": _t("Opryskiwacz polowy", "Field sprayer"),
+                        "Wlasnosc": _t("Własna", "Owned"),
+                        "Zabezpieczenie_EKO": _t(
+                            "Płukanie potrójne + dedykowane dysze",
+                            "Triple rinse + dedicated nozzles",
+                        ),
+                        "Data_mycia": str(selected_timestamp)[:10],
+                    },
+                ]
+            ),
             num_rows="dynamic",
             use_container_width=True,
+            column_config={
+                "Maszyna": st.column_config.TextColumn(_t("Maszyna", "Machine")),
+                "Wlasnosc": st.column_config.TextColumn(_t("Własność", "Ownership")),
+                "Zabezpieczenie_EKO": st.column_config.TextColumn(_t("Zabezpieczenie EKO", "ECO cleaning protocol")),
+                "Data_mycia": st.column_config.TextColumn(_t("Data mycia", "Cleaning date")),
+            },
         )
 
     # 4. Pobranie gotowego pliku Excela (.xlsx) zgodnego ze wzorem audytowym
@@ -314,10 +481,17 @@ def render_eko_documentation_tab(
         custom_treatments_df=custom_treatments,
         machines_df=machines_df,
     )
+    date_tag = pd.to_datetime(selected_timestamp).strftime("%Y%m%d")
     st.download_button(
-        label="Pobierz wypełnioną Dokumentację Rolnika Ekologicznego (.xlsx)",
+        label=_t(
+            "Pobierz wypełnioną Dokumentację Rolnika Ekologicznego (.xlsx)",
+            "Download Filled Organic Farmer Documentation (.xlsx)",
+        ),
         data=xlsx_bytes,
-        file_name=f"Dokumentacja_EKO_Audyt_{pd.to_datetime(selected_timestamp).strftime('%Y%m%d')}.xlsx",
+        file_name=_t(
+            f"Dokumentacja_EKO_Audyt_{date_tag}.xlsx",
+            f"ECO_Audit_Documentation_{date_tag}.xlsx",
+        ),
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         type="primary",
     )

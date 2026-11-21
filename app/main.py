@@ -7,6 +7,8 @@ import plotly.graph_objects as go
 import pydeck as pdk
 import streamlit as st
 
+from farmhand import render_farmhand_bubble
+
 from silnik_regul import (
     DATA_DIR,
     FALLOW_LABEL,
@@ -1396,3 +1398,10 @@ with tab_eko_doc:
                 st.cache_data.clear()
                 st.success(f"Dodano regułę {new_row['rule_id']} ({r_uprawa} -> {r_decyzja})!")
                 st.rerun()
+# --- Poza wszystkimi blokami `with tab_...:` (bez wcięcia) ---
+render_farmhand_bubble(
+    result_df=result_df,
+    farm_profile=st.session_state.get("farm_profile", {}),
+    selected_timestamp=selected_ts,
+    eco_mode=eco_active,
+)

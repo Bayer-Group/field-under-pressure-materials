@@ -28,7 +28,7 @@ from shapely.ops import transform as shp_transform
 ROOT_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT_DIR / "app"))
 try:
-    from silnik_regul import DATA_DIR as APP_DATA_DIR
+    from app.silnik_regul import DATA_DIR as APP_DATA_DIR
 except Exception:
     APP_DATA_DIR = ROOT_DIR / "app" / "data_app"
 
