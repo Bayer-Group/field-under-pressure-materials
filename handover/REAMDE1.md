@@ -1,4 +1,5 @@
 # HANDOVER
+BĘDZIE DUŻO DO POPRAWY I DUŻO KILKA NOWYCH FUNKCJONALNOŚCI - ZMIENI SIĘ CORE BO WEDŁUG MNIE NIE JEST DOBRZE
 
 Działa już mapa pól w Lizmapie, kalendarz 7 dni dla 108 pól >= 3ha (tryb historyczny od 14.04.2025), popup z oceną dnia, podświetlenie pola.
 
