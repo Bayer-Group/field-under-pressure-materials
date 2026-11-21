@@ -43,7 +43,7 @@ export function UserPreferencesSync() {
       .then((res) => {
         const prefs = res.data;
         setThemePref(userPrefToUiTheme(prefs.theme));
-        setLanguage(prefs.lang === 'en' ? 'en' : 'pl');
+        setLanguage(prefs.lang === 'pl' ? 'pl' : 'en');
         if (prefs.activeOrchardId) {
           setSelectedOrchardId(prefs.activeOrchardId);
         }

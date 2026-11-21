@@ -27,6 +27,16 @@ from .tree_health import health_status, tree_health
 
 _ROOT = Path(__file__).resolve().parents[1]
 _DEMO_ORCHARD = "6b01933c1dc02a368703a020"
+_VISIBLE_ORCHARD_IDS = (
+    "6b01933c1dc02a368703a020",  # Grojec A
+    "6b01933c1dc02a368703a01f",  # Grojec B
+    "6b01933c1dc02a368703a023",  # Grojec C
+)
+_VISIBLE_ORCHARD_NAMES = {
+    "6b01933c1dc02a368703a020": "Grojec A",
+    "6b01933c1dc02a368703a01f": "Grojec B",
+    "6b01933c1dc02a368703a023": "Grojec C",
+}
 _WGS84 = Geod(ellps="WGS84")
 _TO_LAS = Transformer.from_crs("EPSG:4326", "EPSG:2180", always_xy=True)
 _SPECIES = {
@@ -40,7 +50,7 @@ _SPECIES = {
 
 def _name(orchard: dict) -> str:
     identifier = str(orchard["_id"])
-    return orchard.get("name") or ("Grojec A" if identifier == _DEMO_ORCHARD else f"Orchard {identifier}")
+    return orchard.get("name") or _VISIBLE_ORCHARD_NAMES.get(identifier, f"Orchard {identifier}")
 
 
 def _center(orchard: dict) -> dict:
@@ -145,7 +155,7 @@ def _serialize_preferences(preferences: dict | None) -> dict:
     active = prefs.get("activeOrchardId")
     return {
         "theme": prefs.get("theme", "OS"),
-        "lang": prefs.get("lang", "pl"),
+        "lang": prefs.get("lang", "en"),
         "activeOrchardId": str(active) if isinstance(active, ObjectId) else active,
     }
 
@@ -158,8 +168,10 @@ def create_orchard_router(db: Database) -> APIRouter:
 
     @router.get("/orchards")
     def list_orchards() -> list[dict]:
+        visible_oids = [ObjectId(oid) for oid in _VISIBLE_ORCHARD_IDS]
+        order_index = {oid: idx for idx, oid in enumerate(_VISIBLE_ORCHARD_IDS)}
         items = []
-        for orchard in db.Orchard.find({}, {"environmentalData": 0}):
+        for orchard in db.Orchard.find({"_id": {"$in": visible_oids}}, {"environmentalData": 0}):
             identifier = str(orchard["_id"])
             try:
                 center = _center(orchard)
@@ -180,7 +192,7 @@ def create_orchard_router(db: Database) -> APIRouter:
                     "centroid": {"lat": center["lat"], "long": center["lng"]},
                 }
             )
-        items.sort(key=lambda item: (item["_id"] != _DEMO_ORCHARD, item["name"]))
+        items.sort(key=lambda item: order_index.get(item["_id"], 99))
         return items
 
     @router.get("/orchard/health")

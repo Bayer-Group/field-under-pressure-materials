@@ -5,7 +5,7 @@
  * (including 16-bit / 8-bit RGB colors and ASPRS classification filtering).
  */
 
-export type LasColorMode = 'rgb' | 'elevation' | 'classification';
+export type LasColorMode = 'rgb' | 'elevation' | 'classification' | 'intensity';
 
 export interface LasHeaderMeta {
   version: string;
@@ -14,6 +14,7 @@ export interface LasHeaderMeta {
   totalPointCount: number;
   renderedPointCount: number;
   hasRgb: boolean;
+  hasIntensity: boolean;
   boundsRaw: {
     minX: number;
     maxX: number;
@@ -45,6 +46,8 @@ export interface ParsedLasCloud {
   elevationColors: Float32Array;
   /** ASPRS classification colors */
   classificationColors: Float32Array;
+  /** LiDAR return intensity mapped with Google Turbo colormap (p02-p98 contrast stretch) */
+  intensityColors: Float32Array;
   /** Samples terrain ground elevation (Three.js +Y) at local scene (x, z) */
   sampleGroundY: (sceneX: number, sceneZ: number) => number;
 }
@@ -97,6 +100,28 @@ function elevationColorRamp(t: number): [number, number, number] {
     }
   }
   return [0.94, 0.82, 0.28];
+}
+
+/**
+ * Google Turbo perceptually smooth rainbow colormap (5th-degree polynomial by Anton Mikhailov).
+ * Input t in [0, 1] -> normalized RGB tuple in [0, 1].
+ */
+function turboColorRamp(t: number): [number, number, number] {
+  const x = Math.max(0, Math.min(1, t));
+  const x2 = x * x;
+  const x3 = x2 * x;
+  const x4 = x2 * x2;
+  const x5 = x4 * x;
+
+  const r = 0.13572138 + 4.6153926 * x - 42.66032258 * x2 + 132.13108234 * x3 - 152.94239396 * x4 + 59.28637943 * x5;
+  const g = 0.09140261 + 2.19418839 * x + 4.84296658 * x2 - 14.18503333 * x3 + 4.27729857 * x4 + 2.82956604 * x5;
+  const b = 0.1066733 + 12.64194608 * x - 60.58204836 * x2 + 110.36276771 * x3 - 89.90310912 * x4 + 27.34824973 * x5;
+
+  return [
+    Math.max(0, Math.min(1, r)),
+    Math.max(0, Math.min(1, g)),
+    Math.max(0, Math.min(1, b)),
+  ];
 }
 
 /** ASPRS standard LiDAR classification palette */
@@ -213,6 +238,18 @@ export function parseLasArrayBuffer(
     }
   }
 
+  // Probe intensity percentiles (p02-p98) for crisp contrast stretching with Turbo colormap
+  const intensityProbe: number[] = [];
+  const intenStep = Math.max(1, Math.floor(totalPointCount / 2000));
+  for (let i = 0; i < totalPointCount; i += intenStep) {
+    intensityProbe.push(view.getUint16(offsetToPoints + i * pointRecordLength + 12, true));
+  }
+  intensityProbe.sort((a, b) => a - b);
+  const intenMinP02 = intensityProbe.length > 0 ? intensityProbe[Math.floor(0.02 * intensityProbe.length)] : 0;
+  const intenMaxP98 = intensityProbe.length > 0 ? intensityProbe[Math.min(intensityProbe.length - 1, Math.floor(0.98 * intensityProbe.length))] : 65535;
+  const hasIntensity = intenMaxP98 > 0;
+  const intenSpan = Math.max(1, intenMaxP98 - intenMinP02);
+
   const stride = Math.max(1, Math.ceil(totalPointCount / maxPoints));
   const capacity = Math.ceil(totalPointCount / stride);
 
@@ -220,6 +257,7 @@ export function parseLasArrayBuffer(
   const rgbColors = new Float32Array(capacity * 3);
   const elevationColors = new Float32Array(capacity * 3);
   const classificationColors = new Float32Array(capacity * 3);
+  const intensityColors = new Float32Array(capacity * 3);
 
   // Build coarse 2m terrain ground elevation grid for accurate 3D tree placement on LiDAR ground
   const cellSize = 2.5;
@@ -281,6 +319,13 @@ export function parseLasArrayBuffer(
     classificationColors[p3] = cr;
     classificationColors[p3 + 1] = cg;
     classificationColors[p3 + 2] = cb;
+
+    // Intensity color (Google Turbo colormap stretched across p02..p98)
+    const rawIntensity = view.getUint16(recOff + 12, true);
+    const [ir, ig, ib] = turboColorRamp((rawIntensity - intenMinP02) / intenSpan);
+    intensityColors[p3] = ir;
+    intensityColors[p3 + 1] = ig;
+    intensityColors[p3 + 2] = ib;
 
     // True RGB color (if present in LAS)
     if (hasNonZeroRgb && rgbOffset !== null) {
@@ -348,6 +393,7 @@ export function parseLasArrayBuffer(
       totalPointCount,
       renderedPointCount: outIdx,
       hasRgb: hasNonZeroRgb,
+      hasIntensity,
       boundsRaw: { minX, maxX, minY, maxY, minZ, maxZ },
       spanMeters: {
         x: Number(spanX.toFixed(2)),
@@ -360,6 +406,7 @@ export function parseLasArrayBuffer(
     rgbColors: rgbColors.subarray(0, outIdx * 3),
     elevationColors: elevationColors.subarray(0, outIdx * 3),
     classificationColors: classificationColors.subarray(0, outIdx * 3),
+    intensityColors: intensityColors.subarray(0, outIdx * 3),
     sampleGroundY,
   };
 }

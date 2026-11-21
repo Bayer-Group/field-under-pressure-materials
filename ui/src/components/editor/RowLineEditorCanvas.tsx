@@ -11,6 +11,7 @@ import {
   type CalculatedRowResult,
   type Vec2,
 } from '../../utils/orchardGeometry';
+import { getZoomModifierLabel } from '../../utils/platform';
 
 export type EditorToolMode = 'draw' | 'select' | 'paint';
 export type CanvasBackdropMode = 'blank' | 'satellite';
@@ -112,6 +113,14 @@ export function RowLineEditorCanvas({
   const [endpointDrag, setEndpointDrag] = useState<{ rowId: string; which: 'start' | 'end' } | null>(null);
   const [hoveredTree, setHoveredTree] = useState<DraftTree | null>(null);
   const [failedTiles, setFailedTiles] = useState<Record<string, boolean>>({});
+  const [showZoomHint, setShowZoomHint] = useState<boolean>(false);
+  const zoomHintTimerRef = useRef<number | null>(null);
+
+  const minPpm = useMemo(
+    () => Math.max(0.65, computeFitView(viewportSize.width, viewportSize.height).ppm * 0.58),
+    [computeFitView, viewportSize.width, viewportSize.height],
+  );
+  const zoomMod = getZoomModifierLabel();
 
   // Observe container resize
   useEffect(() => {
@@ -307,23 +316,45 @@ export function RowLineEditorCanvas({
     return `${outer} ${inner}`;
   }, [viewportSize, polygonLocal, localToScreen]);
 
-  const handleWheel = (event: React.WheelEvent<SVGSVGElement>) => {
-    event.preventDefault();
-    const factor = event.deltaY < 0 ? 1.14 : 0.88;
-    const pointerLocal = clientToLocal(event.clientX, event.clientY);
+  // Require Cmd/Ctrl + scroll to zoom; plain scroll scrolls the page naturally
+  useEffect(() => {
     const svg = svgRef.current;
     if (!svg) return;
-    const rect = svg.getBoundingClientRect();
-    const sx = event.clientX - rect.left;
-    const sy = event.clientY - rect.top;
 
-    setView((prev) => {
-      const nextPpm = Math.max(1.2, Math.min(30, prev.ppm * factor));
-      const nextCenterX = pointerLocal.x - (sx - viewportSize.width / 2) / nextPpm;
-      const nextCenterY = pointerLocal.y + (sy - viewportSize.height / 2) / nextPpm;
-      return { centerX: nextCenterX, centerY: nextCenterY, ppm: nextPpm };
-    });
-  };
+    const handleNativeWheel = (event: WheelEvent) => {
+      if (!event.ctrlKey && !event.metaKey) {
+        setShowZoomHint(true);
+        if (zoomHintTimerRef.current !== null) {
+          window.clearTimeout(zoomHintTimerRef.current);
+        }
+        zoomHintTimerRef.current = window.setTimeout(() => setShowZoomHint(false), 1400);
+        return;
+      }
+
+      event.preventDefault();
+      const factor = event.deltaY < 0 ? 1.14 : 0.88;
+      const rect = svg.getBoundingClientRect();
+      const sx = event.clientX - rect.left;
+      const sy = event.clientY - rect.top;
+
+      setView((prev) => {
+        const pointerX = prev.centerX + (sx - viewportSize.width / 2) / prev.ppm;
+        const pointerY = prev.centerY - (sy - viewportSize.height / 2) / prev.ppm;
+        const nextPpm = Math.max(minPpm, Math.min(30, prev.ppm * factor));
+        const nextCenterX = pointerX - (sx - viewportSize.width / 2) / nextPpm;
+        const nextCenterY = pointerY + (sy - viewportSize.height / 2) / nextPpm;
+        return { centerX: nextCenterX, centerY: nextCenterY, ppm: nextPpm };
+      });
+    };
+
+    svg.addEventListener('wheel', handleNativeWheel, { passive: false });
+    return () => {
+      svg.removeEventListener('wheel', handleNativeWheel);
+      if (zoomHintTimerRef.current !== null) {
+        window.clearTimeout(zoomHintTimerRef.current);
+      }
+    };
+  }, [viewportSize.width, viewportSize.height, minPpm]);
 
   const handlePointerDown = (event: React.PointerEvent<SVGSVGElement>) => {
     // Middle or right mouse button -> pan viewport
@@ -442,7 +473,6 @@ export function RowLineEditorCanvas({
         className={`editor-svg ${canvasCursorClass}`}
         width={viewportSize.width}
         height={viewportSize.height}
-        onWheel={handleWheel}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
@@ -822,6 +852,12 @@ export function RowLineEditorCanvas({
         </div>
       )}
 
+      {showZoomHint && (
+        <div className="map-zoom-hint-toast" role="status">
+          {t.orchard3d.zoomModifierHint.replace('{mod}', zoomMod)}
+        </div>
+      )}
+
       {/* Top-right floating zoom controls & North indicator */}
       <div className="editor-map-controls">
         <div className="editor-compass" title="North">
@@ -840,7 +876,7 @@ export function RowLineEditorCanvas({
           <button
             type="button"
             className="editor-zoom-btn"
-            onClick={() => setView((v) => ({ ...v, ppm: Math.max(1.2, v.ppm * 0.8) }))}
+            onClick={() => setView((v) => ({ ...v, ppm: Math.max(minPpm, v.ppm * 0.8) }))}
             aria-label="Zoom out"
           >
             <Minus size={15} />
@@ -892,7 +928,7 @@ export function RowLineEditorCanvas({
             {drawStartLocal
               ? t.rowEditor.hintFinishLine
               : toolMode === 'draw'
-                ? t.rowEditor.hintDrawMode
+                ? t.rowEditor.hintDrawMode.replace('{mod}', zoomMod)
                 : toolMode === 'paint'
                   ? t.rowEditor.hintPaintMode
                   : t.rowEditor.hintSelectMode}

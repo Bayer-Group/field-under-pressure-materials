@@ -1,14 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   Box,
-  Crosshair,
   Eye,
   EyeOff,
   Loader2,
-  Map as MapIcon,
   Mountain,
   Pentagon,
-  RotateCcw,
   Route,
   Sparkles,
   Trees,
@@ -24,6 +21,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import type { GeoCoord, OrchardSceneResponse, OrchardTree3D } from '../../types/orchard';
 import { geoToLasSceneXZ, wgs84ToEpsg2180 } from '../../utils/crs2180';
 import { parseLasArrayBuffer, type LasColorMode, type ParsedLasCloud } from '../../utils/lasParser';
+import { getZoomModifierLabel } from '../../utils/platform';
 
 interface LayerVisibility {
   pointCloud: boolean;
@@ -91,6 +89,8 @@ export function Orchard3DViewerCard() {
   const [colorMode, setColorMode] = useState<LasColorMode>('rgb');
   const [verticalExaggeration, setVerticalExaggeration] = useState<number>(1.8);
   const [selectedTree, setSelectedTree] = useState<OrchardTree3D | null>(null);
+  const [showZoomHint, setShowZoomHint] = useState<boolean>(false);
+  const zoomHintTimerRef = useRef<number | null>(null);
   const [layers, setLayers] = useState<LayerVisibility>({
     pointCloud: true,
     trees: true,
@@ -99,8 +99,6 @@ export function Orchard3DViewerCard() {
   });
 
   const mountRef = useRef<HTMLDivElement | null>(null);
-  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
-  const controlsRef = useRef<OrbitControls | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const worldRootRef = useRef<THREE.Group | null>(null);
   const pointCloudGeometryRef = useRef<THREE.BufferGeometry | null>(null);
@@ -111,12 +109,6 @@ export function Orchard3DViewerCard() {
   const selectionRingRef = useRef<THREE.Mesh | null>(null);
   const treeLookupRef = useRef<Map<string, OrchardTree3D>>(new Map());
   const gridHelperRef = useRef<THREE.GridHelper | null>(null);
-  const defaultCameraRef = useRef<{ pos: THREE.Vector3; target: THREE.Vector3; topPos: THREE.Vector3 }>({
-    pos: new THREE.Vector3(0, 118, 158),
-    target: new THREE.Vector3(0, 2, 0),
-    topPos: new THREE.Vector3(0, 235, 0.01),
-  });
-  const treesFocusRef = useRef<{ pos: THREE.Vector3; target: THREE.Vector3 } | null>(null);
 
   // Load orchard metadata + `<orchardId>.las` binary point cloud (optional — falls back to pure geometry if absent)
   useEffect(() => {
@@ -179,13 +171,10 @@ export function Orchard3DViewerCard() {
 
     const maxSpan = Math.max(spanX, spanY, 40);
     const orbitPos = new THREE.Vector3(maxSpan * 0.24, maxSpan * 0.52, maxSpan * 0.68);
-    const topPos = new THREE.Vector3(0, maxSpan * 1.12, 0.01);
     const centerTarget = new THREE.Vector3(0, parsedLas ? 2.5 : 1.0, 0);
-    defaultCameraRef.current = { pos: orbitPos, target: centerTarget, topPos };
 
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.2, Math.max(900, maxSpan * 8));
     camera.position.copy(orbitPos);
-    cameraRef.current = camera;
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -197,10 +186,25 @@ export function Orchard3DViewerCard() {
     controls.dampingFactor = 0.08;
     controls.maxPolarAngle = Math.PI / 2 - 0.03;
     controls.minDistance = 6;
-    controls.maxDistance = Math.max(460, maxSpan * 3.5);
+    controls.maxDistance = Math.max(140, maxSpan * 1.68);
     controls.target.copy(centerTarget);
     controls.update();
-    controlsRef.current = controls;
+
+    // Require Cmd/Ctrl + scroll to zoom the 3D scene; plain scroll scrolls the page naturally
+    const handleWheelGuard = (event: WheelEvent) => {
+      if (!event.ctrlKey && !event.metaKey) {
+        event.stopImmediatePropagation();
+        setShowZoomHint(true);
+        if (zoomHintTimerRef.current !== null) {
+          window.clearTimeout(zoomHintTimerRef.current);
+        }
+        zoomHintTimerRef.current = window.setTimeout(() => setShowZoomHint(false), 1400);
+        return;
+      }
+      // Block browser page zoom when zooming the 3D scene with Cmd/Ctrl + scroll
+      event.preventDefault();
+    };
+    renderer.domElement.addEventListener('wheel', handleWheelGuard, { capture: true, passive: false });
 
     // Lighting
     const hemiLight = new THREE.HemisphereLight(0xffffff, 0x3b4a3e, 1.15);
@@ -243,7 +247,9 @@ export function Orchard3DViewerCard() {
           ? parsedLas.rgbColors
           : colorMode === 'classification'
             ? parsedLas.classificationColors
-            : parsedLas.elevationColors;
+            : colorMode === 'intensity'
+              ? parsedLas.intensityColors
+              : parsedLas.elevationColors;
       pcGeom.setAttribute('color', new THREE.BufferAttribute(new Float32Array(initialColors), 3));
       pointCloudGeometryRef.current = pcGeom;
 
@@ -378,9 +384,6 @@ export function Orchard3DViewerCard() {
 
     const pickableMeshes: THREE.Object3D[] = [];
     const lookup = new Map<string, OrchardTree3D>();
-    let treeSumX = 0;
-    let treeSumY = 0;
-    let treeSumZ = 0;
 
     for (const tree of sceneData.trees) {
       const xz = geoToLasSceneXZ(tree.geo, sceneOrigin);
@@ -394,10 +397,6 @@ export function Orchard3DViewerCard() {
         },
       };
       lookup.set(alignedTree.id, alignedTree);
-
-      treeSumX += xz.x;
-      treeSumY += groundY;
-      treeSumZ += xz.z;
 
       const treeNode = new THREE.Group();
       treeNode.position.set(xz.x, groundY, xz.z);
@@ -435,19 +434,6 @@ export function Orchard3DViewerCard() {
       }
 
       treesGroup.add(treeNode);
-    }
-
-    if (sceneData.trees.length > 0) {
-      const n = sceneData.trees.length;
-      const cx = treeSumX / n;
-      const cy = treeSumY / n;
-      const cz = treeSumZ / n;
-      treesFocusRef.current = {
-        target: new THREE.Vector3(cx, cy * activeZScale + 2, cz),
-        pos: new THREE.Vector3(cx + 22, cy * activeZScale + 24, cz + 28),
-      };
-    } else {
-      treesFocusRef.current = null;
     }
 
     treeLookupRef.current = lookup;
@@ -535,7 +521,11 @@ export function Orchard3DViewerCard() {
 
     return () => {
       window.cancelAnimationFrame(animId);
+      if (zoomHintTimerRef.current !== null) {
+        window.clearTimeout(zoomHintTimerRef.current);
+      }
       resizeObserver.disconnect();
+      renderer.domElement.removeEventListener('wheel', handleWheelGuard, { capture: true });
       renderer.domElement.removeEventListener('pointerdown', handlePointerDown);
       renderer.domElement.removeEventListener('pointermove', handlePointerMove);
       renderer.domElement.removeEventListener('pointerup', handlePointerUp);
@@ -568,13 +558,18 @@ export function Orchard3DViewerCard() {
     };
   }, [parsedLas, sceneData]);
 
-  // Sync theme-dependent canvas background and fog
+  // Sync theme-dependent canvas background and subtle distance-scaled horizon fog
   useEffect(() => {
     const scene = sceneRef.current;
     if (!scene) return;
     const bgHex = resolvedTheme === 'dark' ? 0x0b1220 : 0xeef2f6;
     scene.background = new THREE.Color(bgHex);
-    scene.fog = new THREE.Fog(bgHex, 240, 620);
+
+    const geoFallback = sceneData ? computeGeometricBounds(sceneData) : { spanX: 120, spanY: 120 };
+    const spanX = parsedLas ? parsedLas.header.spanMeters.x : geoFallback.spanX;
+    const spanY = parsedLas ? parsedLas.header.spanMeters.y : geoFallback.spanY;
+    const maxSpan = Math.max(spanX, spanY, 40);
+    scene.fog = new THREE.Fog(bgHex, Math.max(700, maxSpan * 4.5), Math.max(2200, maxSpan * 11));
 
     if (gridHelperRef.current) {
       (gridHelperRef.current.material as THREE.Material).opacity = resolvedTheme === 'dark' ? 0.2 : 0.32;
@@ -590,7 +585,9 @@ export function Orchard3DViewerCard() {
         ? parsedLas.rgbColors
         : colorMode === 'classification'
           ? parsedLas.classificationColors
-          : parsedLas.elevationColors;
+          : colorMode === 'intensity'
+            ? parsedLas.intensityColors
+            : parsedLas.elevationColors;
     const attr = geom.getAttribute('color') as THREE.BufferAttribute | undefined;
     if (attr && attr.array.length === nextArr.length) {
       (attr.array as Float32Array).set(nextArr);
@@ -625,24 +622,6 @@ export function Orchard3DViewerCard() {
     }
   }, [selectedTree]);
 
-  const setCameraPreset = (preset: 'orbit' | 'top' | 'trees') => {
-    const camera = cameraRef.current;
-    const controls = controlsRef.current;
-    if (!camera || !controls) return;
-
-    if (preset === 'top') {
-      camera.position.copy(defaultCameraRef.current.topPos);
-      controls.target.set(0, 0, 0);
-    } else if (preset === 'trees' && treesFocusRef.current) {
-      camera.position.copy(treesFocusRef.current.pos);
-      controls.target.copy(treesFocusRef.current.target);
-    } else {
-      camera.position.copy(defaultCameraRef.current.pos);
-      controls.target.copy(defaultCameraRef.current.target);
-    }
-    controls.update();
-  };
-
   const toggleLayer = (key: keyof LayerVisibility) => {
     setLayers((prev) => ({ ...prev, [key]: !prev[key] }));
   };
@@ -651,9 +630,10 @@ export function Orchard3DViewerCard() {
     { id: 'rgb', label: t.orchard3d.colorRgb },
     { id: 'elevation', label: t.orchard3d.colorElevation },
     { id: 'classification', label: t.orchard3d.colorClass },
+    { id: 'intensity', label: t.orchard3d.colorIntensity },
   ];
 
-  const lasFileName = sceneData ? `${sceneData.orchardId}.las` : '';
+  const zoomMod = getZoomModifierLabel();
 
   return (
     <section className="card viewer-card">
@@ -741,41 +721,17 @@ export function Orchard3DViewerCard() {
               </button>
             </>
           )}
-
-          {/* Camera presets */}
-          <div className="segmented-control">
-            <button type="button" className="segmented-btn" onClick={() => setCameraPreset('orbit')}>
-              <Box size={14} />
-              <span>{t.orchard3d.viewOrbit}</span>
-            </button>
-            <button type="button" className="segmented-btn" onClick={() => setCameraPreset('top')}>
-              <MapIcon size={14} />
-              <span>{t.orchard3d.viewTop}</span>
-            </button>
-            <button
-              type="button"
-              className="segmented-btn"
-              onClick={() => setCameraPreset('trees')}
-              title={t.orchard3d.focusTrees}
-            >
-              <Crosshair size={14} />
-              <span>{t.orchard3d.focusTrees}</span>
-            </button>
-            <button
-              type="button"
-              className="segmented-btn"
-              onClick={() => setCameraPreset('orbit')}
-              title={t.orchard3d.resetView}
-              aria-label={t.orchard3d.resetView}
-            >
-              <RotateCcw size={14} />
-            </button>
-          </div>
         </div>
       </div>
 
       <div className="viewer-stage">
         <div ref={mountRef} className="viewer-canvas-container" />
+
+        {showZoomHint && (
+          <div className="map-zoom-hint-toast" role="status">
+            {t.orchard3d.zoomModifierHint.replace('{mod}', zoomMod)}
+          </div>
+        )}
 
         {isLoading && (
           <div className="viewer-loading-overlay">
@@ -784,25 +740,13 @@ export function Orchard3DViewerCard() {
           </div>
         )}
 
-        {/* Top-left LAS or geometric fallback HUD */}
+        {/* Top-left scene stats HUD */}
         {sceneData && (
           <div className="viewer-hud viewer-hud-top-left">
             {parsedLas ? (
-              <>
-                <span className="hud-chip">
-                  <strong>{lasFileName}</strong> (LAS {parsedLas.header.version} · fmt {parsedLas.header.pointFormat})
-                </span>
-                <span className="hud-chip">
-                  {t.orchard3d.pointsStat}:{' '}
-                  <strong>
-                    {parsedLas.header.renderedPointCount.toLocaleString()} /{' '}
-                    {parsedLas.header.totalPointCount.toLocaleString()}
-                  </strong>
-                </span>
-                <span className="hud-chip">
-                  {parsedLas.header.spanMeters.x.toFixed(0)} × {parsedLas.header.spanMeters.y.toFixed(0)} m
-                </span>
-              </>
+              <span className="hud-chip">
+                {parsedLas.header.spanMeters.x.toFixed(0)} × {parsedLas.header.spanMeters.y.toFixed(0)} m
+              </span>
             ) : (
               <span className="hud-chip">{t.orchard3d.geometricFallbackLabel}</span>
             )}
@@ -905,7 +849,9 @@ export function Orchard3DViewerCard() {
         </div>
 
         {/* Bottom-right navigation hint */}
-        <div className="viewer-hud viewer-hud-bottom-right">{t.orchard3d.controlsHint}</div>
+        <div className="viewer-hud viewer-hud-bottom-right">
+          {t.orchard3d.controlsHint.replace('{mod}', zoomMod)}
+        </div>
       </div>
 
       <div className="card-footer-meta">

@@ -14,10 +14,28 @@ const STORAGE_KEY = 'fup-active-orchard-id';
 
 const OrchardContext = createContext<OrchardContextValue | null>(null);
 
+const ALLOWED_ORCHARD_ORDER: ObjectIdString[] = [
+  '6b01933c1dc02a368703a020', // Grojec A
+  '6b01933c1dc02a368703a01f', // Grojec B
+  '6b01933c1dc02a368703a023', // Grojec C
+];
+const ALLOWED_ORCHARD_NAMES = new Set(['Grojec A', 'Grojec B', 'Grojec C']);
+
+function filterAllowedOrchards(items: OrchardOption[]): OrchardOption[] {
+  const filtered = items.filter(
+    (o) => ALLOWED_ORCHARD_ORDER.includes(o._id) || ALLOWED_ORCHARD_NAMES.has(o.name),
+  );
+  return filtered.sort((a, b) => {
+    const ia = ALLOWED_ORCHARD_ORDER.indexOf(a._id);
+    const ib = ALLOWED_ORCHARD_ORDER.indexOf(b._id);
+    return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+  });
+}
+
 function readInitialOrchardId(): ObjectIdString {
   try {
     const saved = window.localStorage.getItem(STORAGE_KEY);
-    if (saved && saved.trim().length > 0) {
+    if (saved && ALLOWED_ORCHARD_ORDER.includes(saved)) {
       return saved;
     }
   } catch {
@@ -35,10 +53,11 @@ export function OrchardProvider({ children }: { children: ReactNode }) {
     const controller = new AbortController();
     fetchOrchardsList(controller.signal)
       .then((res) => {
-        setOrchards(res.data);
-        // Ensure stored orchard still exists in fetched catalog
-        if (res.data.length > 0 && !res.data.some((o) => o._id === selectedOrchardId)) {
-          const fallback = res.data[0]._id;
+        const visible = filterAllowedOrchards(res.data);
+        setOrchards(visible);
+        // Ensure stored orchard still exists in the allowed Grojec A/B/C list
+        if (visible.length > 0 && !visible.some((o) => o._id === selectedOrchardId)) {
+          const fallback = visible[0]._id;
           setSelectedOrchardIdState(fallback);
           try {
             window.localStorage.setItem(STORAGE_KEY, fallback);

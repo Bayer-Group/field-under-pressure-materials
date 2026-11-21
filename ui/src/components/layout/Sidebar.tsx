@@ -21,15 +21,19 @@ export function Sidebar({ activeSection, onSelectSection }: SidebarProps) {
 
   return (
     <aside className="sidebar" aria-label="Main navigation">
-      <div className="sidebar-brand" title={`${t.app.name} — ${t.app.subtitle}`}>
+      <button
+        type="button"
+        className="sidebar-brand"
+        onClick={() => onSelectSection('dashboard')}
+        title={`${t.app.name} — ${t.app.subtitle}`}
+        aria-label={t.app.name}
+      >
         <img
-          className="sidebar-brand-mark"
-          src={`${import.meta.env.BASE_URL}SAGE_logo_kwadrat.png`}
+          src="/SAGE_logo_kwadrat.png"
           alt={t.app.name}
-          width={36}
-          height={36}
+          className="sidebar-brand-logo"
         />
-      </div>
+      </button>
 
       <nav className="sidebar-nav">
         {primaryItems.map((item) => {
