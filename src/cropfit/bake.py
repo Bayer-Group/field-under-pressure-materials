@@ -123,6 +123,11 @@ def bake(client, out_dir: Path, workers: int = 8, log=print) -> dict:
             return list(ex.map(fn, items))
 
     plots = fetch("/plots", "plots") or []
+    lp = light_plots()
+    if lp is not None:                  # light mode: the snapshot holds the light-mode plots only
+        plots = [p for p in plots if p["plot_id"] in lp]
+        write("/plots", plots, "plots")
+        counts["plots"] = 1
     plot_ids = [p["plot_id"] for p in plots]
     log(f"plots: {plot_ids}")
 

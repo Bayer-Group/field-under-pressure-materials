@@ -19,7 +19,7 @@ python3 -m http.server -d static_version
 
 Then open http://127.0.0.1:8000.
 
-The static demo is a read-only snapshot of 5 plots (North Sterling, Colorado). All tabs work: greenness over time, soil microbes, soil functions and crop disease risk. The data is built in; only the map background needs internet. For the full live app and the data pipeline, see [GUI](#gui) below.
+The static demo is a read-only snapshot of 5 plots (North Sterling, Colorado). All tabs work: greenness over time, soil microbes, soil functions, crop disease risk and the treatment plan. The data is built in; only the map background needs internet. For the full live app and the data pipeline, see [GUI](#gui) below.
 
 ## Goal
 
