@@ -132,6 +132,22 @@ From [`FARMER_INPUT_CONTRACT.md`](../FARMER_INPUT_CONTRACT.md); DDL in [`initdb/
 The crop reported by the crop map is **not** stored here: it is derived into the curated layer, so the farmer's value is never
 overwritten. `app.field_crop_share` (one polygon per field) is the older table used by the loader's `--fields` demo option.
 
+### Curated layer (schema `curated`)
+Defined by [`../docs/curated_layer_contract.md`](../docs/curated_layer_contract.md); DDL in [`initdb/05_curated.sql`](initdb/05_curated.sql)
+(migration [`migrations/003_curated.sql`](migrations/003_curated.sql)); rules and thresholds in [`../config/septoria.toml`](../config/septoria.toml).
+Raw tables stay read-only; these tables are derived from them.
+
+| Table | One row = | Built by |
+| --- | --- | --- |
+| `curated.weather_hourly_features` | grid cell × hour (`is_wet`, flags) | `scripts/build_curated.py weather` |
+| `curated.weather_daily_features` | grid cell × local day (`t_mean`, `gdd3`, wet hours, coverage, `gdd_since_resumption`) | `scripts/build_curated.py weather` |
+| `curated.vegetation_resumption` | grid cell × year | `scripts/build_curated.py weather` |
+| `curated.crop_mapping` | farmer crop → CTY class code (filled by hand) | the DDL |
+| `curated.crop_area_crop_map`, `curated.field_context`, `curated.risk_assessment` | per crop area (and day) | the backend, when a farmer saves a crop area |
+
+`python scripts/build_curated.py weather` (connection string in `LOAD_DB_DSN`, like the loader) is repeatable: each run rewrites
+its range or year in one transaction. `t_mean` comes from `raw.weather_daily.avg_temperature`, which equals the mean of the hourly values.
+
 ### `raw.ingest_log`: data provenance
 One row per loaded dataset/file: `dataset`, `source_file`, `source_year`, `row_count`, `time_shift`, `note`
 (`id` and `loaded_at` are filled automatically).

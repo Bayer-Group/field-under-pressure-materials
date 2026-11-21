@@ -21,12 +21,14 @@ docker/
 ├── VM.md                    # GCP machine with the database: access, start/SSH/stop, tunnel, permissions
 ├── migrations/              # One-off scripts that bring an older database up to date
 │   ├── 001_raw_layers.sql   # fup -> raw, farmer tables -> app, new raw tables (idempotent, deletes no data)
-│   └── 002_app_farmer_input.sql  # farmer input tables in app (idempotent)
+│   ├── 002_app_farmer_input.sql  # farmer input tables in app (idempotent)
+│   └── 003_curated.sql      # curated layer tables (idempotent)
 └── initdb/                  # SQL scripts run on the first PostGIS start (empty volume)
     ├── 01_extensions.sql    # PostGIS, PostGIS raster, schemas raw / curated / app
     ├── 02_schema.sql        # raw: grid_cell, weather_hourly, crop_class, ingest_log; app: field, field_crop_share
     ├── 03_raw_layers.sql    # raw: weather_daily, imerg_daily, soil_h3, cropland_cty
-    └── 04_app_farmer_input.sql  # app: parcel, field_parcel, crop_area, spray (field extended)
+    ├── 04_app_farmer_input.sql  # app: parcel, field_parcel, crop_area, spray (field extended)
+    └── 05_curated.sql       # curated: weather features, resumption, crop map, field context, risk assessment
 ```
 
 The `raw`, `curated` and `app` schemas are created only on an empty volume. After changing files in
