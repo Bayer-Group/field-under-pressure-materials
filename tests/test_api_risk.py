@@ -173,6 +173,16 @@ def test_contributions(client):
     assert client.get("/api/plots/STER_999/crop-risk/2022-002").status_code == 404
 
 
+def test_plot_missing_from_geometry_is_still_known(client):
+    geo = pd.read_parquet(client.proc / "plot_geometry.parquet")
+    assert "STER_024" not in set(geo["plotID"])                          # scored peer that is not on the map
+    assert client.get("/api/plots/STER_024/crop-risk").status_code == 200
+    assert client.get("/api/plots/STER_024/crop-risk").json()
+    r = client.get("/api/plots/STER_024/crop-risk/2016-001/corn")
+    assert r.status_code == 200 and r.json()["contributions"]
+    assert client.get("/api/plots/STER_777/crop-risk").status_code == 404
+
+
 def test_missing_inputs_give_503(client):
     (client.proc / kbmod.META_FILE).unlink()
     r = client.get("/api/plots/STER_005/crop-risk/2022-002")

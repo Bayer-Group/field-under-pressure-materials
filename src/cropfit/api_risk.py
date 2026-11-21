@@ -233,10 +233,10 @@ def _ref(r) -> RiskUnitRef:
 
 
 def _plot_units(plot_id: str) -> tuple[str | None, pd.DataFrame]:
-    core.plot_rows("plot_geometry", plot_id)            # 404 for an unknown plot
     _core_df()
     site = _plot_site(plot_id)
-    if site is None:
+    if site is None:                                    # peers may be missing from plot_geometry (light mode)
+        core.plot_rows("plot_geometry", plot_id)        # 404 for an unknown plot
         return None, pd.DataFrame()
     u = _site_units(site, _core_mtime())
     u = u[u["plotID"] == plot_id].copy()
