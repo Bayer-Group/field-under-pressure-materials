@@ -81,6 +81,8 @@ HOURLY_OUTPUT_COLS = [
 # Alias wsteczny dla kodu odwołującego się do starej nazwy
 OUTPUT_COLS = DAILY_OUTPUT_COLS
 
+DEFAULT_METEO_DIR = Path("data/meteo")
+
 MAX_BATCH_WEIGHT = 250.0
 MAX_CHUNK_DAYS = 90
 ARCHIVE_LAG_DAYS = 6
@@ -319,7 +321,7 @@ def fetch_batch_daily(
 
 def fetch_poland_weather_daily(
     output_parquet: str | Path | None = None,
-    output_dir: str | Path = "weather_cache",
+    output_dir: str | Path = DEFAULT_METEO_DIR,
     coords: list[tuple[float, float]] | None = None,
     past_days: int = 14,
     forecast_days: int = 7,
@@ -407,7 +409,7 @@ def fetch_poland_weather_daily(
 def fetch_weather_hourly(
     coords: list[tuple[float, float]] | None = None,
     output_parquet: str | Path | None = None,
-    output_dir: str | Path = "weather_cache",
+    output_dir: str | Path = DEFAULT_METEO_DIR,
     past_days: int = 2,
     forecast_days: int = 7,
     start_date: str | date | datetime | None = None,

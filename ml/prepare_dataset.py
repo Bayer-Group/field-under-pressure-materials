@@ -1,6 +1,8 @@
+import argparse
 from datetime import date, timedelta
 from pathlib import Path
 import re
+import sys
 from typing import Iterable
 
 import duckdb
@@ -12,7 +14,12 @@ from rasterio.features import geometry_mask
 import rasterio.mask
 from shapely.geometry import box
 
-from .config import (
+if __package__ in (None, ""):
+    _repo_root = str(Path(__file__).resolve().parent.parent)
+    if _repo_root not in sys.path:
+        sys.path.insert(0, _repo_root)
+
+from ml.config import (
     DEFAULT_DATA_DIR,
     MVP_CROP_CODE_TO_NAME,
     WEATHER_COLS,
@@ -30,7 +37,7 @@ def _map_crop_name(crop_code_val) -> str:
 
 def build_fields_master(
     fields_crops_geojson: str | Path = "bk/fields_crops.geojson",
-    soil_profiles_parquet: str | Path = "fields_soil_profiles.parquet",
+    soil_profiles_parquet: str | Path = Path("data/soil/fields_soil_profiles.parquet"),
     out_path: str | Path = DEFAULT_DATA_DIR / "fields_master.parquet",
     id_col: str = "id",
     min_area_ha: float = 3.0,
@@ -38,7 +45,7 @@ def build_fields_master(
 ) -> pd.DataFrame:
     """
     Łączy granice + kody upraw z bk/assign_crops.py (fields_crops.geojson)
-    z profilami glebowymi z kw/soil_bonification.py (fields_soil_profiles.parquet).
+    z profilami glebowymi z kw/soil.py (data/soil/fields_soil_profiles.parquet).
     """
     gdf = gpd.read_file(fields_crops_geojson)
     if id_col and id_col in gdf.columns:
@@ -526,3 +533,34 @@ def generate_synthetic_demo_dataset(
     pd.DataFrame(sat_rows).to_parquet(out_dir / "satellite_indices.parquet", index=False)
     print(f"[ML DEMO] Wygenerowano dane demo ({n_fields} pól x {n_days} dni) -> {out_dir}")
     return out_dir
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="Przygotowanie tabeli fields_master lub syntetycznych danych --demo dla ML."
+    )
+    parser.add_argument("--demo", action="store_true", help="Wygeneruj syntetyczny zestaw demo w data/ml/demo.")
+    parser.add_argument("--out-dir", type=Path, default=None, help="Katalog wyjściowy (dla --demo lub build).")
+    args = parser.parse_args()
+
+    if args.demo:
+        target_dir = args.out_dir or (DEFAULT_DATA_DIR / "demo")
+        generate_synthetic_demo_dataset(out_dir=target_dir)
+    else:
+        crops_geojson = Path("bk/fields_crops.geojson")
+        soil_parquet = Path("data/soil/fields_soil_profiles.parquet")
+        if crops_geojson.exists() and soil_parquet.exists():
+            out_master = (args.out_dir or DEFAULT_DATA_DIR) / "fields_master.parquet"
+            fm = build_fields_master(
+                fields_crops_geojson=crops_geojson,
+                soil_profiles_parquet=soil_parquet,
+                out_path=out_master,
+            )
+            print("Kształt fields_master:", fm.shape)
+            print("Uprawy:", fm["crop"].value_counts(dropna=False).to_dict())
+        else:
+            print(
+                "[INFO] Brak wymaganych plików (bk/fields_crops.geojson i/lub data/soil/fields_soil_profiles.parquet).\n"
+                "Najpierw uruchom `.venv/bin/python kw/soil.py` "
+                "albo użyj `--demo`: `.venv/bin/python ml/prepare_dataset.py --demo`."
+            )
