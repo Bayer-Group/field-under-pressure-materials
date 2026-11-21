@@ -458,27 +458,47 @@ def run_stage_satellite(
             )
             zones_geojson = zones_dir / "field_zones.geojson"
             if not zones_gdf.empty and zones_geojson.exists():
+                from vra_export import run_vra_export
+
+                run_vra_export(
+                    zones_input=zones_geojson,
+                    out_dir=zones_dir,
+                    fields_geojson=fields_crops_geojson,
+                    update_zones_geojson=True,
+                )
                 if soil_mode == "aws":
                     from kw import soil_aws
 
-                    soil_aws.prepare_zone_soil_profiles(
+                    zone_soil_df = soil_aws.prepare_zone_soil_profiles(
                         zones_input=zones_geojson,
                         cache_dir=ROOT / "data/soil/aws_cache",
                         env_path=env_path,
                         voivodeships=voivs,
                         crops_geojson=fields_crops_geojson,
                     )
+                    if not zone_soil_df.empty:
+                        soil_aws.export_soil_profiles_to_sql(
+                            zone_soil_df,
+                            table_name="field_zone_soil_profiles",
+                            sql_path=ROOT / "data/soil/field_zone_soil_profiles.sql",
+                        )
                 else:
                     from kw import soil as soil_local
 
                     raw_dir = ROOT / "data/soil/raw"
                     if not raw_dir.exists() and (ROOT / "soil_data").exists():
                         raw_dir = ROOT / "soil_data"
-                    soil_local.prepare_zone_soil_profiles(
+                    zone_soil_df = soil_local.prepare_zone_soil_profiles(
                         zones_input=zones_geojson,
                         soil_dir=raw_dir,
                         crops_geojson=fields_crops_geojson,
                     )
+                    if not zone_soil_df.empty:
+                        soil_local.export_soil_profiles_to_sql(
+                            zone_soil_df,
+                            table_name="field_zone_soil_profiles",
+                            sql_path=ROOT / "data/soil/field_zone_soil_profiles.sql",
+                        )
 
     return out_sat_parquet if out_sat_parquet.exists() else None
 
