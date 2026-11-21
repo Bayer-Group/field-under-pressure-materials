@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
-"""Crop risk index for one NEON site-year: how much fungal (ITS) community of each plot-unit resembles known
-pathogens of each crop. Needs the KB (scripts/12_build_kb.py) and the ITS core table (02b / 05).
+"""Crop risk index for one NEON site-year, per plot-unit and crop, from ITS fungal genera and USDA host records.
+Needs the KB (scripts/12_build_kb.py) and its_core_genus.parquet (scripts/02b_build_neon_features.py).
 
 Usage:
   .venv/bin/python scripts/13_crop_risk.py --site STER --year 2022
   .venv/bin/python scripts/13_crop_risk.py --site STER --year 2025 --min-unit-reads 3000 --out-dir DIR
 
 Score: risk(unit, crop) = sum_g A(unit, g) * H(g, crop)
-- A: abundance of genus g in the unit, relative to its typical share at the site (same product, all years,
-  depth-OK units; "reference"), only where the genus is detectable at the depth used.
-- H: host evidence of genus g for crop c from the USDA fungus-host records (documented host = can infect).
+- A: percentile (0-1, mid-rank) of genus g's share in the unit among the reference units (same site, same ITS
+  product, all years, depth-OK for g, unit itself included). Not-detected genera get their mid-rank percentile;
+  genera the unit is too shallow to detect are skipped as insufficient_depth.
+- H: share of the genus's documented USDA species that have host records on the crop (record = can infect).
 Only genera that pass the FungalTraits filter are scored; oomycetes are excluded. .001 and .002 NEON ITS products
 are never mixed in one score.
 
