@@ -13,6 +13,8 @@ from pathlib import Path
 from farmhand import render_farmhand_bubble
 
 from silnik_regul import (
+    BAYER_SEED_CATALOG,
+    calculate_profit_forecast,
     DATA_DIR,
     FALLOW_LABEL,
     KNOWN_CROPS,
@@ -487,12 +489,13 @@ if not has_active_area:
 
 fields_df = apply_farm_profile(raw_fields_df, farm_profile, crop_dict_df=crop_dict_df)
 
-tab_pola, tab_gosp, tab_siew, tab_kalk, tab_eko_doc, tab_zasady = st.tabs(
+tab_pola, tab_gosp, tab_siew, tab_kalk, tab_zysk, tab_eko_doc, tab_zasady = st.tabs(
     [
         "Pola i pogoda",
         "Moje Gospodarstwo",
         "Doradca siewu",
         "Kalkulator nawozów i oprysku",
+        "Kalkulator zysków (Bayer)",
         "Dokumentacja EKO i Audyt",
         "Zasady zabiegów",
     ]
@@ -1351,6 +1354,157 @@ with tab_zasady:
         unsafe_allow_html=True,
     )
     st.dataframe(rules_df, use_container_width=True, hide_index=True)
+
+
+with tab_zysk:
+    st.markdown(
+        """
+        <div class="soft-card">
+            <div class="soft-card-title">Kalkulator zysków i ryzyka pola (ceny nasion wg katalogu Bayer / DEKALB)</div>
+            <div class="soft-card-sub" style="margin-bottom:0;">
+                Symulacja kosztów kwalifikowanego materiału siewnego Bayer, nawożenia z reguł agronomicznych, ochrony roślin (pestycydów),
+                przewidywanego % straty pogodowo-ryzykowej oraz potencjalnego przychodu i zysku netto dla całego pola.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    profit_base_df = result_df[result_df["is_mine"]].copy() if (my_fields_count > 0 and "is_mine" in result_df.columns) else result_df.copy()
+    if my_fields_count == 0:
+        st.info("Nie zaznaczono jeszcze własnych działek w zakładce 'Moje Gospodarstwo' — kalkulacja obejmuje wszystkie widoczne pola gminy.")
+
+    ctrl_c1, ctrl_c2 = st.columns([1.2, 2.2])
+    with ctrl_c1:
+        loss_adj = st.slider(
+            "Korekta przewidywanego % straty plonu (symulacja ryzyka):",
+            min_value=-10.0,
+            max_value=25.0,
+            value=0.0,
+            step=0.5,
+            format="%+.1f%%",
+            key="profit_loss_offset",
+        )
+        st.caption("Bazowy % straty wyliczany jest automatycznie z poziomu ryzyka reguły, pogody i wigoru NDVI.")
+
+    with ctrl_c2:
+        with st.expander("Cennik nasion Bayer / DEKALB, ŚOR i cen skupu (kliknij, aby edytować)", expanded=False):
+            price_rows = []
+            for crop_k, v in BAYER_SEED_CATALOG.items():
+                price_rows.append({
+                    "Uprawa": crop_k,
+                    "Materiał siewny Bayer": v["odmiana_bayer"],
+                    "Koszt ziarna Bayer (zł/ha)": float(v["cena_ziarna_zl_ha"]),
+                    "Koszt pestycydów (zł/ha)": float(v["cena_pestycydow_zl_ha"]),
+                    "Cena nawozu (zł/t)": float(v["cena_nawozu_zl_t"]),
+                    "Plon bazowy (t/ha)": float(v["plon_bazowy_t_ha"]),
+                    "Cena skupu (zł/t)": float(v["cena_skupu_zl_t"]),
+                })
+            edited_prices_df = st.data_editor(
+                pd.DataFrame(price_rows),
+                use_container_width=True,
+                hide_index=True,
+                key="bayer_price_editor",
+                column_config={
+                    "Uprawa": st.column_config.TextColumn(disabled=True),
+                    "Materiał siewny Bayer": st.column_config.TextColumn(disabled=True),
+                },
+            )
+            custom_bayer_map = {}
+            for pr in edited_prices_df.itertuples(index=False):
+                custom_bayer_map[str(pr[0])] = {
+                    "cena_ziarna_zl_ha": float(pr[2]),
+                    "cena_pestycydow_zl_ha": float(pr[3]),
+                    "cena_nawozu_zl_t": float(pr[4]),
+                    "plon_bazowy_t_ha": float(pr[5]),
+                    "cena_skupu_zl_t": float(pr[6]),
+                }
+
+    profit_df = calculate_profit_forecast(profit_base_df, custom_prices=custom_bayer_map, loss_offset_pct=loss_adj)
+
+    if not profit_df.empty:
+        tot_area = float(profit_df["area_ha"].sum())
+        tot_seed = float(profit_df["koszt_ziarna_zl"].sum())
+        tot_fert = float(profit_df["koszt_nawozu_zl"].sum())
+        tot_pest = float(profit_df["koszt_pestycydow_zl"].sum())
+        tot_cost = float(profit_df["koszt_calkowity_zl"].sum())
+        avg_loss = float(profit_df["strata_pct"].mean())
+        tot_rev = float(profit_df["przychod_po_stracie_zl"].sum())
+        tot_net = float(profit_df["zysk_netto_zl"].sum())
+
+        k1, k2, k3, k4, k5, k6 = st.columns(6)
+        k1.metric("Koszt ziarna (Bayer)", f"{tot_seed:,.0f} zł".replace(",", " "))
+        k2.metric("Koszt nawozów", f"{tot_fert:,.0f} zł".replace(",", " "))
+        k3.metric("Koszt pestycydów", f"{tot_pest:,.0f} zł".replace(",", " "))
+        k4.metric("Śr. strata plonu", f"{avg_loss:.1f} %")
+        k5.metric("Przychód (po stracie)", f"{tot_rev:,.0f} zł".replace(",", " "))
+        k6.metric(
+            "Zysk netto całości",
+            f"{tot_net:,.0f} zł".replace(",", " "),
+            delta=f"{(tot_net / tot_area if tot_area > 0 else 0):,.0f} zł/ha".replace(",", " "),
+        )
+
+        # Symulacja wybranego pojedynczego pola
+        sel_uid = st.selectbox(
+            "Szczegółowa analiza dla wybranego pola:",
+            profit_df["field_uid"].tolist(),
+            format_func=lambda u: f"{u} — {profit_df.loc[profit_df['field_uid'] == u, 'crop_name'].iloc[0]} ({profit_df.loc[profit_df['field_uid'] == u, 'area_ha'].iloc[0]:.2f} ha)",
+            key="profit_single_field_sel",
+        )
+        one = profit_df[profit_df["field_uid"] == sel_uid].iloc[0]
+        st.info(
+            f"**Pole {one['field_uid']} ({one['area_ha']:.2f} ha) · {one['crop_name']}** | "
+            f"Materiał siewny: *{one['bayer_seed_info']}*\n\n"
+            f"• **Koszt ziarna Bayer:** {one['koszt_ziarna_zl']:,.2f} zł  |  "
+            f"**Koszt nawozu:** {one['koszt_nawozu_zl']:,.2f} zł  |  "
+            f"**Koszt pestycydów:** {one['koszt_pestycydow_zl']:,.2f} zł  "
+            f"(**Razem koszty:** {one['koszt_calkowity_zl']:,.2f} zł)\n\n"
+            f"• **Przewidywana strata:** {one['strata_pct']:.1f}%  |  "
+            f"**Szacowany plon:** {one['szacowany_plon_t_ha']:.2f} t/ha  |  "
+            f"**Potencjalny przychód ze sprzedaży całego pola:** {one['przychod_po_stracie_zl']:,.2f} zł  |  "
+            f"**Zysk netto pola:** **{one['zysk_netto_zl']:,.2f} zł** ({one['zysk_netto_zl_ha']:,.0f} zł/ha)"
+        )
+
+        # Wykres struktury kosztów i zysku dla pól
+        top_p = profit_df.head(15).copy()
+        fig_prof = go.Figure()
+        fig_prof.add_bar(name="Ziarno (Bayer)", x=top_p["field_uid"], y=top_p["koszt_ziarna_zl"], marker_color="#4E79A7")
+        fig_prof.add_bar(name="Nawozy", x=top_p["field_uid"], y=top_p["koszt_nawozu_zl"], marker_color="#8E6C8A")
+        fig_prof.add_bar(name="Pestycydy", x=top_p["field_uid"], y=top_p["koszt_pestycydow_zl"], marker_color="#E15759")
+        fig_prof.add_bar(name="Zysk netto pola", x=top_p["field_uid"], y=top_p["zysk_netto_zl"], marker_color="#2E7D32")
+        fig_prof.update_layout(
+            barmode="group",
+            title="Struktura kosztów (ziarno Bayer, nawozy, pestycydy) i zysku netto na polach [zł]",
+            height=340,
+            margin=dict(l=20, r=20, t=45, b=20),
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+        )
+        st.plotly_chart(fig_prof, use_container_width=True)
+
+        disp_cols = [
+            "field_uid", "crop_name", "area_ha", "bayer_seed_info",
+            "koszt_ziarna_zl", "koszt_nawozu_zl", "koszt_pestycydow_zl", "koszt_calkowity_zl",
+            "strata_pct", "przychod_po_stracie_zl", "zysk_netto_zl", "zysk_netto_zl_ha",
+        ]
+        st.dataframe(
+            profit_df[disp_cols].rename(columns={
+                "field_uid": "Działka",
+                "crop_name": "Uprawa",
+                "area_ha": "Pow. (ha)",
+                "bayer_seed_info": "Nasiona Bayer / DEKALB",
+                "koszt_ziarna_zl": "Ziarno (zł)",
+                "koszt_nawozu_zl": "Nawozy (zł)",
+                "koszt_pestycydow_zl": "Pestycydy (zł)",
+                "koszt_calkowity_zl": "Koszty razem (zł)",
+                "strata_pct": "Strata (%)",
+                "przychod_po_stracie_zl": "Przychód pola (zł)",
+                "zysk_netto_zl": "Zysk netto (zł)",
+                "zysk_netto_zl_ha": "Zysk (zł/ha)",
+            }),
+            use_container_width=True,
+            hide_index=True,
+        )
 
 with tab_eko_doc:
     from eko_dokumentacja import render_eko_documentation_tab

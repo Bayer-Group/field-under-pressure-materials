@@ -927,3 +927,206 @@ def evaluate_fields_with_rules(
         out_records.append(rec_dict)
 
     return pd.DataFrame(out_records)
+
+
+# Referencyjne ceny materiału siewnego (Bayer DEKALB + kwalifikat z zaprawami Bayer) oraz parametrów plonowania
+BAYER_SEED_CATALOG = {
+    "Pszenica ozima": {
+        "odmiana_bayer": "Kwalifikat + zaprawa Bayer Bariton Super (180 kg/ha)",
+        "cena_ziarna_zl_ha": 490.0,
+        "cena_pestycydow_zl_ha": 460.0,
+        "cena_nawozu_zl_t": 1850.0,
+        "plon_bazowy_t_ha": 7.4,
+        "cena_skupu_zl_t": 910.0,
+    },
+    "Pszenica jara": {
+        "odmiana_bayer": "Kwalifikat + zaprawa Bayer Redigo Pro (190 kg/ha)",
+        "cena_ziarna_zl_ha": 510.0,
+        "cena_pestycydow_zl_ha": 410.0,
+        "cena_nawozu_zl_t": 1850.0,
+        "plon_bazowy_t_ha": 5.8,
+        "cena_skupu_zl_t": 920.0,
+    },
+    "Rzepak ozimy": {
+        "odmiana_bayer": "Bayer DEKALB (np. DK Exaura / DK Excited, 1 jedn. = 3 ha)",
+        "cena_ziarna_zl_ha": 365.0,
+        "cena_pestycydow_zl_ha": 640.0,
+        "cena_nawozu_zl_t": 2100.0,
+        "plon_bazowy_t_ha": 3.8,
+        "cena_skupu_zl_t": 2150.0,
+    },
+    "Kukurydza": {
+        "odmiana_bayer": "Bayer DEKALB (np. DKC3419 / DKC3710, 80 tys. nasion/ha)",
+        "cena_ziarna_zl_ha": 620.0,
+        "cena_pestycydow_zl_ha": 390.0,
+        "cena_nawozu_zl_t": 1950.0,
+        "plon_bazowy_t_ha": 10.2,
+        "cena_skupu_zl_t": 820.0,
+    },
+    "Jęczmień jary": {
+        "odmiana_bayer": "Kwalifikat + zaprawa Bayer Redigo Pro (160 kg/ha)",
+        "cena_ziarna_zl_ha": 440.0,
+        "cena_pestycydow_zl_ha": 360.0,
+        "cena_nawozu_zl_t": 1800.0,
+        "plon_bazowy_t_ha": 5.6,
+        "cena_skupu_zl_t": 840.0,
+    },
+    "Pszenżyto ozime": {
+        "odmiana_bayer": "Kwalifikat + zaprawa Bayer Bariton Super (170 kg/ha)",
+        "cena_ziarna_zl_ha": 420.0,
+        "cena_pestycydow_zl_ha": 340.0,
+        "cena_nawozu_zl_t": 1750.0,
+        "plon_bazowy_t_ha": 6.1,
+        "cena_skupu_zl_t": 810.0,
+    },
+    "Żyto": {
+        "odmiana_bayer": "Odmiana mieszańcowa + zaprawa Bayer (90 kg/ha)",
+        "cena_ziarna_zl_ha": 450.0,
+        "cena_pestycydow_zl_ha": 290.0,
+        "cena_nawozu_zl_t": 1700.0,
+        "plon_bazowy_t_ha": 5.2,
+        "cena_skupu_zl_t": 760.0,
+    },
+    "Owies": {
+        "odmiana_bayer": "Kwalifikat + zaprawa Bayer Redigo Pro (160 kg/ha)",
+        "cena_ziarna_zl_ha": 390.0,
+        "cena_pestycydow_zl_ha": 240.0,
+        "cena_nawozu_zl_t": 1700.0,
+        "plon_bazowy_t_ha": 4.8,
+        "cena_skupu_zl_t": 790.0,
+    },
+    "Rośliny strączkowe": {
+        "odmiana_bayer": "Nasiona kwalifikowane + zaprawa fungicydowa/inokulant",
+        "cena_ziarna_zl_ha": 560.0,
+        "cena_pestycydow_zl_ha": 320.0,
+        "cena_nawozu_zl_t": 1900.0,
+        "plon_bazowy_t_ha": 3.2,
+        "cena_skupu_zl_t": 1350.0,
+    },
+    "Ziemniaki": {
+        "odmiana_bayer": "Sadzeniaki kwalifikowane + zaprawa Bayer Moncut/Emesto",
+        "cena_ziarna_zl_ha": 2850.0,
+        "cena_pestycydow_zl_ha": 1150.0,
+        "cena_nawozu_zl_t": 2200.0,
+        "plon_bazowy_t_ha": 34.0,
+        "cena_skupu_zl_t": 680.0,
+    },
+    "Buraki cukrowe": {
+        "odmiana_bayer": "Nasiona otoczkowane + program ochrony Bayer Betanal",
+        "cena_ziarna_zl_ha": 1180.0,
+        "cena_pestycydow_zl_ha": 980.0,
+        "cena_nawozu_zl_t": 2100.0,
+        "plon_bazowy_t_ha": 62.0,
+        "cena_skupu_zl_t": 210.0,
+    },
+    "Użytki zielone": {
+        "odmiana_bayer": "Mieszanka traw i motylkowatych (podsiew 25 kg/ha)",
+        "cena_ziarna_zl_ha": 340.0,
+        "cena_pestycydow_zl_ha": 90.0,
+        "cena_nawozu_zl_t": 1650.0,
+        "plon_bazowy_t_ha": 8.5,
+        "cena_skupu_zl_t": 460.0,
+    },
+}
+
+
+def estimate_field_loss_pct(row: pd.Series) -> float:
+    """Szacuje przewidywany % straty plonu na podstawie ryzyka reguły, pogody oraz wigoru NDVI."""
+    risk = str(row.get("poziom_ryzyka", "NISKI")).strip().upper()
+    dec = normalize_decision(row.get("decyzja", "MONITORUJ"))
+    ndvi = float(pd.to_numeric(row.get("ndvi", 0.5), errors="coerce") or 0.5)
+    temp_c = float(pd.to_numeric(row.get("temp_c", 15.0), errors="coerce") or 15.0)
+    precip_24h = float(pd.to_numeric(row.get("precip_24h_mm", 0.0), errors="coerce") or 0.0)
+
+    base_loss = {
+        "KRYTYCZNY": 18.0,
+        "WYSOKI": 11.0,
+        "ŚREDNI": 6.5,
+        "NISKI": 3.5,
+        "OPTYMALNY": 2.5,
+    }.get(risk, 5.0)
+
+    if dec == "CZEKAJ" and (temp_c >= 26.0 or precip_24h >= 8.0):
+        base_loss += 4.0
+    if ndvi < 0.32 and dec not in ("ZASIEJ", "ZBIERAJ"):
+        base_loss += 3.5
+
+    return round(min(max(base_loss, 1.0), 45.0), 1)
+
+
+def calculate_profit_forecast(
+    evaluated_df: pd.DataFrame,
+    custom_prices: dict | None = None,
+    loss_offset_pct: float = 0.0,
+) -> pd.DataFrame:
+    """Wylicza koszty (ziarno Bayer, nawozy, pestycydy), stratę % oraz zysk netto całego pola."""
+    if evaluated_df.empty:
+        return evaluated_df.copy()
+
+    custom_prices = custom_prices or {}
+    rows = []
+    for r in evaluated_df.itertuples(index=False):
+        raw_crop = str(getattr(r, "crop_name", "Pszenica ozima"))
+        canon_crop = _canonical_crop_for_rules(raw_crop)
+        if canon_crop == FALLOW_LABEL:
+            rec = str(getattr(r, "rekomendowana_uprawa", "Pszenica ozima")).split("/")[0].strip()
+            canon_crop = _canonical_crop_for_rules(rec)
+
+        cfg = dict(BAYER_SEED_CATALOG.get(canon_crop, BAYER_SEED_CATALOG["Pszenica ozima"]))
+        if canon_crop in custom_prices:
+            cfg.update(custom_prices[canon_crop])
+
+        area = float(getattr(r, "area_ha", 1.0) or 1.0)
+        ndvi = float(getattr(r, "ndvi", 0.5) or 0.5)
+        is_eco = bool(getattr(r, "is_eco", False))
+        dec = normalize_decision(getattr(r, "decyzja", "MONITORUJ"))
+        dose_kg_ha = float(getattr(r, "dawka_nawozu_kg_ha", 0.0) or 0.0)
+
+        # Koszt ziarna wg cennika Bayer
+        seed_cost_ha = float(cfg["cena_ziarna_zl_ha"])
+        seed_cost_total = round(seed_cost_ha * area, 2)
+
+        # Koszt nawozu (dawka z reguły + ewentualna dawka bazowa sezonu)
+        effective_fert_kg_ha = dose_kg_ha if dose_kg_ha > 0 else 140.0
+        fert_price_t = float(cfg["cena_nawozu_zl_t"]) * (0.85 if is_eco else 1.0)
+        fert_cost_total = round((effective_fert_kg_ha / 1000.0) * fert_price_t * area, 2)
+
+        # Koszt pestycydów / ochrony roślin (Bayer ŚOR lub środki biologiczne w EKO)
+        pest_mult = 0.65 if is_eco else (1.15 if dec == "PRYSKAJ TERAZ" else 1.0)
+        pest_cost_ha = round(float(cfg["cena_pestycydow_zl_ha"]) * pest_mult, 2)
+        pest_cost_total = round(pest_cost_ha * area, 2)
+
+        total_cost = round(seed_cost_total + fert_cost_total + pest_cost_total, 2)
+
+        # Korekta plonu względem NDVI oraz przewidywanego % straty
+        row_series = pd.Series(r._asdict())
+        auto_loss = estimate_field_loss_pct(row_series)
+        final_loss_pct = round(min(max(auto_loss + float(loss_offset_pct), 0.0), 60.0), 1)
+
+        ndvi_factor = 1.0 if dec in ("ZASIEJ", "ZBIERAJ") else min(max(0.75 + (ndvi - 0.35) * 0.75, 0.70), 1.18)
+        est_yield_t_ha = round(float(cfg["plon_bazowy_t_ha"]) * ndvi_factor, 2)
+        crop_price_t = float(cfg["cena_skupu_zl_t"]) * (1.18 if is_eco else 1.0)
+
+        gross_revenue = round(area * est_yield_t_ha * crop_price_t, 2)
+        expected_revenue = round(gross_revenue * (1.0 - final_loss_pct / 100.0), 2)
+        net_profit = round(expected_revenue - total_cost, 2)
+        profit_per_ha = round(net_profit / area, 2) if area > 0 else 0.0
+
+        d = r._asdict()
+        d.update({
+            "bayer_seed_info": cfg["odmiana_bayer"],
+            "koszt_ziarna_zl": seed_cost_total,
+            "koszt_nawozu_zl": fert_cost_total,
+            "koszt_pestycydow_zl": pest_cost_total,
+            "koszt_calkowity_zl": total_cost,
+            "strata_pct": final_loss_pct,
+            "szacowany_plon_t_ha": est_yield_t_ha,
+            "cena_skupu_zl_t": round(crop_price_t, 0),
+            "przychod_brutto_zl": gross_revenue,
+            "przychod_po_stracie_zl": expected_revenue,
+            "zysk_netto_zl": net_profit,
+            "zysk_netto_zl_ha": profit_per_ha,
+        })
+        rows.append(d)
+
+    return pd.DataFrame(rows)
