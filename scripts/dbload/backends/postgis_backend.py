@@ -32,6 +32,7 @@ class PostgisBackend(Backend):
                                "(postgresql://user:password@host:5432/dbname)")
         self.con = psycopg.connect(dsn, autocommit=True)
         self.execute("SET TIME ZONE 'UTC'")
+        self.execute("SET synchronous_commit = off")   # a crash can only lose the last files, together with their ledger rows
         schema = self.options.get("schema")
         if schema:
             self.execute(f"SET search_path TO {self.qi(schema)}, public")

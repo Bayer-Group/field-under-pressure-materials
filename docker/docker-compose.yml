@@ -22,6 +22,42 @@ services:
       timeout: 3s
       retries: 10
 
+  # 1b. Backend API (FastAPI): reads the serve views, demo login. Build: docker/backend.Dockerfile
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/backend.Dockerfile
+    container_name: spatial_backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-gis_user}:${POSTGRES_PASSWORD:-secretpassword}@postgis:5432/${POSTGRES_DB:-spatial_db}
+      AUTH_SECRET: ${AUTH_SECRET:-}      # empty: random at start (tokens expire on restart)
+      DEMO_READONLY: ${DEMO_READONLY:-0}  # 1: nobody saves anything (kill switch for the audience demo)
+      SANDBOX_RATE_PER_MIN: ${SANDBOX_RATE_PER_MIN:-150}
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-3}    # uvicorn worker processes (one Python process is limited by the GIL)
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:-8000}:8000"   # only this machine; the internet reaches the API through caddy (HTTPS)
+    depends_on:
+      postgis:
+        condition: service_healthy
+
+  # 1c. HTTPS (Caddy): ports 80 (certificate challenge, redirect) and 443; needs PUBLIC_HOST in .env
+  caddy:
+    image: caddy:2
+    container_name: spatial_caddy
+    restart: unless-stopped
+    environment:
+      PUBLIC_HOST: ${PUBLIC_HOST:-localhost}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./caddy:/etc/caddy:ro            # a directory, not a single file: a file replaced by git pull would stay stale in the container
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+
   # 2. Local S3 for COG raster files (MinIO)
   minio:
     image: minio/minio:latest
@@ -53,3 +89,5 @@ services:
 volumes:
   postgis_data:
   minio_data:
+  caddy_data:
+  caddy_config:

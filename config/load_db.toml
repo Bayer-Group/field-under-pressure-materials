@@ -1,4 +1,4 @@
-# Configuration for scripts/load_db.py (target: the existing PostGIS schema `fup`). CLI flags override these.
+# Configuration for scripts/load_db.py (target: the PostGIS database, see docker/RAW_SCHEMA.md). CLI flags override these.
 # Relative paths are resolved against the repository root.
 
 [database]
@@ -9,14 +9,15 @@ backend = "postgis"
 dsn = ""
 
 [database.options]
-schema = "fup"          # tables live in schema fup (search_path = fup, public)
+schema = "raw"          # the raw layer; tables are looked up with search_path = raw, public
 
-# Only needed if your real table names differ from the DDL: logical name = real name ("schema.table" ok)
-# [tables]
-# weather_hourly = "fup.weather_hourly"
+# Tables that live in another schema: logical name = real name ("schema.table")
+[tables]
+field = "app.field"
+field_crop_share = "app.field_crop_share"
 
 [paths]
-raw = "data/raw"
+raw = "data/raw"        # or pass --raw <folder> (e.g. an external disk)
 report = "data/db/load_report.json"
 
 [inputs]
@@ -24,7 +25,10 @@ report = "data/db/load_report.json"
 # fields_source = "farmer-x"          # stored in field.source (default: the file name)
 
 [datasets]
-enabled = ["grid_cell", "weather_hourly", "field", "field_crop_share"]
+enabled = ["grid_cell", "weather_hourly", "weather_daily", "imerg_daily", "soil_h3", "cropland_cty",
+           "field", "field_crop_share"]
 
 [options]
 batch_size = 1_000_000
+# Years to load. Needed because some sources (IMERG) hold 2020-2025 on disk; --years overrides it.
+years = [2024]

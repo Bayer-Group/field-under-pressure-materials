@@ -18,11 +18,16 @@ def run_validation(b: Backend, s: Settings, ds_report: dict) -> list[dict]:
         return b.query(sql)[0][0]
 
     tq = b.tq
-    have = {t: b.table_exists(t) for t in ("grid_cell", "weather_hourly", "field", "field_crop_share", "crop_class", "ingest_log")}
+    have = {t: b.table_exists(t) for t in ("grid_cell", "weather_hourly", "weather_daily", "imerg_daily", "soil_h3",
+                                           "cropland_cty", "field", "field_crop_share", "crop_class", "ingest_log")}
 
-    for t in ("grid_cell", "weather_hourly", "field", "field_crop_share"):
+    for t in ("grid_cell", "weather_hourly", "weather_daily", "imerg_daily", "soil_h3", "cropland_cty", "field",
+              "field_crop_share"):
         if have[t]:
             add(f"{t}: rows", "INFO", f"{b.count(t):,} in {b.phys(t)}")
+    if have["cropland_cty"]:
+        files, rows = b.query(f"SELECT COUNT(DISTINCT tile), COUNT(*) FROM {tq('cropland_cty')}")[0]
+        add("cropland_cty: files and raster tiles", "INFO", f"{int(files)} file(s), {int(rows):,} raster tile(s)")
     if have["grid_cell"] and not (s.limit_files or s.voiv):
         n = b.count("grid_cell")
         add("grid_cell: full grid", "OK" if n == GRID_CELLS_FULL else "WARN", f"{n:,} cells (source has {GRID_CELLS_FULL:,})")
@@ -35,6 +40,8 @@ def run_validation(b: Backend, s: Settings, ds_report: dict) -> list[dict]:
         add(label, "OK" if n == 0 else "FAIL", f"{n:,} orphan key(s)")
 
     orphans("weather_hourly", "grid_id", "grid_cell", "grid_id", "weather_hourly.grid_id in grid_cell")
+    orphans("weather_daily", "grid_id", "grid_cell", "grid_id", "weather_daily.grid_id in grid_cell")
+    orphans("imerg_daily", "grid_id", "grid_cell", "grid_id", "imerg_daily.grid_id in grid_cell")
     orphans("field_crop_share", "field_id", "field", "field_id", "field_crop_share.field_id in field")
     orphans("field_crop_share", "class_code", "crop_class", "code", "field_crop_share.class_code in crop_class")
 
@@ -46,7 +53,7 @@ def run_validation(b: Backend, s: Settings, ds_report: dict) -> list[dict]:
         nulls = scalar(f"SELECT COUNT(*) FROM {tq('weather_hourly')} WHERE precipitation IS NULL")
         add("weather_hourly: precipitation NULL rows", "INFO", f"{nulls:,} (no IMERG match)")
     if have["ingest_log"]:
-        for ds in ("grid_cell", "weather_hourly", "field", "field_crop_share"):
+        for ds in ("grid_cell", "weather_hourly", "weather_daily", "imerg_daily", "soil_h3", "field", "field_crop_share"):
             if have[ds]:
                 logged = scalar(f"SELECT COALESCE(SUM(row_count), 0) FROM {tq('ingest_log')} WHERE dataset = '{ds}'")
                 add(f"{ds}: ingest_log rows", "INFO", f"{int(logged):,} logged vs {b.count(ds):,} in table")

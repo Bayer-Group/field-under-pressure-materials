@@ -13,5 +13,22 @@ ULDK_API_URL = os.environ.get("GUGIK_ULDK_URL", "https://uldk.gugik.gov.pl/")
 IMGW_SYNOP_URL = os.environ.get("IMGW_SYNOP_URL", "https://danepubliczne.imgw.pl/api/data/synop")
 IMGW_WARNINGS_URL = os.environ.get("IMGW_WARNINGS_URL", "https://danepubliczne.imgw.pl/api/data/warnings/meteo")
 
+# Baza (schemat serve) i uwierzytelnianie demo
+DATABASE_URL = os.environ.get("DATABASE_URL") or os.environ.get("LOAD_DB_DSN", "")
+# Bez AUTH_SECRET tokeny są podpisywane losowym kluczem i tracą ważność po restarcie (bezpieczne domyślnie).
+AUTH_SECRET = os.environ.get("AUTH_SECRET") or os.urandom(32).hex()
+TOKEN_TTL_SECONDS = int(os.environ.get("TOKEN_TTL_SECONDS", "28800"))
+
+# Tryb demo (sandbox dla publiczności): limity i wyłącznik zapisu
+DEMO_READONLY = os.environ.get("DEMO_READONLY", "0") == "1"                  # 1: nikt nic nie zapisuje, sala tylko ogląda
+SANDBOX_TTL_HOURS = int(os.environ.get("SANDBOX_TTL_HOURS", "8"))            # ważność tokenu i czas życia danych sandboxu
+SANDBOX_MAX_OWNERS = int(os.environ.get("SANDBOX_MAX_OWNERS", "300"))        # tylu sandboxów z danymi naraz
+MAX_AREAS_SANDBOX = int(os.environ.get("MAX_AREAS_SANDBOX", "10"))           # pól na sandbox
+MAX_AREAS_OTHER = int(os.environ.get("MAX_AREAS_OTHER", "50"))               # pól na zwykłego rolnika demo
+MAX_AREA_HA = float(os.environ.get("MAX_AREA_HA", "150"))                    # maks. powierzchnia jednego pola
+MAX_PARALLEL_REFRESH = int(os.environ.get("MAX_PARALLEL_REFRESH", "4"))      # równoległe przeliczenia pól
+# Nowych sandboxów na minutę z jednego adresu IP. Wysoko, bo cała sala na jednym Wi-Fi wychodzi zwykle przez jeden publiczny adres (NAT).
+SANDBOX_RATE_PER_MIN = int(os.environ.get("SANDBOX_RATE_PER_MIN", "150"))
+
 # Dozwolone originy CORS
 CORS_ORIGINS = ["*"]

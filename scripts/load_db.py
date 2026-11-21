@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
-"""Load data/raw (and the farmer's fields) into the existing PostGIS schema `fup`.
+"""Load the organizer data (data/raw, and the farmer's fields) into the existing PostGIS schema `raw`.
 
-    $env:LOAD_DB_DSN = "postgresql://user:password@host:5432/dbname"      # PowerShell
+    export LOAD_DB_DSN="postgresql://user:password@host:5432/dbname"
     python scripts/load_db.py --dry-run                                   # show the plan, no database access
     python scripts/load_db.py --limit-files 1                             # smoke test: one file per dataset
-    python scripts/load_db.py --voiv opolskie --months 4-9                # a slice of hourly weather
+    python scripts/load_db.py --voiv mazowieckie --months 5-6             # the MVP slice of the time-varying data
+    python scripts/load_db.py --datasets soil_h3 --voiv mazowieckie       # static soil of one voivodeship
+    python scripts/load_db.py --datasets cropland_cty --tiles 0,7,13      # crop raster tiles as PostGIS raster
     python scripts/load_db.py --fields fields.geojson                     # + field and field_crop_share
 
-Loads ONLY rows into existing tables (grid_cell, weather_hourly, field, field_crop_share) and records
-each file in ingest_log, so a re-run skips what is already loaded. It never creates or alters schema.
-Dates are loaded as in the source; any time shift is applied later, in the database.
+Loads ONLY rows into existing tables (see docker/RAW_SCHEMA.md) and records each file in ingest_log, so a re-run
+skips what is already loaded. It never creates or alters schema. Dates are loaded as in the source; the demo time
+shift is applied later, at the API. The folder with the raw data comes from config [paths] raw or --raw.
 """
 from __future__ import annotations
 
@@ -29,9 +31,12 @@ def parse_args(argv=None) -> argparse.Namespace:
     p.add_argument("--config", default=str(ROOT / "config" / "load_db.toml"))
     p.add_argument("--backend", help="database backend (default from config: postgis)")
     p.add_argument("--dsn", help="connection string; prefer env LOAD_DB_DSN so it stays out of shell history")
-    p.add_argument("--schema", help="PostgreSQL schema holding the tables (default from config; the DDL uses fup)")
-    p.add_argument("--table-map", help="logical=real pairs, e.g. weather_hourly=fup.weather_hourly (adds to config [tables])")
-    p.add_argument("--datasets", help="comma list of: grid_cell, weather_hourly, field, field_crop_share")
+    p.add_argument("--schema", help="PostgreSQL schema holding the tables (default from config: raw)")
+    p.add_argument("--table-map", help="logical=real pairs, e.g. field=app.field (adds to config [tables])")
+    p.add_argument("--raw", help="folder with the raw data (default from config [paths] raw, usually data/raw)")
+    p.add_argument("--datasets", help="comma list of: grid_cell, weather_hourly, weather_daily, imerg_daily, soil_h3, "
+                                      "cropland_cty, field, field_crop_share")
+    p.add_argument("--tiles", help="cropland_cty: comma list of CTY tile numbers, e.g. 0,7,13 (default: every tile)")
     p.add_argument("--mode", choices=["resume", "replace"], default="resume",
                    help="resume = skip files already in ingest_log (default); replace = DELETE all rows of the "
                         "selected tables first, then reload")
@@ -60,9 +65,13 @@ def build_settings(a: argparse.Namespace) -> Settings:
     if a.datasets:
         s.datasets = tuple(x.strip() for x in a.datasets.split(",") if x.strip())
     s.mode = a.mode
-    s.years = {int(y) for y in a.years.split(",")} if a.years else None
+    if a.years:
+        s.years = {int(y) for y in a.years.split(",")}
     s.voiv = {v.strip() for v in a.voiv.split(",")} if a.voiv else None
     s.months = parse_months(a.months)
+    s.tiles = {int(t) for t in a.tiles.split(",") if t.strip()} if a.tiles else None
+    if a.raw:
+        s.raw = Path(a.raw).resolve()
     if a.fields:
         s.fields = Path(a.fields).resolve()
     if a.fields_source:

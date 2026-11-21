@@ -110,6 +110,14 @@ class Pipeline:
                 rec["skipped"] += 1
                 continue
             t0 = time.time()
+            if spec.load is not None:                    # own loading path (rasters): same transaction + ledger entry
+                with b.transaction():
+                    rows = spec.load(unit, self.ctx)
+                    self._record(name, key, unit.year, rows)
+                rec["loaded"] += 1
+                rec["rows"] += rows
+                self.log(f"  [{name} {i}/{len(units)}] {key}  {rows:,} rows  {time.time() - t0:.1f}s")
+                continue
             gen = (t for t in (to_table(x) for x in spec.produce(unit, self.ctx)) if t.num_rows)
             first = next(gen, None)
             if first is None:

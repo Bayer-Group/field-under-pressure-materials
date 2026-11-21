@@ -57,7 +57,7 @@ After SSH-ing in you can write SQL right away, with no extra configuration and n
 ```bash
 sudo docker exec -it spatial_postgis psql -U gis_user -d spatial_db
 ```
-Inside: `\dt fup.*` (list tables), `SELECT count(*) FROM fup.weather_hourly;`, `\q` (quit).
+Inside: `\dt raw.*` (list tables), `SELECT count(*) FROM raw.weather_hourly;`, `\q` (quit).
 
 This is enough for inspecting data, checks after loading and simple fixes.
 
@@ -93,16 +93,38 @@ gcloud compute ssh fup-vm --zone europe-central2-a --project geo-earth-junction 
 | database | `spatial_db` |
 | user | `gis_user` |
 | password | from the machine owner (it is not in the repo) |
-| schema | `fup` |
+| schema | `raw` (organizer data), `app` (farmer data) |
 
 Test from a console (it asks for the password):
 ```bash
-psql -h localhost -p 5433 -U gis_user spatial_db -c '\dt fup.*'
+psql -h localhost -p 5433 -U gis_user spatial_db -c '\dt raw.*'
 ```
 Without a local `psql`: `docker run --rm -it --network host postgres:15 psql -h localhost -p 5433 -U gis_user spatial_db`.
 
 **QGIS:** Layer → Data Source Manager → PostgreSQL → New connection: host `localhost`, port `5433`, database
 `spatial_db`, user and password as above.
+
+## Backend API on the VM
+
+The backend (FastAPI, `docker/backend.Dockerfile`) runs as the compose service `backend` next to the database and reads it over
+the internal compose network, so the database port stays closed. The owner deploys it with `scripts/provision_vm.sh deploy`
+(updates the code, adds `AUTH_SECRET` to the VM's `.env` if missing, builds and starts only `backend`, checks `/health`). Before the
+first deploy, apply the database migrations (`docker/migrations/003`-`005`) and, for the demo logins, run
+`scripts/generate_mock_farmers.py`. Endpoints and logins: `docs/serve_read_contract.md`; interactive documentation at `/docs`.
+
+The API is served over **HTTPS** by the compose service `caddy` (automatic certificate for `PUBLIC_HOST`, which `deploy` sets to
+`<external-ip-with-dashes>.nip.io`; a custom domain in `.env` is kept). Two ways to reach it:
+- **Open ports 80 and 443** (the demo): `API_SOURCE_RANGES=0.0.0.0/0 scripts/provision_vm.sh firewall` (rule `fup-allow-web`, no default
+  range on purpose; the database port is never opened). Then use `https://<PUBLIC_HOST>/api/v1`; it also works from a page on another
+  host and from `http://localhost` (CORS allows any origin, no cookies are used).
+- **SSH tunnel** (no firewall change, needs access to the project): `scripts/provision_vm.sh api-tunnel`, then use
+  `http://localhost:8000/api/v1` (the backend listens only on the VM's localhost).
+
+The external IP of the VM is ephemeral: after a stop and start the address changes (and the certificate is requested again). Do not
+stop the VM before a demo; reserve a static IP or use a domain to make the address permanent. Switches in the VM's `.env`:
+`DEMO_READONLY=1` (nobody saves anything, visitors get a read-only view), `SANDBOX_TTL_HOURS`, `SANDBOX_MAX_OWNERS`,
+`MAX_AREAS_SANDBOX`, `MAX_AREA_HA`, `WEB_CONCURRENCY`; apply with `scripts/provision_vm.sh deploy`. Load test:
+`python scripts/load_test_api.py --base https://<PUBLIC_HOST> --users 100 --ramp 15` (100 people in 15 s: p95 0.4 s, no errors).
 
 ## Who needs the tunnel (and who does not)
 

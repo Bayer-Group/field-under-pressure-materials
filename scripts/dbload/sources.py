@@ -5,7 +5,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from prepare_data import voiv_slug   # reuse the canonical spelling normaliser (scripts/ is on sys.path)
+from .names import voiv_slug
 
 
 @dataclass
