@@ -87,20 +87,22 @@ to wyliczamy" (version 3) and `docs/curated_layer_contract.md`, section 3; value
 
 1. **Signal** (note 4): the `conditions_met` of the septoria assessment of the day (`serve.risk_daily`): class `high`, growth zone B or
    C, not protected. Without it no window is proposed: `spray_window_status = no_signal` and `signal_reason` is one of
-   `no_assessment`, `stage_unknown`, `out_of_window`, `insufficient_data`, `protected`, `risk_not_high`, `zone_not_b_or_c`.
+   `no_assessment`, `stage_unknown`, `out_of_window`, `insufficient_data`, `protected`, `uncertain`, `risk_not_high`, `zone_not_b_or_c`.
 2. **Hours** (note 5.1): the next 72 hours of the grid cell of the crop area (`serve.spray_weather_hourly`; in the demo the actual
    weather, `notes.source = "replay"`). An hour is good when wind <= 4 m/s (regulation; always the stricter limit), gusts <= 6 m/s,
    5-25 °C and precipitation <= 0.2 mm (team assumptions, shown in `notes.origin`). A missing value makes the hour unknown, never
    good. Optional `work_from` / `work_to` (the farmer's working hours) can only exclude hours.
 3. **Windows** (note 5.3, 6): runs of at least 4 good hours; up to three, those with a wind margin of at least 1 m/s first
    (`confidence = confident`, else `borderline`), then the earlier one. A window starting 48 h or more ahead is `indicative`. Each has
-   `start`, `end`, `hours`, `wind_max_ms`, `gust_max_ms`, `temperature_min_c`, `temperature_max_c`, `wind_margin_ms`, `reason`.
+   `start`, `end`, `latest_start` (`end` minus the 2 rain-free hours after the spray: start by then), `open_end` (the good weather goes
+   on past the 72 h horizon, so `end` is the horizon, not the end of the window), `hours`, `wind_max_ms`, `gust_max_ms`,
+   `temperature_min_c`, `temperature_max_c`, `wind_margin_ms`, `reason`.
 4. **Status**: `no_signal`, `no_forecast` (no weather for the hours), `window_now` (a window starts now), `window_later` or
    `no_window` (no run of 4 good hours in 72 h).
 
 `GET /me/spray-window` (one feature): `crop_area_id`, `field_id`, `field_name`, `farmer_crop_id`, `risk_class`, `status`,
 `spray_window_status`, `signal`, `signal_reason`, `weather_ok_now`, `next_window_start`, `next_window_end`, `windows_found`,
-`best_window_start`, `best_window_end`, `best_window_hours`, `best_window_margin_ms`, `best_window_confidence`, `forecast_coverage`;
+`best_window_start`, `best_window_end`, `best_window_latest_start`, `best_window_hours`, `best_window_margin_ms`, `best_window_confidence`, `forecast_coverage`;
 the collection also has `assessed_at`, `model_version` and `notes` (disclaimer, wind height, source, limits and their origin).
 `GET /crop-areas/{id}/spray-window`: `{crop_area_id, assessed_at, status, signal: {signal, reason, risk_class, status,
 growth_stage_zone, protected_until, h_hours}, weather_ok_now, windows: [...], hours: [{time, ok, failed, missing, wind_ms, gust_ms,
