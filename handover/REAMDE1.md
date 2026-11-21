@@ -1,8 +1,5 @@
 # HANDOVER
 
-## WAŻNE!!
-IMO zmieniamy produkt z kalendarza z średnią dla całego pola, który mówi rolnikowi kiedy, gdzie i ile nawozić oraz kiedy pryskać.
-
 Działa już mapa pól w Lizmapie, kalendarz 7 dni dla 108 pól >= 3ha (tryb historyczny od 14.04.2025), popup z oceną dnia, podświetlenie pola.
 
 ## Obecnie Lizmapa wygląda tak
