@@ -6,6 +6,7 @@ Dates in the answers are already shifted for the demo by the views; the API neve
 """
 from __future__ import annotations
 
+import threading
 from datetime import date
 from typing import Optional
 
@@ -14,6 +15,7 @@ from pydantic import BaseModel
 
 from backend.app.core.config import AUTH_SECRET, TOKEN_TTL_SECONDS
 from backend.app.core.db import get_db
+from backend.app.core.limits import RateLimiter, enforce
 from backend.app.core.security import hash_password, make_token, read_token, verify_password
 from backend.app.domain import septoria
 from backend.app.services import risk_surface
@@ -57,6 +59,8 @@ def _collection(rows) -> dict:
 
 
 _RULES: Optional[septoria.Rules] = None
+_SMOOTH_SLOT = threading.BoundedSemaphore(1)      # the Gaussian method costs seconds of CPU: one at a time per process
+_surface_limit = RateLimiter(60, 60)                # surface requests per minute and analyst
 
 
 def _rules() -> septoria.Rules:
@@ -172,6 +176,7 @@ def grid_risk_surface(day: Optional[date] = Query(None, alias="date"),
     the fixed ramp, bounds in the X-Bounds header (west,south,east,north). asc: ESRI ASCII Grid (QGIS reads it directly)."""
     if user.get("role") != "analyst":
         raise HTTPException(status_code=403, detail="analyst role required")
+    enforce(_surface_limit, user["owner_id"])
     if method == "smooth" and (resolution < 0.02 or sigma_km > 10.0):
         raise HTTPException(status_code=422, detail="method=smooth needs resolution >= 0.02 (it takes seconds per request)")
     rows = con.execute(
@@ -182,7 +187,18 @@ def grid_risk_surface(day: Optional[date] = Query(None, alias="date"),
     rules = _rules()
     points = [(r["lon"], r["lat"], r["h_low"]) for r in rows]
     key = (method, resolution, sigma_km if method == "smooth" else None, risk_surface.fingerprint(points))
-    grid = risk_surface.cached(key, lambda: risk_surface.build(points, method=method, resolution_deg=resolution, sigma_km=sigma_km))
+
+    def build():
+        if method != "smooth":
+            return risk_surface.build(points, method=method, resolution_deg=resolution, sigma_km=sigma_km)
+        if not _SMOOTH_SLOT.acquire(blocking=False):             # never queue behind a heavy computation (it would hold a connection)
+            raise HTTPException(status_code=503, detail="another smoothing is running, try again in a moment (method=interpolate is instant)")
+        try:
+            return risk_surface.build(points, method=method, resolution_deg=resolution, sigma_km=sigma_km)
+        finally:
+            _SMOOTH_SLOT.release()
+
+    grid = risk_surface.cached(key, build)
     if grid is None:
         raise HTTPException(status_code=404, detail="no grid data for this date")
     index_values = risk_surface.to_index(grid["values"], lambda h: septoria.risk_index(h, rules))

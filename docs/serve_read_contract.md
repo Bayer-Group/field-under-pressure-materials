@@ -103,7 +103,9 @@ high on the check day.)
 
 `json`: `{date, crs, bounds: [west, south, east, north], resolution_deg, width, height, method, value, values: [[...]] (row 0 is the
 north, null outside the data), max_distance_km, class_thresholds, index_scale, class_note, model_version}`. Pixels farther than 4 km
-from every cell centre are empty. A day computed once is kept in memory (the default surface takes about a second the first time).
+from every cell centre are empty. A day computed once is kept in memory (the default surface takes about 0.3 s the first time).
+`method=smooth` costs seconds of CPU, so only one runs at a time per process (another one gets 503 at once; `interpolate` is instant and
+more accurate); 60 surface requests per minute per analyst (429).
 
 **How to mark the classes on it.** The classes belong to the cells (`GET /grid/risk`, `septoria.classify`); a pixel is a continuous
 estimate between two cell centres, not a cell. `class_thresholds` gives the landmarks: `{hours: {medium: 10, high: 20}, index:
