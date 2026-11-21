@@ -158,32 +158,48 @@ def grid_risk(day: Optional[date] = Query(None, alias="date"), user=Depends(curr
     return collection
 
 
-@router.get("/grid/risk/surface", summary="Smoothed risk surface (heatmap) of the voivodeship for one day (analyst only)")
+@router.get("/grid/risk/surface", summary="Risk surface (heatmap) of the voivodeship for one day (analyst only)")
 def grid_risk_surface(day: Optional[date] = Query(None, alias="date"),
-                      format: str = Query("json", pattern="^(json|png)$"),
-                      resolution: float = Query(0.02, ge=0.005, le=0.1, description="pixel size in degrees"),
-                      sigma_km: float = Query(5.0, ge=1.0, le=30.0, description="smoothing radius (Gaussian sigma)"),
+                      format: str = Query("json", pattern="^(json|png|asc)$"),
+                      method: str = Query("interpolate", pattern="^(interpolate|smooth)$",
+                                          description="interpolate: bilinear, exact at the cell centres; smooth: Gaussian"),
+                      value: str = Query("index", pattern="^(index|hours)$", description="what json and asc carry; png is always the index"),
+                      resolution: float = Query(0.02, ge=0.01, le=0.1, description="pixel size in degrees"),
+                      sigma_km: float = Query(5.0, ge=1.0, le=10.0, description="smoothing radius, method=smooth only"),
                       user=Depends(current_user), con=Depends(get_db)):
-    """Gaussian-weighted mean of risk_index of the cells around each pixel (services/risk_surface.py).
-    json: the grid (EPSG:4326, row 0 north, null outside the data). png: RGBA image on the fixed ramp, with the bounds in the
-    X-Bounds header (west,south,east,north) for an image source in MapLibre or a georeferenced layer in QGIS."""
+    """The hours of continuous leaf wetness (h_low) of the cells as a continuous surface (services/risk_surface.py); the risk
+    index is applied to each pixel afterwards. json: the grid (EPSG:4326, row 0 north, null outside the data). png: RGBA image on
+    the fixed ramp, bounds in the X-Bounds header (west,south,east,north). asc: ESRI ASCII Grid (QGIS reads it directly)."""
     if user.get("role") != "analyst":
         raise HTTPException(status_code=403, detail="analyst role required")
+    if method == "smooth" and (resolution < 0.02 or sigma_km > 10.0):
+        raise HTTPException(status_code=422, detail="method=smooth needs resolution >= 0.02 (it takes seconds per request)")
     rows = con.execute(
         "SELECT ST_X(ST_Centroid(geom)) AS lon, ST_Y(ST_Centroid(geom)) AS lat, h_low, date FROM serve.grid_risk_daily "
         "WHERE date = COALESCE(%s::date, current_date)", (day,)).fetchall()
     if not rows:
         raise HTTPException(status_code=404, detail="no grid data for this date")
     rules = _rules()
-    grid = risk_surface.surface(((r["lon"], r["lat"], septoria.risk_index(r["h_low"], rules)) for r in rows),
-                                resolution_deg=resolution, sigma_km=sigma_km)
+    points = [(r["lon"], r["lat"], r["h_low"]) for r in rows]
+    key = (method, resolution, sigma_km if method == "smooth" else None, risk_surface.fingerprint(points))
+    grid = risk_surface.cached(key, lambda: risk_surface.build(points, method=method, resolution_deg=resolution, sigma_km=sigma_km))
     if grid is None:
         raise HTTPException(status_code=404, detail="no grid data for this date")
-    grid["date"] = rows[0]["date"].isoformat()
-    grid["model_version"] = rules.model_version
-    grid["index_scale"] = {"low": [0.0, 0.5], "medium": [0.5, 1.0], "high": [1.0, 1.0]}
+    index_values = risk_surface.to_index(grid["values"], lambda h: septoria.risk_index(h, rules))
+    date_text = rows[0]["date"].isoformat()
     if format == "png":
-        return Response(risk_surface.to_png(grid["values"]), media_type="image/png", headers={
-            "X-Bounds": ",".join(str(v) for v in grid["bounds"]), "X-Date": grid["date"],
-            "Access-Control-Expose-Headers": "X-Bounds, X-Date"})
-    return grid
+        return Response(risk_surface.to_png(index_values), media_type="image/png", headers={
+            "X-Bounds": ",".join(str(v) for v in grid["bounds"]), "X-Date": date_text, "X-Method": grid["method"],
+            "Access-Control-Expose-Headers": "X-Bounds, X-Date, X-Method"})
+    carried = index_values if value == "index" else grid["values"]
+    if format == "asc":
+        return Response(risk_surface.to_asc(carried, grid["bounds"], grid["resolution_deg"]), media_type="text/plain", headers={
+            "X-Date": date_text, "X-Value": value, "Access-Control-Expose-Headers": "X-Date, X-Value"})
+    out = {k: v for k, v in grid.items() if k != "values"}
+    out.update({"date": date_text, "model_version": rules.model_version, "value": value, "values": carried,
+                "class_thresholds": {"hours": {"medium": rules.threshold_medium, "high": rules.threshold_high},
+                                     "index": {"medium": 0.5, "high": 1.0}},
+                "index_scale": {"low": [0.0, 0.5], "medium": [0.5, 1.0], "high": [1.0, 1.0]},
+                "class_note": "The classes belong to the cells (GET /grid/risk). A pixel is a continuous estimate between cell centres: "
+                              "colour it by value, and read the thresholds in class_thresholds as landmarks, not as a new assessment."})
+    return out

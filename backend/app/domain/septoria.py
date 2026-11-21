@@ -89,17 +89,20 @@ def classify(h: int, rules: Rules) -> str:
     return "low"
 
 
-def risk_index(h: Optional[int], rules: Rules) -> Optional[float]:
-    """H on a continuous 0-1 scale aligned with the classes (PROPOSAL, issue #49): 0 at 0 h, 0.5 at the medium threshold,
-    1 at the high threshold and above, linear in between. So index < 0.5 is low, 0.5 to < 1 is medium and 1 is high, the same
-    as classify(h). It adds no rule: it only keeps the information the three classes round away (for a smooth map)."""
+def risk_index(h: Optional[float], rules: Rules) -> Optional[float]:
+    """H on a continuous 0-1 scale aligned with the classes (issue #49): 0 at 0 h, 0.5 at the medium threshold, 1 at the high
+    threshold and above, linear in between. So index < 0.5 is low, 0.5 to < 1 is medium and 1 is high, the same as classify(h)
+    for every whole H. It adds no rule: it only keeps the information the three classes round away (for a smooth map). H may be a
+    fraction of an hour (a pixel of the interpolated surface). The index is capped at the high threshold: to see how far above it
+    the hours are, use the hours themselves."""
     if h is None:
         return None
-    if h >= rules.threshold_high:
+    lo, hi = rules.threshold_medium, rules.threshold_high
+    if h >= hi:
         return 1.0
-    if h >= rules.threshold_medium:
-        return round(0.5 + 0.5 * (h - rules.threshold_medium) / (rules.threshold_high - rules.threshold_medium), 4)
-    return round(0.5 * h / rules.threshold_medium, 4)
+    if h >= lo:
+        return round(0.5 + 0.5 * (h - lo) / (hi - lo), 4) if hi > lo else 1.0
+    return round(0.5 * max(h, 0) / lo, 4) if lo > 0 else 0.0
 
 
 def zone(gdd: Optional[float], rules: Rules) -> Optional[str]:

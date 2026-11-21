@@ -43,8 +43,8 @@ over them, so the farmer front end and QGIS see the same data and no business lo
 | `GET /crop-areas/{id}` | `serve.crop_area` | one crop area with soil and crop-map context |
 | `GET /crop-areas/{id}/risk?from=&to=` | `serve.risk_daily` | one row per day (the date slider), with `reasons` for the "Why?" screen |
 | `GET /crop-areas/{id}/changes` | `serve.risk_change_log` | when and why the class, status or `conditions_met` changed |
-| `GET /grid/risk?date=` | `serve.grid_risk_daily` | FeatureCollection of 4 km cells for the whole voivodeship (analyst), default today |
-| `GET /grid/risk/surface?date=&format=json\|png&resolution=&sigma_km=` | `serve.grid_risk_daily` | smoothed `risk_index` of the cells (a heatmap, analyst); PROPOSAL, see section 3 |
+| `GET /grid/risk?date=` | `serve.grid_risk_daily` | FeatureCollection of the grid cells (rectangles of 0.044°, about 3.0 x 4.9 km, tiling the plane) for the whole voivodeship (analyst), default today |
+| `GET /grid/risk/surface?date=&format=json\|png\|asc&value=index\|hours&method=&resolution=&sigma_km=` | `serve.grid_risk_daily` | the cells as a continuous surface (a heatmap, analyst), see section 3 |
 | `POST /crop-areas` | `app.crop_area` | saves a crop area (`geometry`, `farmer_crop_id`, `sowing_date`, optional `bbch_override`), recomputes, returns it with today's class |
 | `POST /crop-areas/{id}/sprays` | `app.spray` | `{spray_date, protection_duration_days}`, may be in the past; recomputes, returns `{crop_area, changed_days}` |
 | `DELETE /crop-areas/{id}` | `app.field` | deletes a crop area, 204 |
@@ -86,15 +86,31 @@ round away. `index_low` / `index_high` come from `h_low` / `h_high` (missing hou
 is NULL (e.g. `out_of_window`). Added to `GET /me/crop-areas` (`risk_index`), `GET /crop-areas/{id}/risk` (all three) and
 `GET /grid/risk` (all three).
 
-**`GET /grid/risk/surface` (PROPOSAL, #49).** A heatmap of the voivodeship for one day (analyst): each pixel of a regular
-EPSG:4326 grid is the Gaussian-weighted mean of `risk_index` of the cell centres around it (`backend/app/services/risk_surface.py`,
-standard library only). Normalised weights keep the value on the index scale, so a colour means the same class everywhere and the
-surface does not fade at the edge; pixels farther than 4 km from every cell centre are empty. Parameters: `resolution` (degrees,
-0.005-0.1, default 0.02), `sigma_km` (1-30, default 5). `format=json` (default): `{date, crs, bounds: [west, south, east, north],
-resolution_deg, width, height, sigma_km, max_distance_km, values: [[...]] (row 0 north, null outside), index_scale, model_version}`.
-`format=png`: an RGBA image on a fixed ramp (green, amber, red, as the suggested colours) with the bounds in the `X-Bounds` header
-(`west,south,east,north`), for an image source in MapLibre or a georeferenced layer in QGIS. It shows the cell results smoothly
-and is not a new assessment.
+**`GET /grid/risk/surface` (#49).** A heatmap of the voivodeship for one day (analyst), the cells shown as a continuous surface
+(`backend/app/services/risk_surface.py`, standard library only). It is built from the **hours** `h_low` of the cells, and the
+`risk_index` is applied to each pixel afterwards. (Building it from the index lost the peaks: the index is capped at 20 h, so
+averaging it lowered every value next to a peak, and the first version showed no pixel of class high while 13 % of the cells were
+high on the check day.)
+
+| Parameter | Values | Meaning |
+| --- | --- | --- |
+| `date` | a date | the shown day, default today |
+| `format` | `json` (default), `png`, `asc` | `json`: the grid; `png`: an RGBA image on the fixed ramp (green 0, amber 0.5, red 1), the bounds in the header `X-Bounds` (`west,south,east,north`), for an image source in MapLibre; `asc`: an ESRI ASCII Grid (QGIS opens it directly, choose EPSG:4326) |
+| `value` | `index` (default), `hours` | what `json` and `asc` carry; `png` is always the index. `hours` shows how far above the threshold the cells are (the index stops at 20 h) |
+| `method` | `interpolate` (default), `smooth` | `interpolate`: bilinear on the regular lattice of the weather grid, exact at the cell centres (mean error 0.09 h, 33 / 55 / 12 % of low / medium / high pixels against 31 / 55 / 13 % of the cells); `smooth`: Gaussian mean (mean error 0.9 h, blurs the peaks), the fallback when the cells are not a lattice |
+| `resolution` | 0.01 to 0.1 degrees, default 0.02 | pixel size; `smooth` needs 0.02 or more |
+| `sigma_km` | 1 to 10, default 5 | smoothing radius of `method=smooth` |
+
+`json`: `{date, crs, bounds: [west, south, east, north], resolution_deg, width, height, method, value, values: [[...]] (row 0 is the
+north, null outside the data), max_distance_km, class_thresholds, index_scale, class_note, model_version}`. Pixels farther than 4 km
+from every cell centre are empty. A day computed once is kept in memory (the default surface takes about a second the first time).
+
+**How to mark the classes on it.** The classes belong to the cells (`GET /grid/risk`, `septoria.classify`); a pixel is a continuous
+estimate between two cell centres, not a cell. `class_thresholds` gives the landmarks: `{hours: {medium: 10, high: 20}, index:
+{medium: 0.5, high: 1.0}}` (from `config/septoria.toml`). In QGIS colour the raster by value with the stops at the thresholds
+(green below, amber at the medium one, red at the high one), draw the contour lines at them if the classes must be marked, and put
+the cell layer with its three classes over it for the decisions. The surface is a view for the analyst; `conditions_met` and every
+decision stay with the cells and the fields. Legend: "hours of continuous leaf wetness in the last 72 h".
 
 ## 4. Open points
 
