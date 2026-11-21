@@ -212,7 +212,10 @@ def place_name(region: str | None, commune: str | None) -> str:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--farmers", type=int, default=100, help="enough for every visitor of a room to get another farm (default 100)")
+    ap.add_argument("--farmers", type=int, default=100, help="how many farmers to make (default 100: enough for a room to get another farm each)")
+    ap.add_argument("--start", type=int, default=1, help="the number of the first farmer (to add farmers after the ones already there)")
+    ap.add_argument("--no-replace", action="store_true", help="do not delete the example farmers that exist (use with --start)")
+    ap.add_argument("--commit-every", type=int, default=0, help="commit after every N farmers (default: one transaction for everything)")
     ap.add_argument("--password-word", default="demo", help="the password of farmerNNN is this word and NNN (default demo -> demo014)")
     ap.add_argument("--analyst-password", help="password of the analyst, created only if there is no analyst yet")
     ap.add_argument("--seed", type=int, default=1)
@@ -252,15 +255,19 @@ def main(argv=None) -> int:
         mixed = [c for v in mixed_by.values() for c in v]
         print(f"demo day (data time): {day}; cells {len(cells)}, of them with a neighbour of another class: {len(mixed)}", flush=True)
 
-        cur.execute("DELETE FROM app.field WHERE data_status = 'mock' AND owner_id NOT LIKE 'sbx-%'")      # the example farmers only
-        cur.execute("DELETE FROM app.demo_user WHERE role = 'farmer'")
+        if not a.no_replace:
+            cur.execute("DELETE FROM app.field WHERE data_status = 'mock' AND owner_id NOT LIKE 'sbx-%'")      # the example farmers only
+            cur.execute("DELETE FROM app.demo_user WHERE role = 'farmer'")
         if a.analyst_password:
             cur.execute("INSERT INTO app.demo_user (login, password_hash, owner_id, role, display_name) VALUES "
                         "('analyst', %s, 'analyst', 'analyst', 'Analyst') ON CONFLICT (login) DO NOTHING", (hash_password(a.analyst_password),))
 
         parcels = Parcels(con, pcon)
+        cur.execute("SELECT DISTINCT fp.parcel_id FROM app.field_parcel fp JOIN app.field f USING (field_id) WHERE f.owner_id NOT LIKE 'sbx-%'")
+        parcels.used.update(r[0] for r in cur.fetchall())                      # parcels of the farmers that are already there
         stats: Counter = Counter()
-        for n in range(1, a.farmers + 1):
+        done = 0
+        for n in range(a.start, a.start + a.farmers):
             owner = f"farmer-{n:03d}"
             snapshot = Counter(stats)
             for farmer_try in range(3):                                               # another place when fewer than 2 fields fit
@@ -409,6 +416,9 @@ def main(argv=None) -> int:
                     refresh(con, cid, a.d0, a.d1, rules, "created")
             print(f"{owner}: {len(fields)} fields, {sum(f['pieces'] for f in fields)} crop areas, program {kind}"
                   f"{', two clusters' if len(centres) > 1 else ''}: {', '.join(f['name'] for f in fields)}", flush=True)
+            done += 1
+            if a.commit_every and not a.dry_run and done % a.commit_every == 0:
+                con.commit()                                                           # these farmers are there for everybody now
 
         if not a.no_pin:
             cur.execute("UPDATE serve.demo_time SET mode = 'pinned', pinned_data_date = %s, updated_at = now() WHERE id = 1", (day,))
