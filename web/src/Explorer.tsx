@@ -29,6 +29,8 @@ export function Explorer({ plotId, tab, sampleId, unit, crop, view }: {
   const microbiome = useFetch(plotId, (s) => api.microbiome(plotId!, s)) // optional: marks metagenomics on the timeline
   const [focusSite, setFocusSite] = useState<string | null>(null)
   const [highlight, setHighlight] = useState<string | null>(null)
+  const [panelHidden, setPanelHidden] = useState(false) // map across the whole width
+  const [baseHidden, setBaseHidden] = useState(false) // only the data, no base map under it
 
   // What the user chose on the timeline for this plot. Until they choose: the most recent photo and map,
   // showing the photo if there is one.
@@ -55,8 +57,9 @@ export function Explorer({ plotId, tab, sampleId, unit, crop, view }: {
     : undefined
 
   const selected = plots.data?.find((p) => p.plot_id === plotId) ?? null
-  // Under a greenness map the base is orthophotos, so greenness is read against the real ground, not a drawn map.
-  const baseMap: BaseMap = selected && layer === 'greenness' ? 'imagery' : 'streets'
+  // Around a chosen plot the base is orthophotos, so greenness maps and aerial photos are read against the real
+  // ground; the general map is topographic.
+  const baseMap: BaseMap = baseHidden ? 'none' : selected ? 'imagery' : 'topo'
   // Only the plot list gates the whole panel; greenness/photo/event errors belong to the greenness tab,
   // so a missing satellite or aerial table does not hide the microbes and crop risk tabs.
   const error = plots.error
@@ -65,8 +68,8 @@ export function Explorer({ plotId, tab, sampleId, unit, crop, view }: {
   const open = (id: string) => { setHighlight(null); navigate(tabHref(tab, id)) }
 
   return (
-    <main className={`explorer ${selected ? 'has-plot' : ''}`}>
-      <section className="panel">
+    <main className={`explorer${selected ? ' has-plot' : ''}${panelHidden ? ' panel-hidden' : ''}`}>
+      <section className="panel" id="side-panel" hidden={panelHidden}>
         {error ? (
           <p className="message error">Could not load data: {error}</p>
         ) : !plotId ? (
@@ -115,10 +118,39 @@ export function Explorer({ plotId, tab, sampleId, unit, crop, view }: {
             photoId={photo?.photo_id ?? null} mapId={gmap?.map_id ?? null} onChange={choose} />
         )}
         {selected && layer === 'greenness' && <NdviLegend />}
+        <div className="map-toggles" role="group" aria-label="Map view">
+          {/* on a narrow screen only the icons show: the label is the accessible name */}
+          <button aria-pressed={panelHidden} aria-controls="side-panel" onClick={() => setPanelHidden(!panelHidden)}
+            aria-label={panelHidden ? 'Show panel' : 'Full map'}
+            title={panelHidden ? 'Show the side panel again' : 'Hide the side panel to see the map across the whole width'}>
+            {panelHidden ? ICON_PANEL_SHOW : ICON_PANEL_HIDE}<span>{panelHidden ? 'Show panel' : 'Full map'}</span>
+          </button>
+          <button aria-pressed={baseHidden} onClick={() => setBaseHidden(!baseHidden)}
+            aria-label={baseHidden ? 'Show base map' : 'Data only'}
+            title={baseHidden ? 'Show the base map under the data again' : 'Hide the base map to see only the data'}>
+            {ICON_LAYERS}<span>{baseHidden ? 'Show base map' : 'Data only'}</span>
+          </button>
+        </div>
       </section>
     </main>
   )
 }
+
+const ICON_PANEL_HIDE = (
+  <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.5">
+    <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" /><path d="M6 2.5v11M4.2 6.5 2.8 8l1.4 1.5" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+)
+const ICON_PANEL_SHOW = (
+  <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.5">
+    <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" /><path d="M6 2.5v11M2.8 6.5 4.2 8 2.8 9.5" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+)
+const ICON_LAYERS = (
+  <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round">
+    <path d="M8 2 14.5 5.5 8 9 1.5 5.5Z" /><path d="M1.5 8.5 8 12l6.5-3.5" />
+  </svg>
+)
 
 /** The panel with no plot chosen: what this is, and every plot by site. */
 function Overview({ plots, focusSite, highlight, onFocusSite, onHighlight }: {
