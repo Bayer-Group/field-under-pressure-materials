@@ -1,4 +1,4 @@
-import { BarChart3, Layers, LayoutDashboard, Route, Settings } from 'lucide-react';
+import { ChartNoAxesCombined, Layers, LayoutDashboard, Route, Settings } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
 
 export type NavSectionId = 'dashboard' | 'row-editor' | 'analytics' | 'layers' | 'settings';
@@ -15,7 +15,7 @@ export function Sidebar({ activeSection, onSelectSection }: SidebarProps) {
   const primaryItems: Array<{ id: NavSectionId; label: string; icon: typeof LayoutDashboard }> = [
     { id: 'dashboard', label: t.nav.dashboard, icon: LayoutDashboard },
     { id: 'row-editor', label: t.nav.rowEditor, icon: Route },
-    { id: 'analytics', label: t.nav.analytics, icon: BarChart3 },
+    { id: 'analytics', label: t.nav.analytics, icon: ChartNoAxesCombined },
     { id: 'layers', label: t.nav.layers, icon: Layers },
   ];
 

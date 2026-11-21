@@ -77,7 +77,7 @@ function computeGeometricBounds(sceneData: OrchardSceneResponse): {
 }
 
 export function Orchard3DViewerCard() {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const { resolvedTheme } = useTheme();
   const { selectedOrchardId } = useOrchard();
 
@@ -794,6 +794,9 @@ export function Orchard3DViewerCard() {
                     {selectedTree.healthStatus && selectedTree.healthScore !== null
                       ? `${t.health.statuses[selectedTree.healthStatus]} (${selectedTree.healthScore}/100)`
                       : t.health.statuses.unrated}
+                    {selectedTree.healthSource === 'estimate' && (
+                      <small> · {language === 'pl' ? 'Szacunek ML' : 'ML estimate'} · {selectedTree.healthCoverage}%</small>
+                    )}
                   </strong>
                 </span>
               </div>

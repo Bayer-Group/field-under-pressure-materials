@@ -8,7 +8,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import type { OrchardHealthSummary } from '../../types/orchard';
 
 export function OrchardHealthCard() {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const { resolvedTheme } = useTheme();
   const { selectedOrchardId } = useOrchard();
   const [summary, setSummary] = useState<OrchardHealthSummary | null>(null);
@@ -118,6 +118,9 @@ export function OrchardHealthCard() {
         <div className="health-dist-title">{t.health.scaleTitle}</div>
         {unratedTrees > 0 && (
           <div className="muted-caption">{t.health.statuses.unrated}: {unratedTrees}</div>
+        )}
+        {!!summary?.estimatedTrees && (
+          <div className="muted-caption">{language === 'pl' ? 'Szacunek ML' : 'ML estimate'} · {summary.estimatedTrees}/{totalTrees}</div>
         )}
 
         {/* Stacked horizontal bar */}

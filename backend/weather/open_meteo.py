@@ -2,9 +2,12 @@
 
 import json
 import ssl
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone as datetime_timezone
+from dataclasses import dataclass
+from dataclasses import field as dataclass_field
+from datetime import datetime, timedelta
+from datetime import timezone as datetime_timezone
 from http.client import HTTPException
+from itertools import pairwise
 from math import isfinite
 from urllib.error import HTTPError
 from urllib.parse import urlencode
@@ -70,8 +73,8 @@ class HourlyWeather:
     points: list[WeatherPoint]
     units: dict[str, str]
     forecast_start: datetime
-    days: list[WeatherDay] = field(default_factory=list)
-    daily_units: dict[str, str] = field(default_factory=dict)
+    days: list[WeatherDay] = dataclass_field(default_factory=list)
+    daily_units: dict[str, str] = dataclass_field(default_factory=dict)
 
 
 class OpenMeteoClient:
@@ -216,7 +219,7 @@ def _series_rows(
         raise OpenMeteoError(f"Unexpected number of {key} timestamps in the Open-Meteo response")
     if any(type(timestamp) is not int for timestamp in timestamps):
         raise OpenMeteoError(f"Expected {key} Unix timestamps in the Open-Meteo response")
-    if any(right - left != step_seconds for left, right in zip(timestamps, timestamps[1:])):
+    if any(right - left != step_seconds for left, right in pairwise(timestamps)):
         raise OpenMeteoError(f"Non-contiguous {key} timestamps in the Open-Meteo response")
 
     for field in fields:

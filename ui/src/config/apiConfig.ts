@@ -7,13 +7,12 @@
  * 3. Delete ui/src/placeholders/ and remove its fallback import in ui/src/api/orchardApi.ts
  */
 
-const rawBaseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://localhost:8000';
-const rawUsePlaceholders = import.meta.env.VITE_USE_PLACEHOLDERS as string | undefined;
+const rawBaseUrl = import.meta.env.VITE_API_BASE_URL ?? '';
 
 export const apiConfig = {
   baseUrl: rawBaseUrl.replace(/\/+$/, ''),
-  /** Defaults to false now that the local FastAPI backend is connected; set VITE_USE_PLACEHOLDERS=true to re-enable demos */
-  usePlaceholders: rawUsePlaceholders === 'true',
+  /** Runtime widgets read the project's MongoDB-backed API. */
+  usePlaceholders: false,
   requestTimeoutMs: 6000,
   binaryTimeoutMs: 25000,
   defaultOrchardId: '6b01933c1dc02a368703a020',
@@ -25,6 +24,14 @@ export const apiConfig = {
 } as const;
 
 export const API_ENDPOINTS = {
+  soilMoisture: {
+    analysis: '/api/soil-moisture',
+    task: (id: string) => `/api/soil-moisture/tasks/${encodeURIComponent(id)}`,
+    rasters: (id: string) => `/api/soil-moisture/tasks/${encodeURIComponent(id)}/rasters`,
+    raster: (id: string, fileId: string) =>
+      `/api/soil-moisture/tasks/${encodeURIComponent(id)}/rasters/${encodeURIComponent(fileId)}`,
+    forecast: '/api/soil-moisture/forecast',
+  },
   weather: {
     temperature: '/api/v1/weather/temperature',
   },

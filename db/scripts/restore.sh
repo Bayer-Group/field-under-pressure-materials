@@ -86,8 +86,20 @@ if [[ -n "${MONGO_URI:-}" ]]; then
     echo "Error: mongorestore is required when MONGO_URI is set." >&2
     exit 1
   fi
-  if [[ "${DROP_EXISTING}" == "true" ]] && command -v mongosh >/dev/null 2>&1; then
-    mongosh --quiet "${MONGO_URI}" --eval "db.getSiblingDB('${MONGO_DB}').dropDatabase()" >/dev/null
+  if [[ "${DROP_EXISTING}" == "true" ]]; then
+    if command -v mongosh >/dev/null 2>&1; then
+      MONGO_DB="${MONGO_DB}" mongosh --quiet "${MONGO_URI}" \
+        --eval 'db.getSiblingDB(process.env.MONGO_DB).dropDatabase()' >/dev/null
+    else
+      # The backend virtual environment already includes PyMongo.
+      MONGO_URI="${MONGO_URI}" MONGO_DB="${MONGO_DB}" python - <<'PY'
+import os
+from pymongo import MongoClient
+
+with MongoClient(os.environ["MONGO_URI"], serverSelectionTimeoutMS=5000) as client:
+    client.drop_database(os.environ["MONGO_DB"])
+PY
+    fi
   fi
   mongorestore \
     --uri="${MONGO_URI}" \

@@ -1,0 +1,4 @@
+-r soil_moisture/requirements-core.txt
+pandas>=2
+torch
+wandb

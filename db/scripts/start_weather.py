@@ -22,7 +22,7 @@ from pymongo.errors import PyMongoError
 ROOT = Path(__file__).resolve().parents[2]
 DB_NAME = "field_under_pressure"
 WINDOWS = os.name == "nt"
-DEFAULT_ARCHIVE = ROOT / "db/backups/field_under_pressure_20261121_185937.archive.gz"
+DEFAULT_ARCHIVE = ROOT / "db/backups/field_under_pressure_20261121_230119.archive.gz"
 
 
 def _binary(name: str, directory: Path | None) -> str:
@@ -248,7 +248,8 @@ def _start(args: argparse.Namespace) -> int:
                         cwd=ROOT / "ui",
                         env={
                             **environment,
-                            "VITE_API_BASE_URL": f"http://127.0.0.1:{args.api_port}",
+                            "VITE_API_BASE_URL": "",
+                            "ORCHARD_API_URL": f"http://127.0.0.1:{args.api_port}",
                             "VITE_USE_PLACEHOLDERS": "false",
                         },
                         creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if WINDOWS else 0,
