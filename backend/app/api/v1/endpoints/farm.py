@@ -6,6 +6,7 @@ Dates in the answers are already shifted for the demo by the views; the API neve
 """
 from __future__ import annotations
 
+import json
 import threading
 from datetime import date
 from typing import Optional
@@ -13,6 +14,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
 from pydantic import BaseModel
 
+from backend.app.core.cache import TtlCache
 from backend.app.core.config import AUTH_SECRET, TOKEN_TTL_SECONDS
 from backend.app.core.db import get_db
 from backend.app.core.limits import RateLimiter, enforce
@@ -59,6 +61,10 @@ def _collection(rows) -> dict:
 
 
 _RULES: Optional[septoria.Rules] = None
+# The answers of the grid layer and of the surface are the same for every user and change rarely: kept for a minute as bytes, so a hit
+# costs a millisecond (measured: 400 surface requests of 100 visitors, every one asking the database and serialising, raised the p95
+# of the room from 0.4 s to 7.5 s). The data of the demo clock and a recomputation reach the readers within a minute.
+_RESPONSES = TtlCache(60, 64)
 _SMOOTH_SLOT = threading.BoundedSemaphore(1)      # the Gaussian method costs seconds of CPU: one at a time per process
 _surface_limit = RateLimiter(30, 60)                # grid and surface requests per minute and user, per worker process (3 workers: 90 a minute)
 
@@ -152,6 +158,10 @@ def crop_area_changes(crop_area_id: str, user=Depends(current_user), con=Depends
 def grid_risk(day: Optional[date] = Query(None, alias="date"), user=Depends(current_user), con=Depends(get_db)):
     """Weather and risk per grid cell: public data, nothing of a farmer, so every signed-in user may read it."""
     enforce(_surface_limit, user["owner_id"])
+    key = ("grid", day, date.today())
+    hit = _RESPONSES.get(key)
+    if hit is not None:
+        return Response(hit, media_type="application/json")
     rows = con.execute(
         "SELECT jsonb_build_object('type', 'Feature', 'geometry', ST_AsGeoJSON(geom, 6)::jsonb, "
         "'properties', to_jsonb(g) - 'geom' - 'data_date') AS f FROM serve.grid_risk_daily g "
@@ -159,7 +169,10 @@ def grid_risk(day: Optional[date] = Query(None, alias="date"), user=Depends(curr
     collection = _collection(rows)
     for feature in collection["features"]:
         _add_index(feature["properties"], "h_low", "h_low", "h_high")
-    return collection
+    body = json.dumps(collection, separators=(",", ":"), default=str).encode()
+    if rows:
+        _RESPONSES.put(key, body)
+    return Response(body, media_type="application/json")
 
 
 @router.get("/grid/risk/surface", summary="Risk surface (heatmap) of the voivodeship for one day (any signed-in user)")
@@ -179,6 +192,11 @@ def grid_risk_surface(day: Optional[date] = Query(None, alias="date"),
     enforce(_surface_limit, user["owner_id"])
     if method == "smooth" and (resolution < 0.02 or sigma_km > 10.0):
         raise HTTPException(status_code=422, detail="method=smooth needs resolution >= 0.02 (it takes seconds per request)")
+    rkey = ("surface", day, date.today(), format, method, value, resolution, sigma_km if method == "smooth" else None)
+    hit = _RESPONSES.get(rkey)
+    if hit is not None:
+        body, media_type, headers = hit
+        return Response(body, media_type=media_type, headers=headers)
     rows = con.execute(
         "SELECT ST_X(ST_Centroid(geom)) AS lon, ST_Y(ST_Centroid(geom)) AS lat, h_low, date FROM serve.grid_risk_daily "
         "WHERE data_date = COALESCE(%s::date, current_date) - serve.shift_days()", (day,)).fetchall()
@@ -204,18 +222,23 @@ def grid_risk_surface(day: Optional[date] = Query(None, alias="date"),
     index_values = risk_surface.to_index(grid["values"], lambda h: septoria.risk_index(h, rules))
     date_text = rows[0]["date"].isoformat()
     if format == "png":
-        return Response(risk_surface.to_png(index_values), media_type="image/png", headers={
-            "X-Bounds": ",".join(str(v) for v in grid["bounds"]), "X-Date": date_text, "X-Method": grid["method"],
-            "Access-Control-Expose-Headers": "X-Bounds, X-Date, X-Method"})
-    carried = index_values if value == "index" else grid["values"]
-    if format == "asc":
-        return Response(risk_surface.to_asc(carried, grid["bounds"], grid["resolution_deg"]), media_type="text/plain", headers={
-            "X-Date": date_text, "X-Value": value, "Access-Control-Expose-Headers": "X-Date, X-Value"})
-    out = {k: v for k, v in grid.items() if k != "values"}
-    out.update({"date": date_text, "model_version": rules.model_version, "value": value, "values": carried,
-                "class_thresholds": {"hours": {"medium": rules.threshold_medium, "high": rules.threshold_high},
-                                     "index": {"medium": 0.5, "high": 1.0}},
-                "index_scale": {"low": [0.0, 0.5], "medium": [0.5, 1.0], "high": [1.0, 1.0]},
-                "class_note": "The classes belong to the cells (GET /grid/risk). A pixel is a continuous estimate between cell centres: "
-                              "colour it by value, and read the thresholds in class_thresholds as landmarks, not as a new assessment."})
-    return out
+        body, media_type = risk_surface.to_png(index_values), "image/png"
+        headers = {"X-Bounds": ",".join(str(v) for v in grid["bounds"]), "X-Date": date_text, "X-Method": grid["method"],
+                   "Access-Control-Expose-Headers": "X-Bounds, X-Date, X-Method"}
+    else:
+        carried = index_values if value == "index" else grid["values"]
+        if format == "asc":
+            body, media_type = risk_surface.to_asc(carried, grid["bounds"], grid["resolution_deg"]).encode(), "text/plain"
+            headers = {"X-Date": date_text, "X-Value": value, "Access-Control-Expose-Headers": "X-Date, X-Value"}
+        else:
+            out = {k: v for k, v in grid.items() if k != "values"}
+            out.update({"date": date_text, "model_version": rules.model_version, "value": value, "values": carried,
+                        "class_thresholds": {"hours": {"medium": rules.threshold_medium, "high": rules.threshold_high},
+                                             "index": {"medium": 0.5, "high": 1.0}},
+                        "index_scale": {"low": [0.0, 0.5], "medium": [0.5, 1.0], "high": [1.0, 1.0]},
+                        "class_note": "The classes belong to the cells (GET /grid/risk). A pixel is a continuous estimate between cell "
+                                      "centres: colour it by value, and read the thresholds in class_thresholds as landmarks, not as a "
+                                      "new assessment."})
+            body, media_type, headers = json.dumps(out, separators=(",", ":")).encode(), "application/json", {}
+    _RESPONSES.put(rkey, (body, media_type, headers))
+    return Response(body, media_type=media_type, headers=headers)

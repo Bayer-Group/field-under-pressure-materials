@@ -19,8 +19,11 @@ LATTICE = [(20.0 + i * 0.044, 52.0 + j * 0.044, 8 + 3 * (i + j)) for j in range(
 
 
 class FakeCon:
+    queries = 0                                                          # how many times the database was asked
+
     def execute(self, sql, params=()):
         self.sql = sql
+        FakeCon.queries += 1
         return self
 
     def fetchall(self):
@@ -38,6 +41,10 @@ def as_user(role, owner="u1"):
 
 
 class GridAccess(unittest.TestCase):
+    def setUp(self):
+        farm._RESPONSES.clear()
+        FakeCon.queries = 0
+
     def tearDown(self):
         app.dependency_overrides.clear()
 
@@ -67,6 +74,44 @@ class GridAccess(unittest.TestCase):
         c = as_user("farmer", "visitor-3")
         self.assertEqual(c.get("/api/v1/grid/risk/surface", params={"resolution": 0.005}).status_code, 422)
         self.assertEqual(c.get("/api/v1/grid/risk/surface", params={"format": "gif"}).status_code, 422)
+
+
+class ResponseCache(unittest.TestCase):
+    def setUp(self):
+        farm._RESPONSES.clear()
+        FakeCon.queries = 0
+
+    def tearDown(self):
+        app.dependency_overrides.clear()
+
+    def test_the_second_identical_request_does_not_ask_the_database(self):
+        c = as_user("farmer", "cache-1")
+        a = c.get("/api/v1/grid/risk/surface", params={"format": "png", "resolution": 0.03})
+        asked = FakeCon.queries
+        b = c.get("/api/v1/grid/risk/surface", params={"format": "png", "resolution": 0.03})
+        self.assertEqual((a.status_code, b.status_code), (200, 200))
+        self.assertEqual(FakeCon.queries, asked)                           # served from the cache
+        self.assertEqual(a.content, b.content)
+        self.assertEqual(a.headers["x-bounds"], b.headers["x-bounds"])
+        c.get("/api/v1/grid/risk/surface", params={"format": "png", "resolution": 0.04})
+        self.assertGreater(FakeCon.queries, asked)                         # other parameters are another entry
+
+    def test_every_format_and_the_grid_come_back_identical_from_the_cache(self):
+        c = as_user("farmer", "cache-2")
+        for path, params in (("/api/v1/grid/risk", {}), ("/api/v1/grid/risk/surface", {}),
+                             ("/api/v1/grid/risk/surface", {"format": "asc", "value": "hours"})):
+            first, second = c.get(path, params=params), c.get(path, params=params)
+            self.assertEqual(first.content, second.content, path)
+            self.assertEqual(first.headers["content-type"], second.headers["content-type"], path)
+
+    def test_the_cache_does_not_skip_the_roles(self):
+        farmer = as_user("farmer", "cache-3")
+        farmer.get("/api/v1/grid/risk/surface", params={"method": "smooth", "resolution": 0.02})
+        self.assertEqual(farmer.get("/api/v1/grid/risk/surface", params={"method": "smooth"}).status_code, 403)
+        analyst = as_user("analyst", "cache-4")
+        self.assertEqual(analyst.get("/api/v1/grid/risk/surface", params={"method": "smooth"}).status_code, 200)
+        farmer = as_user("farmer", "cache-3")                              # the override is global: set the farmer again
+        self.assertEqual(farmer.get("/api/v1/grid/risk/surface", params={"method": "smooth"}).status_code, 403)   # still 403 after a hit
 
 
 if __name__ == "__main__":
