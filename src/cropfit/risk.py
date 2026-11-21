@@ -214,7 +214,9 @@ def abundance_scores(shares, units, status, target_units, min_reference, hard_mi
                          "small_reference": n < min_reference, "reference_too_small": too_small})
     cols = ["unit_id", "genus", "percentile", "a", "reference_n", "reference_years", "small_reference",
             "reference_too_small"]
-    return pd.DataFrame(rows, columns=cols)
+    out = pd.DataFrame(rows, columns=cols)
+    # keep the flags boolean when no genus is scored (an empty frame would give object dtype)
+    return out.astype({"small_reference": bool, "reference_too_small": bool})
 
 
 def host_scores(host: pd.DataFrame, genera, crops) -> pd.DataFrame:
@@ -296,7 +298,7 @@ def skipped_table(target: pd.DataFrame, shares: pd.DataFrame, units: pd.DataFram
     stt = status.set_index(["unit_id", "genus"])
     scored_set = set(map(tuple, scored[["site", "product", "genus"]].itertuples(index=False, name=None)))
     sh = {u: g for u, g in shares[shares["reads"] > 0].groupby("unit_id")}
-    small = abund[abund["reference_too_small"]].set_index(["unit_id", "genus"])
+    small = abund[abund["reference_too_small"].astype(bool)].set_index(["unit_id", "genus"])
     for _, u in target.iterrows():
         if u["total_reads"] < min_unit_reads:
             rows.append(_skip_rows(u, None, "insufficient_depth_unit", np.nan, np.nan,
@@ -430,6 +432,15 @@ class CropRiskResult:
                 "skipped": _records(self.skipped)}
 
 
+def _kb_metadata(meta: dict) -> dict:
+    """kb_meta.json flattened to the documented shape: one key per source (fungaltraits, usda_fungus_host with
+    url, retrieved_utc, bytes, sha256, source_version), plus build_utc, counts and the rules-file hashes."""
+    meta = dict(meta or {})
+    out = dict(meta.pop("sources", {}) or {})
+    out.update(meta)
+    return out
+
+
 def _metadata(site, year, kb, params, crops, units, notes, reason) -> dict:
     products = sorted(units["product"].unique()) if len(units) else []
     n_low = int((units["total_reads"] < params["min_unit_reads"]).sum()) if len(units) else 0
@@ -437,7 +448,7 @@ def _metadata(site, year, kb, params, crops, units, notes, reason) -> dict:
             "parameters": dict(params), "crops_scored": list(crops), "crops_excluded": dict(EXCLUDED_CROP_GROUPS),
             "same_host_taxa_as": dict(SAME_HOST_TAXA_AS), "reference_definition": REFERENCE_DEFINITION,
             "products": products, "n_units": int(len(units)), "n_units_insufficient_depth": n_low,
-            "kb": kb.meta, "synonyms": dict(kb.synonyms), "caveats": list(CAVEATS), "notes": list(notes),
+            "kb": _kb_metadata(kb.meta), "synonyms": dict(kb.synonyms), "caveats": list(CAVEATS), "notes": list(notes),
             "reason": reason, "generated_utc": _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds")}
 
 
