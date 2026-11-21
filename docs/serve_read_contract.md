@@ -46,7 +46,11 @@ over them, so the farmer front end and QGIS see the same data and no business lo
 | `GET /grid/risk?date=` | `serve.grid_risk_daily` | FeatureCollection of the grid cells (rectangles of 0.044°, about 3.0 x 4.9 km, tiling the plane) for the whole voivodeship (any signed-in user), default today |
 | `GET /grid/risk/surface?date=&format=json\|png\|asc&value=index\|hours&method=&resolution=&sigma_km=` | `serve.grid_risk_daily` | the cells as a continuous surface (a heatmap, any signed-in user), see section 3 |
 | `POST /crop-areas` | `app.crop_area` | saves a crop area (`geometry`, `farmer_crop_id`, `sowing_date`, optional `bbch_override`), recomputes, returns it with today's class |
-| `POST /crop-areas/{id}/sprays` | `app.spray` | `{spray_date, protection_duration_days}`, may be in the past; recomputes, returns `{crop_area, changed_days}` |
+| `POST /crop-areas/{id}/sprays` | `app.spray` | `{spray_date, protection_duration_days}`, may be in the past; recomputes, returns `{spray, crop_area, changed_days}` (the spray has its `spray_id`) |
+| `GET /crop-areas/{id}/sprays` | `app.spray` | `{crop_area_id, sprays_confirmed, sprays: [{spray_id, date, protection_duration_days}]}` |
+| `PATCH /crop-areas/{id}/sprays/{spray_id}` | `app.spray` | changes `date` and/or `protection_duration_days`; recomputes; returns `{spray, past_sprays, crop_area, changed_days}` |
+| `DELETE /crop-areas/{id}/sprays/{spray_id}` | `app.spray` | deletes one spray; recomputes; 200 with `{spray: null, past_sprays, crop_area, changed_days}` |
+| `PATCH /crop-areas/{id}` | `app.crop_area` | changes `sowing_date`, `farmer_crop_id`, `bbch_override` (null clears it) and sets `sprays_confirmed`; returns the crop area as an element of `crop_areas` |
 | `DELETE /crop-areas/{id}` | `app.field` | deletes a crop area, 204 |
 
 Writing follows `FARMER_INPUT_CONTRACT.md`. After every write the API recomputes that one crop area (a new area in about 0.2 s; a
@@ -200,3 +204,17 @@ parcel is needed), links the field to all its parcels, replaces the crop areas a
 saved field (as in `GET`). Answers: 422 (spray question unanswered, missing confirmations with the list `missing`, overlaps,
 errors, validation rules of section 2), 409 (stale `validation_id`: validate again), 404 and 401 as before. The earlier one-parcel
 shape (`parcel` instead of `parcel_ids`) works too; the validation id is required in both.
+
+**Editing one crop area and its sprays (no full-field save).** Every `/crop-areas/{id}/...` endpoint accepts **the id of `GET /fields`** (the
+id the client chose) as well as the stored one, and is limited to the owner (404 for somebody else's). The sprays of `GET /fields`
+(`past_sprays`) have a `spray_id`; `PUT /fields/{id}` keeps the ids of the sprays it is given (a spray without `spray_id` is new, one
+that is missing is deleted). `PATCH /crop-areas/{id}` sends only what changes: `sowing_date` (not in the future, in the shown time),
+`farmer_crop_id` (see `GET /crops`), `bbch_override` (31, 37, 39, 51 or 59; `null` clears it, the risk then uses the estimated stage) and
+`sprays_confirmed: true` (the answer "no sprays" or "the list is complete"; `false` is refused). Body errors are 422, before anything is
+looked up. The spray endpoints answer the whole list of sprays, so after a lost connection the client reads the state back (the list)
+instead of sending the spray again.
+
+**The geometry of a saved crop area.** A crop area is clipped to its parcels only when something sticks out of them (the part outside
+needs the confirmation `outside:<id>`); otherwise the repaired geometry is stored as it is, so saving the same area again does not change
+it (a crop area equal to a parcel used to gain vertices with every save). After a clipping the geometry follows the parcel boundary and
+the next saves leave it unchanged.
