@@ -1,4 +1,5 @@
 from pathlib import Path
+import sys
 from typing import Literal
 
 import numpy as np
@@ -6,7 +7,12 @@ import pandas as pd
 import torch
 from torch.utils.data import Dataset
 
-from .config import (
+if __package__ in (None, ""):
+    _repo_root = str(Path(__file__).resolve().parent.parent)
+    if _repo_root not in sys.path:
+        sys.path.insert(0, _repo_root)
+
+from ml.config import (
     CROP_CATEGORIES,
     FORECAST_DAYS,
     FUTURE_SCALE_INDICES,

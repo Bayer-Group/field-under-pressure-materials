@@ -1,11 +1,17 @@
 import argparse
 from pathlib import Path
+import sys
 
 import numpy as np
 import torch
 from torch.utils.data import DataLoader, Subset
 
-from .config import (
+if __package__ in (None, ""):
+    _repo_root = str(Path(__file__).resolve().parent.parent)
+    if _repo_root not in sys.path:
+        sys.path.insert(0, _repo_root)
+
+from ml.config import (
     DEFAULT_CHECKPOINT_PATH,
     DEFAULT_DATA_DIR,
     FUTURE_FEATURE_NAMES,
@@ -15,9 +21,9 @@ from .config import (
     ModelConfig,
     TrainConfig,
 )
-from .dataset import FeatureScaler, FieldTimeSeriesDataset, split_indices
-from .model import VegetationLSTM, compute_masked_metrics, masked_smooth_l1_loss
-from .prepare_dataset import generate_synthetic_demo_dataset
+from ml.dataset import FeatureScaler, FieldTimeSeriesDataset, split_indices
+from ml.model import VegetationLSTM, compute_masked_metrics, masked_smooth_l1_loss
+from ml.prepare_dataset import generate_synthetic_demo_dataset
 
 
 def _select_device() -> torch.device:
@@ -203,7 +209,7 @@ def _build_cli() -> argparse.ArgumentParser:
     p.add_argument("--num-layers", type=int, default=2)
     p.add_argument("--split-mode", choices=("field", "time"), default="field")
     p.add_argument("--target-mode", choices=("observed", "interpolated"), default="observed")
-    p.add_argument("--demo", action="store_true", help="Wygeneruj syntetyczne dane w ml_data/demo i odpal trening testowy.")
+    p.add_argument("--demo", action="store_true", help="Wygeneruj syntetyczne dane w data/ml/demo i odpal trening testowy.")
     return p
 
 

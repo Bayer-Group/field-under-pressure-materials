@@ -4,6 +4,7 @@ from dataclasses import asdict, dataclass
 from datetime import date, datetime
 from pathlib import Path
 import re
+import sys
 from typing import Literal
 import zipfile
 
@@ -24,6 +25,15 @@ SOIL_METHOD_NOTE = (
     "z frakcji SoilGrids 250m oraz natywnych klas ISRIC BAND_pH / BAND_om / BAND_cec "
     "(brak urzędowej polskiej klasy bonitacyjnej I–VI z IUNG-PIB/EGiB)."
 )
+
+DEFAULT_SOIL_DIR = Path("data/soil")
+DEFAULT_SOIL_RAW_DIR = DEFAULT_SOIL_DIR / "raw"
+DEFAULT_FIELDS_PROFILES_PARQUET = DEFAULT_SOIL_DIR / "fields_soil_profiles.parquet"
+DEFAULT_FIELDS_PROFILES_JSON = DEFAULT_SOIL_DIR / "fields_soil_profiles.json"
+DEFAULT_ZONE_PROFILES_PARQUET = DEFAULT_SOIL_DIR / "field_zone_soil_profiles.parquet"
+DEFAULT_ZONE_PROFILES_JSON = DEFAULT_SOIL_DIR / "field_zone_soil_profiles.json"
+DEFAULT_H3_CELLS_PARQUET = DEFAULT_SOIL_DIR / "field_soil_h3_cells.parquet"
+DEFAULT_SOIL_SQL = DEFAULT_SOIL_DIR / "field_soil_profiles.sql"
 
 CLMS_CROP_CODE_TO_NAME = {
     1110: "pszenica",
@@ -80,10 +90,10 @@ ZoneSoilProfile = SoilProfile
 # ETAP 1: ROZPAKOWANIE SOILGRIDS + PROFILE GLEBOWE PER POLE, PER STREFA I H3
 # ==============================================================================
 
-def ensure_parquets_unpacked(soil_dir: str | Path) -> list[str]:
+def ensure_parquets_unpacked(soil_dir: str | Path = DEFAULT_SOIL_RAW_DIR) -> list[str]:
     """
-    Przeszukuje folder soil_data/, rozpakowuje wszystkie pliki soil_*_isric_250_v2.zip
-    (jeśli jeszcze nie są rozpakowane) i zwraca listę ścieżek do plików .parquet.
+    Przeszukuje folder data/soil/raw/ (lub inny wskazany), rozpakowuje wszystkie pliki
+    soil_*_isric_250_v2.zip (jeśli jeszcze nie są rozpakowane) i zwraca listę ścieżek .parquet.
     """
     soil_dir = Path(soil_dir)
     for zip_path in sorted(soil_dir.glob("soil_*_isric_250_v2.zip")):
@@ -199,6 +209,9 @@ def _attach_crops(
             return matched_code, matched_name
 
     if assign_crops_year is not None and geojson_path is not None:
+        _repo_root = str(Path(__file__).resolve().parent.parent)
+        if _repo_root not in sys.path:
+            sys.path.insert(0, _repo_root)
         from bk.assign_crops import CropDetector
 
         detector = CropDetector(year=assign_crops_year)
@@ -376,16 +389,16 @@ def _compute_soil_physical_metrics(out: pd.DataFrame) -> pd.DataFrame:
 
 def prepare_all_soil_profiles(
     geojson_path: str | Path,
-    soil_dir: str | Path,
-    output_parquet: str | Path = "fields_soil_profiles.parquet",
-    output_json: str | Path = "fields_soil_profiles.json",
+    soil_dir: str | Path = DEFAULT_SOIL_RAW_DIR,
+    output_parquet: str | Path = DEFAULT_FIELDS_PROFILES_PARQUET,
+    output_json: str | Path = DEFAULT_FIELDS_PROFILES_JSON,
     id_col: str | None = "id",
     min_area_ha: float = 3.0,
     crops_geojson: str | Path | None = None,
     assign_crops_year: int | None = None,
 ) -> pd.DataFrame:
     """
-    Łączy pola >= min_area_ha z GeoJSON ze wszystkimi województwami w soil_data/.
+    Łączy pola >= min_area_ha z GeoJSON ze wszystkimi województwami w data/soil/raw/ (lub soil_dir).
     Wylicza parametry retencji Saxtona & Rawlsa (2006), natywne klasy SoilGrids
     (BAND_pH, BAND_om, BAND_cec), zmienność wewnętrzną oraz dołącza uprawy
     z GeoJSON lub z modułu bk/assign_crops.py.
@@ -417,17 +430,21 @@ def prepare_all_soil_profiles(
         raise LookupError("JOIN zwrócił 0 pól – sprawdź czy GeoJSON ma poprawne współrzędne.")
 
     out = _compute_soil_physical_metrics(out)
-    out.to_parquet(output_parquet, index=False)
-    out.to_json(output_json, orient="records", force_ascii=False)
-    print(f"[ETAP 1] Zapisano {len(out)} profili pól do {output_parquet} oraz {output_json}.")
+    out_parquet_path = Path(output_parquet)
+    out_json_path = Path(output_json)
+    out_parquet_path.parent.mkdir(parents=True, exist_ok=True)
+    out_json_path.parent.mkdir(parents=True, exist_ok=True)
+    out.to_parquet(out_parquet_path, index=False)
+    out.to_json(out_json_path, orient="records", force_ascii=False)
+    print(f"[ETAP 1] Zapisano {len(out)} profili pól do {out_parquet_path} oraz {out_json_path}.")
     return out
 
 
 def prepare_zone_soil_profiles(
     zones_input: str | Path | gpd.GeoDataFrame,
-    soil_dir: str | Path,
-    output_parquet: str | Path = "field_zone_soil_profiles.parquet",
-    output_json: str | Path = "field_zone_soil_profiles.json",
+    soil_dir: str | Path = DEFAULT_SOIL_RAW_DIR,
+    output_parquet: str | Path = DEFAULT_ZONE_PROFILES_PARQUET,
+    output_json: str | Path = DEFAULT_ZONE_PROFILES_JSON,
     field_id_col: str = "field_id",
     zone_col: str = "zone",
     min_zone_area_ha: float = 0.0,
@@ -476,16 +493,20 @@ def prepare_zone_soil_profiles(
 
     out = _compute_soil_physical_metrics(out)
     out = out.sort_values(["field_id", "zone"]).reset_index(drop=True)
-    out.to_parquet(output_parquet, index=False)
-    out.to_json(output_json, orient="records", force_ascii=False)
-    print(f"[ETAP 1 - STREFY] Zapisano {len(out)} profili stref do {output_parquet} oraz {output_json}.")
+    out_parquet_path = Path(output_parquet)
+    out_json_path = Path(output_json)
+    out_parquet_path.parent.mkdir(parents=True, exist_ok=True)
+    out_json_path.parent.mkdir(parents=True, exist_ok=True)
+    out.to_parquet(out_parquet_path, index=False)
+    out.to_json(out_json_path, orient="records", force_ascii=False)
+    print(f"[ETAP 1 - STREFY] Zapisano {len(out)} profili stref do {out_parquet_path} oraz {out_json_path}.")
     return out
 
 
 def prepare_field_h3_soil_cells(
     geojson_path: str | Path,
-    soil_dir: str | Path,
-    output_parquet: str | Path = "field_soil_h3_cells.parquet",
+    soil_dir: str | Path = DEFAULT_SOIL_RAW_DIR,
+    output_parquet: str | Path = DEFAULT_H3_CELLS_PARQUET,
     id_col: str | None = "id",
     min_area_ha: float = 3.0,
 ) -> pd.DataFrame:
@@ -540,8 +561,10 @@ def prepare_field_h3_soil_cells(
     cells_df["cell_lon"] = [round(lon, 6) for _, lon in latlons]
 
     out = _compute_soil_physical_metrics(cells_df).sort_values(["field_id", "h3_index_10"]).reset_index(drop=True)
-    out.to_parquet(output_parquet, index=False)
-    print(f"[ETAP 1 - H3] Zapisano {len(out)} komórek H3 gleby do {output_parquet}.")
+    out_parquet_path = Path(output_parquet)
+    out_parquet_path.parent.mkdir(parents=True, exist_ok=True)
+    out.to_parquet(out_parquet_path, index=False)
+    print(f"[ETAP 1 - H3] Zapisano {len(out)} komórek H3 gleby do {out_parquet_path}.")
     return out
 
 
@@ -602,7 +625,7 @@ def _row_to_soil_profile(r: pd.Series) -> SoilProfile:
 
 def load_field_profile(
     field_id: str,
-    profiles_parquet: str | Path = "fields_soil_profiles.parquet",
+    profiles_parquet: str | Path = DEFAULT_FIELDS_PROFILES_PARQUET,
 ) -> SoilProfile:
     """Wczytuje profil pojedynczego pola z pliku wygenerowanego w Etapie 1."""
     df = pd.read_parquet(profiles_parquet)
@@ -614,7 +637,7 @@ def load_field_profile(
 
 def load_zone_profiles(
     field_id: str,
-    zone_profiles_parquet: str | Path = "field_zone_soil_profiles.parquet",
+    zone_profiles_parquet: str | Path = DEFAULT_ZONE_PROFILES_PARQUET,
 ) -> list[ZoneSoilProfile]:
     """Wczytuje listę profili glebowych wszystkich stref dla wybranego pola."""
     df = pd.read_parquet(zone_profiles_parquet)
@@ -627,7 +650,7 @@ def load_zone_profiles(
 def export_soil_profiles_to_sql(
     df: pd.DataFrame,
     table_name: str = "field_soil_profiles",
-    sql_path: str | Path = "field_soil_profiles.sql",
+    sql_path: str | Path = DEFAULT_SOIL_SQL,
 ) -> Path:
     """
     Eksportuje profile glebowe (per pole lub per strefa) do pliku SQL dla PostgreSQL (public.<table_name>).
@@ -685,7 +708,7 @@ def evaluate_fertilization_day(
     temp_c: float,
     sm_l1: float,
     sm_l2: float,
-    sm_l3: float,
+    sm_l3: float | None = None,
     day_date: str | date | datetime | None = None,
     wind_max_kmh: float | None = None,
     rh_mean_pct: float | None = None,
@@ -794,8 +817,8 @@ def evaluate_water_stress(
     crop: Crop,
     sm_l1: float,
     sm_l2: float,
-    sm_l3: float,
-    precip_72h_mm: float,
+    sm_l3: float | None = None,
+    precip_72h_mm: float = 0.0,
     ndmi_value: float | None = None,
 ) -> dict:
     """
@@ -803,7 +826,11 @@ def evaluate_water_stress(
     Nie generuje zaleceń ani dawek nawadniania.
     """
     paw_l2 = float(np.clip((sm_l2 - soil.wilting_point) / (soil.field_capacity - soil.wilting_point), 0.0, 1.0))
-    paw_l3 = float(np.clip((sm_l3 - soil.wilting_point) / (soil.field_capacity - soil.wilting_point), 0.0, 1.0))
+    paw_l3 = (
+        float(np.clip((sm_l3 - soil.wilting_point) / (soil.field_capacity - soil.wilting_point), 0.0, 1.0))
+        if sm_l3 is not None
+        else None
+    )
 
     crop_threshold = 0.35 if crop in ("kukurydza", "rzepak") else 0.30
     reasons: list[str] = []
@@ -815,11 +842,11 @@ def evaluate_water_stress(
             f"Nasycenie wodą powyżej pojemności polowej w warstwach 1–2 (retencja: {soil.water_retention}) – "
             "ryzyko niedotlenienia korzeni i wymywania składników."
         )
-    elif paw_l2 < crop_threshold and paw_l3 < 0.40 and precip_72h_mm < 5.0:
+    elif paw_l2 < crop_threshold and (paw_l3 is None or paw_l3 < 0.40) and precip_72h_mm < 5.0:
         water_status = "DEFICYT"
         stress_level = "WYSOKI"
         reasons.append(
-            f"Silny deficyt wody dostępnej dla roślin w warstwach 2–3 (retencja gleby: {soil.water_retention}) przy braku opadów."
+            f"Silny deficyt wody dostępnej dla roślin w strefie korzeniowej (retencja gleby: {soil.water_retention}) przy braku opadów."
         )
     elif paw_l2 < crop_threshold + 0.15 and precip_72h_mm < 5.0:
         water_status = "DEFICYT"
@@ -847,7 +874,7 @@ def evaluate_water_stress(
         "water_stress_level": stress_level,
         "water_status": water_status,
         "paw_layer2_pct": round(paw_l2 * 100, 1),
-        "paw_layer3_pct": round(paw_l3 * 100, 1),
+        "paw_layer3_pct": round(paw_l3 * 100, 1) if paw_l3 is not None else None,
         "reasons": reasons,
     }
 
@@ -880,7 +907,7 @@ def evaluate_field_calendar(
         temp_c = float(row["temp_mean_c"])
         sm_l1 = float(row["sm_l1"])
         sm_l2 = float(row["sm_l2"])
-        sm_l3 = float(row["sm_l3"])
+        sm_l3 = float(row["sm_l3"]) if "sm_l3" in row and pd.notna(row["sm_l3"]) else None
         wind_max = float(row["wind_max_kmh"]) if "wind_max_kmh" in row and pd.notna(row["wind_max_kmh"]) else None
         rh_mean = float(row["rh_mean_pct"]) if "rh_mean_pct" in row and pd.notna(row["rh_mean_pct"]) else None
 
@@ -963,7 +990,7 @@ def evaluate_field_calendar(
                     "precip_72h_mm": round(precip_72h, 2),
                     "sm_l1": round(sm_l1, 3),
                     "sm_l2": round(sm_l2, 3),
-                    "sm_l3": round(sm_l3, 3),
+                    "sm_l3": round(sm_l3, 3) if sm_l3 is not None else None,
                 },
                 "ndvi_value": ndvi,
                 "ndmi_value": ndmi,
@@ -985,11 +1012,23 @@ if __name__ == "__main__":
     else:
         default_geojson = Path("fields.geojson")
 
+    has_new_raw = DEFAULT_SOIL_RAW_DIR.exists() and (
+        any(DEFAULT_SOIL_RAW_DIR.rglob("*.parquet")) or any(DEFAULT_SOIL_RAW_DIR.glob("*.zip"))
+    )
+    if has_new_raw:
+        raw_soil_dir = DEFAULT_SOIL_RAW_DIR
+    else:
+        raw_soil_dir = Path("soil_data")
+        print(
+            "[INFO] Brak plików w data/soil/raw/ — tymczasowo wczytuję z soil_data/. "
+            "Docelowo przenieś zawartość soil_data/ do data/soil/raw/."
+        )
+
     df_profiles = prepare_all_soil_profiles(
         geojson_path=default_geojson,
-        soil_dir="soil_data",
-        output_parquet="fields_soil_profiles.parquet",
-        output_json="fields_soil_profiles.json",
+        soil_dir=raw_soil_dir,
+        output_parquet=DEFAULT_FIELDS_PROFILES_PARQUET,
+        output_json=DEFAULT_FIELDS_PROFILES_JSON,
         id_col="id",
     )
     print(
@@ -1013,7 +1052,7 @@ if __name__ == "__main__":
 
     known_crops = df_profiles[df_profiles["crop"].notna() & (df_profiles["crop"] != "inne")]
     sample_id = (known_crops if not known_crops.empty else df_profiles)["field_id"].iloc[0]
-    soil_profile = load_field_profile(sample_id, "fields_soil_profiles.parquet")
+    soil_profile = load_field_profile(sample_id, DEFAULT_FIELDS_PROFILES_PARQUET)
     sample_crop = soil_profile.crop or "pszenica"
 
     fert_eval = evaluate_fertilization_day(

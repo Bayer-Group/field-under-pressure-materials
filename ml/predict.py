@@ -2,14 +2,20 @@ import argparse
 from dataclasses import asdict, is_dataclass
 from datetime import date, timedelta
 from pathlib import Path
+import sys
 
 import numpy as np
 import pandas as pd
 import torch
 
-from .config import DEFAULT_CHECKPOINT_PATH, DEFAULT_DATA_DIR, ModelConfig
-from .dataset import FeatureScaler, build_field_daily_series
-from .model import VegetationLSTM
+if __package__ in (None, ""):
+    _repo_root = str(Path(__file__).resolve().parent.parent)
+    if _repo_root not in sys.path:
+        sys.path.insert(0, _repo_root)
+
+from ml.config import DEFAULT_CHECKPOINT_PATH, DEFAULT_DATA_DIR, ModelConfig
+from ml.dataset import FeatureScaler, build_field_daily_series
+from ml.model import VegetationLSTM
 
 
 def load_trained_model(
@@ -41,7 +47,7 @@ def predict_field_7days(
 ) -> dict:
     """
     Prognozuje NDVI i NDMI na 7 dni w przód dla pojedynczego pola.
-    Zwraca słownik gotowy do przekazania do kw.soil_bonification.evaluate_field_calendar().
+    Zwraca słownik gotowy do przekazania do kw.soil.evaluate_field_calendar().
     """
     if is_dataclass(field_profile):
         field_dict = asdict(field_profile)

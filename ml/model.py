@@ -1,8 +1,16 @@
+from pathlib import Path
+import sys
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .config import ModelConfig
+if __package__ in (None, ""):
+    _repo_root = str(Path(__file__).resolve().parent.parent)
+    if _repo_root not in sys.path:
+        sys.path.insert(0, _repo_root)
+
+from ml.config import ModelConfig
 
 
 class VegetationLSTM(nn.Module):

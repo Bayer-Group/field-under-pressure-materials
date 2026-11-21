@@ -69,7 +69,7 @@ HIST_SCALE_INDICES: tuple[int, ...] = (0, 1, 4, 5, 6, 7, 8, 9, 10)
 FUTURE_SCALE_INDICES: tuple[int, ...] = (0, 1, 2, 3, 4, 5, 6)
 STATIC_SCALE_INDICES: tuple[int, ...] = (0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
 
-DEFAULT_DATA_DIR = Path("ml_data")
+DEFAULT_DATA_DIR = Path("data/ml")
 DEFAULT_CHECKPOINT_PATH = Path("ml/checkpoints/vegetation_lstm.pt")
 
 

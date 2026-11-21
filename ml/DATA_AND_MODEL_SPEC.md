@@ -19,8 +19,8 @@ flowchart LR
     end
 
     subgraph KW ["Zespół KW (gleba i pogoda live)"]
-        SOIL["kw/soil_bonification.py<br/>-> fields_soil_profiles.parquet"]
-        METEO["kw/meteo.py<br/>-> open_meteo_poland_daily_*.parquet"]
+        SOIL["kw/soil.py<br/>-> data/soil/fields_soil_profiles.parquet"]
+        METEO["kw/meteo.py<br/>-> data/meteo/open_meteo_poland_daily_*.parquet"]
     end
 
     subgraph BAYER ["Archiwum Bayer + IMERG (2020-2025)"]
@@ -30,9 +30,9 @@ flowchart LR
 
     subgraph ML ["Warstwa ML (ml/)"]
         PREP["ml/prepare_dataset.py"]
-        FM["ml_data/fields_master.parquet"]
-        SI["ml_data/satellite_indices.parquet"]
-        WD["ml_data/weather_daily.parquet"]
+        FM["data/ml/fields_master.parquet"]
+        SI["data/ml/satellite_indices.parquet"]
+        WD["data/ml/weather_daily.parquet"]
         TRAIN["ml/train.py + VegetationLSTM<br/>-> ml/checkpoints/vegetation_lstm.pt"]
         PRED["ml/predict.py<br/>-> ndvi_by_date, ndmi_by_date"]
         PREP --> FM
@@ -50,7 +50,7 @@ flowchart LR
     BW --> PREP
     IM --> PREP
     METEO --> PRED
-    PRED --> CAL["kw/soil_bonification.py<br/>evaluate_field_calendar()"]
+    PRED --> CAL["kw/soil.py<br/>evaluate_field_calendar()"]
 ```
 
 ---
@@ -61,7 +61,7 @@ flowchart LR
 |---|---|
 | `ml/__init__.py` | Eksport głównych klas, konfiguracji i funkcji inferencji |
 | `ml/config.py` | Stałe (`HISTORY_DAYS=56`, `FORECAST_DAYS=7`), mapowanie kodów upraw CLMS (`1110`, `1130`, `1430`), definicje kolumn i indeksów skalowania, klasy `ModelConfig` i `TrainConfig` |
-| `ml/prepare_dataset.py` | Adaptery budujące trzy kanoniczne pliki Parquet w `ml_data/` z artefaktów zespołu (`bk/`, `satelite_img_downloader.ipynb`, `kw/`, Bayer+IMERG) oraz generator danych `--demo` |
+| `ml/prepare_dataset.py` | Adaptery budujące trzy kanoniczne pliki Parquet w `data/ml/` z artefaktów zespołu (`bk/`, `satelite_img_downloader.ipynb`, `kw/`, Bayer+IMERG) oraz generator danych `--demo` |
 | `ml/dataset.py` | `FeatureScaler` (czysty NumPy, dopasowywany wyłącznie na zbiorze treningowym), sklejanie osi dziennej (`build_field_daily_series`), `FieldTimeSeriesDataset` oraz `split_indices` (podział po polach lub czasie) |
 | `ml/model.py` | Sieć `VegetationLSTM` (Encoder–Decoder LSTM + kondycjonowanie statyczne + połączenie rezydualne) oraz zamaskowana funkcja straty `masked_smooth_l1_loss` i metryki MAE/RMSE |
 | `ml/train.py` | Pętla treningowa z AdamW, `ReduceLROnPlateau`, obcinaniem gradientów, wyborem urządzenia (`cuda`/`mps`/`cpu`) i zapisem samowystarczalnego checkpointu `.pt` |
@@ -70,12 +70,12 @@ flowchart LR
 
 ---
 
-## 3. Kontrakt danych wejściowych (`ml_data/`)
+## 3. Kontrakt danych wejściowych (`data/ml/`)
 
-Pipeline treningowy oczekuje trzech znormalizowanych tabel Parquet w katalogu `ml_data/` (tworzonych przez `ml/prepare_dataset.py`). Dzięki wspólnemu schematowi model trenuje się na archiwum **Bayer (2020–2025)**, a w produkcji na **2026 r.** korzysta bez zmian z prognoz **Open-Meteo** z `kw/meteo.py`.
+Pipeline treningowy oczekuje trzech znormalizowanych tabel Parquet w katalogu `data/ml/` (tworzonych przez `ml/prepare_dataset.py`). Dzięki wspólnemu schematowi model trenuje się na archiwum **Bayer (2020–2025)**, a w produkcji na **2026 r.** korzysta bez zmian z prognoz **Open-Meteo** z `kw/meteo.py`.
 
-### 3.1. `ml_data/fields_master.parquet` (cechy statyczne pól)
-Źródło: połączenie `bk/fields_crops.geojson` (`bk/assign_crops.py`) oraz `fields_soil_profiles.parquet` (`kw/soil_bonification.py`) po kluczu `field_id` (dla pól o `area_ha >= 3.0`).
+### 3.1. `data/ml/fields_master.parquet` (cechy statyczne pól)
+Źródło: połączenie `bk/fields_crops.geojson` (`bk/assign_crops.py`) oraz `data/soil/fields_soil_profiles.parquet` (`kw/soil.py`) po kluczu `field_id` (dla pól o `area_ha >= 3.0`).
 
 | Kolumna | Typ | Jednostka / wartości | Rola |
 |---|---|---|---|
@@ -90,13 +90,13 @@ Pipeline treningowy oczekuje trzech znormalizowanych tabel Parquet w katalogu `m
 | `om` | `float` | `%` | Materia organiczna |
 | `cec` | `float` | cmol(c)/kg | Pojemność wymiany kationów |
 | `bulk_density` | `float` | kg/dm³ | Gęstość objętościowa |
-| `wilting_point`, `field_capacity`, `awc_mm_per_m` | `float` | m³/m³ / mm/m | Parametry retencji Saxtona & Rawlsa (2006) z `kw/soil_bonification.py` |
+| `wilting_point`, `field_capacity`, `awc_mm_per_m` | `float` | m³/m³ / mm/m | Parametry retencji Saxtona & Rawlsa (2006) z `kw/soil.py` |
 | `band_ph`, `band_om`, `band_cec`, `permeability`, `water_retention`, `soil_variability`, `soilTexture` | `string` | metadane | Natywne pasma ISRIC SoilGrids oraz zmienność wewnętrzna i reguły agronomiczne |
 
 > [!TIP]
 > W `bk/fields_crops.geojson` część pól ma `crop_code = NaN` (np. klasy poza `ACCEPTED_CROPS` lub udział < 50%) oraz inne uprawy (np. `1120` jęczmień, `1320` burak). Domyślnie `build_fields_master(..., only_mvp_crops=False)` mapuje je na kategorię `"inne"`, dzięki czemu nie tracimy przykładów treningowych dla LSTM; ustawienie `only_mvp_crops=True` zawęża tabelę wyłącznie do pszenicy, kukurydzy i rzepaku.
 
-### 3.2. `ml_data/satellite_indices.parquet` (obserwacje Sentinel-2)
+### 3.2. `data/ml/satellite_indices.parquet` (obserwacje Sentinel-2)
 Źródło: GeoTIFF-y wygenerowane przez `satelite_img_downloader.ipynb` (`download_clip_sentinel`, pasma `NDVI`, `NDMI`, `dtype=float32`, `nodata=np.nan`; obsługiwane są też surowe pasma `red`, `nir`, `swir16`).
 
 | Kolumna | Typ | Zakres | Opis |
@@ -110,7 +110,7 @@ Pipeline treningowy oczekuje trzech znormalizowanych tabel Parquet w katalogu `m
 - Obserwacje z `valid_pixel_ratio < min_valid_ratio` (domyślnie `0.5`) są automatycznie odrzucane jako zbyt zachmurzone.
 - Funkcja `parse_date_from_filename` rozpoznaje daty `YYYY-MM-DD` (np. `wycinek_2024-06-24.tif`) i `YYYYMMDD` (np. `S2A_33UWU_20220624_0_L2A.tif`), lub można podać pary `(data, ścieżka)`.
 
-### 3.3. `ml_data/weather_daily.parquet` (dzienna pogoda na poziomie pola)
+### 3.3. `data/ml/weather_daily.parquet` (dzienna pogoda na poziomie pola)
 Źródła:
 - **Trening (2020–2025)**: `build_weather_table_from_bayer(...)` łączy po najbliższym `grid_id` tabele Bayera oraz (opcjonalnie/zastępczo) opady satelitarne NASA IMERG.
 - **Inferencja bieżąca (2026+)**: `build_weather_table_from_open_meteo(...)` lub bezpośrednio wynik `kw.meteo.get_weather_for_field(...)`.
@@ -172,7 +172,7 @@ Standaryzacja (`FeatureScaler`) jest zawsze dopasowywana **wyłącznie na oknach
 
 1. **Spójne granice pól (`bk/fields_crops.geojson` vs `kw/fields.geojson`):**
    - Obecnie `bk/fields_crops.geojson` zawiera **408 pól** w woj. mazowieckim (`lon ~20.70–20.95, lat ~52.58–52.68`), natomiast `kw/fields.geojson` zawiera **66 pól** w woj. lubuskim (`lon ~15.70–15.85, lat ~52.58–52.65`).
-   - Przed uruchomieniem `build_fields_master` należy przeliczyć `prepare_all_soil_profiles(geojson_path="bk/fields_crops.geojson", ...)` z `kw/soil_bonification.py` (moduł potrafi też sam wywołać `CropDetector` z `bk/assign_crops.py` przez `assign_crops_year`), aby `fields_soil_profiles.parquet` i `bk/fields_crops.geojson` miały **identyczne pola, uprawy i `field_id`**.
+   - Przed uruchomieniem `build_fields_master` należy przeliczyć `prepare_all_soil_profiles(geojson_path="bk/fields_crops.geojson", ...)` z `kw/soil.py` (moduł potrafi też sam wywołać `CropDetector` z `bk/assign_crops.py` przez `assign_crops_year`), aby `data/soil/fields_soil_profiles.parquet` i `bk/fields_crops.geojson` miały **identyczne pola, uprawy i `field_id`**.
 2. **Daty w nazwach plików z `satelite_img_downloader.ipynb`:**
    - W notatniku przykładowa ścieżka to `test/wycinek.tif` (bez daty w nazwie). Przy masowym pobieraniu scen historycznych do treningu warto zapisywać pliki np. jako `sentinel_2024-06-24.tif` albo przekazywać do `extract_satellite_indices_from_tiffs` jawną listę `[("2024-06-24", "sciezka.tif"), ...]`.
 3. **Inferencja live na listopad 2026 (`kw/meteo.py`):**
@@ -185,12 +185,12 @@ Standaryzacja (`FeatureScaler`) jest zawsze dopasowywana **wyłącznie na oknach
 ### A. Testowy trening na syntetycznych danych (`--demo`)
 ```bash
 .venv/bin/python -m ml.train --demo --epochs 5 --checkpoint ml/checkpoints/demo_lstm.pt
-.venv/bin/python -m ml.predict --checkpoint ml/checkpoints/demo_lstm.pt --data-dir ml_data/demo
+.venv/bin/python -m ml.predict --checkpoint ml/checkpoints/demo_lstm.pt --data-dir data/ml/demo
 ```
 
 ### B. Budowa prawdziwego zbioru treningowego (przykład w Pythonie)
 ```python
-from kw.soil_bonification import prepare_all_soil_profiles, load_field_profile, evaluate_field_calendar
+from kw.soil import prepare_all_soil_profiles, load_field_profile, evaluate_field_calendar
 from ml.prepare_dataset import (
     build_fields_master,
     extract_satellite_indices_from_tiffs,
@@ -202,42 +202,42 @@ from ml.predict import load_trained_model, predict_field_7days
 # 1. Profile glebowe dokładnie dla pól z bk/fields_crops.geojson
 prepare_all_soil_profiles(
     geojson_path="bk/fields_crops.geojson",
-    soil_dir="soil_data",
-    output_parquet="fields_soil_profiles.parquet",
-    output_json="fields_soil_profiles.json",
+    soil_dir="data/soil/raw",
+    output_parquet="data/soil/fields_soil_profiles.parquet",
+    output_json="data/soil/fields_soil_profiles.json",
 )
 
 # 2. Tabela pól + uprawy + gleba
 fields_master = build_fields_master(
     fields_crops_geojson="bk/fields_crops.geojson",
-    soil_profiles_parquet="fields_soil_profiles.parquet",
-    out_path="ml_data/fields_master.parquet",
+    soil_profiles_parquet="data/soil/fields_soil_profiles.parquet",
+    out_path="data/ml/fields_master.parquet",
 )
 
 # 3. Indeksy NDVI / NDMI z pobranych GeoTIFF-ów Sentinel-2
 sat_df = extract_satellite_indices_from_tiffs(
     fields_geojson="bk/fields_crops.geojson",
     tiff_inputs="sentinel_tiffs/",
-    out_path="ml_data/satellite_indices.parquet",
+    out_path="data/ml/satellite_indices.parquet",
 )
 
 # 4. Pogoda dzienna z archiwum Bayer + opady IMERG
 weather_df = build_weather_table_from_bayer(
-    fields_master_parquet="ml_data/fields_master.parquet",
+    fields_master_parquet="data/ml/fields_master.parquet",
     bayer_weather_parquets="weather_data/daily/2024/",
     weather_grids_parquet="weather_data/weather_grids.parquet",
     imerg_daily_parquet="weather_data/imerg_precipitation_daily.parquet",
-    out_path="ml_data/weather_daily.parquet",
+    out_path="data/ml/weather_daily.parquet",
 )
 
 # 5. Trening LSTM
-train_model(data_dir="ml_data", checkpoint_path="ml/checkpoints/vegetation_lstm.pt")
+train_model(data_dir="data/ml", checkpoint_path="ml/checkpoints/vegetation_lstm.pt")
 ```
 
-### C. Podłączenie predykcji do kalendarza z `kw/soil_bonification.py`
+### C. Podłączenie predykcji do kalendarza z `kw/soil.py`
 ```python
 model, scaler, m_cfg = load_trained_model("ml/checkpoints/vegetation_lstm.pt")
-soil = load_field_profile("field_0", "fields_soil_profiles.parquet")
+soil = load_field_profile("field_0", "data/soil/fields_soil_profiles.parquet")
 
 pred = predict_field_7days(
     model=model,
