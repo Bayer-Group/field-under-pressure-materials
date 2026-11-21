@@ -25,6 +25,7 @@ class Rules:
     model_version: str
     horizon_hours: int
     min_window_hours: int
+    rain_free_after_hours: int
     max_windows: int
     indicative_after_hours: int
     wind_max_ms: float
@@ -43,7 +44,7 @@ class Rules:
         s, lim = cfg["spray_window"], cfg["spray_window"]["limits"]
         return cls(
             model_version=s["model_version"], horizon_hours=s["horizon_hours"], min_window_hours=s["min_window_hours"],
-            max_windows=s["max_windows"], indicative_after_hours=s["indicative_after_hours"],
+            rain_free_after_hours=s["rain_free_after_hours"], max_windows=s["max_windows"], indicative_after_hours=s["indicative_after_hours"],
             wind_max_ms=lim["wind_max_ms"], gust_max_ms=lim["wind_max_ms"] + lim["gust_over_wind_max_ms"],
             temperature_min_c=lim["temperature_min_c"], temperature_max_c=lim["temperature_max_c"],
             precipitation_max_mm=lim["precipitation_max_mm"], confident_margin_ms=lim["confident_margin_ms"],
@@ -111,11 +112,14 @@ def _window(run: Sequence[dict], rules: Rules, now: datetime) -> dict:
     t_min, t_max = min(c["temperature_c"] for c in run), max(c["temperature_c"] for c in run)
     margin = round(rules.wind_max_ms - wind, 1)
     start, end = run[0]["time"], run[-1]["time"] + HOUR
+    latest_start = end - timedelta(hours=rules.rain_free_after_hours)   # so that the rain-free hours after the spray fit
+    open_end = end >= now + timedelta(hours=rules.horizon_hours)         # good weather goes on past the horizon
     confident = margin >= rules.confident_margin_ms
     indicative = start - now >= timedelta(hours=rules.indicative_after_hours)
     reason = (f"wind up to {wind:.1f} m/s (gusts {gust:.1f}), {t_min:.1f}-{t_max:.1f} °C, no rain for {len(run)} h, "
               f"margin below the wind limit {margin:.1f} m/s")
-    return {"start": start, "end": end, "hours": len(run), "wind_max_ms": round(wind, 1), "gust_max_ms": round(gust, 1),
+    return {"start": start, "end": end, "latest_start": latest_start, "open_end": open_end, "hours": len(run),
+            "wind_max_ms": round(wind, 1), "gust_max_ms": round(gust, 1),
             "temperature_min_c": round(t_min, 1), "temperature_max_c": round(t_max, 1), "wind_margin_ms": margin,
             "confidence": "confident" if confident else "borderline", "indicative": indicative, "reason": reason}
 
@@ -135,7 +139,7 @@ def signal(assessment: Optional[dict]) -> tuple[bool, str]:
     if assessment.get("conditions_met"):
         return True, "conditions_met"
     status = assessment.get("status")
-    if status in ("stage_unknown", "out_of_window", "insufficient_data", "protected"):
+    if status in ("stage_unknown", "out_of_window", "insufficient_data", "protected", "uncertain"):
         return False, status
     if assessment.get("risk_class") != "high":
         return False, "risk_not_high"
