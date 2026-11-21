@@ -359,13 +359,79 @@ export interface Carriers {
   agreement_text: string
 }
 
+const STATIC = import.meta.env.VITE_STATIC === '1'
+
+declare global {
+  interface Window {
+    __BAKED__?: Record<string, unknown>
+  }
+}
+
+// Static mode: data is pre-baked into data/<key>.js scripts (fetch of file:// is blocked).
+const bakedKey = (path: string) => path.replace(/\//g, '__').replace(/\?/g, '~').replace(/=/g, '-').replace(/&/g, '+')
+const bakedCache = new Map<string, Promise<unknown>>()
+
+function loadBaked(path: string): Promise<unknown> {
+  const key = bakedKey(path)
+  let p = bakedCache.get(key)
+  if (!p) {
+    p = new Promise((resolve, reject) => {
+      const fail = () => reject(new Error('Not available in the static demo'))
+      const tag = document.createElement('script')
+      tag.src = `data/${key}.js`
+      tag.async = true
+      tag.onload = () => {
+        const v = window.__BAKED__?.[path]
+        if (v === undefined) fail()
+        else resolve(v)
+        tag.remove()
+      }
+      tag.onerror = () => {
+        tag.remove()
+        fail()
+      }
+      document.head.appendChild(tag)
+    })
+    bakedCache.set(key, p)
+  }
+  return p
+}
+
 async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
+  if (STATIC) {
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+    const data = await loadBaked(path)
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+    return data as T
+  }
   const r = await fetch(`/api${path}`, { signal })
   if (!r.ok) {
     const detail = await r.json().then((b) => b.detail, () => null)
     throw new Error(typeof detail === 'string' ? detail : `Request failed (${r.status})`)
   }
   return r.json()
+}
+
+interface BakedGrid { s: number; w: number; n: number; e: number; width: number; height: number; codes: string }
+const gridBytes = new Map<string, Uint8Array>()
+let decodeTable: Promise<(number | null)[]> | null = null
+const mercY = (lat: number) => Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360))
+
+async function staticGreennessAt(mapId: string, lat: number, lon: number): Promise<{ ndvi: number | null }> {
+  const grid = (await loadBaked(`/greenness-maps/${encodeURIComponent(mapId)}/grid`)) as BakedGrid
+  decodeTable ??= (loadBaked('/ndvi-decode') as Promise<{ values: (number | null)[] }>).then((d) => d.values)
+  const values = await decodeTable
+  const { s, w, n, e, width, height } = grid
+  if (lat < s || lat > n || lon < w || lon > e) return { ndvi: null }
+  let bytes = gridBytes.get(mapId)
+  if (!bytes) {
+    bytes = Uint8Array.from(atob(grid.codes), (c) => c.charCodeAt(0))
+    gridBytes.set(mapId, bytes)
+  }
+  const col = Math.min(width - 1, Math.max(0, Math.floor(((lon - w) / (e - w)) * width)))
+  const row = Math.min(height - 1, Math.max(0, Math.floor(((mercY(n) - mercY(lat)) / (mercY(n) - mercY(s))) * height)))
+  const v = values[bytes[row * width + col]]
+  return { ndvi: v == null ? null : Math.round(v * 100) / 100 }
 }
 
 const id = encodeURIComponent
@@ -376,8 +442,8 @@ export const api = {
   plotEvents: (plotId: string, s?: AbortSignal) => get<EventSummary[]>(`/plots/${id(plotId)}/events`, s),
   aerial: (plotId: string, s?: AbortSignal) => get<AerialPhoto[]>(`/plots/${id(plotId)}/aerial`, s),
   greennessMaps: (plotId: string, s?: AbortSignal) => get<GreennessMap[]>(`/plots/${id(plotId)}/greenness-maps`, s),
-  greennessAt: (mapId: string, lat: number, lon: number) =>
-    get<{ ndvi: number | null }>(`/greenness-maps/${id(mapId)}/value?lat=${lat}&lon=${lon}`),
+  greennessAt: (mapId: string, lat: number, lon: number): Promise<{ ndvi: number | null }> =>
+    STATIC ? staticGreennessAt(mapId, lat, lon) : get<{ ndvi: number | null }>(`/greenness-maps/${id(mapId)}/value?lat=${lat}&lon=${lon}`),
   microbiome: (plotId: string, s?: AbortSignal) => get<MicrobiomeSample[]>(`/plots/${id(plotId)}/microbiome`, s),
   composition: (sampleId: string, rank: TaxonRank, s?: AbortSignal) =>
     get<Composition>(`/microbiome/${id(sampleId)}?rank=${rank}`, s),

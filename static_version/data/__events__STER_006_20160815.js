@@ -1,0 +1,1 @@
+window.__BAKED__=window.__BAKED__||{};window.__BAKED__["/events/STER_006_20160815"]={"event_id":"STER_006_20160815","date":"2016-08-15","plot_id":"STER_006","site":"STER","sampled":["Soil chemistry","Soil microbes (metagenome)"]};

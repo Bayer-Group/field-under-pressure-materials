@@ -50,6 +50,8 @@ button { font: inherit; color: inherit; }
 .brand:hover { color: var(--ink); }
 .tagline { color: var(--muted); font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
+.static-badge { margin-left: auto; flex: none; color: var(--muted); font-size: 0.75rem; border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; white-space: nowrap; }
+
 /* Wide screens: panel on the left, map filling the rest. Narrow: map on top, panel under it. */
 .explorer { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(520px, 46%) 1fr; }
 .explorer.has-plot { grid-template-columns: minmax(600px, 58%) 1fr; }

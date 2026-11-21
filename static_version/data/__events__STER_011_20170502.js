@@ -1,0 +1,1 @@
+window.__BAKED__=window.__BAKED__||{};window.__BAKED__["/events/STER_011_20170502"]={"event_id":"STER_011_20170502","date":"2017-05-02","plot_id":"STER_011","site":"STER","sampled":["Soil chemistry"]};
