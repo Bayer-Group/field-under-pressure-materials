@@ -148,6 +148,25 @@ Raw tables stay read-only; these tables are derived from them.
 `python scripts/build_curated.py weather` (connection string in `LOAD_DB_DSN`, like the loader) is repeatable: each run rewrites
 its range or year in one transaction. `t_mean` comes from `raw.weather_daily.avg_temperature`, which equals the mean of the hourly values.
 
+### Serving layer (schema `serve`)
+The only place the API, the farmer front end and QGIS read from ([`initdb/06_serve.sql`](initdb/06_serve.sql), migration
+[`migrations/004_serve.sql`](migrations/004_serve.sql)). Stored data keeps the time of the data (2024); the views add one demo shift
+to every date, so a reader sees "today" and needs no knowledge of it. Dates a farmer writes (sowing, spray) are translated back by the API.
+
+| View | One row = |
+| --- | --- |
+| `serve.crop_area` | crop area: geometry, owner, farmer crop, soil and crop-map context |
+| `serve.risk_daily` | crop area × day: class, status, `conditions_met`, growth stage, reasons |
+| `serve.crop_area_today` | crop area with the assessment of today (the map layer of a farmer) |
+| `serve.risk_change_log` | a change of class, status or `conditions_met` (from `curated.risk_change`) |
+| `serve.grid_risk_daily` | grid cell × day: 4 km square and class for the whole voivodeship (analysts) |
+| `serve.clock` | the current shift |
+
+The shift is one row, `serve.demo_time`: `pinned` (today shows the data day `pinned_data_date`; stable demo, default 2024-05-20) or
+`offset` (a constant `offset_days`; the data moves one day per day). Example, before a demo:
+`UPDATE serve.demo_time SET mode = 'pinned', pinned_data_date = '2024-05-20', updated_at = now();`
+`python scripts/build_curated.py cells` fills `curated.septoria_cell_day` after `weather`.
+
 ### `raw.ingest_log`: data provenance
 One row per loaded dataset/file: `dataset`, `source_file`, `source_year`, `row_count`, `time_shift`, `note`
 (`id` and `loaded_at` are filled automatically).

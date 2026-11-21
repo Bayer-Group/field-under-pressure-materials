@@ -19,6 +19,8 @@ from datetime import date
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from backend.app.domain import septoria  # noqa: E402
 
 HOURLY = """
 INSERT INTO curated.weather_hourly_features
@@ -113,9 +115,53 @@ def build_weather(con, cfg: dict, d0: date | None, d1: date | None, log=print) -
         log(f"{year}: daily features {n_daily:,} rows, resumption {n_res:,} cells, gdd updated {cur.rowcount:,} rows")
 
 
+def build_cells(con, rules, d0: date | None, d1: date | None, log=print) -> None:
+    """curated.septoria_cell_day: H and the class per grid cell and local day (the window of the last hour of the day), with
+    the same functions as the per-field assessment. Days with coverage below min_coverage are not written."""
+    from itertools import groupby
+    from datetime import timedelta
+    n, step = rules.window_hours, timedelta(hours=1)
+    cur = con.cursor()
+    cur.execute("SELECT min(date), max(date) FROM curated.weather_hourly_features")
+    h0, h1 = cur.fetchone()
+    d0, d1 = d0 or h0, d1 or h1
+    if h0 is None:
+        log("no hourly features: run `weather` first")
+        return
+    cur.execute("DELETE FROM curated.septoria_cell_day WHERE date BETWEEN %s AND %s", (d0, d1))
+    out = []                                                       # ~220k small rows: kept, then written with one COPY
+    with con.cursor(name="cell_stream") as src:                    # server-side cursor: the hourly rows are streamed
+        src.itersize = 20000
+        src.execute("SELECT grid_id, utc_time, date, is_wet FROM curated.weather_hourly_features "
+                    "WHERE date BETWEEN %s AND %s ORDER BY grid_id, utc_time", (d0 - timedelta(days=4), d1))
+        for grid_id, rows in groupby(src, key=lambda r: r[0]):
+            wet, last = {}, {}
+            for _, t, d, w in rows:
+                wet[t] = w
+                last[d] = t                                        # rows are ordered: the last hour of each local day
+            for day, end in last.items():
+                if not d0 <= day <= d1:
+                    continue
+                flags = [wet.get(end - step * i) for i in range(n - 1, -1, -1)]
+                cov = sum(f is not None for f in flags) / n
+                if cov < rules.min_coverage:
+                    continue
+                lo, hi = septoria.longest_run(flags, False), septoria.longest_run(flags, True)
+                c_lo, c_hi = septoria.classify(lo, rules), septoria.classify(hi, rules)
+                out.append((grid_id, day, lo, hi, cov, c_lo, c_lo != c_hi, rules.model_version))
+    with cur.copy("COPY curated.septoria_cell_day (grid_id, date, h_low, h_high, coverage, risk_class, uncertain, "
+                  "model_version) FROM STDIN") as cp:
+        for row in out:
+            cp.write_row(row)
+    log(f"septoria per cell and day {d0} .. {d1}: {len(out):,} rows")
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
+    c = sub.add_parser("cells", help="septoria H and class per grid cell and day (after `weather`)")
+    c.add_argument("--from", dest="d0", type=date.fromisoformat)
+    c.add_argument("--to", dest="d1", type=date.fromisoformat)
     w = sub.add_parser("weather", help="hourly and daily weather features and the vegetation resumption")
     w.add_argument("--from", dest="d0", type=date.fromisoformat, help="first local date of the hourly features")
     w.add_argument("--to", dest="d1", type=date.fromisoformat, help="last local date of the hourly features")
@@ -129,7 +175,11 @@ def main(argv=None) -> int:
     cfg = load_config(Path(a.config))
     with psycopg.connect(dsn) as con:          # one transaction: commits at the end, rolls back on an error
         con.execute("SET TIME ZONE 'UTC'")
-        build_weather(con, cfg, a.d0, a.d1)
+        if a.cmd == "weather":
+            build_weather(con, cfg, a.d0, a.d1)
+        else:
+            with open(a.config, "rb") as fh:
+                build_cells(con, septoria.Rules.from_config(tomllib.load(fh)), a.d0, a.d1)
     return 0
 
 
