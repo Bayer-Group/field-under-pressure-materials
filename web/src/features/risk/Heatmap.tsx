@@ -11,7 +11,7 @@ function tone(t: number): { background: string; color: string } {
   return { background: `color-mix(in srgb, ${hue} ${strength}%, transparent)`, color: strength > 55 ? '#fff' : 'var(--ink)' }
 }
 
-/** Plot x crop grid of risk indices. Shading is per crop column, or on one scale for every cell. */
+/** Plot x crop grid of risk indices. Shading is per plot row, or on one scale for every cell. */
 export function Heatmap({ rows, plotId, unit, selected, across, nUnits, onSelect }: {
   rows: CropRiskRow[]; plotId: string; unit: string; selected: Selection; across: boolean; nUnits: number
   onSelect: (s: Selection) => void
@@ -20,7 +20,9 @@ export function Heatmap({ rows, plotId, unit, selected, across, nUnits, onSelect
   const plots = [...new Set([plotId, ...rows.flatMap((r) => r.peers.map((p) => p.plot_id))])].sort()
   const range = (vs: number[]) => (vs.length ? [Math.min(...vs), Math.max(...vs)] : [0, 0])
   const all = range(values.flatMap((m) => [...m.values()]))
-  const ranges = values.map((m) => (across ? all : range([...m.values()])))
+  // One [lo, hi] per plot row: that plot's indices across the scored crops.
+  const ranges = new Map(plots.map((p) => [p, across ? all : range(
+    values.flatMap((m, i) => (rows[i].status === 'no_knowledge' ? [] : m.has(p) ? [m.get(p)!] : [])))]))
   const hidden = nUnits - plots.length
 
   return (
@@ -42,7 +44,7 @@ export function Heatmap({ rows, plotId, unit, selected, across, nUnits, onSelect
                 }
                 const rank = 1 + r.peers.filter((q) => q.risk_index > v).length
                 const text = `${p}, ${r.label}: ${v.toFixed(2)}, rank ${rank} of ${r.peers.length}`
-                const [lo, hi] = ranges[i]
+                const [lo, hi] = ranges.get(p)!
                 const on = selected.plot === p && selected.crop === r.crop
                 return (
                   <button key={r.crop} className={`heat-cell${on ? ' on' : ''}`} aria-label={text} title={text}

@@ -393,10 +393,6 @@ a.heat-row:hover { color: var(--ink); text-decoration-color: currentColor; }
 .heat-cell:hover { filter: brightness(0.94); }
 .heat-cell.on { outline: 2px solid var(--ink); outline-offset: -1px; }
 .heat-cell.none { color: var(--muted); font-size: 0.7rem; cursor: default; padding: 6px 2px; align-self: center; }
-.risk-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-top: 14px; }
-.risk-card { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: var(--radius); background: var(--surface-2); font-size: 0.78rem; color: var(--ink-2); }
-.risk-card b { font-size: 1.5rem; font-weight: 650; color: var(--ink); font-variant-numeric: tabular-nums; }
-.risk-card-h { font-weight: 600; color: var(--ink); }
 .risk-bar-row { display: flex; align-items: center; gap: 8px; }
 .risk-bar { flex: 1; min-width: 40px; height: 8px; }
 .risk-bar span { display: block; height: 100%; background: var(--green); border-radius: 2px; min-width: 1px; }

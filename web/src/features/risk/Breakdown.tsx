@@ -16,9 +16,6 @@ export function Breakdown({ plot, unit, crop }: { plot: string; unit: string; cr
   if (r.status !== 'ok' || r.risk_index === null) {
     return <p className="message">{plot}, {d.label}: {STATUS_LABEL[r.status as Exclude<typeof r.status, 'ok'>]}. Nothing to break down.</p>
   }
-  const total = r.risk_index || 1
-  const det = r.from_detected ?? 0
-  const notDet = r.from_not_detected ?? 0
   const key = `${plot}|${unit}|${crop}`
   const expanded = all === key
   const rows = expanded ? d.contributions : d.contributions.slice(0, 10)
@@ -27,23 +24,6 @@ export function Breakdown({ plot, unit, crop }: { plot: string; unit: string; cr
 
   return (
     <div className="risk-break">
-      <div className="risk-cards">
-        <div className="risk-card">
-          <span className="risk-card-h">{plot}, {d.label}</span>
-          <b>{r.risk_index.toFixed(2)}</b>
-          <span>Rank {r.rank} of {r.n_peers} plots for this crop</span>
-        </div>
-        <div className="risk-card">
-          <span className="risk-card-h">From fungi found in this plot</span>
-          <b>{det.toFixed(2)}</b>
-          <span>{Math.round((100 * det) / total)}% of the index</span>
-        </div>
-        <div className="risk-card">
-          <span className="risk-card-h">From fungi not found here</span>
-          <b>{notDet.toFixed(2)}</b>
-          <span>{Math.round((100 * notDet) / total)}% — counted at their mid-rank (usually 0.4–0.5)</span>
-        </div>
-      </div>
       <h2>Why: the plant-pathogenic fungi behind this score</h2>
       <p className="risk-note">
         Contribution = A × H. A: how this plot's share of the genus ranks among comparison samples (0–1). H: share of the
