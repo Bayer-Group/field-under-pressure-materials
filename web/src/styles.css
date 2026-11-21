@@ -77,3 +77,50 @@ h2 { font-size: 1rem; margin: 0; }
 .sub { color: var(--muted); margin: 4px 0 16px; }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
 .card ul { margin: 8px 0 0; padding-left: 20px; }
+
+/* plot panel tabs */
+.panel { max-height: 62vh; overflow-y: auto; }
+.panel-head .tabs { display: flex; gap: 4px; margin-right: auto; margin-left: 12px; }
+.panel-head .tabs a { padding: 4px 10px; border-radius: 999px; color: var(--muted); text-decoration: none; font-size: 0.9rem; }
+.panel-head .tabs a:hover { background: var(--bg); color: var(--ink); }
+.panel-head .tabs a[aria-current='page'] { background: var(--green); color: #fff; }
+
+/* soil microbiome */
+.microbiome .controls { display: flex; flex-wrap: wrap; gap: 8px 22px; margin: 4px 0 14px; }
+.choice { display: flex; flex-direction: column; gap: 4px; }
+.choice-label { font-size: 0.75rem; color: var(--muted); }
+.seg-buttons { display: flex; flex-wrap: wrap; gap: 4px; }
+.seg-buttons button {
+  font: inherit; font-size: 0.85rem; padding: 4px 10px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--surface); color: var(--ink); cursor: pointer;
+}
+.seg-buttons button:hover:not(:disabled) { border-color: var(--muted); }
+.seg-buttons button[aria-pressed='true'] { background: var(--ink); border-color: var(--ink); color: #fff; }
+.seg-buttons button:disabled { color: var(--line); cursor: default; }
+.seg-buttons .few { color: var(--visit); }
+.seg-buttons button[aria-pressed='true'] .few { color: #fdba74; }
+.notes { margin: 6px 0 10px; padding-left: 18px; font-size: 0.8rem; color: var(--muted); }
+.notes li.caution { color: #9a3412; font-weight: 600; }
+.notes li.caution::marker { content: '⚠ '; }
+
+.composition { margin-top: 6px; }
+.seg-bar { display: flex; gap: 2px; height: 28px; }
+.seg {
+  min-width: 0; flex: 0 1 0; border-radius: 4px; display: flex; align-items: center; padding-left: 6px;
+  font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; transition: opacity 0.1s;
+}
+.seg.dim { opacity: 0.45; }
+.comp-legend { margin: 8px 0 10px; }
+.comp-legend i { border-radius: 2px; }
+.comp-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+.comp-table th { text-align: left; font-weight: 500; color: var(--muted); font-size: 0.75rem; padding: 4px 6px; border-bottom: 1px solid var(--line); }
+.comp-table td { padding: 3px 6px; border-bottom: 1px solid var(--line); }
+.comp-table .num { text-align: right; }
+.comp-table .muted, .comp-table tr.rest td { color: var(--muted); }
+.comp-table tr.on td { background: var(--bg); }
+.comp-table .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 8px; vertical-align: -1px; }
+@media (max-width: 600px) {
+  .panel-head { flex-wrap: wrap; }
+  .panel-head .tabs { order: 3; margin-left: 0; width: 100%; }
+}
+.card .card-sub { margin-top: 14px; }

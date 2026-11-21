@@ -41,6 +41,40 @@ export interface GreennessMap {
   url: string
 }
 
+export type MicrobeKind = 'bacteria' | 'fungi'
+export type TaxonRank = 'phylum' | 'class' | 'genus'
+
+export interface MicrobiomeSample {
+  sample_id: string
+  kind: MicrobeKind
+  date: string
+  year: number
+  reads: number // reads the composition is computed from
+  n_cores: number
+  low_depth: boolean
+}
+
+export interface Taxon {
+  name: string
+  phylum: string | null // used for colour; the taxon itself at phylum rank
+  pct: number // 0-100, share of the group's reads
+  reads: number
+}
+
+export interface Composition {
+  sample_id: string
+  kind: MicrobeKind
+  plot_id: string
+  date: string
+  rank: TaxonRank
+  reads: number
+  n_taxa: number
+  taxa: Taxon[] // largest first
+  other_pct: number // named taxa beyond `taxa`
+  unassigned_pct: number // reads with no name at this rank
+  notes: string[]
+}
+
 async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
   const r = await fetch(`/api${path}`, { signal })
   if (!r.ok) {
@@ -60,5 +94,8 @@ export const api = {
   greennessMaps: (plotId: string, s?: AbortSignal) => get<GreennessMap[]>(`/plots/${id(plotId)}/greenness-maps`, s),
   greennessAt: (mapId: string, lat: number, lon: number) =>
     get<{ ndvi: number | null }>(`/greenness-maps/${id(mapId)}/value?lat=${lat}&lon=${lon}`),
+  microbiome: (plotId: string, s?: AbortSignal) => get<MicrobiomeSample[]>(`/plots/${id(plotId)}/microbiome`, s),
+  composition: (sampleId: string, rank: TaxonRank, s?: AbortSignal) =>
+    get<Composition>(`/microbiome/${id(sampleId)}?rank=${rank}&top=12`, s),
   event: (eventId: string, s?: AbortSignal) => get<EventDetail>(`/events/${id(eventId)}`, s),
 }

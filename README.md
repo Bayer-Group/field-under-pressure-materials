@@ -28,7 +28,7 @@ What data is available, what it is for and how to build on it: [`docs/data-overv
 
 ## GUI
 
-A small local web app for looking at the data: a map of the plots, and for each plot one timeline with its greenness over time, its sampling visits and its aerial photos. The timeline chooses what is laid over the map: an aerial photo, or the satellite greenness map (1 km around the plot) of any day. It runs on your machine only.
+A small local web app for looking at the data: a map of the plots, and for each plot one timeline with its greenness over time, its sampling visits and its aerial photos. The timeline chooses what is laid over the map: an aerial photo, or the satellite greenness map (1 km around the plot) of any day. A second tab, *Soil microbes*, shows what lives in the plot's soil for a chosen year and sampling day: bacteria and archaea (NMDC metagenomes) or fungi (NEON ITS), grouped by phylum, class or genus. It needs the tables from `scripts/02b_build_neon_features.py` and `scripts/05_build_biology.py`. It runs on your machine only.
 
 ```bash
 cd web && npm install && npm run build      # once, and after changing anything in web/
@@ -36,7 +36,7 @@ cd web && npm install && npm run build      # once, and after changing anything 
 .venv/bin/python scripts/12_gui.py          # then open http://127.0.0.1:8000
 ```
 
-- `src/cropfit/api.py`: the local JSON API over `data/processed/` (new backend results get a route here).
+- `src/cropfit/api.py`: the local JSON API over `data/processed/` (new backend results get a route here); `api_microbiome.py` holds the soil microbes routes (plot → samples, sample → composition by phylum, class or genus).
 - `web/src/api.ts`: the typed client; `web/src/features/<name>/`: one folder per part of the screen.
 - Frontend development: run `scripts/12_gui.py` and, in `web/`, `npm run dev` (it forwards `/api` to port 8000).
 

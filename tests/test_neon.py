@@ -79,3 +79,17 @@ def test_pooling_map(tmp_path):
     p = neon.pooling_map(tmp_path)
     assert list(p.soilSampleID) == ["KONA_003-M-10-30-20170807", "KONA_003-M-12-2.5-20170807"]
     assert set(p.genomicsSampleID) == {"KONA_003-M-20170807-COMP"}
+
+
+def test_its_genus_lineage_picks_dominant_lineage_and_keeps_fungi_only():
+    raw = pd.DataFrame([
+        dict(kingdom="Fungi", phylum="Ascomycota", **{"class": "Sordariomycetes"}, genus="Fusarium", individualCount=10),
+        dict(kingdom="Fungi", phylum="Basidiomycota", **{"class": "Agaricomycetes"}, genus="Fusarium", individualCount=1),
+        dict(kingdom="Fungi", phylum="Mortierellomycota", **{"class": "Mortierellomycetes"}, genus=" Mortierella ", individualCount=3),
+        dict(kingdom="Fungi", phylum="Ascomycota", **{"class": None}, genus=None, individualCount=5),
+        dict(kingdom="Protista", phylum="Oomycota", **{"class": "Oomycetes"}, genus="Pythium", individualCount=4),
+    ])
+    lin = neon.its_genus_lineage(raw).set_index("genus")
+    assert lin.loc["Fusarium", "phylum"] == "Ascomycota" and lin.loc["Fusarium", "class"] == "Sordariomycetes"
+    assert lin.loc["Mortierella", "phylum"] == "Mortierellomycota"
+    assert list(lin.index) == ["Fusarium", "Mortierella"]
