@@ -186,8 +186,8 @@ def main(argv=None) -> int:
                     sowing = date(2023, 9, 20) + timedelta(days=rnd.randint(0, 35))
                     cur.execute("INSERT INTO app.field (field_id, name, owner_id, data_status) VALUES (%s, %s, %s, 'mock')",
                                 (fid, f"Field {k + 1}", owner))
-                    cur.execute("INSERT INTO app.crop_area (crop_area_id, field_id, geom, farmer_crop_id, sowing_date) "
-                                "VALUES (%s, %s, ST_GeomFromEWKT(%s), %s, %s)", (cid, fid, ewkt, crop, sowing))
+                    cur.execute("INSERT INTO app.crop_area (crop_area_id, field_id, geom, farmer_crop_id, sowing_date, sprays_confirmed) "
+                                "VALUES (%s, %s, ST_GeomFromEWKT(%s), %s, %s, true)", (cid, fid, ewkt, crop, sowing))
                     cur.execute("INSERT INTO app.field_parcel (field_id, parcel_id) VALUES (%s, %s)", (fid, pid))
                     rows = refresh_crop_map(cur, cid)           # keep the place only if the crop map is dominated by the crop expected there
                     dominant = min(rows, key=lambda x: (-x[1], x[0]))[0] if rows else None
