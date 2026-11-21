@@ -52,19 +52,22 @@ def read_season(raw: Path, year: int, voiv: str, first: date, last: date):
     if not ip:
         raise FileNotFoundError(f"no IMERG hourly file for {year}")
     p = pq.read_table(ip[0], columns=["grid_id", "utc_time", "precipitation"])
-    cells = np.array(sorted(set(w["grid_id"].to_pylist())))
+    cells = np.array(sorted(pc.unique(w["grid_id"]).to_pylist()))
+    cells_arr = pa.array(cells)
     utc = w["utc_time"].cast(pa.int64()).to_numpy()
     hours = np.unique(utc)
-    ci = np.searchsorted(cells, np.array(w["grid_id"].to_pylist()))
+    ci = pc.index_in(w["grid_id"], value_set=cells_arr).to_numpy(zero_copy_only=False)
     ti = np.searchsorted(hours, utc)
     rh = np.full((len(cells), len(hours)), np.nan, dtype=np.float32)
     rh[ci, ti] = w["relative_humidity"].to_numpy(zero_copy_only=False).astype(np.float32)
     pr = np.zeros((len(cells), len(hours)), dtype=np.float32)
-    pci = np.searchsorted(cells, np.array(p["grid_id"].to_pylist()))
-    ok = (pci < len(cells)) & (cells[np.minimum(pci, len(cells) - 1)] == np.array(p["grid_id"].to_pylist()))
-    pti = np.searchsorted(hours, p["utc_time"].cast(pa.int64()).to_numpy())
-    ok &= (pti < len(hours)) & (hours[np.minimum(pti, len(hours) - 1)] == p["utc_time"].cast(pa.int64()).to_numpy())
-    pr[pci[ok], pti[ok]] = p["precipitation"].to_numpy(zero_copy_only=False).astype(np.float32)[ok]
+    p_utc = p["utc_time"].cast(pa.int64())
+    p = p.filter(pc.and_(pc.greater_equal(p_utc, int(hours[0])), pc.less_equal(p_utc, int(hours[-1]))))
+    pci = pc.index_in(p["grid_id"], value_set=cells_arr).to_numpy(zero_copy_only=False)
+    p_utc = p["utc_time"].cast(pa.int64()).to_numpy()
+    pti = np.searchsorted(hours, p_utc)
+    ok = ~np.isnan(pci.astype(float)) & (hours[np.minimum(pti, len(hours) - 1)] == p_utc)
+    pr[pci[ok].astype(int), pti[ok]] = p["precipitation"].to_numpy(zero_copy_only=False).astype(np.float32)[ok]
     # local clock (the same for every cell) from the first cell
     first_cell = w["grid_id"].to_pylist()[0]
     sel = pc.equal(w["grid_id"], pa.scalar(first_cell))
