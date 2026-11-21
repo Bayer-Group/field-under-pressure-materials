@@ -1,1 +1,1 @@
-"""Field Under Pressure backend."""
+"""S.A.G.E. (Smart Agricultural Guidance Engine) backend."""
