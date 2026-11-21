@@ -170,4 +170,3 @@ def download_clip_sentinel_ndvi_ndmi(
 if __name__ == "__main__":
     boundary_file = Path("test/fields.geojson")
     download_clip_sentinel_ndvi_ndmi(boundary_file=boundary_file, start_date="2022-03-01", end_date="2022-06-30", out_dir="test/ndvi", n_scenes=1)
-

@@ -1,0 +1,16 @@
+if run_zones:
+        try:
+            from ndvi_kmeans import process_fields_ndvi_kmeans
+        except ImportError as exc:
+            print(f"[UWAGA] Pomijam klasteryzację stref K-Means (brak zależności: {exc}).")
+        else:
+            zones_dir = ROOT / "data/zones"
+            #soil_h3_path = ROOT / "data/soil/field_soil_h3_cells.parquet"
+            zones_gdf = process_fields_ndvi_kmeans(
+                boundary_file=fields_crops_geojson,
+                ndvi_dir=sat_dir,
+                out_dir=zones_dir,
+                model_path=zones_dir / "ndvi_kmeans_model.joblib",
+                #soil_source=soil_h3_path if soil_h3_path.exists() else None,
+                min_area_ha=min_area_ha,
+            )
