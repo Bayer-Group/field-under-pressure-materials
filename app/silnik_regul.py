@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Optional
 import pandas as pd
 
-DATA_DIR = Path(__file__).parent / "data"
+DATA_DIR = Path(__file__).parent / "data_app"
 
 SOWING_ALIASES = {"ZASIEJ", "SIEJ", "ZASADŹ"}
 
