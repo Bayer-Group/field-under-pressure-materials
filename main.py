@@ -24,6 +24,7 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 
+from dbseed import seed
 from env_config import (
     VOIVODESHIP_BAYER_NAMES,
     detect_voivodeships_for_bbox,
@@ -846,6 +847,7 @@ def main(argv: list[str] | None = None) -> None:
         print(f"  - Granice pól:      data/fields/{tag}_fields.geojson")
         print(f"  - Uprawy CLMS:      data/fields/{tag}_fields_crops.geojson")
         print(f"  - Gleba ({soil_mode_preview}):    data/soil/fields_soil_profiles.parquet (+ H3 + SQL)")
+        print(f"  - Baza PostGIS:     public.fields + field_profile ({tag})")
         print(f"  - Satelita S2:      data/satellite/{tag}_{args.start_date}_to_{args.end_date}/ -> data/ml/satellite_indices.parquet")
         print(f"  - Zbiór ML:         data/ml/{{fields_master,satellite_indices,weather_daily}}.parquet")
         return
@@ -880,6 +882,9 @@ def main(argv: list[str] | None = None) -> None:
         env_path=args.env_file,
         force=args.force,
     )
+
+    print("\n--- BAZA: dbseed ---")
+    seed(tag)
 
     print("\n--- [6/6] BUDOWA fields_master.parquet ---")
     fields_master_path = DEFAULT_ML_DIR / "fields_master.parquet"

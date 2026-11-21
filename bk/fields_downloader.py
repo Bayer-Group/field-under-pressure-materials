@@ -100,7 +100,7 @@ class FieldsDownloader:
         return paths
 
     def _clip(self, paths: list[Path]) -> gpd.GeoDataFrame:
-        """DuckDB czyta parquet i zwraca tylko poligony ucięte do bbox."""
+        """DuckDB czyta lokalny parquet i zwraca tylko poligony ucięte do bbox."""
         min_lon, min_lat, max_lon, max_lat = self.bbox
         con = duckdb.connect()
         con.execute("INSTALL spatial; LOAD spatial;")

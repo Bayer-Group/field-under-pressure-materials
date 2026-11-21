@@ -34,5 +34,6 @@ segmentation-models-pytorch
 geopandas>=1.0
 shapely>=2.0
 scipy
+psycopg2-binary>=2.9
 scikit-learn
 joblib

@@ -6,6 +6,7 @@ Jedyna publiczna funkcja: sendTelegramAlert.
 Cron o północy jest w main.py (--telegram-cron) i woła sendTelegramAlert(top=3).
 
 Jednorazowa konfiguracja (zmienne środowiskowe lub .env):
+  PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD — połączenie PostgreSQL
   TELEGRAM_BOT_TOKEN  — token z @BotFather
   TELEGRAM_CHAT_ID    — chat_id (sendTelegramAlert(get_chat_id=True) wypisze go po wiadomości do bota)
   HC_LIZMAP_URL       — opcjonalny publiczny adres Lizmapa
@@ -13,15 +14,17 @@ Jednorazowa konfiguracja (zmienne środowiskowe lub .env):
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import psycopg2
 import requests
 
+from env_config import load_env_file
+
 __all__ = ["sendTelegramAlert"]
 
-_DEFAULT_DSN = "host=localhost port=8093 dbname=geoai user=postgres password=postgres"
-_LIZMAP_BASE = os.environ.get("HC_LIZMAP_URL", "http://localhost:8090").rstrip("/")
-_LIZMAP_URL = f"{_LIZMAP_BASE}/index.php/view/map?repository=holycrop&project=satops_project"
+_ENV_FILE = Path(__file__).resolve().parent / ".env"
+_PG_KEYS = ("PGHOST", "PGPORT", "PGDATABASE", "PGUSER", "PGPASSWORD")
 _FERT_LABELS = {
     "saletra_amonowa": "Saletra amonowa",
     "mocznik_inhibitor": "Mocznik z inhibitorem",
@@ -30,6 +33,30 @@ _FERT_LABELS = {
 }
 _STATUS_ICON = {"ZIELONY": "🟢", "ZOLTY": "🟡", "CZERWONY": "🔴"}
 _WEEKDAYS = ["pon", "wt", "śr", "czw", "pt", "sob", "nd"]
+
+
+def _load_env() -> None:
+    load_env_file(_ENV_FILE)
+
+
+def _lizmap_url() -> str:
+    base = os.environ.get("HC_LIZMAP_URL", "http://localhost:8090").rstrip("/") or "http://localhost:8090"
+    return f"{base}/index.php/view/map?repository=holycrop&project=satops_project"
+
+
+def _connect(dsn: str | None):
+    if dsn:
+        return psycopg2.connect(dsn)
+    missing = [key for key in _PG_KEYS if not os.environ.get(key)]
+    if missing:
+        raise SystemExit(f"Brak w .env: {', '.join(missing)}")
+    return psycopg2.connect(
+        host=os.environ["PGHOST"],
+        port=os.environ["PGPORT"],
+        dbname=os.environ["PGDATABASE"],
+        user=os.environ["PGUSER"],
+        password=os.environ["PGPASSWORD"],
+    )
 
 
 def _api(token: str, method: str, **params) -> dict:
@@ -90,7 +117,7 @@ def _compose(cur, field_id: int, fertilizer: str) -> str | None:
         lines += ["", "💧 Uwaga: wysokie ryzyko niedoboru wody w strefie korzeniowej."]
     ext = _field_extent(cur, field_id)
     if ext:
-        lines += ["", f'<a href="{_LIZMAP_URL}&bbox={",".join(f"{v:.0f}" for v in ext)}&crs=EPSG:3857">Otwórz pole na mapie</a>']
+        lines += ["", f'<a href="{_lizmap_url()}&bbox={",".join(f"{v:.0f}" for v in ext)}&crs=EPSG:3857">Otwórz pole na mapie</a>']
     return "\n".join(lines)
 
 
@@ -109,7 +136,7 @@ def sendTelegramAlert(
     field_ids: list[int] | None = None,
     top: int = 0,
     fertilizer: str = "saletra_amonowa",
-    dsn: str = _DEFAULT_DSN,
+    dsn: str | None = None,
     dry_run: bool = False,
     get_chat_id: bool = False,
 ) -> None:
@@ -121,6 +148,7 @@ def sendTelegramAlert(
     if fertilizer not in _FERT_LABELS:
         raise ValueError(f"Nieznany nawóz: {fertilizer}. Dozwolone: {', '.join(_FERT_LABELS)}")
 
+    _load_env()
     token = os.environ.get("TELEGRAM_BOT_TOKEN")
     if get_chat_id:
         if not token:
@@ -131,7 +159,7 @@ def sendTelegramAlert(
             print(f"chat_id={chat.get('id')}  ({chat.get('first_name', '')} {chat.get('username', '')})")
         return
 
-    with psycopg2.connect(dsn) as conn, conn.cursor() as cur:
+    with _connect(dsn) as conn, conn.cursor() as cur:
         ids = list(field_ids or [])
         if top > 0:
             ids.extend(_top_fields(cur, top, fertilizer))
