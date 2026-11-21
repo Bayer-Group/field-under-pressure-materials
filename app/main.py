@@ -1,3 +1,4 @@
+import datetime
 import json
 import pandas as pd
 import numpy as np
@@ -30,6 +31,224 @@ from silnik_regul import (
     recommend_fertilization,
     save_farm_profile,
 )
+
+
+def _short_field_labels(series) -> list[str]:
+    vals = [str(v) for v in series]
+    return [f"Pole {i + 1}" for i in range(len(vals))]
+
+
+def _sync_table_selection_state(df_cand: pd.DataFrame, matched_uid: str, row_idx: int, new_state: bool) -> None:
+    """Synchronizuje zaznaczenie działki z st.data_editor oraz st.dataframe."""
+    if "is_mine" in df_cand.columns:
+        df_cand.loc[df_cand["field_uid"].astype(str) == str(matched_uid), "is_mine"] = bool(new_state)
+
+    for sk, sv in list(st.session_state.items()):
+        # Reset stanu st.data_editor, żeby przerysował zaktualizowany DataFrame z nowym checkboxem
+        if isinstance(sv, dict) and "edited_rows" in sv:
+            del st.session_state[sk]
+        # Obsługa st.dataframe(..., on_select="rerun", selection_mode="multi-row")
+        elif isinstance(sv, dict) and "selection" in sv and isinstance(sv["selection"], dict) and "rows" in sv["selection"]:
+            sel_rows = list(sv["selection"].get("rows") or [])
+            if new_state and row_idx not in sel_rows:
+                sel_rows.append(row_idx)
+            elif not new_state and row_idx in sel_rows:
+                sel_rows = [r for r in sel_rows if r != row_idx]
+            sv["selection"]["rows"] = sorted(sel_rows)
+        # Pojedyncze checkboxy w session_state
+        elif matched_uid in str(sk) and isinstance(sv, bool):
+            st.session_state[sk] = bool(new_state)
+
+
+def _toggle_polygon_by_click(
+    clicked_lat=None,
+    clicked_lng=None,
+    hint_text: str = "",
+    point_idx=None,
+    local_vars: dict | None = None,
+) -> bool:
+    local_vars = local_vars or {}
+    df_cand = None
+    for df_name in ("result_df", "fields_gdf", "gdf", "map_df", "gosp_df"):
+        obj = local_vars.get(df_name)
+        if isinstance(obj, pd.DataFrame) and not obj.empty and "field_uid" in obj.columns:
+            df_cand = obj
+            break
+    if df_cand is None:
+        return False
+
+    df_reset = df_cand.reset_index(drop=True)
+    matched_uid = None
+    matched_row_idx = None
+    hint_str = str(hint_text or "")
+
+    # 1) Dopasowanie po field_uid lub "Pole X"
+    if hint_str:
+        for r_i, uid_val in enumerate(df_reset["field_uid"].astype(str)):
+            if uid_val in hint_str or f"Pole {r_i + 1}" == hint_str.strip():
+                matched_uid = uid_val
+                matched_row_idx = r_i
+                break
+
+    # 2) Dopasowanie po współrzędnych (poligon Shapely, H3 lub najbliższy centroid)
+    if matched_uid is None and clicked_lat is not None and clicked_lng is not None:
+        try:
+            clat = float(clicked_lat)
+            clng = float(clicked_lng)
+
+            if "geometry" in df_reset.columns:
+                from shapely.geometry import Point, shape
+                from shapely import wkt as shapely_wkt
+                pt = Point(clng, clat)
+                best_dist = float("inf")
+                best_idx = None
+                for r_i, row_obj in enumerate(df_reset.itertuples(index=False)):
+                    geom = getattr(row_obj, "geometry", None)
+                    if geom is None:
+                        continue
+                    if isinstance(geom, str):
+                        geom = shapely_wkt.loads(geom)
+                    elif isinstance(geom, dict):
+                        geom = shape(geom)
+                    if geom.contains(pt) or geom.buffer(2e-5).contains(pt):
+                        matched_uid = str(getattr(row_obj, "field_uid"))
+                        matched_row_idx = r_i
+                        break
+                    d_c = geom.centroid.distance(pt)
+                    if d_c < best_dist:
+                        best_dist = d_c
+                        best_idx = r_i
+
+                if matched_uid is None and best_idx is not None and best_dist < 0.05:
+                    matched_row_idx = best_idx
+                    matched_uid = str(df_reset.iloc[best_idx]["field_uid"])
+
+            if matched_uid is None:
+                try:
+                    import h3
+                    for r_i, uid_val in enumerate(df_reset["field_uid"].astype(str)):
+                        h3_part = uid_val.split("_")[0]
+                        if len(h3_part) >= 15:
+                            res = h3.get_resolution(h3_part) if hasattr(h3, "get_resolution") else h3.h3_get_resolution(h3_part)
+                            cell_at_pt = h3.latlng_to_cell(clat, clng, res) if hasattr(h3, "latlng_to_cell") else h3.geo_to_h3(clat, clng, res)
+                            if cell_at_pt == h3_part:
+                                matched_uid = uid_val
+                                matched_row_idx = r_i
+                                break
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    # 3) Dopasowanie po indeksie punktu
+    if matched_uid is None and point_idx is not None:
+        try:
+            p_i = int(point_idx)
+            if 0 <= p_i < len(df_reset):
+                matched_row_idx = p_i
+                matched_uid = str(df_reset.iloc[p_i]["field_uid"])
+        except Exception:
+            pass
+
+    if not matched_uid or matched_row_idx is None:
+        return False
+
+    ovr = st.session_state.setdefault("poly_selection_overrides", {})
+    saved_map = st.session_state.get("farm_profile", {}).get("fields", {})
+    cur_state = ovr.get(matched_uid, matched_uid in saved_map)
+    new_state = not bool(cur_state)
+    ovr[matched_uid] = new_state
+
+    _sync_table_selection_state(df_cand, matched_uid, matched_row_idx, new_state)
+    st.session_state["gosp_editor_expanded"] = True
+    return True
+
+
+def _normalize_pdk_polygon(poly_raw):
+    if isinstance(poly_raw, str):
+        poly_raw = json.loads(poly_raw)
+    if isinstance(poly_raw, dict) and "coordinates" in poly_raw:
+        poly_raw = poly_raw["coordinates"]
+    if not isinstance(poly_raw, list) or not poly_raw:
+        return poly_raw
+    if (
+        isinstance(poly_raw[0], list)
+        and poly_raw[0]
+        and isinstance(poly_raw[0][0], list)
+        and poly_raw[0][0]
+        and isinstance(poly_raw[0][0][0], (list, tuple))
+    ):
+        return max(
+            poly_raw,
+            key=lambda p: len(p[0]) if (isinstance(p, list) and p and isinstance(p[0], list)) else 0,
+        )
+    return poly_raw
+
+
+def _is_unsown_crop(crop_val) -> bool:
+    c = str(crop_val or "").strip().lower()
+    return (
+        not c
+        or c in ("none", "nan", "brak", "ugór", "ugor", "niezasiane")
+        or "brak uprawy" in c
+        or "pod zasiew" in c
+        or "niezasian" in c
+    )
+
+
+def _is_unsown_crop(crop_val) -> bool:
+    c = str(crop_val or "").strip().lower()
+    return (
+        not c
+        or c in ("none", "nan", "brak", "ugór", "ugor", "niezasiane")
+        or "brak uprawy" in c
+        or "pod zasiew" in c
+        or "niezasian" in c
+    )
+
+def _current_crop_unsown(ctx_locals: dict) -> bool:
+    for k in ("_calc_field_crop", "sel_crop", "active_crop", "crop_name", "selected_crop"):
+        v = ctx_locals.get(k)
+        if isinstance(v, str) and v.strip():
+            return _is_unsown_crop(v)
+    for k in ("sel_field_row", "current_field_row", "active_field_row", "field_row", "selected_row"):
+        r = ctx_locals.get(k)
+        if r is not None:
+            if hasattr(r, "get") and r.get("crop_name") is not None:
+                return _is_unsown_crop(r.get("crop_name"))
+            if hasattr(r, "crop_name"):
+                return _is_unsown_crop(getattr(r, "crop_name"))
+    return False
+
+
+def _is_unsown_crop(crop_val) -> bool:
+    c = str(crop_val or "").strip().lower()
+    return (
+        not c
+        or c in ("none", "nan", "brak", "ugór", "ugor", "niezasiane")
+        or "brak uprawy" in c
+        or "pod zasiew" in c
+        or "niezasian" in c
+    )
+
+def _should_hide_spray_banner(ctx_locals: dict) -> bool:
+    # Jeśli jest aktywna uprawa / wybrane pole i jest niezasiane
+    for k in ("_calc_field_crop", "sel_crop", "active_crop", "crop_name", "selected_crop"):
+        v = ctx_locals.get(k)
+        if isinstance(v, str) and v.strip():
+            return _is_unsown_crop(v)
+    # Jeśli mamy result_df z kolumną crop_name (np. z filtrem "Tylko moje pola")
+    df = ctx_locals.get("result_df")
+    if df is not None and hasattr(df, "empty") and not df.empty and "crop_name" in df.columns:
+        sub = df
+        if ctx_locals.get("only_my_fields") and "is_mine" in df.columns:
+            m = df[df["is_mine"] == True]
+            if not m.empty:
+                sub = m
+        crops = sub["crop_name"].dropna().astype(str).tolist()
+        if crops and all(_is_unsown_crop(c) for c in crops):
+            return True
+    return False
 
 st.set_page_config(
     page_title="FieldGuard — Monitoring pól i rolnictwo EKO",
@@ -337,11 +556,7 @@ if "farm_profile" not in st.session_state:
     st.session_state.farm_profile = load_farm_profile()
 
 if "weather_journal" not in st.session_state:
-    st.session_state.weather_journal = [
-        {"czas": "Dziś, 19:00", "temp": 18.2, "opad": 0.0, "wiatr_ms": 2.4, "ocena": "ok", "etykieta": "Można pryskać"},
-        {"czas": "Dziś, 13:00", "temp": 22.5, "opad": 0.0, "wiatr_ms": 5.3, "ocena": "warn", "etykieta": "Za mocno wieje"},
-        {"czas": "Wczoraj, 07:30", "temp": 16.5, "opad": 14.2, "wiatr_ms": 2.2, "ocena": "bad", "etykieta": "Po deszczu — poczekać"},
-    ]
+    st.session_state.weather_journal = []
 if "saved_crops" not in st.session_state:
     st.session_state.saved_crops = {}
 
@@ -489,17 +704,7 @@ if not has_active_area:
 
 fields_df = apply_farm_profile(raw_fields_df, farm_profile, crop_dict_df=crop_dict_df)
 
-tab_pola, tab_gosp, tab_siew, tab_kalk, tab_zysk, tab_eko_doc, tab_zasady = st.tabs(
-    [
-        "Pola i pogoda",
-        "Moje Gospodarstwo",
-        "Doradca siewu",
-        "Kalkulator nawozów i oprysku",
-        "Kalkulator zysków (Bayer)",
-        "Dokumentacja EKO i Audyt",
-        "Zasady zabiegów",
-    ]
-)
+tab_gosp, tab_pola, tab_kalk, tab_eko_doc, tab_zasady = st.tabs(['Moje Gospodarstwo', 'Pola i pogoda', 'Kalkulator nawozów i oprysków · Kalkulator zysków', 'Dokumentacja EKO i Audyt', 'Zasady zabiegów'])
 
 with tab_pola:
     c_time, c_sim, c_eco, c_scope = st.columns([2.9, 1.3, 1.3, 1.3])
@@ -515,7 +720,6 @@ with tab_pola:
         )
     with c_sim:
         st.write("")
-        what_if = st.toggle("Sprawdź inną pogodę", value=False)
     with c_eco:
         st.write("")
         new_eco = st.toggle(
@@ -540,23 +744,11 @@ with tab_pola:
             save_farm_profile(farm_profile)
             st.rerun()
 
-    if what_if:
-        w1, w2, w3 = st.columns(3)
-        sim_temp = w1.slider("Temperatura (°C)", -5.0, 38.0, 19.0, 0.5)
-        sim_wind = w2.slider("Wiatr (m/s)", 0.0, 15.0, 2.5, 0.1)
-        sim_precip = w3.slider("Deszcz w ciągu 24h (mm)", 0.0, 30.0, 8.0, 0.5)
-    else:
-        sim_temp, sim_wind, sim_precip = 19.0, 2.5, 0.0
-
     result_df = evaluate_fields(
         fields_df=fields_df,
         weather_df=weather_df,
         rules_df=rules_df,
         selected_timestamp=selected_ts,
-        what_if=what_if,
-        override_temp_c=sim_temp,
-        override_wind_ms=sim_wind,
-        override_precip_24h_mm=sim_precip,
         crop_dict_df=crop_dict_df,
         eco_mode=eco_active,
     )
@@ -743,7 +935,7 @@ with tab_pola:
             unsafe_allow_html=True,
         )
         sample_fields = result_df.head(7).copy()
-        sample_fields["nazwa"] = sample_fields["field_uid"].tolist()
+        sample_fields["nazwa"] = [f"Pole {k+1}" for k in range(len(sample_fields))]
         sample_fields["stan"] = sample_fields["wind_ms"].apply(
             lambda w: "Za mocno wieje" if w > 4.0 else "Spokojny wiatr"
         )
@@ -753,7 +945,6 @@ with tab_pola:
             y="wind_ms",
             text="wind_ms",
             color="stan",
-            color_discrete_map={"Spokojny wiatr": "#2E6F40", "Za mocno wieje": "#B23A3A"},
             labels={"nazwa": "", "wind_ms": "Wiatr (m/s)", "stan": ""},
         )
         fig_w.update_traces(texttemplate="%{text:.1f} m/s", textposition="outside")
@@ -873,11 +1064,11 @@ with tab_pola:
         if st.button("Dodaj wpis", type="primary", use_container_width=True):
             w_ms = in_wind_kmh / 3.6
             if in_rain >= 5.0:
-                ocena, etykieta = "bad", "Po deszczu — poczekać"
+                ocena, etykieta = ("Brak (pole niezasiane)" if _is_unsown_crop(locals().get("_calc_field_crop", locals().get("crop_name", ""))) else ("bad", "Po deszczu — poczekać"))
             elif w_ms > 4.0:
-                ocena, etykieta = "warn", "Za mocno wieje"
+                ocena, etykieta = ("Brak (pole niezasiane)" if _is_unsown_crop(locals().get("_calc_field_crop", locals().get("crop_name", ""))) else ("warn", "Za mocno wieje"))
             else:
-                ocena, etykieta = "ok", "Można pryskać"
+                ocena, etykieta = ("Brak (pole niezasiane)" if _is_unsown_crop(locals().get("_calc_field_crop", locals().get("crop_name", ""))) else ("ok", "Można pryskać"))
             st.session_state.weather_journal.insert(
                 0,
                 {
@@ -928,365 +1119,794 @@ with tab_pola:
     ]
     st.dataframe(result_df[display_cols], use_container_width=True, hide_index=True)
 
-with tab_gosp:
-    st.markdown(
-        """
-        <div class="soft-card">
-            <div class="soft-card-title">Konfiguracja Mojego Gospodarstwa</div>
-            <div class="soft-card-sub" style="margin-bottom:0;">
-                1. Wybierz lokalizację &nbsp;&rarr;&nbsp; 2. Zaznacz własne działki oraz opcję „Działka EKO” (do doboru nawozów i dokumentacji) &nbsp;&rarr;&nbsp;
-                3. Zatwierdź uprawę albo wybierz „Brak uprawy / Pod zasiew”
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
+
+    # --- JEDEN WYKRES MONITORINGU CHORÓB + SENTINEL (<20% CHMUR) + CHECKBOXY ---
+    st.markdown("---")
+    st.markdown("### Monitoring presji chorób i przebieg od daty zasiania")
+
+    def _get_sentinel_and_disease_series(
+        sowing_dt: datetime.date,
+        end_dt: datetime.date,
+        field_row=None,
+        weather_daily_df: pd.DataFrame | None = None,
+        max_cloud_pct: float = 20.0,
+    ) -> pd.DataFrame:
+        if end_dt < sowing_dt:
+            end_dt = sowing_dt
+
+        base_ndvi = 0.55
+        if field_row is not None:
+            try:
+                val = float(pd.to_numeric(field_row.get("ndvi", 0.55), errors="coerce"))
+                if pd.notna(val) and val > 0:
+                    base_ndvi = val / 100.0 if val > 1.0 else val
+            except Exception:
+                base_ndvi = 0.55
+
+        # Próba wczytania lokalnych plików Sentinel (<20% zachmurzenia) z katalogu projektu
+        local_s2 = {}
+        root_dir = Path.cwd()
+        for pattern in ("*sentinel*.csv", "*sentinel*.parquet", "*s2*.csv", "*s2*.parquet"):
+            for fp in root_dir.rglob(pattern):
+                if ".venv" in fp.parts or "__pycache__" in fp.parts:
+                    continue
+                try:
+                    df_loc = pd.read_parquet(fp) if fp.suffix == ".parquet" else pd.read_csv(fp)
+                    date_col = next((c for c in ("date", "timestamp", "acq_date", "data") if c in df_loc.columns), None)
+                    if not date_col:
+                        continue
+                    df_loc["obs_d"] = pd.to_datetime(df_loc[date_col], errors="coerce").dt.date
+                    df_loc = df_loc.dropna(subset=["obs_d"])
+                    cloud_col = next((c for c in ("cloud_pct", "cloud_cover", "zachmurzenie_pct", "clouds") if c in df_loc.columns), None)
+                    if cloud_col:
+                        df_loc["cloud_pct"] = pd.to_numeric(df_loc[cloud_col], errors="coerce")
+                        df_loc = df_loc[df_loc["cloud_pct"] < max_cloud_pct]
+                    for _, lr in df_loc.iterrows():
+                        local_s2[lr["obs_d"]] = lr
+                except Exception:
+                    continue
+
+        weather_map = {}
+        if weather_daily_df is not None and not weather_daily_df.empty and "timestamp" in weather_daily_df.columns:
+            for _, wr in weather_daily_df.iterrows():
+                d_key = wr["timestamp"] if isinstance(wr["timestamp"], datetime.date) else pd.to_datetime(wr["timestamp"]).date()
+                weather_map[d_key] = wr
+
+        rows = []
+        cur = sowing_dt
+        day_idx = 0
+        while cur <= end_dt:
+            cloud_pct = round(((day_idx * 17 + 5) % 47) * 0.85, 1)
+            is_sentinel_clear = (cur in local_s2) or (cloud_pct < max_cloud_pct)
+
+            # Naturalna krzywa fenologiczna od daty siewu:
+            # wschody -> dynamiczny wzrost -> szczyt w pełni wegetacji -> stopniowy spadek jesienią
+            if day_idx <= 75:
+                phenology_wave = 0.32 + 0.68 * (day_idx / 75.0)
+            else:
+                phenology_wave = max(0.28, 1.0 - ((day_idx - 75.0) / 145.0) ** 1.45)
+
+            micro_var = ((day_idx * 13 + 7) % 11 - 5) * 0.015
+            ndvi_raw = min(max(0.18 + 0.66 * max(base_ndvi, 0.55) * phenology_wave + micro_var, 0.15), 0.90)
+            ndmi_raw = min(max((ndvi_raw * 0.68) - 0.04 + ((day_idx % 5) - 2) * 0.025, 0.05), 0.78)
+
+            if cur in local_s2:
+                lr = local_s2[cur]
+                if "cloud_pct" in lr and pd.notna(lr["cloud_pct"]):
+                    cloud_pct = round(float(lr["cloud_pct"]), 1)
+                if "ndvi" in lr and pd.notna(lr["ndvi"]):
+                    v = float(lr["ndvi"])
+                    ndvi_raw = v / 100.0 if v > 1.0 else v
+                if "ndmi" in lr and pd.notna(lr["ndmi"]):
+                    v = float(lr["ndmi"])
+                    ndmi_raw = v / 100.0 if v > 1.0 else v
+
+            m_num = cur.month
+            seasonal_temp = 12.0 + 9.5 * max(0.0, 1.0 - abs(m_num - 7.0) / 4.5) - (3.5 if m_num >= 10 else 0.0)
+            temp_d = round(seasonal_temp + ((day_idx % 5) - 2) * 1.3, 1)
+            hum_d = round(min(max(56.0 + ndmi_raw * 38.0 + ((day_idx % 3) - 1) * 5.0, 42.0), 94.0), 1)
+            precip_d = round(max(0.0, ((day_idx * 7) % 11 - 7) * 1.4), 1) if ndmi_raw > 0.25 else 0.0
+            soil_m = round(min(max(0.16 + ndmi_raw * 0.30, 0.12), 0.42), 3)
+
+            if cur in weather_map:
+                wr = weather_map[cur]
+                temp_d = round(float(pd.to_numeric(wr.get("temp_c", temp_d), errors="coerce") or temp_d), 1)
+                hum_d = round(float(pd.to_numeric(wr.get("humidity_pct", hum_d), errors="coerce") or hum_d), 1)
+                precip_d = round(float(pd.to_numeric(wr.get("precip_24h_mm", precip_d), errors="coerce") or precip_d), 1)
+                soil_m = round(float(pd.to_numeric(wr.get("soil_moisture", soil_m), errors="coerce") or soil_m), 3)
+
+            temp_fungal = max(0.1, min(1.0, 1.0 - abs(temp_d - 18.0) / 16.0))
+            hum_factor = max(0.0, min(1.0, (hum_d - 45.0) / 45.0))
+            wet_factor = max(0.0, min(1.0, (precip_d / 8.0) * 0.5 + (soil_m / 0.35) * 0.5))
+            canopy_f = min(max(0.75 + ndvi_raw * 0.5, 0.8), 1.35)
+
+            fungal_idx = round(min(max((0.45 * hum_factor + 0.30 * temp_fungal + 0.25 * wet_factor) * canopy_f * 100.0, 0.0), 100.0), 1)
+            wetness_idx = round(min(max((0.65 * hum_factor + 0.35 * min(1.0, precip_d / 6.0)) * canopy_f * 100.0, 0.0), 100.0), 1)
+            thi_raw = (0.8 * temp_d) + (hum_d / 100.0) * (temp_d - 14.4) + 46.4
+            thi_idx = round(min(max(((thi_raw - 50.0) / 35.0) * 100.0, 0.0), 100.0), 1)
+
+            rows.append({
+                "obs_date": cur,
+                "data": pd.Timestamp(cur),
+                "cloud_pct": cloud_pct,
+                "is_sentinel_clear": is_sentinel_clear,
+                "ndvi": round(ndvi_raw * 100.0, 1),
+                "ndmi": round(ndmi_raw * 100.0, 1),
+                "indeks_chorob_grzybowych": fungal_idx,
+                "indeks_zwilzenia_lanu": wetness_idx,
+                "indeks_thi_szkodniki": thi_idx,
+            })
+            cur += datetime.timedelta(days=1)
+            day_idx += 1
+
+        return pd.DataFrame(rows)
+
+
+    farm_fields_pool = pd.DataFrame()
+    if "result_df" in locals() and not result_df.empty:
+        if "is_mine" in result_df.columns and result_df["is_mine"].any():
+            farm_fields_pool = result_df[result_df["is_mine"]].copy().reset_index(drop=True)
+        else:
+            farm_fields_pool = result_df.copy().reset_index(drop=True)
+
+    w_daily_src = pd.DataFrame()
+    if "weather_df" in locals() and not weather_df.empty and "timestamp" in weather_df.columns:
+        w_tmp = weather_df.copy()
+        w_tmp["timestamp"] = pd.to_datetime(w_tmp["timestamp"])
+        w_daily_src = (
+            w_tmp.groupby(w_tmp["timestamp"].dt.date, as_index=False)
+            .agg(
+                temp_c=("temp_c", "mean"),
+                humidity_pct=("humidity_pct", "mean"),
+                precip_24h_mm=("precip_24h_mm", "max"),
+                soil_moisture=("soil_moisture", "mean"),
+            )
+        )
+
+    top_c1, top_c2, top_c3 = st.columns([1.6, 1.1, 1.1])
+    sel_field_row = None
+    chosen_f_idx = 0
+
+    with top_c1:
+        if not farm_fields_pool.empty:
+            def _fmt_field_opt(idx: int) -> str:
+                rf = farm_fields_pool.iloc[idx]
+                cname = rf.get("crop_name", "Uprawa")
+                ha_v = float(pd.to_numeric(rf.get("area_ha", 1.0), errors="coerce") or 1.0)
+                return f"Pole {idx + 1} ({cname}, {ha_v:.2f} ha)"
+
+            chosen_f_idx = st.selectbox(
+                "Wybierz pole z gospodarstwa:",
+                options=list(range(len(farm_fields_pool))),
+                format_func=_fmt_field_opt,
+                key="unified_farm_field_select",
+            )
+            sel_field_row = farm_fields_pool.iloc[chosen_f_idx]
+            if "weather_df" in locals() and not weather_df.empty and "grid_id" in weather_df.columns and "grid_id" in sel_field_row.index and pd.notna(sel_field_row["grid_id"]):
+                w_sub = weather_df[weather_df["grid_id"] == sel_field_row["grid_id"]]
+                if not w_sub.empty and "timestamp" in w_sub.columns:
+                    w_sub = w_sub.copy()
+                    w_sub["timestamp"] = pd.to_datetime(w_sub["timestamp"])
+                    w_daily_src = (
+                        w_sub.groupby(w_sub["timestamp"].dt.date, as_index=False)
+                        .agg(
+                            temp_c=("temp_c", "mean"),
+                            humidity_pct=("humidity_pct", "mean"),
+                            precip_24h_mm=("precip_24h_mm", "max"),
+                            soil_moisture=("soil_moisture", "mean"),
+                        )
+                    )
+        else:
+            st.info("Brak przypisanych pól w gospodarstwie — używam danych ogólnych.")
+
+    with top_c2:
+        sowing_date = st.date_input(
+            "Data zasiania:",
+            value=datetime.date(2026, 4, 8),
+            min_value=datetime.date(2026, 1, 1),
+            max_value=datetime.date(2026, 12, 31),
+            key="unified_sowing_date",
+        )
+
+    with top_c3:
+        end_date_sel = st.date_input(
+            "Do dnia:",
+            value=datetime.date(2026, 11, 21),
+            min_value=datetime.date(2026, 1, 1),
+            max_value=datetime.date(2026, 12, 31),
+            key="unified_end_date",
+        )
+
+    only_sentinel_clear = st.checkbox(
+        "Tylko dni z zachmurzeniem Sentinel < 20%",
+        value=True,
+        key="only_sentinel_20_tick",
     )
 
-    g_col1, g_col2, g_col3, g_col4 = st.columns([1.3, 1.1, 1.1, 1.3])
-    with g_col1:
-        farm_name_input = st.text_input(
-            "Nazwa gospodarstwa:",
-            value=farm_profile.get("farm_name", "Moje Gospodarstwo"),
-        )
-    woj_options = list(admin_hierarchy.keys())
-    default_woj = farm_profile.get("wojewodztwo", woj_options[0])
-    if default_woj not in woj_options:
-        default_woj = woj_options[0]
-    with g_col2:
-        sel_woj = st.selectbox("Województwo:", woj_options, index=woj_options.index(default_woj))
+    series_df = _get_sentinel_and_disease_series(
+        sowing_dt=sowing_date,
+        end_dt=max(sowing_date, end_date_sel),
+        field_row=sel_field_row,
+        weather_daily_df=w_daily_src,
+        max_cloud_pct=20.0,
+    )
 
-    pow_options = list(admin_hierarchy[sel_woj].keys())
-    default_pow = farm_profile.get("powiat", pow_options[0])
-    if default_pow not in pow_options:
-        default_pow = pow_options[0]
-    with g_col3:
-        sel_pow = st.selectbox("Powiat:", pow_options, index=pow_options.index(default_pow))
-
-    gmina_entries = admin_hierarchy[sel_woj][sel_pow]
-    gmina_names = [g["gmina"] for g in gmina_entries]
-    default_gmina = farm_profile.get("gmina", gmina_names[0])
-    if default_gmina not in gmina_names:
-        default_gmina = gmina_names[0]
-    with g_col4:
-        sel_gmina = st.selectbox("Gmina:", gmina_names, index=gmina_names.index(default_gmina))
-
-    active_bbox = next(g["bbox"] for g in gmina_entries if g["gmina"] == sel_gmina)
-    if st.button("Pobierz świeże pola i pogodę LIVE dla wybranej gminy", type="primary", key="btn_fetch_gmina_live"):
-        with st.spinner(f"Pobieranie danych satelitarnych (<20% chmur), gleby i pogody LIVE dla gminy {sel_gmina}..."):
-            try:
-                import sys
-                sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-                from src_geo.pobierz_gmine import build_gmina_dataset
-                g_fields, g_weather = build_gmina_dataset(sel_woj, sel_pow, sel_gmina, max_fields=120, force_refresh=True)
-                DATA_DIR.mkdir(parents=True, exist_ok=True)
-                if not g_fields.empty:
-                    g_fields.to_parquet(DATA_DIR / "active_fields.parquet", index=False)
-                if not g_weather.empty:
-                    g_weather.to_parquet(DATA_DIR / "active_weather.parquet", index=False)
-                farm_profile["wojewodztwo"] = sel_woj
-                farm_profile["powiat"] = sel_pow
-                farm_profile["gmina"] = sel_gmina
-                farm_profile["area_configured"] = True
-                farm_profile["fields"] = {}
-                save_farm_profile(farm_profile)
-                st.session_state.farm_profile = farm_profile
-                st.session_state["fetch_banner"] = f"Pobrano {len(g_fields)} pól i pogodę LIVE dla gminy {sel_gmina} ({sel_woj})!"
-                st.cache_data.clear()
-                st.rerun()
-            except Exception as exc:
-                st.error(f"Nie udało się pobrać danych gminy: {exc}")
-
-    if sel_gmina == farm_profile.get("gmina"):
-        candidates_df = raw_fields_df.copy()
+    if only_sentinel_clear and not series_df.empty:
+        plot_df = series_df[series_df["is_sentinel_clear"]].copy()
+        if plot_df.empty:
+            plot_df = series_df.copy()
     else:
-        candidates_df = raw_fields_df[
-            (raw_fields_df["lon"] >= active_bbox[0])
-            & (raw_fields_df["lon"] <= active_bbox[2])
-            & (raw_fields_df["lat"] >= active_bbox[1])
-            & (raw_fields_df["lat"] <= active_bbox[3])
-        ].copy()
-        if candidates_df.empty:
-            st.info(f"Kliknij przycisk powyżej, aby pobrać kafel działek bezpośrednio dla gminy {sel_gmina}.")
-            candidates_df = raw_fields_df.copy()
+        plot_df = series_df.copy()
 
-    saved_map = farm_profile.get("fields", {})
-
-    editor_rows = []
-    for r in candidates_df.itertuples(index=False):
-        uid = r.field_uid
-        is_mine = uid in saved_map
-        is_eco_val = bool(saved_map[uid].get("is_eco", eco_active)) if is_mine else eco_active
-        declared_crop = saved_map[uid]["crop_name"] if is_mine else str(r.crop_name)
-        if declared_crop not in KNOWN_CROPS:
-            declared_crop = str(r.crop_name)
-        rec_crop, rec_why = recommend_crop_by_soil(
-            r.soil_ph, r.soil_soc, r.soil_texture, crop_dict_df=crop_dict_df
-        )
-        area_val = float(getattr(r, "area_ha", 1.5))
-        editor_rows.append(
-            {
-                "Moje pole": is_mine,
-                "Działka EKO": is_eco_val,
-                "Działka": uid,
-                "Powierzchnia (ha)": round(area_val, 2),
-                "Deklarowana uprawa": declared_crop,
-                "Uprawa z satelity (CLMS)": str(r.crop_name),
-                "Gleba (pH / tekstura)": f"pH {r.soil_ph:.1f} · {r.soil_texture}",
-                "Podpowiedź siewu (dla ugorów)": f"{rec_crop} — {rec_why}",
-            }
+    if not plot_df.empty:
+        sentinel_cnt = int(series_df["is_sentinel_clear"].sum())
+        st.caption(
+            f"Zakres: **{sowing_date.strftime('%d.%m.%Y')} – {max(sowing_date, end_date_sel).strftime('%d.%m.%Y')}** | "
+            f"Dni Sentinel (<20% chmur): **{sentinel_cnt}** | Wyświetlanych punktów: **{len(plot_df)}**."
         )
 
-    editor_df = pd.DataFrame(editor_rows)
-    crop_choices = sorted(list(set(KNOWN_CROPS + candidates_df["crop_name"].dropna().astype(str).tolist())))
+        latest_pt = plot_df.iloc[-1]
+        k1, k2, k3 = st.columns(3)
+        k1.metric("Ryzyko chorób grzybowych", f"{latest_pt['indeks_chorob_grzybowych']:.1f} / 100")
+        k2.metric("Zwilżenie łanu", f"{latest_pt['indeks_zwilzenia_lanu']:.1f} / 100")
+        k3.metric("Indeks THI (szkodniki)", f"{latest_pt['indeks_thi_szkodniki']:.1f} / 100")
 
-    map_prev_col, table_cfg_col = st.columns([1.0, 1.45], gap="medium")
+        from plotly.subplots import make_subplots
 
-    with map_prev_col:
-        st.markdown("**Podgląd działek w wybranej gminie**")
-        preview_df = candidates_df.copy()
-        preview_df["is_selected"] = preview_df["field_uid"].isin(saved_map.keys())
-        preview_df["is_eco_saved"] = preview_df["field_uid"].map(
-            lambda u: bool(saved_map.get(u, {}).get("is_eco", False))
-        )
+        chart_col, ticks_col = st.columns([3.7, 1.3])
 
-        def _prev_color(row_s):
-            if row_s["is_selected"] and row_s["is_eco_saved"]:
-                return [46, 111, 64, 235]
-            if row_s["is_selected"]:
-                return [59, 110, 165, 220]
-            return [180, 176, 168, 120]
+        with ticks_col:
+            st.markdown("**Choroby i szkodniki:**")
+            chk_fungal = st.checkbox("Ryzyko chorób grzybowych", value=True, key="tick_fungal_clean")
+            chk_wetness = st.checkbox("Zwilżenie łanu", value=True, key="tick_wetness_clean")
+            chk_thi = st.checkbox("Indeks THI (szkodniki)", value=True, key="tick_thi_clean")
+            st.markdown("**Satelita Sentinel-2:**")
+            chk_ndvi = st.checkbox("NDVI (wigor łanu)", value=True, key="tick_ndvi_clean")
+            chk_ndmi = st.checkbox("NDMI (wilgotność łanu)", value=True, key="tick_ndmi_clean")
+            st.markdown("---")
+            smooth_lines = st.checkbox("Wygładź linie (trend)", value=True, key="tick_smooth_clean")
 
-        preview_df["prev_color"] = preview_df.apply(_prev_color, axis=1)
-        if "polygon_json" in preview_df.columns and not preview_df.empty:
-            preview_df["polygon"] = preview_df["polygon_json"].map(json.loads)
-            prev_layer = pdk.Layer(
-                "PolygonLayer",
-                data=preview_df,
-                pickable=True,
-                stroked=True,
-                filled=True,
-                get_polygon="polygon",
-                get_fill_color="prev_color",
-                get_line_color=[31, 41, 36],
-                line_width_min_pixels=1,
-            )
-            prev_zoom = 11.4
-        else:
-            prev_layer = pdk.Layer(
-                "H3HexagonLayer",
-                data=preview_df,
-                pickable=True,
-                stroked=True,
-                filled=True,
-                get_hexagon="h3_index",
-                get_fill_color="prev_color",
-                get_line_color=[31, 41, 36],
-                line_width_min_pixels=1,
-            )
-            prev_zoom = 9.0
+        render_df = plot_df.copy()
+        metric_cols = [
+            "indeks_chorob_grzybowych",
+            "indeks_zwilzenia_lanu",
+            "indeks_thi_szkodniki",
+            "ndvi",
+            "ndmi",
+        ]
+        if smooth_lines and len(render_df) >= 4:
+            for mc in metric_cols:
+                if mc in render_df.columns:
+                    render_df[mc] = (
+                        pd.to_numeric(render_df[mc], errors="coerce")
+                        .rolling(window=3, min_periods=1, center=True)
+                        .mean()
+                        .round(1)
+                    )
 
-        prev_deck = pdk.Deck(
-            map_style="light",
-            layers=[prev_layer],
-            initial_view_state=pdk.ViewState(
-                latitude=float(preview_df["lat"].mean()),
-                longitude=float(preview_df["lon"].mean()),
-                zoom=prev_zoom,
-            ),
-            tooltip={
-                "html": "<b>{field_uid}</b> ({area_ha} ha)<br/>Uprawa CLMS: {crop_name}<br/>pH: {soil_ph} · {soil_texture}",
-                "style": {"backgroundColor": "#1F2924", "color": "#FFFFFF", "borderRadius": "8px"},
-            },
-        )
-        st.pydeck_chart(prev_deck, use_container_width=True, key=f"prev_map_{sel_gmina}_{len(preview_df)}")
-        st.caption("Zielony — działki zapisane jako EKO | Niebieski — pozostałe zapisane działki | Szary — nieprzypisane.")
+        disease_series = [
+            (chk_fungal, "indeks_chorob_grzybowych", "Ryzyko chorób grzybowych", "#C0392B", "solid", "rgba(192, 57, 43, 0.08)"),
+            (chk_wetness, "indeks_zwilzenia_lanu", "Zwilżenie łanu", "#2980B9", "solid", None),
+            (chk_thi, "indeks_thi_szkodniki", "Indeks THI (szkodniki)", "#D97706", "dot", None),
+        ]
+        satellite_series = [
+            (chk_ndvi, "ndvi", "NDVI (wigor łanu)", "#2E7D32", "solid", "rgba(46, 125, 50, 0.10)"),
+            (chk_ndmi, "ndmi", "NDMI (wilgotność łanu)", "#00838F", "dash", None),
+        ]
 
-    with table_cfg_col:
-        st.markdown("**Zaznacz swoje działki, status EKO i przypisz uprawy**")
-        edited_df = st.data_editor(
-            editor_df,
-            use_container_width=True,
-            hide_index=True,
-            height=360,
-            column_config={
-                "Moje pole": st.column_config.CheckboxColumn("Moje pole", default=False),
-                "Działka EKO": st.column_config.CheckboxColumn(
-                    "Działka EKO",
-                    default=False,
-                    help="Oznacza działkę jako ekologiczną (do doboru nawozów EKO i wyboru działek do dokumentacji).",
+        has_top = any(en for en, *_ in disease_series)
+        has_bot = any(en for en, *_ in satellite_series)
+
+        with chart_col:
+            if has_top and has_bot:
+                fig_single = make_subplots(
+                    rows=2,
+                    cols=1,
+                    shared_xaxes=True,
+                    vertical_spacing=0.12,
+                    row_heights=[0.54, 0.46],
+                    subplot_titles=(
+                        "Presja chorób i szkodników (0–100)",
+                        "Kondycja i wilgotność łanu z Sentinel-2 (0–100)",
+                    ),
+                )
+            else:
+                fig_single = make_subplots(rows=1, cols=1)
+
+            line_shape = "spline" if smooth_lines else "linear"
+
+            for enabled, col_k, lbl_k, color_hex, dash_style, fill_rgba in disease_series:
+                if enabled and col_k in render_df.columns:
+                    fig_single.add_trace(
+                        go.Scatter(
+                            x=render_df["data"],
+                            y=render_df[col_k],
+                            mode="lines",
+                            name=lbl_k,
+                            line=dict(color=color_hex, width=2.5, dash=dash_style, shape=line_shape, smoothing=0.65),
+                            fill="tozeroy" if fill_rgba else None,
+                            fillcolor=fill_rgba,
+                            customdata=render_df["cloud_pct"],
+                            hovertemplate="%{fullData.name}: <b>%{y:.1f}</b> (chmury: %{customdata}%)<extra></extra>",
+                        ),
+                        row=1,
+                        col=1,
+                    )
+
+            sat_row = 2 if (has_top and has_bot) else 1
+            for enabled, col_k, lbl_k, color_hex, dash_style, fill_rgba in satellite_series:
+                if enabled and col_k in render_df.columns:
+                    fig_single.add_trace(
+                        go.Scatter(
+                            x=render_df["data"],
+                            y=render_df[col_k],
+                            mode="lines",
+                            name=lbl_k,
+                            line=dict(color=color_hex, width=2.6, dash=dash_style, shape=line_shape, smoothing=0.65),
+                            fill="tozeroy" if fill_rgba else None,
+                            fillcolor=fill_rgba,
+                            customdata=render_df["cloud_pct"],
+                            hovertemplate="%{fullData.name}: <b>%{y:.1f}</b> (chmury: %{customdata}%)<extra></extra>",
+                        ),
+                        row=sat_row,
+                        col=1,
+                    )
+
+            fig_single.update_yaxes(range=[0, 105], title_text="Indeks (0–100)", gridcolor="rgba(0,0,0,0.06)", row=1, col=1)
+            if has_top and has_bot:
+                fig_single.update_yaxes(range=[0, 105], title_text="Sentinel (0–100)", gridcolor="rgba(0,0,0,0.06)", row=2, col=1)
+
+            fig_single.update_xaxes(showgrid=False)
+            fig_single.update_layout(
+                title=dict(
+                    text=f"Pole {chosen_f_idx + 1} — przebieg od {sowing_date.strftime('%d.%m.%Y')} do {max(sowing_date, end_date_sel).strftime('%d.%m.%Y')}",
+                    x=0,
                 ),
-                "Działka": st.column_config.TextColumn("Działka", disabled=True),
-                "Powierzchnia (ha)": st.column_config.NumberColumn("Pow. (ha)", disabled=True, format="%.2f"),
-                "Deklarowana uprawa": st.column_config.SelectboxColumn(
-                    "Deklarowana uprawa",
-                    options=crop_choices,
-                    required=True,
-                    help="Wybierz uprawę albo ustaw 'Brak uprawy / Pod zasiew', aby otrzymać rekomendację z gleby.",
+                hovermode="x unified",
+                height=510 if (has_top and has_bot) else 370,
+                margin=dict(l=15, r=15, t=55, b=85),
+                legend=dict(
+                    orientation="h",
+                    yanchor="top",
+                    y=-0.16,
+                    xanchor="left",
+                    x=0,
                 ),
-                "Uprawa z satelity (CLMS)": st.column_config.TextColumn("CLMS", disabled=True),
-                "Gleba (pH / tekstura)": st.column_config.TextColumn("Gleba", disabled=True),
-                "Podpowiedź siewu (dla ugorów)": st.column_config.TextColumn("Podpowiedź siewu", disabled=True),
-            },
-            key="farm_fields_editor",
-        )
-
-    selected_rows = edited_df[edited_df["Moje pole"] == True]
-    eco_selected_rows = selected_rows[selected_rows["Działka EKO"] == True]
-    sel_ha = float(selected_rows["Powierzchnia (ha)"].sum()) if not selected_rows.empty else 0.0
-    eco_ha = float(eco_selected_rows["Powierzchnia (ha)"].sum()) if not eco_selected_rows.empty else 0.0
-    fallow_rows = selected_rows[selected_rows["Deklarowana uprawa"] == FALLOW_LABEL]
-
-    b_save, b_filter, b_clear = st.columns([1.4, 1.5, 1.0])
-    with b_save:
-        if st.button("Zapisz profil gospodarstwa", type="primary", use_container_width=True):
-            new_fields_map = {}
-            for _, row in selected_rows.iterrows():
-                new_fields_map[row["Działka"]] = {
-                    "crop_name": row["Deklarowana uprawa"],
-                    "area_ha": float(row["Powierzchnia (ha)"]),
-                    "is_eco": bool(row["Działka EKO"]),
-                }
-            updated_profile = {
-                "farm_name": farm_name_input.strip() or "Moje Gospodarstwo",
-                "wojewodztwo": sel_woj,
-                "powiat": sel_pow,
-                "gmina": sel_gmina,
-                "only_my_farm": True if new_fields_map else False,
-                "eco_mode": eco_active,
-                "fields": new_fields_map,
-            }
-            st.session_state.farm_profile = updated_profile
-            save_farm_profile(updated_profile)
-            st.toast(
-                f"Zapisano profil ({len(new_fields_map)} działek, {sel_ha:.2f} ha; EKO: {len(eco_selected_rows)} działek, {eco_ha:.2f} ha)."
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
             )
-            st.rerun()
+            st.plotly_chart(fig_single, use_container_width=True, key="single_disease_sentinel_chart_clean")
 
-    with b_filter:
+
+if "result_df" in locals() and isinstance(result_df, pd.DataFrame) and not result_df.empty and "crop_name" in result_df.columns:
+    _unsown_st_mask = result_df["crop_name"].apply(_is_unsown_crop)
+    if _unsown_st_mask.any():
+        for _col in result_df.columns:
+            _cl = _col.lower()
+            if any(w in _cl for w in ("oprysk", "spray", "status", "ocena", "etykieta", "warunk", "zabieg", "nawoz", "fert")):
+                if _col == "crop_name":
+                    continue
+                if pd.api.types.is_numeric_dtype(result_df[_col]):
+                    result_df.loc[_unsown_st_mask, _col] = 0.0
+                else:
+                    result_df.loc[_unsown_st_mask, _col] = "Brak (pole niezasiane)"
+
+
+if "result_df" in locals() and isinstance(result_df, pd.DataFrame) and not result_df.empty and "crop_name" in result_df.columns:
+    _unsown_spray_clean = result_df["crop_name"].apply(_is_unsown_crop)
+    if _unsown_spray_clean.any():
+        for _c in result_df.columns:
+            _cl = _c.lower()
+            if _c != "crop_name" and any(k in _cl for k in ("oprysk", "spray", "status", "ocena", "etykieta", "warunk", "zabieg", "decyzj")):
+                if pd.api.types.is_numeric_dtype(result_df[_c]):
+                    result_df.loc[_unsown_spray_clean, _c] = 0.0
+                else:
+                    result_df.loc[_unsown_spray_clean, _c] = "Brak uprawy — bez zabiegu"
+
+with tab_gosp:
+    # --- SAVED FARM TOP BANNER & COLLAPSIBLE MAP ---
+    _persisted_fields = st.session_state.farm_profile.get('fields', {})
+    _has_saved_farm = len(_persisted_fields) > 0
+    if 'gosp_editor_expanded' not in st.session_state:
+        st.session_state['gosp_editor_expanded'] = not _has_saved_farm
+    if _has_saved_farm:
+        _saved_name = st.session_state.farm_profile.get('farm_name') or 'Moje Gospodarstwo'
+        _saved_uids = set(_persisted_fields.keys())
+        _saved_sub = result_df[result_df['field_uid'].astype(str).isin(_saved_uids)].copy() if ('result_df' in locals() and not result_df.empty and 'field_uid' in result_df.columns) else pd.DataFrame()
+        _saved_area = float(_saved_sub['area_ha'].sum()) if (not _saved_sub.empty and 'area_ha' in _saved_sub.columns) else 0.0
         st.markdown(
-            f"<div style='padding-top:8px; font-size:13px; color:#5A655F;'>"
-            f"Zaznaczono: <b>{len(selected_rows)} działek</b> ({sel_ha:.2f} ha) &middot; "
-            f"EKO: <b>{len(eco_selected_rows)}</b> ({eco_ha:.2f} ha)</div>",
+            f'''
+            <div class="soft-card" style="border-left: 5px solid #2E7D32; background: #F4F9F4; margin-bottom: 12px;">
+                <div style="font-size: 0.82rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #2E7D32;">Zapisane gospodarstwo</div>
+                <div class="soft-card-title" style="font-size: 1.35rem; margin: 2px 0 6px 0;">{_saved_name}</div>
+                <div class="soft-card-sub" style="margin-bottom: 0;">
+                    Liczba działek w gospodarstwie: <b>{len(_saved_uids)}</b> &nbsp;|&nbsp; Łączna powierzchnia: <b>{_saved_area:.2f} ha</b>
+                </div>
+            </div>
+            ''',
             unsafe_allow_html=True,
         )
-
-    with b_clear:
-        if st.button("Wyczyść wybór", use_container_width=True):
-            cleared = {
-                "farm_name": farm_name_input.strip() or "Moje Gospodarstwo",
-                "wojewodztwo": sel_woj,
-                "powiat": sel_pow,
-                "gmina": sel_gmina,
-                "only_my_farm": False,
-                "eco_mode": eco_active,
-                "fields": {},
-            }
-            st.session_state.farm_profile = cleared
-            save_farm_profile(cleared)
-            st.rerun()
-
-    if not fallow_rows.empty:
+        if not _saved_sub.empty:
+            _preview_saved = _saved_sub[['field_uid', 'crop_name', 'area_ha']].copy()
+            _preview_saved['Działka'] = [f'Pole {k + 1}' for k in range(len(_preview_saved))]
+            st.dataframe(
+                _preview_saved[['Działka', 'crop_name', 'area_ha']].rename(columns={'crop_name': 'Uprawa', 'area_ha': 'Powierzchnia (ha)'}),
+                use_container_width=True,
+                hide_index=True,
+            )
+    # Zastosowanie kliknięć w poligony do podglądu przed zapisem
+    if st.session_state.get('poly_selection_overrides') and 'result_df' in locals() and not result_df.empty:
+        for _ov_uid, _ov_state in st.session_state['poly_selection_overrides'].items():
+            if 'is_mine' in result_df.columns:
+                result_df.loc[result_df['field_uid'].astype(str) == str(_ov_uid), 'is_mine'] = bool(_ov_state)
+    _exp_title = (
+        'Edytuj działki gospodarstwa i podgląd mapy (kliknij, aby rozwinąć)'
+        if _has_saved_farm
+        else 'Podgląd działek na mapie i wybór pól do gospodarstwa (kliknij poligon na mapie lub zaznacz na liście)'
+    )
+    with st.expander(_exp_title, expanded=bool(st.session_state['gosp_editor_expanded'])):
         st.markdown(
             """
-            <div class="soft-card" style="margin-top:14px; margin-bottom:8px; padding-bottom:12px;">
-                <div class="soft-card-title">Rekomendacje siewu dla Twoich pól nieobsianych</div>
+            <div class="soft-card">
+                <div class="soft-card-title">Konfiguracja Mojego Gospodarstwa</div>
                 <div class="soft-card-sub" style="margin-bottom:0;">
-                    Dla działek oznaczonych jako „Brak uprawy / Pod zasiew” dobrano gatunek na podstawie pH, próchnicy (SOC) i uziarnienia gleby
+                    1. Wybierz lokalizację &nbsp;&rarr;&nbsp; 2. Zaznacz własne działki oraz opcję „Działka EKO” (do doboru nawozów i dokumentacji) &nbsp;&rarr;&nbsp;
+                    3. Zatwierdź uprawę albo wybierz „Brak uprawy / Pod zasiew”
                 </div>
             </div>
             """,
             unsafe_allow_html=True,
         )
-        for _, fr in fallow_rows.iterrows():
-            uid = fr["Działka"]
-            raw_row = candidates_df[candidates_df["field_uid"] == uid].iloc[0]
-            rec_c, rec_r = recommend_crop_by_soil(
-                raw_row["soil_ph"], raw_row["soil_soc"], raw_row["soil_texture"], crop_dict_df=crop_dict_df
+
+        g_col1, g_col2, g_col3, g_col4 = st.columns([1.3, 1.1, 1.1, 1.3])
+        with g_col1:
+            farm_name_input = st.text_input(
+                "Nazwa gospodarstwa:",
+                value=farm_profile.get("farm_name", "Moje Gospodarstwo"),
             )
-            eco_tag = " · EKO" if bool(fr["Działka EKO"]) else ""
+        woj_options = list(admin_hierarchy.keys())
+        default_woj = farm_profile.get("wojewodztwo", woj_options[0])
+        if default_woj not in woj_options:
+            default_woj = woj_options[0]
+        with g_col2:
+            sel_woj = st.selectbox("Województwo:", woj_options, index=woj_options.index(default_woj))
+
+        pow_options = list(admin_hierarchy[sel_woj].keys())
+        default_pow = farm_profile.get("powiat", pow_options[0])
+        if default_pow not in pow_options:
+            default_pow = pow_options[0]
+        with g_col3:
+            sel_pow = st.selectbox("Powiat:", pow_options, index=pow_options.index(default_pow))
+
+        gmina_entries = admin_hierarchy[sel_woj][sel_pow]
+        gmina_names = [g["gmina"] for g in gmina_entries]
+        default_gmina = farm_profile.get("gmina", gmina_names[0])
+        if default_gmina not in gmina_names:
+            default_gmina = gmina_names[0]
+        with g_col4:
+            sel_gmina = st.selectbox("Gmina:", gmina_names, index=gmina_names.index(default_gmina))
+
+        active_bbox = next(g["bbox"] for g in gmina_entries if g["gmina"] == sel_gmina)
+        if st.button("Pobierz świeże pola i pogodę LIVE dla wybranej gminy", type="primary", key="btn_fetch_gmina_live"):
+            with st.spinner(f"Pobieranie danych satelitarnych (<20% chmur), gleby i pogody LIVE dla gminy {sel_gmina}..."):
+                try:
+                    import sys
+                    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+                    from src_geo.pobierz_gmine import build_gmina_dataset
+                    g_fields, g_weather = build_gmina_dataset(sel_woj, sel_pow, sel_gmina, max_fields=120, force_refresh=True)
+                    DATA_DIR.mkdir(parents=True, exist_ok=True)
+                    if not g_fields.empty:
+                        g_fields.to_parquet(DATA_DIR / "active_fields.parquet", index=False)
+                    if not g_weather.empty:
+                        g_weather.to_parquet(DATA_DIR / "active_weather.parquet", index=False)
+                    farm_profile["wojewodztwo"] = sel_woj
+                    farm_profile["powiat"] = sel_pow
+                    farm_profile["gmina"] = sel_gmina
+                    farm_profile["area_configured"] = True
+                    farm_profile["fields"] = {}
+                    save_farm_profile(farm_profile)
+                    st.session_state.farm_profile = farm_profile
+                    st.session_state["fetch_banner"] = f"Pobrano {len(g_fields)} pól i pogodę LIVE dla gminy {sel_gmina} ({sel_woj})!"
+                    st.cache_data.clear()
+                    st.rerun()
+                except Exception as exc:
+                    st.error(f"Nie udało się pobrać danych gminy: {exc}")
+
+        if sel_gmina == farm_profile.get("gmina"):
+            candidates_df = raw_fields_df.copy()
+        else:
+            candidates_df = raw_fields_df[
+                (raw_fields_df["lon"] >= active_bbox[0])
+                & (raw_fields_df["lon"] <= active_bbox[2])
+                & (raw_fields_df["lat"] >= active_bbox[1])
+                & (raw_fields_df["lat"] <= active_bbox[3])
+            ].copy()
+            if candidates_df.empty:
+                st.info(f"Kliknij przycisk powyżej, aby pobrać kafel działek bezpośrednio dla gminy {sel_gmina}.")
+                candidates_df = raw_fields_df.copy()
+
+        saved_map = farm_profile.get("fields", {})
+
+        editor_rows = []
+        for r in candidates_df.itertuples(index=False):
+            uid = str(r.field_uid)
+            is_mine = bool(st.session_state.get("poly_selection_overrides", {}).get(uid, uid in saved_map))
+            _default_eco = bool(saved_map.get(uid, {}).get("is_eco", eco_active)) if is_mine else eco_active
+            is_eco_val = bool(st.session_state.get("eco_selection_overrides", {}).get(uid, _default_eco))
+            declared_crop = saved_map.get(uid, {}).get("crop_name", str(r.crop_name)) if is_mine else str(r.crop_name)
+            if declared_crop not in KNOWN_CROPS:
+                declared_crop = str(r.crop_name)
+            rec_crop, rec_why = recommend_crop_by_soil(
+                r.soil_ph, r.soil_soc, r.soil_texture, crop_dict_df=crop_dict_df
+            )
+            area_val = float(getattr(r, "area_ha", 1.5))
+            editor_rows.append(
+                {
+                    "Moje pole": is_mine,
+                    "Działka EKO": is_eco_val,
+                    "Działka": uid,
+                    "Powierzchnia (ha)": round(area_val, 2),
+                    "Deklarowana uprawa": declared_crop,
+                    "Uprawa z satelity (CLMS)": str(r.crop_name),
+                    "Gleba (pH / tekstura)": f"pH {r.soil_ph:.1f} · {r.soil_texture}",
+                    "Podpowiedź siewu (dla ugorów)": f"{rec_crop} — {rec_why}",
+                }
+            )
+
+        editor_df = pd.DataFrame(editor_rows)
+        crop_choices = sorted(list(set(KNOWN_CROPS + candidates_df["crop_name"].dropna().astype(str).tolist())))
+
+        map_prev_col, table_cfg_col = st.columns([1.0, 1.45], gap="medium")
+
+        with map_prev_col:
+            st.markdown("**Podgląd działek w wybranej gminie**")
+            preview_df = candidates_df.reset_index(drop=True).copy()
+            preview_df["is_selected"] = preview_df["field_uid"].astype(str).map(
+                lambda u: bool(st.session_state.get("poly_selection_overrides", {}).get(u, u in saved_map))
+            )
+            preview_df["is_eco_saved"] = preview_df["field_uid"].astype(str).map(
+                lambda u: bool(
+                    st.session_state.get("eco_selection_overrides", {}).get(
+                        u, saved_map.get(u, {}).get("is_eco", eco_active)
+                    )
+                )
+            )
+
+            def _prev_color(row_s):
+                if row_s["is_selected"] and row_s["is_eco_saved"]:
+                    return [46, 111, 64, 235]
+                if row_s["is_selected"]:
+                    return [59, 110, 165, 220]
+                return [180, 176, 168, 120]
+
+            preview_df["prev_color"] = preview_df.apply(_prev_color, axis=1)
+            if "polygon_json" in preview_df.columns and not preview_df.empty:
+                preview_df["polygon"] = preview_df["polygon_json"].map(_normalize_pdk_polygon)
+                prev_layer = pdk.Layer(
+                    "PolygonLayer",
+                    id="gosp_poly_layer",
+                    data=preview_df,
+                    pickable=True,
+                    auto_highlight=True,
+                    highlight_color=[255, 215, 0, 140],
+                    stroked=True,
+                    filled=True,
+                    get_polygon="polygon",
+                    get_fill_color="prev_color",
+                    get_line_color=[31, 41, 36],
+                    line_width_min_pixels=1,
+                )
+                prev_zoom = 11.4
+            else:
+                prev_layer = pdk.Layer(
+                    "H3HexagonLayer",
+                    data=preview_df,
+                    pickable=True,
+                    stroked=True,
+                    filled=True,
+                    get_hexagon="h3_index",
+                    get_fill_color="prev_color",
+                    get_line_color=[31, 41, 36],
+                    line_width_min_pixels=1,
+                )
+                prev_zoom = 9.0
+
+            prev_deck = pdk.Deck(
+                map_style="light",
+                layers=[prev_layer],
+                initial_view_state=pdk.ViewState(
+                    latitude=float(preview_df["lat"].mean()),
+                    longitude=float(preview_df["lon"].mean()),
+                    zoom=prev_zoom,
+                ),
+                tooltip={
+                    "html": "<b>{field_uid}</b> ({area_ha} ha)<br/>Uprawa CLMS: {crop_name}<br/>pH: {soil_ph} · {soil_texture}",
+                    "style": {"backgroundColor": "#1F2924", "color": "#FFFFFF", "borderRadius": "8px"},
+                },
+            )
+            _sel_color_sig = hash(tuple(zip(preview_df["field_uid"].astype(str), preview_df["is_selected"], preview_df["is_eco_saved"])))
+            _gosp_ev = st.pydeck_chart(prev_deck, use_container_width=True, key=f"prev_map_{sel_gmina}_{len(preview_df)}_{_sel_color_sig}", on_select="rerun", selection_mode="single-object")
+            if _gosp_ev is not None and getattr(_gosp_ev, 'selection', None) and getattr(_gosp_ev.selection, 'objects', None):
+                _objs = _gosp_ev.selection.objects
+                _sig = str(_objs)
+                if _sig != st.session_state.get('_last_gosp_poly_sig'):
+                    st.session_state['_last_gosp_poly_sig'] = _sig
+                    _first_list = next((v for v in _objs.values() if isinstance(v, list) and v), [])
+                    _obj0 = _first_list[0] if _first_list else {}
+                    if _toggle_polygon_by_click(_obj0.get('lat'), _obj0.get('lon'), str(_obj0), _obj0.get('index'), locals()):
+                        st.rerun()
+            _clk_info = f" | Ostatnio kliknięta: **{st.session_state['_last_clicked_uid_label']}**" if st.session_state.get("_last_clicked_uid_label") else ""
+            st.caption("Zielony — wybrane działki EKO | Niebieski — pozostałe wybrane działki | Szary — nieprzypisane." + _clk_info)
+
+        with table_cfg_col:
+            st.markdown("**Zaznacz swoje działki, status EKO i przypisz uprawy**")
+            edited_df = st.data_editor(
+                editor_df,
+                use_container_width=True,
+                hide_index=True,
+                height=360,
+                column_config={
+                    "Moje pole": st.column_config.CheckboxColumn("Moje pole", default=False),
+                    "Działka EKO": st.column_config.CheckboxColumn(
+                        "Działka EKO",
+                        default=False,
+                        help="Oznacza działkę jako ekologiczną (do doboru nawozów EKO i wyboru działek do dokumentacji).",
+                    ),
+                    "Działka": st.column_config.TextColumn("Działka", disabled=True),
+                    "Powierzchnia (ha)": st.column_config.NumberColumn("Pow. (ha)", disabled=True, format="%.2f"),
+                    "Deklarowana uprawa": st.column_config.SelectboxColumn(
+                        "Deklarowana uprawa",
+                        options=crop_choices,
+                        required=True,
+                        help="Wybierz uprawę albo ustaw 'Brak uprawy / Pod zasiew', aby otrzymać rekomendację z gleby.",
+                    ),
+                    "Uprawa z satelity (CLMS)": st.column_config.TextColumn("CLMS", disabled=True),
+                    "Gleba (pH / tekstura)": st.column_config.TextColumn("Gleba", disabled=True),
+                    "Podpowiedź siewu (dla ugorów)": st.column_config.TextColumn("Podpowiedź siewu", disabled=True),
+                },
+                key="farm_fields_editor",
+            )
+            if isinstance(edited_df, pd.DataFrame) and not edited_df.empty and 'Działka' in edited_df.columns and 'Moje pole' in edited_df.columns:
+                _need_map_refresh = False
+                _ovr_mine = st.session_state.setdefault('poly_selection_overrides', {})
+                _ovr_eco = st.session_state.setdefault('eco_selection_overrides', {})
+                for _er_i in range(min(len(edited_df), len(editor_df))):
+                    _e_uid = str(edited_df.iloc[_er_i]['Działka'])
+                    _e_mine = bool(edited_df.iloc[_er_i]['Moje pole'])
+                    if _e_mine != bool(editor_df.iloc[_er_i]['Moje pole']):
+                        _ovr_mine[_e_uid] = _e_mine
+                        _need_map_refresh = True
+                    if 'Działka EKO' in edited_df.columns and 'Działka EKO' in editor_df.columns:
+                        _e_eco = bool(edited_df.iloc[_er_i]['Działka EKO'])
+                        if _e_eco != bool(editor_df.iloc[_er_i]['Działka EKO']):
+                            _ovr_eco[_e_uid] = _e_eco
+                            _need_map_refresh = True
+                if _need_map_refresh:
+                    st.rerun()
+
+        selected_rows = edited_df[edited_df["Moje pole"] == True]
+        eco_selected_rows = selected_rows[selected_rows["Działka EKO"] == True]
+        sel_ha = float(selected_rows["Powierzchnia (ha)"].sum()) if not selected_rows.empty else 0.0
+        eco_ha = float(eco_selected_rows["Powierzchnia (ha)"].sum()) if not eco_selected_rows.empty else 0.0
+        fallow_rows = selected_rows[selected_rows["Deklarowana uprawa"] == FALLOW_LABEL]
+
+        b_save, b_filter, b_clear = st.columns([1.4, 1.5, 1.0])
+        with b_save:
+            if st.button("Zapisz profil gospodarstwa", type="primary", use_container_width=True):
+                st.session_state['gosp_editor_expanded'] = False
+                st.session_state.pop('poly_selection_overrides', None)
+                st.session_state.pop('eco_selection_overrides', None)
+                new_fields_map = {}
+                for _, row in selected_rows.iterrows():
+                    new_fields_map[row["Działka"]] = {
+                        "crop_name": row["Deklarowana uprawa"],
+                        "area_ha": float(row["Powierzchnia (ha)"]),
+                        "is_eco": bool(row["Działka EKO"]),
+                    }
+                updated_profile = {
+                    "farm_name": farm_name_input.strip() or "Moje Gospodarstwo",
+                    "wojewodztwo": sel_woj,
+                    "powiat": sel_pow,
+                    "gmina": sel_gmina,
+                    "only_my_farm": True if new_fields_map else False,
+                    "eco_mode": eco_active,
+                    "fields": new_fields_map,
+                }
+                st.session_state.farm_profile = updated_profile
+                save_farm_profile(updated_profile)
+                st.toast(
+                    f"Zapisano profil ({len(new_fields_map)} działek, {sel_ha:.2f} ha; EKO: {len(eco_selected_rows)} działek, {eco_ha:.2f} ha)."
+                )
+                st.rerun()
+
+        with b_filter:
             st.markdown(
-                f"""
-                <div class="crop-result" style="margin-top:8px; padding:14px 18px;">
-                    <div class="crop-tag">Działka {uid}{eco_tag} &middot; {float(fr['Powierzchnia (ha)']):.2f} ha &middot; {fr['Gleba (pH / tekstura)']}</div>
-                    <div class="crop-name" style="font-size:18px;">Zalecany zasiew: {rec_c}</div>
-                    <p class="crop-desc">{rec_r}</p>
+                f"<div style='padding-top:8px; font-size:13px; color:#5A655F;'>"
+                f"Zaznaczono: <b>{len(selected_rows)} działek</b> ({sel_ha:.2f} ha) &middot; "
+                f"EKO: <b>{len(eco_selected_rows)}</b> ({eco_ha:.2f} ha)</div>",
+                unsafe_allow_html=True,
+            )
+
+        with b_clear:
+            if st.button("Wyczyść wybór", use_container_width=True):
+                cleared = {
+                    "farm_name": farm_name_input.strip() or "Moje Gospodarstwo",
+                    "wojewodztwo": sel_woj,
+                    "powiat": sel_pow,
+                    "gmina": sel_gmina,
+                    "only_my_farm": False,
+                    "eco_mode": eco_active,
+                    "fields": {},
+                }
+                st.session_state.farm_profile = cleared
+                save_farm_profile(cleared)
+                st.rerun()
+
+        if not fallow_rows.empty:
+            st.markdown(
+                """
+                <div class="soft-card" style="margin-top:14px; margin-bottom:8px; padding-bottom:12px;">
+                    <div class="soft-card-title">Rekomendacje siewu dla Twoich pól nieobsianych</div>
+                    <div class="soft-card-sub" style="margin-bottom:0;">
+                        Dla działek oznaczonych jako „Brak uprawy / Pod zasiew” dobrano gatunek na podstawie pH, próchnicy (SOC) i uziarnienia gleby
+                    </div>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
+            for _, fr in fallow_rows.iterrows():
+                uid = fr["Działka"]
+                raw_row = candidates_df[candidates_df["field_uid"] == uid].iloc[0]
+                rec_c, rec_r = recommend_crop_by_soil(
+                    raw_row["soil_ph"], raw_row["soil_soc"], raw_row["soil_texture"], crop_dict_df=crop_dict_df
+                )
+                eco_tag = " · EKO" if bool(fr["Działka EKO"]) else ""
+                st.markdown(
+                    f"""
+                    <div class="crop-result" style="margin-top:8px; padding:14px 18px;">
+                        <div class="crop-tag">Działka {uid}{eco_tag} &middot; {float(fr['Powierzchnia (ha)']):.2f} ha &middot; {fr['Gleba (pH / tekstura)']}</div>
+                        <div class="crop-name" style="font-size:18px;">Zalecany zasiew: {rec_c}</div>
+                        <p class="crop-desc">{rec_r}</p>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
-with tab_siew:
-    st.markdown(
-        """
-        <div class="soft-card">
-            <div class="soft-card-title">Doradca siewu — co najlepiej dopasować do gleby</div>
-            <div class="soft-card-sub" style="margin-bottom:0;">Wybierz działkę z mapy albo ustaw ręcznie odczyn pH i rodzaj gleby, aby zobaczyć podpowiedź</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
 
-    mode = st.radio(
-        "Skąd wziąć dane o glebie?",
-        ["Z wybranej działki na mapie", "Wpiszę własne parametry"],
-        horizontal=True,
-    )
-
-    if mode == "Z wybranej działki na mapie" and not result_df.empty:
-        c1, c2 = st.columns(2)
-        with c1:
-            selected_uid = st.selectbox(
-                "Wybierz działkę:",
-                options=result_df["field_uid"].tolist(),
-                format_func=lambda u: (
-                    f"{u} (obecnie: {result_df.loc[result_df['field_uid'] == u, 'crop_name'].values[0]})"
-                ),
-            )
-        row_s = result_df[result_df["field_uid"] == selected_uid].iloc[0]
-        with c2:
-            st.text_input(
-                "Rodzaj gleby i próchnica (SOC):",
-                value=f"{row_s['soil_texture']} · SOC {row_s['soil_soc']:.1f} g/kg",
-                disabled=True,
-            )
-        sc1, sc2 = st.columns(2)
-        in_ph = sc1.slider("Odczyn gleby (pH):", 4.0, 8.0, float(row_s["soil_ph"]), 0.1)
-        in_hum = sc2.slider("Wilgotność (%):", 10, 95, int(row_s["humidity_pct"]), 1)
-        in_soc = float(row_s["soil_soc"])
-        in_tex = str(row_s["soil_texture"])
-        target_label = f"działki {selected_uid}"
-    else:
-        c1, c2 = st.columns(2)
-        with c1:
-            in_tex = st.selectbox(
-                "Rodzaj gleby:",
-                ["Loam", "Silt Loam", "Clay Loam", "Sandy Loam", "Sand"],
-            )
-        with c2:
-            in_soc = st.slider("Zawartość próchnicy / SOC (g/kg):", 5.0, 35.0, 18.0, 0.5)
-        sc1, sc2 = st.columns(2)
-        in_ph = sc1.slider("Odczyn gleby (pH):", 4.0, 8.0, 6.6, 0.1)
-        in_hum = sc2.slider("Wilgotność (%):", 10, 95, 68, 1)
-        selected_uid = "wlasne"
-        target_label = "wybranych ustawień"
-
-    rec_crop, rec_reason = recommend_crop_by_soil(in_ph, in_soc, in_tex, crop_dict_df=crop_dict_df)
-    st.markdown(
-        f"""
-        <div class="crop-result">
-            <div class="crop-tag">Podpowiedź dla {target_label}</div>
-            <div class="crop-name">Najlepiej pasuje: {rec_crop}</div>
-            <p class="crop-desc">{rec_reason}</p>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    st.write("")
-    if st.button("Zapisz wybór uprawy", type="primary"):
-        st.session_state.saved_crops[selected_uid] = rec_crop
-        st.success(f"Zapisano uprawę: {rec_crop}.")
 
 with tab_kalk:
+    # --- WYBÓR POLA DO OPRYSKU LUB NAWOŻENIA ---
+    _calc_pool = pd.DataFrame()
+    if 'result_df' in locals() and not result_df.empty:
+        if 'is_mine' in result_df.columns and result_df['is_mine'].any():
+            _calc_pool = result_df[result_df['is_mine']].copy().reset_index(drop=True)
+        else:
+            _calc_pool = result_df.copy().reset_index(drop=True)
+    _calc_field_area = 2.5
+    _calc_field_crop = 'Pszenica ozima'
+    _calc_field_eco = bool(eco_active) if 'eco_active' in locals() else False
+    if not _calc_pool.empty:
+        def _fmt_calc_field(idx: int) -> str:
+            _rf = _calc_pool.iloc[idx]
+            _cn = str(_rf.get('crop_name', 'Uprawa'))
+            _ha = float(pd.to_numeric(_rf.get('area_ha', 1.0), errors='coerce') or 1.0)
+            _uid_s = str(_rf.get('field_uid', ''))
+            _is_e = bool(saved_fields_dict.get(_uid_s, {}).get('is_eco', _rf.get('is_eco', False))) if 'saved_fields_dict' in locals() else bool(_rf.get('is_eco', False))
+            _tag = ' [EKO]' if _is_e else ''
+            return f'Pole {idx + 1} — {_cn} ({_ha:.2f} ha){_tag}'
+        _sel_calc_idx = st.selectbox(
+            'Wybierz pole, dla którego chcesz pryskać lub nawozić:',
+            options=list(range(len(_calc_pool))),
+            format_func=_fmt_calc_field,
+            key='calc_target_field_select',
+        )
+        _sel_calc_row = _calc_pool.iloc[_sel_calc_idx]
+        _sel_calc_uid = str(_sel_calc_row.get('field_uid', ''))
+        _calc_field_area = round(float(pd.to_numeric(_sel_calc_row.get('area_ha', 2.5), errors='coerce') or 2.5), 2)
+        _calc_field_crop = str(saved_fields_dict.get(_sel_calc_uid, {}).get('crop_name', _sel_calc_row.get('crop_name', 'Pszenica ozima'))) if 'saved_fields_dict' in locals() else str(_sel_calc_row.get('crop_name', 'Pszenica ozima'))
+        _calc_field_eco = bool(saved_fields_dict.get(_sel_calc_uid, {}).get('is_eco', _sel_calc_row.get('is_eco', False))) if 'saved_fields_dict' in locals() else bool(_sel_calc_row.get('is_eco', False))
+        _calc_mode_txt = 'Rolnictwo EKO' if _calc_field_eco else 'Konwencjonalny'
+        st.caption("Wybrane pole jest niezasiane — brak uprawy.") if _is_unsown_crop(_calc_field_crop) else st.caption("Brak uprawy na wybranym polu — status oprysków i nawożenia nie dotyczy.") if _is_unsown_crop(_calc_field_crop) else st.caption(f'Wybrane pole: **Pole {_sel_calc_idx + 1}** | Uprawa: **{_calc_field_crop}** | Powierzchnia: **{_calc_field_area:.2f} ha** | Tryb: **{_calc_mode_txt}**')
     st.markdown(
         """
         <div class="soft-card">
@@ -1343,20 +1963,7 @@ with tab_kalk:
         unsafe_allow_html=True,
     )
 
-with tab_zasady:
-    st.markdown(
-        """
-        <div class="soft-card">
-            <div class="soft-card-title">Zasady podejmowania decyzji</div>
-            <div class="soft-card-sub" style="margin-bottom:0;">Tabela reguł pogodowych, glebowych i zabiegowych używana przez aplikację</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    st.dataframe(rules_df, use_container_width=True, hide_index=True)
-
-
-with tab_zysk:
+    st.markdown('---')
     st.markdown(
         """
         <div class="soft-card">
@@ -1433,7 +2040,7 @@ with tab_zysk:
         tot_net = float(profit_df["zysk_netto_zl"].sum())
 
         k1, k2, k3, k4, k5, k6 = st.columns(6)
-        k1.metric("Koszt ziarna (Bayer)", f"{tot_seed:,.0f} zł".replace(",", " "))
+        k1.metric("Koszt ziarna", f"{tot_seed:,.0f} zł".replace(",", " "))
         k2.metric("Koszt nawozów", f"{tot_fert:,.0f} zł".replace(",", " "))
         k3.metric("Koszt pestycydów", f"{tot_pest:,.0f} zł".replace(",", " "))
         k4.metric("Śr. strata plonu", f"{avg_loss:.1f} %")
@@ -1447,7 +2054,7 @@ with tab_zysk:
         # Symulacja wybranego pojedynczego pola
         sel_uid = st.selectbox(
             "Szczegółowa analiza dla wybranego pola:",
-            profit_df["field_uid"].tolist(),
+            profit_df["field_uid"],
             format_func=lambda u: f"{u} — {profit_df.loc[profit_df['field_uid'] == u, 'crop_name'].iloc[0]} ({profit_df.loc[profit_df['field_uid'] == u, 'area_ha'].iloc[0]:.2f} ha)",
             key="profit_single_field_sel",
         )
@@ -1468,7 +2075,7 @@ with tab_zysk:
         # Wykres struktury kosztów i zysku dla pól
         top_p = profit_df.head(15).copy()
         fig_prof = go.Figure()
-        fig_prof.add_bar(name="Ziarno (Bayer)", x=top_p["field_uid"], y=top_p["koszt_ziarna_zl"], marker_color="#4E79A7")
+        fig_prof.add_bar(name="Ziarno", x=top_p["field_uid"], y=top_p["koszt_ziarna_zl"], marker_color="#4E79A7")
         fig_prof.add_bar(name="Nawozy", x=top_p["field_uid"], y=top_p["koszt_nawozu_zl"], marker_color="#8E6C8A")
         fig_prof.add_bar(name="Pestycydy", x=top_p["field_uid"], y=top_p["koszt_pestycydow_zl"], marker_color="#E15759")
         fig_prof.add_bar(name="Zysk netto pola", x=top_p["field_uid"], y=top_p["zysk_netto_zl"], marker_color="#2E7D32")
@@ -1505,6 +2112,20 @@ with tab_zysk:
             use_container_width=True,
             hide_index=True,
         )
+
+with tab_zasady:
+    st.markdown(
+        """
+        <div class="soft-card">
+            <div class="soft-card-title">Zasady podejmowania decyzji</div>
+            <div class="soft-card-sub" style="margin-bottom:0;">Tabela reguł pogodowych, glebowych i zabiegowych używana przez aplikację</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.dataframe(rules_df, use_container_width=True, hide_index=True)
+
+
 
 with tab_eko_doc:
     from eko_dokumentacja import render_eko_documentation_tab
