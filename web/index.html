@@ -148,6 +148,12 @@
     .fc-facts dt { flex: none; color: var(--muted); }
     .fc-facts dd { display: grid; gap: 2px; margin: 0; font-weight: 650; text-align: right; }
     .fc-facts dd small { color: #708074; font-size: 11px; font-weight: 500; line-height: 1.35; }
+    .fc-factors { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
+    .fc-factor { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 38px; border-top: 1px solid var(--line); font-size: 14px; font-weight: 650; }
+    .fc-factor:first-child { border-top: 0; }
+    .fc-factor-dot { width: 14px; height: 14px; }
+    .fc-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+    .fc-factor-key { margin: 6px 0 0; color: #708074; font-size: 11px; }
     .fc-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
     .fc-soon { display: grid; justify-items: center; gap: 1px; min-height: 52px; padding: 6px 8px; }
     .fc-soon small { color: #7a8a7f; font-size: 10px; font-weight: 600; }
@@ -1647,20 +1653,29 @@
       else if (notes[row.status]) level.append(sandboxElement('p', 'fc-level-note', notes[row.status]));
       const parts = [level];
       if (row && typeof row === 'object') {
-        const why = [];
-        const windowHours = row.reasons?.window_hours || 72;
-        if (Number.isFinite(row.h_hours)) {
-          const range = Number.isFinite(row.h_low) && Number.isFinite(row.h_high) && row.h_low !== row.h_high ? `${row.h_low}–${row.h_high} h` : `${row.h_hours} h`;
-          why.push(['Longest wet spell', range, `Consecutive wet hours within the ${windowHours} hours up to this day.`]);
+        // Factor dots: red raises the chance of septoria, yellow is moderate, green lowers it, grey is unknown.
+        // The wet spell alone sets the backend risk level, so its dot uses that level's colour.
+        const factors = [];
+        const assessed = ['ok', 'protected'].includes(row.status) && sandboxRank[row.risk_class];
+        if (Number.isFinite(row.h_hours) || row.status === 'uncertain') {
+          const hours = Number.isFinite(row.h_low) && Number.isFinite(row.h_high) && row.h_low !== row.h_high ? `${row.h_low} to ${row.h_high} hours` : `${row.h_hours} hours`;
+          factors.push(['Wet spell', assessed ? row.risk_class : 'unknown', `longest wet spell ${hours}`]);
         }
-        if (Number.isFinite(row.coverage)) why.push(['Weather data', `${Math.round(row.coverage * 100)}% of hours`, `Share of the ${windowHours} hours with weather data.`]);
-        const source = ({ estimated: 'estimated from accumulated temperature', override: 'from your growth stage entry', calendar: 'estimated from the calendar' })[row.growth_stage_source];
-        if (row.status === 'out_of_window') why.push(['Growth stage', 'Outside the susceptible period', source]);
-        else if (row.status === 'stage_unknown') why.push(['Growth stage', 'Unknown']);
-        else if (row.growth_stage_zone || source) why.push(['Growth stage', 'Within the susceptible period', source]);
-        if (why.length) {
+        if (row.status === 'out_of_window') factors.push(['Growth stage', 'low', 'outside the susceptible period']);
+        else if (row.status === 'stage_unknown') factors.push(['Growth stage', 'unknown', 'unknown']);
+        else if (row.growth_stage_zone || row.growth_stage_source) factors.push(['Growth stage', 'high', 'within the susceptible period']);
+        if (row.protected_until && row.protected_until >= day) factors.push(['Spray protection', 'low', `active until ${sandboxFormatDate(row.protected_until)}`]);
+        if (factors.length) {
           const section = sandboxElement('section', 'fc-section');
-          section.append(sandboxElement('h2', '', 'Why this level'), sandboxFacts(why));
+          const list = sandboxElement('ul', 'fc-factors');
+          factors.forEach(([name, tone, meaning]) => {
+            const item = sandboxElement('li', 'fc-factor');
+            const label = sandboxElement('span', '', name); label.append(sandboxElement('span', 'fc-sr', `: ${meaning}`));
+            const dot = sandboxElement('span', `fc-dot fc-factor-dot tone-${tone}`); dot.setAttribute('aria-hidden', 'true');
+            item.append(label, dot);
+            list.append(item);
+          });
+          section.append(sandboxElement('h2', '', 'Why this level'), list, sandboxElement('p', 'fc-factor-key', 'Red raises the chance of septoria, green lowers it.'));
           parts.push(section);
         }
       }
