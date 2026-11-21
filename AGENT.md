@@ -43,8 +43,9 @@ The package is `cropfit` in `src/cropfit/` (the name is historical). Scripts add
 | `risk.py` | Crop risk index per plot-unit x crop (see 3.12). |
 | `followup.py` | Follow-up test suggestions per plot-unit x crop from the risk result and `rules/followup_tests.csv` (see 3.13). |
 | `api_risk.py` | GUI endpoints for the crop risk index (`/api/plots/{id}/crop-risk[/{unit}[/{crop}]]`), computed on demand from `risk.py` |
+| `microbe_roles.py` | Microbe roles (3.14): ontology, genus role annotations and hover descriptions; per-sample roll-up into role classes. Used by the Soil microbes "Roles" view and the Soil functions tab. |
 
-Lookup tables in `rules/` (generic, read by the code): `cdl_codes.csv` (all 132 CDL codes to a crop-group vocabulary), `ko_panel.csv` (KEGG KOs of interest with function group and caveat), `lucas_lc1_groups.csv` (LUCAS land-cover codes with `is_cereal`; documentation only, `e1_match.py` hard-codes its own cereal rule B11-B19), `genus_synonyms.csv` (alias -> canonical genus: Rhizoctonia/Thanatephorus/Ceratobasidium -> Rhizoctonia_complex, Gibberella -> Fusarium) and `crop_host_taxa.csv` (USDA host taxon -> crop_group). Small input tables in `resources/` are listed under each dataset.
+Lookup tables in `rules/` (generic, read by the code): `cdl_codes.csv` (all 132 CDL codes to a crop-group vocabulary), `ko_panel.csv` (KEGG KOs of interest with function group and caveat), `lucas_lc1_groups.csv` (LUCAS land-cover codes with `is_cereal`; documentation only, `e1_match.py` hard-codes its own cereal rule B11-B19), `genus_synonyms.csv` (alias -> canonical genus: Rhizoctonia/Thanatephorus/Ceratobasidium -> Rhizoctonia_complex, Gibberella -> Fusarium) and `crop_host_taxa.csv` (USDA host taxon -> crop_group). Microbe roles (3.14): `microbe_ontology.csv` (32 role terms in a tree under useful / harmful / context (nitrogen cyclers) / background / unknown, with `ko_group` linking to `ko_panel.csv` function groups), `microbe_annotations.csv` (genus -> role rows with confidence, evidence, source and species examples), `microbe_genera.csv` (a plain-language description of at most two sentences per genus, shown on hover) and `microbe_annotation_prompt.md` (instructions for the annotator agents). Small input tables in `resources/` are listed under each dataset.
 
 ### Where things land (all gitignored except `resources/`, `rules/`, `config/`)
 
@@ -82,6 +83,9 @@ Pipeline order (what produces what):
 | Inspector | `scripts/10_inspect_data.py [--standalone]` (offline) | `outputs/inspect/index.html`, a developer page to look at all of the above |
 | Joined table | `scripts/06_build_joined.py` (offline, after 02b and 05) | `joined_metagenomes`, `joined_fungi_genus` (see 3.8) |
 | Fungal guilds (for the GUI's soil functions) | `scripts/16_fetch_funguild.py` (network once, ~7.5 MB, keyless; cached under `data/raw/kb/funguild/`) | `fungal_guilds` (FUNGuild role per fungal genus: primary guild, category, can be plant pathogen, can parasitise fungi, confidence) |
+| Microbe roles: export | `scripts/17_export_microbe_taxa.py` (offline, after 02b and 05) | `data/processed/microbe_taxa.csv` (2,358 genera: 1,095 bacteria, 96 archaea, 1,167 fungi) |
+| Microbe roles: annotation | Manual step: LLM agents write the chunks by hand, following `rules/microbe_annotation_prompt.md` (no script) | `data/annotation_chunks/` (gitignored) |
+| Microbe roles: merge | `scripts/18_merge_microbe_annotations.py` (offline, after the chunks exist) | Validates the chunks and `review_*` overrides, merges them into `rules/microbe_annotations.csv` and `rules/microbe_genera.csv`, prints coverage and the blind agreement with FUNGuild (saved to `data/processed/microbe_roles_agreement_blind.csv`) |
 
 Note: `03_build_plots.py` takes its plots from the event registry (the 29 plots that were actually sampled). `04_build_fields.py` still carries the two windows of `config/regions.yaml`. The site list is defined once, as the keys of `windows` in `config/regions.yaml` (`config.sites()`); only the standalone NMDC pull script has its own `--sites` default.
 
@@ -463,7 +467,36 @@ For a quick start (or a small laptop), switch light mode on **before** downloadi
 - **Measured (21 Nov 2026, KONA 2017, KONA 2024, STER 2016, STER 2022):** 3.4 suggestions per unit × crop on average (1 to 8); soybean has the most (5.2), millet the fewest (2.2).
 - **Limits:** no result thresholds; a suggestion means "this is unknown", not "disease is expected". Only genera in the catalogue can trigger a pathogen test. The triggers inherit the weaknesses of the risk score (3.12).
 
-### 3.14 Product recommendations (prototype)
+### 3.14 Microbe roles (LLM-annotated, POC)
+
+- **What:** a GO-like role ontology for genera. It has 32 terms in a tree under five roots: useful, harmful, context (nitrogen cyclers), background and unknown. Each genus has zero or more role annotations (genus -> term, with confidence, evidence, source and named species examples), and one plain-language description for hover text. Files: `rules/microbe_ontology.csv`, `rules/microbe_annotations.csv`, `rules/microbe_genera.csv`. Code: `src/cropfit/microbe_roles.py` (contract: `docs/microbe_roles.md`).
+- **Rank:** genus is the finest rank. The data has no species abundances, so species appear only as named examples (e.g. *Pseudomonas syringae*). One genus can have several roles.
+- **How it was made:**
+  - `scripts/17_export_microbe_taxa.py` (offline) writes `data/processed/microbe_taxa.csv`: 2,358 genera (1,095 bacteria, 96 archaea, 1,167 fungi).
+  - Sonnet annotated all 2,358 genera blind, in 10 chunks, with `rules/microbe_annotation_prompt.md`. The chunks are in `data/annotation_chunks/` (gitignored). This is a manual step, not a script.
+  - Opus reviewed 346 genera: every harmful genus and the 100 most abundant genera per group. Reviewed rows have `+reviewed` in `source`: 516 of 2,585 rows.
+  - `scripts/18_merge_microbe_annotations.py` validates the chunks and the `review_*` overrides, merges them into the rules files, and prints coverage and the blind agreement with FUNGuild.
+- **Fungi:** for the terms they cover, FUNGuild and FungalTraits override the LLM rows. The rules are in `docs/microbe_roles.md`, section 4. The curated rows are not written to `microbe_annotations.csv`; `microbe_roles.py` computes them on load.
+- **Counted rows:** only `medium` and `high` confidence rows count. Low rows stay in the files for review and are ignored by every share, class and list.
+- **Summary class:** each genus gets one class, with this precedence: mixed (useful and harmful terms) > harmful > useful > context > background > unknown. The six classes of a sample add up to 100% minus the reads without a genus name.
+- **Quality, measured 21 Nov 2026, BLIND (before review):** LLM vs FUNGuild on 1,084 shared fungal genera.
+
+  | Axis | Agreement | Cohen's kappa | Notes |
+  |---|---|---|---|
+  | Plant pathogen | 81.5% (read-weighted 74.6%) | 0.36 (read-weighted 0.51) | FUNGuild flags 274 genera, LLM 77. FUNGuild's "can be a plant pathogen" is much broader (e.g. Trichoderma, Cladosporium) |
+  | Arbuscular mycorrhizal | 100% | 1.0 | |
+  | Saprotroph / decomposer | 51.9% | 0.17 | The LLM used `decomposer` far less often |
+
+  The blind comparison is saved to `data/processed/microbe_roles_agreement_blind.csv`.
+- **Coverage after review** (share of reads, LLM rows only):
+  - Bacteria and archaea: useful 15.6%, mixed 16.2%, potentially harmful 6.8%, nitrogen cyclers 1.9%, background 40.9%, role unknown 18.6%. Of the role unknown share, 4.5% of reads (587 genera) are probably misnamed reads: Kraken2 hits on marine, thermophile, gut or insect-symbiont genera.
+  - Fungi: useful 8.0%, mixed 6.8%, potentially harmful 27.6%, background 51.0%, role unknown 6.6%.
+- **Endpoints:**
+  - `GET /api/microbiome/{sample_id}/roles`: the Roles view (`RoleComposition`).
+  - `Taxon.description`: hover text at genus rank in the composition.
+  - `/api/functions/{id}`: gains `carriers` ("who may carry it by name", per gene-backed role, with an agreement status) and a `bacteria_pathogens` card.
+
+### 3.15 Product recommendations (prototype)
 
 - **What:** `products.recommend(contributions, summary, unit_id, crop, signals=..., context=...)` lists product types worth considering for one crop on one unit, each with a timing (`before_planting` or `during_growth`), a reason, what it rests on and the follow-up tests that would confirm it. `products.unanswered(crop, signals, context)` lists the soil rules that could not be evaluated. API: `GET /api/plots/{plot}/crop-risk/{unit}/{crop}/products`. GUI: the "Treatment plan" tab (`web/src/features/plan/`), linked from the crop disease risk tab.
 - **Triggers** (constants at the top of `src/cropfit/products.py`; the genus thresholds are those of 3.13):
@@ -560,4 +593,8 @@ j = pd.merge_asof(mg.sort_values("date"), chem.sort_values("collectDate"),
 - **NLCD 2001 plot labels are outdated** (`nlcd` in `resources/neon_soil_plots_landcover.csv`). Use crop maps (CDL, CSB) for what was actually grown.
 - **Two NEON farm sites are not a generalisation** of US (or EU) agriculture. The LUCAS table is the only cross-site check here and it is EU, genus-level and relative.
 - CSB and CDL carry no irrigation information; SSURGO is map-unit typical, not measured.
+- **Microbe roles are per genus.** A role describes the typical genus, not the strains in the sample. A genus "with plant pathogens" (e.g. *Streptomyces* via *S. scabies*, *Pseudomonas* via *P. syringae*) mostly holds harmless or useful species. That is why the "Mixed" class exists.
+- **LLM annotation can be wrong.** Only harmful and abundant genera had a second check, by an AI reviewer. No human expert has reviewed any of the roles.
+- **Kraken2 genus calls on short reads can misplace reads**, especially into well-known pathogen genera. Small shares are noise.
+- **Named carriers are capacity hints, not activity.** A genus listed as a possible carrier does not show that the function is active in this soil.
 - When in doubt, look at the raw table, and say what you could not verify.

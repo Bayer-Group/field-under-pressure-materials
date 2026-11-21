@@ -8,7 +8,7 @@ import { PlotTimeline, type MapLayer, type TimelineChoice } from './features/tim
 import { formatDate } from './format'
 import { PlanPanel } from './features/plan/PlanPanel'
 import { RiskPanel } from './features/risk/RiskPanel'
-import { functionsHref, microbesHref, navigate, planHref, plotHref, riskHref, type PlotTab } from './router'
+import { functionsHref, microbesHref, navigate, planHref, plotHref, riskHref, type MicrobeView, type PlotTab } from './router'
 import { bySite, formatLatLon, shortId, siteName } from './sites'
 import { useFetch } from './useFetch'
 
@@ -20,8 +20,8 @@ const CONTEXT_M: Record<MapLayer, number> = { photo: 130, greenness: 1050, none:
  *  is laid over the map), the soil microbiome, the soil functions, the crop disease risk and the products to consider. Panels for future backend results become further tabs. */
 const tabHref = (tab: PlotTab, id: string) => (tab === 'microbes' ? microbesHref(id) : tab === 'risk' ? riskHref(id) : tab === 'plan' ? planHref(id) : tab === 'functions' ? functionsHref(id) : plotHref(id))
 
-export function Explorer({ plotId, tab, sampleId, unit, crop }: {
-  plotId: string | null; tab: PlotTab; sampleId: string | null; unit: string | null; crop: string | null
+export function Explorer({ plotId, tab, sampleId, unit, crop, view }: {
+  plotId: string | null; tab: PlotTab; sampleId: string | null; unit: string | null; crop: string | null; view: MicrobeView
 }) {
   const plots = useFetch('plots', api.plots)
   const photos = useFetch(plotId, (s) => api.aerial(plotId!, s))
@@ -78,7 +78,7 @@ export function Explorer({ plotId, tab, sampleId, unit, crop }: {
           <>
             <PlotHead plot={selected} plots={plots.data!} tab={tab} onOpen={open} />
             {tab === 'microbes' ? (
-              <MicrobiomePanel plotId={selected.plot_id} sampleId={sampleId} />
+              <MicrobiomePanel plotId={selected.plot_id} sampleId={sampleId} view={view} />
             ) : tab === 'risk' ? (
               <RiskPanel plotId={selected.plot_id} unit={unit} crop={crop} />
             ) : tab === 'plan' ? (

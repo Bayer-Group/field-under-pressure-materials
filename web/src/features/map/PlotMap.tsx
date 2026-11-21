@@ -49,11 +49,20 @@ export function PlotMap({ plots, selected, focusSite, highlight, overlay, contex
   useEffect(() => {
     const m = L.map(el.current!, { maxZoom: 21, zoomSnap: 0.5 }).setView([39.5, -100], 5)
     m.createPane(OVERLAY_PANE).style.zIndex = '350'
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxNativeZoom: 19,
-      maxZoom: 21,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    }).addTo(m)
+    // Static demo: opened from file:// there is no Referer, which OSM's tile servers refuse; Esri needs no key.
+    const staticMode = import.meta.env.VITE_STATIC === '1'
+    L.tileLayer(
+      staticMode
+        ? 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}'
+        : 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+      {
+        maxNativeZoom: 19,
+        maxZoom: 21,
+        attribution: staticMode
+          ? 'Tiles &copy; Esri &mdash; Esri, HERE, Garmin, USGS, NGA, EPA, USDA, NPS'
+          : '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      },
+    ).addTo(m)
     m.on('click', (e) => {
       const ask = cb.current.inspect
       if (!ask) return

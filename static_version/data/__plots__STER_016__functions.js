@@ -1,0 +1,1 @@
+window.__BAKED__=window.__BAKED__||{};window.__BAKED__["/plots/STER_016/functions"]=[{"sample_id":"mg-dobj-11-1tka9y28","date":"2013-06-27","year":2013,"n_genes":6314,"deep_enough":false},{"sample_id":"mg-dobj-11-6r7tdh98","date":"2017-06-06","year":2017,"n_genes":17645,"deep_enough":false}];

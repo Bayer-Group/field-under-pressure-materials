@@ -19,9 +19,14 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from . import api as core
+from . import microbe_roles
 
 Kind = Literal["bacteria", "fungi"]
 Rank = Literal["phylum", "class", "genus"]
+SummaryClassId = Literal["useful", "mixed", "harmful", "context", "background", "unknown"]
+Polarity = Literal["useful", "harmful", "context", "background", "unknown"]
+Confidence = Literal["high", "medium", "low"]
+Evidence = Literal["curated_db", "well_known_genus", "some_species", "inferred"]
 
 MIN_BACTERIA_READS = 10_000     # classified bacterial + archaeal reads; below this a composition is shaky
 MIN_FUNGI_READS = 5_000         # fungal ITS reads summed over the passing cores
@@ -44,6 +49,7 @@ class Taxon(BaseModel):
     phylum: str | None               # the taxon's phylum (itself at phylum rank); used to colour it
     pct: float                       # share of the group's reads, 0-100
     reads: int
+    description: str | None = None   # rank genus only: rules/microbe_genera.csv via microbe_roles.describe(); else None
 
 
 class Composition(BaseModel):
@@ -58,6 +64,60 @@ class Composition(BaseModel):
     other_pct: float                 # named taxa beyond `top` (0 without `top`)
     unassigned_pct: float            # reads without a name at this rank
     notes: list[str]                 # plain-language caveats for this sample
+
+
+class RoleSummary(BaseModel):
+    class_id: SummaryClassId
+    label: str                       # section 2 labels of docs/microbe_roles.md, exact
+    pct: float                       # share of the group's reads (same basis as Composition.taxa[].pct)
+    pct_of_named: float              # share of reads with a genus name; the six add up to 100 (0 if none named)
+    n_genera: int
+    top: list[str]                   # up to 3 largest genus names in the class
+
+
+class RoleGenus(BaseModel):
+    name: str
+    domain: str | None               # Bacteria | Archaea | Fungi; None when the genus is not annotated
+    phylum: str | None
+    pct: float                       # share of the group's reads, 0-100
+    reads: int
+    term_id: str                     # term of the representative row: the listed term itself or a descendant
+    confidence: Confidence
+    evidence: Evidence
+    source: str                      # funguild | fungaltraits | llm:<model> | llm:<model>+reviewed | unannotated
+    species_examples: list[str]
+    note: str | None
+    summary_class: SummaryClassId
+    description: str | None
+
+
+class RoleTerm(BaseModel):
+    term_id: str
+    parent_id: str | None
+    label: str
+    description: str                 # the ontology's one-sentence description
+    polarity: Polarity
+    depth: int                       # 0 for the five roots
+    ko_groups: list[str]
+    pct: float                       # Σ pct of distinct genera with a counted row on the term or a descendant
+    n_genera: int
+    genera: list[RoleGenus]          # largest first, at most `genera_per_term`
+    other_genera_pct: float          # pct of the term's genera beyond the list (0 when all listed)
+
+
+class RoleComposition(BaseModel):
+    sample_id: str
+    kind: Kind
+    plot_id: str
+    date: dt.date
+    reads: int
+    n_genera: int                    # named genera in the sample
+    summary: list[RoleSummary]       # always six, order useful, mixed, harmful, context, background, unknown
+    terms: list[RoleTerm]            # all terms, ontology (depth-first) order, empty ones included
+    annotated_pct: float             # share of the group's reads from genera with >= 1 annotation row
+    unassigned_pct: float            # reads without a genus name, as Composition at rank genus
+    sources: list[str]               # distinct sources behind the counted rows of this sample
+    notes: list[str]
 
 
 # ---------------------------------------------------------------- samples
@@ -141,6 +201,15 @@ def _fungi_taxa(plot_id: str, date: dt.date, rank: Rank) -> pd.DataFrame:
             .agg(reads=("reads", "sum"), pct=("rel_abund_pct", "sum")))
 
 
+def _find(sample_id: str):
+    """The sample row of `sample_id`, looked up in the tables (never parsed into a path); 404 when unknown."""
+    s = _samples()
+    hit = s[s["sample_id"] == sample_id]
+    if hit.empty:
+        raise HTTPException(404, f"unknown microbiome sample {sample_id}")
+    return next(hit.itertuples())
+
+
 def _notes(r) -> list[str]:
     notes = []
     if r.low_depth:
@@ -176,17 +245,66 @@ def plot_microbiome(plot_id: str):
 def composition(sample_id: str, rank: Rank = "phylum", top: int | None = Query(None, ge=1)):
     """Composition of one sample at `rank`: every named taxon, largest first (or only the `top` largest, the
     rest summed in `other_pct`)."""
-    s = _samples()
-    hit = s[s["sample_id"] == sample_id]                # looked up in the tables, never parsed into a path
-    if hit.empty:
-        raise HTTPException(404, f"unknown microbiome sample {sample_id}")
-    r = next(hit.itertuples())
+    r = _find(sample_id)
     t = _bacteria_taxa(r.key, rank) if r.kind == "bacteria" else _fungi_taxa(r.plotID, r.date, rank)
     t = t[t["reads"] > 0].sort_values(["pct", "name"], ascending=[False, True])
     head, rest = (t, t.iloc[:0]) if top is None else (t.head(top), t.iloc[top:])
     named = float(t["pct"].sum())
+    desc = microbe_roles.load_descriptions() if rank == "genus" else {}
     taxa = [Taxon(name=x.name, phylum=None if pd.isna(x.phylum) else x.phylum, pct=round(float(x.pct), 4),
-                  reads=int(x.reads)) for x in head.itertuples()]
+                  reads=int(x.reads), description=microbe_roles.describe(r.kind, x.name, desc) if desc else None)
+            for x in head.itertuples()]
     return Composition(sample_id=r.sample_id, kind=r.kind, plot_id=r.plotID, date=r.date, rank=rank,
                        reads=int(r.reads), n_taxa=len(t), taxa=taxa, other_pct=round(float(rest["pct"].sum()), 2),
                        unassigned_pct=round(max(0.0, 100 - named), 2), notes=_notes(r))
+
+
+def _role_notes(r, ru: microbe_roles.RollUp) -> list[str]:
+    ai = "Roles come from an AI (LLM) annotation of each genus, checked by a second AI review only for harmful and abundant genera."
+    if r.kind == "fungi":
+        have = [(core.PROCESSED / t).exists() for t in (microbe_roles.FUNGALTRAITS_TABLE, microbe_roles.FUNGUILD_TABLE)]
+        ai += (" For fungi, FUNGuild and FungalTraits are used wherever they give a role." if any(have) else
+               " FUNGuild and FungalTraits tables are missing here, so fungal roles are from the AI annotation only.")
+    notes = _notes(r) + ["Roles are given per genus: a genus marked as including pathogens usually also holds "
+                         "harmless species, and one genus can have several roles.", ai,
+                         "Only roles given with medium or high confidence are counted."]
+    if ru.named_pct - ru.annotated_pct >= 0.5:
+        notes.append(f"{ru.named_pct - ru.annotated_pct:.0f}% of the reads are from genera not yet annotated; "
+                     "they count as Role unknown.")
+    if not microbe_roles.ANNOTATIONS_FILE.exists():
+        notes.append("Role annotations are not available yet (rules/microbe_annotations.csv is missing), so "
+                     "every genus counts as Role unknown.")
+    return notes
+
+
+def _role_genus(x) -> RoleGenus:
+    return RoleGenus(name=x.name, domain=x.domain if isinstance(x.domain, str) else None,
+                     phylum=None if pd.isna(x.phylum) else x.phylum, pct=round(float(x.pct), 4), reads=int(x.reads),
+                     term_id=x.row_term_id, confidence=x.confidence, evidence=x.evidence, source=x.source,
+                     species_examples=list(x.species_examples), note=x.note or None, summary_class=x.summary_class,
+                     description=x.description if isinstance(x.description, str) else None)
+
+
+@router.get("/microbiome/{sample_id}/roles", response_model=RoleComposition)
+def roles(sample_id: str, genera_per_term: int = Query(50, ge=1, le=5000)):
+    """What the named genera of one sample are likely to do (docs/microbe_roles.md): the six-class summary (a
+    partition of the named reads), and every role term with the genera that carry it (terms overlap)."""
+    r = _find(sample_id)
+    t = _bacteria_taxa(r.key, "genus") if r.kind == "bacteria" else _fungi_taxa(r.plotID, r.date, "genus")
+    ru = microbe_roles.roll_up(t, r.kind, ann=microbe_roles.load_annotations(core.PROCESSED))
+    by_term = {k: v for k, v in ru.term_genera.groupby("term_id")}
+    terms = []
+    for x in ru.terms.itertuples():
+        g = by_term.get(x.term_id, ru.term_genera.iloc[:0])
+        terms.append(RoleTerm(
+            term_id=x.term_id, parent_id=x.parent_id, label=x.label, description=x.description, polarity=x.polarity,
+            depth=int(x.depth), ko_groups=list(x.ko_groups), pct=round(float(x.pct), 2), n_genera=int(x.n_genera),
+            genera=[_role_genus(y) for y in g.head(genera_per_term).itertuples()],
+            other_genera_pct=round(float(g["pct"].iloc[genera_per_term:].sum()), 2)))
+    summary = [RoleSummary(class_id=x.class_id, label=x.label, pct=round(float(x.pct), 2),
+                           pct_of_named=round(float(x.pct_of_named), 2), n_genera=int(x.n_genera), top=list(x.top))
+               for x in ru.summary.itertuples()]
+    return RoleComposition(sample_id=r.sample_id, kind=r.kind, plot_id=r.plotID, date=r.date, reads=int(r.reads),
+                           n_genera=len(ru.genera), summary=summary, terms=terms,
+                           annotated_pct=round(ru.annotated_pct, 2), unassigned_pct=round(max(0.0, 100 - ru.named_pct), 2),
+                           sources=ru.sources, notes=_role_notes(r, ru))
