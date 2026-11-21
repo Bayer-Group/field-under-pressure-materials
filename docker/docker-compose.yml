@@ -1,10 +1,11 @@
 version: '3.8'
 
 services:
-  # 1. Baza danych przestrzennych (PostGIS)
+  # 1. Spatial database (PostGIS)
   postgis:
     image: postgis/postgis:15-3.3
     container_name: spatial_postgis
+    restart: unless-stopped  # starts again together with the machine (VM stop/start, reboot)
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-gis_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secretpassword}
@@ -13,7 +14,7 @@ services:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgis_data:/var/lib/postgresql/data
-      # Schemat tworzony automatycznie przy pierwszym starcie na pustym wolumenie
+      # Schema is created automatically on the first start with an empty volume
       - ./initdb:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-gis_user} -d ${POSTGRES_DB:-spatial_db}"]
@@ -21,7 +22,7 @@ services:
       timeout: 3s
       retries: 10
 
-  # 2. Lokalne S3 na pliki rastrowe COG (MinIO)
+  # 2. Local S3 for COG raster files (MinIO)
   minio:
     image: minio/minio:latest
     container_name: spatial_minio
@@ -35,7 +36,7 @@ services:
     volumes:
       - minio_data:/data
 
-  # 3. Dynamiczny serwer kafelków rastrowych (TiTiler)
+  # 3. Dynamic raster tile server (TiTiler)
   titiler:
     image: ghcr.io/developmentseed/titiler:latest
     container_name: spatial_titiler
