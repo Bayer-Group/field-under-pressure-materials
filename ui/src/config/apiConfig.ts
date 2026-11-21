@@ -1,24 +1,22 @@
-/**
- * Central API configuration and backend endpoint registry.
- *
- * When the backend becomes available:
- * 1. Set VITE_API_BASE_URL in ui/.env
- * 2. Set VITE_USE_PLACEHOLDERS=false
- * 3. Delete ui/src/placeholders/ and remove its fallback import in ui/src/api/orchardApi.ts
- */
+/** Common API configuration and endpoint registry. */
 
-const rawBaseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://localhost:8000';
+const rawBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000';
 const rawUsePlaceholders = import.meta.env.VITE_USE_PLACEHOLDERS as string | undefined;
 
 export const apiConfig = {
   baseUrl: rawBaseUrl.replace(/\/+$/, ''),
-  /** Defaults to true while backend endpoints are not yet live */
+  /** Controls orchard and temperature demo widgets. */
   usePlaceholders: rawUsePlaceholders !== 'false',
   requestTimeoutMs: 4000,
   defaultOrchardId: 'orchard-pl-01',
 } as const;
 
 export const API_ENDPOINTS = {
+  soilMoisture: {
+    analysis: '/api/soil-moisture',
+    task: (id: string) => `/api/soil-moisture/tasks/${encodeURIComponent(id)}`,
+    forecast: '/api/soil-moisture/forecast',
+  },
   weather: {
     temperature: '/api/v1/weather/temperature',
   },

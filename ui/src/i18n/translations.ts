@@ -27,6 +27,42 @@ export interface Translations {
     sectionSubtitle: string;
     moreChartsHint: string;
   };
+  soilMoisture: {
+    subtitle: string;
+    forecastTitle: string;
+    forecastDescription: string;
+    loadForecast: string;
+    loadingForecast: string;
+    forecastError: string;
+    issuedAt: string;
+    sarDate: string;
+    nextOverpass: string;
+    selectField: string;
+    field: string;
+    noForecast: string;
+    sarMoisture: string;
+    forecastTime: string;
+    moisture: string;
+    rain: string;
+    et0: string;
+    analysisTitle: string;
+    analysisDescription: string;
+    start: string;
+    testStart: string;
+    end: string;
+    dateError: string;
+    submit: string;
+    submitting: string;
+    submitError: string;
+    submitTimeout: string;
+    statusError: string;
+    exportLabel: string;
+    statusLabel: string;
+    taskId: string;
+    driveLabel: string;
+    states: Record<string, string>;
+    taskNames: Record<string, string>;
+  };
   temperature: {
     title: string;
     subtitle: string;
@@ -96,13 +132,13 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     app: {
       name: 'Field Under Pressure',
       subtitle: 'Monitoring Sadu 3D',
-      placeholderBadge: 'Tryb Placeholderów',
-      placeholderTooltip: 'Brak aktywnego backendu — wyświetlane są dane testowe z src/placeholders/.',
+      placeholderBadge: 'Dane demonstracyjne',
+      placeholderTooltip: 'Widżety sadu korzystają z danych demonstracyjnych.',
     },
     nav: {
       dashboard: 'Dashboard',
       rowEditor: 'Edytor linii rzędów (wkrótce)',
-      analytics: 'Analityka (placeholder)',
+      analytics: 'Wilgotność gleby',
       layers: 'Warstwy i skany (placeholder)',
       settings: 'Ustawienia (placeholder)',
       placeholderHint: 'Ikony tymczasowe',
@@ -118,6 +154,56 @@ export const TRANSLATIONS: Record<Language, Translations> = {
       sectionTitle: 'Panel Główny Sadu',
       sectionSubtitle: 'Monitorowanie mikroklimatu, uśrednionej kondycji drzew oraz wizualizacja 3D chmury punktów.',
       moreChartsHint: 'Siatka przygotowana pod kolejne wykresy',
+    },
+    soilMoisture: {
+      subtitle: 'Prognoza dla pól i analiza historycznych scen Sentinel‑1.',
+      forecastTitle: 'Prognoza do następnego przelotu',
+      forecastDescription: 'Oszacowanie z najnowszej sceny SAR, aktualizowane prognozą pogody.',
+      loadForecast: 'Pobierz prognozę',
+      loadingForecast: 'GEE oblicza prognozę…',
+      forecastError: 'Nie udało się pobrać prognozy. Sprawdź połączenie z API.',
+      issuedAt: 'Obliczono',
+      sarDate: 'Scena Sentinel‑1',
+      nextOverpass: 'Szacowany kolejny przelot',
+      selectField: 'Wybierz pole',
+      field: 'Pole',
+      noForecast: 'Brak prognozy dla tego pola w wybranej scenie.',
+      sarMoisture: 'Wilgotność w momencie przelotu',
+      forecastTime: 'Czas prognozy (Warszawa)',
+      moisture: 'Wilgotność objętościowa',
+      rain: 'Opad w okresie (mm)',
+      et0: 'ET₀ (mm)',
+      analysisTitle: 'Analiza historyczna',
+      analysisDescription: 'Wybierz okres treningu i testu. Data końcowa jest wyłączona z zakresu.',
+      start: 'Początek treningu',
+      testStart: 'Początek testu',
+      end: 'Data końcowa',
+      dateError: 'Podaj rosnące daty: początek treningu, początek testu i koniec.',
+      submit: 'Uruchom analizę',
+      submitting: 'Wysyłanie zadań do GEE…',
+      submitError: 'Nie udało się wysłać analizy. Sprawdź połączenie z API.',
+      submitTimeout: 'Upłynął czas odpowiedzi. Przed ponowieniem sprawdź zadania w GEE.',
+      statusError: 'Nie udało się odświeżyć części statusów. Kolejna próba nastąpi automatycznie.',
+      exportLabel: 'Eksport',
+      statusLabel: 'Stan',
+      taskId: 'Identyfikator GEE',
+      driveLabel: 'Znajdź eksporty na Dysku Google',
+      states: {
+        UNCONFIRMED: 'Sprawdzanie',
+        UNSUBMITTED: 'Oczekuje na wysłanie',
+        READY: 'W kolejce',
+        RUNNING: 'W trakcie',
+        COMPLETED: 'Zakończono',
+        FAILED: 'Błąd',
+        CANCEL_REQUESTED: 'Anulowanie',
+        CANCELLED: 'Anulowano',
+      },
+      taskNames: {
+        sentinel1_soil_moisture_metrics: 'Metryki modelu (CSV)',
+        sentinel1_soil_moisture: 'Mapa pól (GeoTIFF)',
+        sentinel1_soil_moisture_fields: 'Raport pól (CSV)',
+        sentinel1_soil_moisture_model: 'Model radarowy (GEE)',
+      },
     },
     temperature: {
       title: 'Temperatura Min / Max',
@@ -187,13 +273,13 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     app: {
       name: 'Field Under Pressure',
       subtitle: '3D Orchard Intelligence',
-      placeholderBadge: 'Placeholder Mode',
-      placeholderTooltip: 'No live backend connected yet — rendering placeholder data from src/placeholders/.',
+      placeholderBadge: 'Demo Data',
+      placeholderTooltip: 'Orchard widgets use demo data.',
     },
     nav: {
       dashboard: 'Dashboard',
       rowEditor: 'Row Line Editor (coming next)',
-      analytics: 'Analytics (placeholder)',
+      analytics: 'Soil moisture',
       layers: 'Layers & Scans (placeholder)',
       settings: 'Settings (placeholder)',
       placeholderHint: 'Placeholder icons',
@@ -209,6 +295,56 @@ export const TRANSLATIONS: Record<Language, Translations> = {
       sectionTitle: 'Orchard Overview Dashboard',
       sectionSubtitle: 'Microclimate tracking, averaged tree health diagnostics, and 3D point-cloud orchard visualization.',
       moreChartsHint: 'Extensible grid ready for additional charts',
+    },
+    soilMoisture: {
+      subtitle: 'Field forecasts and historical Sentinel‑1 analysis.',
+      forecastTitle: 'Forecast until the next overpass',
+      forecastDescription: 'An estimate from the latest SAR scene, updated using the weather forecast.',
+      loadForecast: 'Load forecast',
+      loadingForecast: 'GEE is calculating the forecast…',
+      forecastError: 'Could not load the forecast. Check the API connection.',
+      issuedAt: 'Issued at',
+      sarDate: 'Sentinel‑1 scene',
+      nextOverpass: 'Estimated next overpass',
+      selectField: 'Select a field',
+      field: 'Field',
+      noForecast: 'This scene has no forecast for the selected field.',
+      sarMoisture: 'Soil moisture at the overpass',
+      forecastTime: 'Forecast time (Warsaw)',
+      moisture: 'Volumetric soil moisture',
+      rain: 'Interval rainfall (mm)',
+      et0: 'ET₀ (mm)',
+      analysisTitle: 'Historical analysis',
+      analysisDescription: 'Choose the training and test periods. The end date is exclusive.',
+      start: 'Training start',
+      testStart: 'Test start',
+      end: 'End date',
+      dateError: 'Enter the training start, test start, and end date in chronological order.',
+      submit: 'Run analysis',
+      submitting: 'Submitting tasks to GEE…',
+      submitError: 'Could not submit the analysis. Check the API connection.',
+      submitTimeout: 'The request timed out. Check GEE tasks before submitting again.',
+      statusError: 'Some task statuses could not be refreshed. Retrying automatically.',
+      exportLabel: 'Export',
+      statusLabel: 'Status',
+      taskId: 'GEE task ID',
+      driveLabel: 'Find exports in Google Drive',
+      states: {
+        UNCONFIRMED: 'Checking',
+        UNSUBMITTED: 'Awaiting submission',
+        READY: 'Queued',
+        RUNNING: 'Running',
+        COMPLETED: 'Completed',
+        FAILED: 'Failed',
+        CANCEL_REQUESTED: 'Cancelling',
+        CANCELLED: 'Cancelled',
+      },
+      taskNames: {
+        sentinel1_soil_moisture_metrics: 'Model metrics (CSV)',
+        sentinel1_soil_moisture: 'Field map (GeoTIFF)',
+        sentinel1_soil_moisture_fields: 'Field report (CSV)',
+        sentinel1_soil_moisture_model: 'Radar model (GEE)',
+      },
     },
     temperature: {
       title: 'Min / Max Temperature',

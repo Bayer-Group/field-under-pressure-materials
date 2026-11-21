@@ -12,6 +12,7 @@ ML/wandb/
 # Secrets / local config
 .env
 .env.*
+/earthengine.json
 *.pem
 
 # Python

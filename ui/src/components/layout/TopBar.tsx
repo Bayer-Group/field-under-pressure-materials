@@ -40,7 +40,7 @@ export function TopBar({ activeSection }: TopBarProps) {
           <span className="topbar-section-name">{sectionLabels[activeSection]}</span>
         </div>
 
-        {apiConfig.usePlaceholders && (
+        {apiConfig.usePlaceholders && activeSection !== 'analytics' && (
           <span className="placeholder-pill" title={t.app.placeholderTooltip}>
             <span className="placeholder-pill-dot" aria-hidden="true" />
             {t.app.placeholderBadge}

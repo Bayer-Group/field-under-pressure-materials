@@ -1005,6 +1005,159 @@ input {
   filter: brightness(1.06);
 }
 
+.soil-panel {
+  min-width: 0;
+}
+
+.soil-date-form,
+.soil-meta {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.soil-date-form {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  align-items: end;
+}
+
+.soil-input {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.soil-input input,
+.soil-input select {
+  min-width: 0;
+  min-height: 38px;
+  padding: 7px 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font: inherit;
+}
+
+.soil-input select {
+  justify-self: start;
+  min-width: 10rem;
+}
+
+[data-theme='dark'] .soil-input :is(input, select) {
+  color-scheme: dark;
+}
+
+.soil-action {
+  min-height: 38px;
+  margin: 0;
+  justify-content: center;
+  background: color-mix(in srgb, var(--accent) 78%, #000);
+}
+
+[data-theme='dark'] .soil-action {
+  background: var(--accent);
+}
+
+.soil-action:disabled {
+  opacity: 0.68;
+  cursor: wait;
+}
+
+.soil-panel :is(input, select, button, a):focus-visible {
+  outline: 2px solid var(--temp-min);
+  outline-offset: 2px;
+}
+
+.soil-meta {
+  margin: 0;
+  padding: 12px;
+  background: var(--bg-surface-muted);
+  border-radius: 10px;
+}
+
+.soil-meta dt,
+.soil-table small {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.soil-meta dd {
+  margin: 4px 0 0;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.soil-feedback {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.soil-error,
+.soil-table .soil-error {
+  color: var(--temp-max);
+}
+
+.soil-table-scroll {
+  overflow-x: auto;
+}
+
+.soil-table {
+  width: 100%;
+  min-width: 31rem;
+  border-collapse: collapse;
+  table-layout: auto;
+  font-size: 13px;
+  text-align: left;
+}
+
+.soil-table :is(th, td) {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.soil-table thead {
+  background: var(--bg-surface-muted);
+  color: var(--text-secondary);
+}
+
+.soil-table tbody th {
+  font-weight: 600;
+}
+
+.soil-table small {
+  display: block;
+  margin-top: 3px;
+}
+
+.soil-table code {
+  white-space: nowrap;
+}
+
+.soil-status {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--bg-surface-muted);
+  white-space: nowrap;
+}
+
+.soil-status[data-state='COMPLETED'] {
+  background: var(--accent-soft);
+}
+
+.soil-status[data-state='FAILED'] {
+  border: 1px solid var(--temp-max);
+}
+
+.soil-drive-link {
+  align-self: flex-start;
+  color: var(--temp-min);
+  font-size: 13px;
+}
+
 /* ==========================================================================
    Responsive Adjustments
    ========================================================================== */
@@ -1027,6 +1180,11 @@ input {
 
   .app-content {
     padding: 14px;
+  }
+
+  .soil-date-form,
+  .soil-meta {
+    grid-template-columns: 1fr;
   }
 
   .viewer-stage {
