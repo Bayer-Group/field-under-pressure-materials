@@ -23,7 +23,6 @@ from ml.config import (
 )
 from ml.dataset import FeatureScaler, FieldTimeSeriesDataset, split_indices
 from ml.model import VegetationLSTM, compute_masked_metrics, masked_smooth_l1_loss
-from ml.prepare_dataset import generate_synthetic_demo_dataset
 
 
 def _select_device() -> torch.device:
@@ -73,16 +72,25 @@ def _evaluate(
     return avg_loss, metrics
 
 
+DEFAULT_PIXEL_CHECKPOINT_PATH = Path("ml/checkpoints/vegetation_lstm_pixel.pt")
+
+
 def train_model(
     data_dir: str | Path = DEFAULT_DATA_DIR,
-    checkpoint_path: str | Path = DEFAULT_CHECKPOINT_PATH,
+    checkpoint_path: str | Path | None = None,
     model_cfg: ModelConfig | None = None,
     train_cfg: TrainConfig | None = None,
+    mode: str = "field",
+    anchor_stride: int | None = None,
 ) -> dict:
     """
     Trenuje model VegetationLSTM na danych z data_dir i zapisuje najlepszy
     checkpoint (wraz ze skalerem i konfiguracją) do checkpoint_path.
+    Obsługuje tryb `field` (średnia po polu) oraz `pixel` (piksele 10 m z komórek H3).
     """
+    if mode not in ("field", "pixel"):
+        raise ValueError(f"Nieznany tryb treningu: {mode!r} (oczekiwano 'field' lub 'pixel').")
+
     model_cfg = model_cfg or ModelConfig()
     train_cfg = train_cfg or TrainConfig()
 
@@ -91,15 +99,30 @@ def train_model(
     device = _select_device()
 
     data_dir = Path(data_dir)
+    if checkpoint_path is None:
+        checkpoint_path = DEFAULT_PIXEL_CHECKPOINT_PATH if mode == "pixel" else DEFAULT_CHECKPOINT_PATH
+
+    eff_stride = anchor_stride if anchor_stride is not None else (3 if mode == "pixel" else 1)
+    if mode == "pixel":
+        master_parquet = data_dir / "pixel_master.parquet"
+        sat_parquet = data_dir / "pixel_satellite_indices.parquet"
+        entity_col = "pixel_id"
+    else:
+        master_parquet = data_dir / "fields_master.parquet"
+        sat_parquet = data_dir / "satellite_indices.parquet"
+        entity_col = "field_id"
+
     dataset = FieldTimeSeriesDataset(
-        fields_master_parquet=data_dir / "fields_master.parquet",
-        satellite_indices_parquet=data_dir / "satellite_indices.parquet",
+        fields_master_parquet=master_parquet,
+        satellite_indices_parquet=sat_parquet,
         weather_daily_parquet=data_dir / "weather_daily.parquet",
         history_days=model_cfg.history_days,
         forecast_days=model_cfg.forecast_days,
         target_mode=train_cfg.target_mode,
         max_interp_gap_days=train_cfg.max_interp_gap_days,
         min_hist_obs=train_cfg.min_hist_obs,
+        entity_col=entity_col,
+        anchor_stride=eff_stride,
     )
 
     train_idx, val_idx = split_indices(
@@ -129,8 +152,8 @@ def train_model(
     best_metrics: dict[str, float] = {}
 
     print(
-        f"[TRAIN] Start na {device}: okna train={len(train_idx)}, val={len(val_idx)}, "
-        f"tryb={train_cfg.split_mode}/{train_cfg.target_mode}, epoki={train_cfg.epochs}"
+        f"[TRAIN] Start na {device}: tryb={mode}/{train_cfg.split_mode}/{train_cfg.target_mode}, "
+        f"stride={eff_stride}, okna train={len(train_idx)}, val={len(val_idx)}, epoki={train_cfg.epochs}"
     )
 
     for epoch in range(1, train_cfg.epochs + 1):
@@ -178,6 +201,7 @@ def train_model(
                     "train_config": train_cfg.to_dict(),
                     "scaler": scaler.to_dict(),
                     "val_metrics": best_metrics,
+                    "entity_mode": mode,
                     "feature_schema": {
                         "hist": list(HIST_FEATURE_NAMES),
                         "future": list(FUTURE_FEATURE_NAMES),
@@ -195,15 +219,18 @@ def train_model(
         "val_metrics": best_metrics,
         "n_train": len(train_idx),
         "n_val": len(val_idx),
+        "mode": mode,
     }
 
 
 def _build_cli() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Trening modelu VegetationLSTM (prognoza NDVI i NDMI na 7 dni).")
-    p.add_argument("--data-dir", default=str(DEFAULT_DATA_DIR), help="Folder z fields_master/satellite_indices/weather_daily.")
-    p.add_argument("--checkpoint", default=str(DEFAULT_CHECKPOINT_PATH), help="Ścieżka zapisu wag modelu (.pt).")
+    p.add_argument("--data-dir", default=str(DEFAULT_DATA_DIR), help="Folder z tabelami Parquet (fields/pixel, satellite, weather).")
+    p.add_argument("--mode", choices=("field", "pixel"), default="field", help="Granularność treningu: średnia po polu lub piksel 10 m.")
+    p.add_argument("--checkpoint", default=None, help="Ścieżka zapisu wag modelu (.pt); domyślnie zależna od --mode.")
     p.add_argument("--epochs", type=int, default=30)
-    p.add_argument("--batch-size", type=int, default=32)
+    p.add_argument("--batch-size", type=int, default=None, help="Rozmiar batcha (domyślnie 32 dla field, 256 dla pixel).")
+    p.add_argument("--anchor-stride", type=int, default=None, help="Krok przesuwu okien (domyślnie 1 dla field, 3 dla pixel).")
     p.add_argument("--lr", type=float, default=1e-3)
     p.add_argument("--hidden-size", type=int, default=64)
     p.add_argument("--num-layers", type=int, default=2)
@@ -217,14 +244,32 @@ if __name__ == "__main__":
     args = _build_cli().parse_args()
     data_dir = Path(args.data_dir)
     if args.demo:
+        if args.mode == "pixel":
+            raise ValueError("Tryb --demo generuje wyłącznie dane na poziomie pól (--mode field).")
+        from ml.prepare_dataset import generate_synthetic_demo_dataset
+
         data_dir = generate_synthetic_demo_dataset(DEFAULT_DATA_DIR / "demo")
+
+    batch_size = args.batch_size if args.batch_size is not None else (256 if args.mode == "pixel" else 32)
+    checkpoint_path = (
+        args.checkpoint
+        if args.checkpoint is not None
+        else (DEFAULT_PIXEL_CHECKPOINT_PATH if args.mode == "pixel" else DEFAULT_CHECKPOINT_PATH)
+    )
 
     m_cfg = ModelConfig(hidden_size=args.hidden_size, num_layers=args.num_layers)
     t_cfg = TrainConfig(
         epochs=args.epochs,
-        batch_size=args.batch_size,
+        batch_size=batch_size,
         lr=args.lr,
         split_mode=args.split_mode,
         target_mode=args.target_mode,
     )
-    train_model(data_dir=data_dir, checkpoint_path=args.checkpoint, model_cfg=m_cfg, train_cfg=t_cfg)
+    train_model(
+        data_dir=data_dir,
+        checkpoint_path=checkpoint_path,
+        model_cfg=m_cfg,
+        train_cfg=t_cfg,
+        mode=args.mode,
+        anchor_stride=args.anchor_stride,
+    )

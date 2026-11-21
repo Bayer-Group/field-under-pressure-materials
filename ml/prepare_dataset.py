@@ -10,8 +10,13 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import rasterio
+from rasterio.enums import Resampling
+import rasterio.features
 from rasterio.features import geometry_mask
 import rasterio.mask
+import rasterio.transform
+import rasterio.warp
+from rasterio.vrt import WarpedVRT
 from shapely.geometry import box
 
 if __package__ in (None, ""):
@@ -22,6 +27,7 @@ if __package__ in (None, ""):
 from ml.config import (
     DEFAULT_DATA_DIR,
     MVP_CROP_CODE_TO_NAME,
+    STATIC_SOIL_COLS,
     WEATHER_COLS,
 )
 
@@ -151,6 +157,154 @@ def _normalize_tiff_inputs(
     return normalized
 
 
+PIXEL_SOIL_VALUE_COLS: tuple[str, ...] = tuple(c for c in STATIC_SOIL_COLS if c != "area_ha")
+
+
+def detect_scene_bands(src: rasterio.DatasetReader) -> tuple[bool, list[int]]:
+    """
+    Rozpoznaje układ pasm w GeoTIFF Sentinel-2 ('NDVI'/'NDMI' vs raw 'red'/'nir'/'swir16').
+    """
+    desc_map = {
+        (src.descriptions[i] or "").strip().lower(): i + 1
+        for i in range(src.count)
+        if src.descriptions[i]
+    }
+    has_precomputed = "ndvi" in desc_map and "ndmi" in desc_map
+    has_raw = {"red", "nir", "swir16"}.issubset(desc_map)
+    if not has_precomputed and not has_raw:
+        raise ValueError(
+            f"Plik {src.name} musi zawierać opisane pasma ('NDVI', 'NDMI') "
+            "lub ('red', 'nir', 'swir16')."
+        )
+    band_indexes = (
+        [desc_map["ndvi"], desc_map["ndmi"]]
+        if has_precomputed
+        else [desc_map["red"], desc_map["nir"], desc_map["swir16"]]
+    )
+    return has_precomputed, band_indexes
+
+
+def arrays_to_ndvi_ndmi(
+    arr: np.ndarray,
+    has_precomputed: bool,
+    nodata: float | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Konwertuje surowe lub gotowe pasma rastra (C, H, W) na pary 2D (ndvi, ndmi) float32."""
+    work = arr.astype(np.float32, copy=True)
+    if nodata is not None and np.isfinite(nodata):
+        work = np.where(work == float(nodata), np.nan, work)
+
+    if has_precomputed:
+        ndvi_arr, ndmi_arr = work[0], work[1]
+    else:
+        red_arr = np.where(work[0] == 0, np.nan, work[0])
+        nir_arr = np.where(work[1] == 0, np.nan, work[1])
+        swir_arr = np.where(work[2] == 0, np.nan, work[2])
+        d_ndvi = nir_arr + red_arr
+        d_ndmi = nir_arr + swir_arr
+        ndvi_arr = np.where((d_ndvi != 0) & np.isfinite(d_ndvi), (nir_arr - red_arr) / d_ndvi, np.nan)
+        ndmi_arr = np.where((d_ndmi != 0) & np.isfinite(d_ndmi), (nir_arr - swir_arr) / d_ndmi, np.nan)
+
+    ndvi_out = np.where(np.isfinite(ndvi_arr), np.clip(ndvi_arr, -1.0, 1.0), np.nan).astype(np.float32)
+    ndmi_out = np.where(np.isfinite(ndmi_arr), np.clip(ndmi_arr, -1.0, 1.0), np.nan).astype(np.float32)
+    return ndvi_out, ndmi_out
+
+
+def load_h3_soil_lookup(
+    soil_h3_parquet: str | Path = Path("data/soil/field_soil_h3_cells.parquet"),
+) -> dict[str, tuple[np.ndarray, np.ndarray, dict[str, np.ndarray]]]:
+    """
+    Buduje szybki słownik komórek H3 pogrupowanych wg `field_id` do przypisywania
+    gleby dla pojedynczych pikseli 10 m.
+    """
+    h3_path = Path(soil_h3_parquet)
+    if not h3_path.exists():
+        return {}
+
+    df = pd.read_parquet(h3_path)
+    required = {"field_id", "cell_lat", "cell_lon"}
+    if df.empty or not required.issubset(df.columns):
+        return {}
+
+    df = df.copy()
+    df["field_id"] = df["field_id"].astype(str)
+    df["cell_lat"] = pd.to_numeric(df["cell_lat"], errors="coerce")
+    df["cell_lon"] = pd.to_numeric(df["cell_lon"], errors="coerce")
+    df = df[df["cell_lat"].notna() & df["cell_lon"].notna()].reset_index(drop=True)
+    if df.empty:
+        return {}
+
+    for col in PIXEL_SOIL_VALUE_COLS:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    lookup: dict[str, tuple[np.ndarray, np.ndarray, dict[str, np.ndarray]]] = {}
+    present_soil_cols = [c for c in PIXEL_SOIL_VALUE_COLS if c in df.columns]
+    has_h3_idx = "h3_index_10" in df.columns
+
+    for fid, grp in df.groupby("field_id", sort=False):
+        lats = grp["cell_lat"].to_numpy(dtype=np.float64)
+        lons = grp["cell_lon"].to_numpy(dtype=np.float64)
+        cols_data: dict[str, np.ndarray] = {
+            col: grp[col].to_numpy(dtype=np.float32) for col in present_soil_cols
+        }
+        if has_h3_idx:
+            cols_data["h3_index_10"] = grp["h3_index_10"].astype(str).to_numpy()
+        lookup[fid] = (lats, lons, cols_data)
+
+    return lookup
+
+
+def assign_pixels_to_h3_soil(
+    field_id: str,
+    pixel_lats: np.ndarray,
+    pixel_lons: np.ndarray,
+    h3_lookup: dict[str, tuple[np.ndarray, np.ndarray, dict[str, np.ndarray]]],
+    fallback_row: dict,
+) -> dict[str, np.ndarray]:
+    """
+    Przypisuje każdy piksel (pixel_lats, pixel_lons) do najbliższej komórki H3 w ramach
+    tego samego pola, z bezpiecznym fallbackiem na profil całego pola.
+    """
+    n_px = len(pixel_lats)
+    entry = h3_lookup.get(str(field_id))
+
+    if entry is not None and n_px > 0:
+        c_lats, c_lons, c_cols = entry
+        cos_lat = float(np.cos(np.deg2rad(np.mean(c_lats))))
+        d2 = (pixel_lats[:, None] - c_lats[None, :]) ** 2 + (
+            (pixel_lons[:, None] - c_lons[None, :]) * cos_lat
+        ) ** 2
+        nearest = np.argmin(d2, axis=1)
+    else:
+        c_cols = {}
+        nearest = None
+
+    out: dict[str, np.ndarray] = {}
+    if nearest is not None and "h3_index_10" in c_cols:
+        out["h3_index_10"] = c_cols["h3_index_10"][nearest]
+    else:
+        out["h3_index_10"] = np.asarray([None] * n_px, dtype=object)
+
+    for col in PIXEL_SOIL_VALUE_COLS:
+        raw_fb = fallback_row.get(col, 0.0)
+        try:
+            fb_val = float(raw_fb)
+        except (TypeError, ValueError):
+            fb_val = 0.0
+        if not np.isfinite(fb_val):
+            fb_val = 0.0
+
+        if nearest is not None and col in c_cols:
+            vals = c_cols[col][nearest].astype(np.float32, copy=True)
+            vals = np.where(np.isfinite(vals), vals, fb_val).astype(np.float32)
+        else:
+            vals = np.full(n_px, fb_val, dtype=np.float32)
+        out[col] = vals
+
+    return out
+
+
 def extract_satellite_indices_from_tiffs(
     fields_geojson: str | Path,
     tiff_inputs: str | Path | Iterable[str | Path | tuple[str, str | Path]],
@@ -176,26 +330,9 @@ def extract_satellite_indices_from_tiffs(
 
     for obs_date, tif_path in items:
         with rasterio.open(tif_path) as src:
-            desc_map = {
-                (src.descriptions[i] or "").strip().lower(): i + 1
-                for i in range(src.count)
-                if src.descriptions[i]
-            }
-            has_precomputed = "ndvi" in desc_map and "ndmi" in desc_map
-            has_raw = {"red", "nir", "swir16"}.issubset(desc_map)
-            if not has_precomputed and not has_raw:
-                raise ValueError(
-                    f"Plik {tif_path} musi zawierać opisane pasma ('NDVI', 'NDMI') "
-                    "lub ('red', 'nir', 'swir16')."
-                )
-
+            has_precomputed, band_indexes = detect_scene_bands(src)
             fields_crs = gdf.to_crs(src.crs)
             raster_box = box(*src.bounds)
-            band_indexes = (
-                [desc_map["ndvi"], desc_map["ndmi"]]
-                if has_precomputed
-                else [desc_map["red"], desc_map["nir"], desc_map["swir16"]]
-            )
 
             for field_row in fields_crs.itertuples():
                 geom = field_row.geometry
@@ -220,17 +357,7 @@ def extract_satellite_indices_from_tiffs(
                 if total_poly_px == 0:
                     continue
 
-                if has_precomputed:
-                    ndvi_arr, ndmi_arr = arr[0], arr[1]
-                else:
-                    red_arr = np.where(arr[0] == 0, np.nan, arr[0])
-                    nir_arr = np.where(arr[1] == 0, np.nan, arr[1])
-                    swir_arr = np.where(arr[2] == 0, np.nan, arr[2])
-                    d_ndvi = nir_arr + red_arr
-                    d_ndmi = nir_arr + swir_arr
-                    ndvi_arr = np.where((d_ndvi != 0) & np.isfinite(d_ndvi), (nir_arr - red_arr) / d_ndvi, np.nan)
-                    ndmi_arr = np.where((d_ndmi != 0) & np.isfinite(d_ndmi), (nir_arr - swir_arr) / d_ndmi, np.nan)
-
+                ndvi_arr, ndmi_arr = arrays_to_ndvi_ndmi(arr, has_precomputed=has_precomputed)
                 valid_mask = poly_mask & np.isfinite(ndvi_arr) & np.isfinite(ndmi_arr)
                 valid_px = int(valid_mask.sum())
                 valid_ratio = valid_px / float(total_poly_px)
@@ -263,6 +390,287 @@ def extract_satellite_indices_from_tiffs(
     out.to_parquet(out_path, index=False)
     print(f"[ML PREP] Zapisano satellite_indices ({len(out)} obserwacji) -> {out_path}")
     return out
+
+
+def extract_pixel_dataset_from_tiffs(
+    fields_geojson: str | Path,
+    tiff_inputs: str | Path | Iterable[str | Path | tuple[str, str | Path]],
+    soil_h3_parquet: str | Path = Path("data/soil/field_soil_h3_cells.parquet"),
+    fields_master_parquet: str | Path = DEFAULT_DATA_DIR / "fields_master.parquet",
+    out_master_path: str | Path = DEFAULT_DATA_DIR / "pixel_master.parquet",
+    out_sat_path: str | Path = DEFAULT_DATA_DIR / "pixel_satellite_indices.parquet",
+    id_col: str = "id",
+    min_area_ha: float = 3.0,
+    pixels_per_field: int = 32,
+    min_valid_scenes: int = 3,
+    seed: int = 42,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Próbkuje stratyfikowane piksele 10 m z wnętrza każdego pola na bazie scen Sentinel-2,
+    łączy każdy piksel z najbliższą komórką glebową H3 (`field_soil_h3_cells.parquet`)
+    i zapisuje tabele `pixel_master.parquet` oraz `pixel_satellite_indices.parquet`.
+    """
+    items = _normalize_tiff_inputs(tiff_inputs)
+    if not items:
+        raise ValueError("Brak plików GeoTIFF do ekstrakcji zestawu pikselowego.")
+
+    gdf = gpd.read_file(fields_geojson)
+    if id_col and id_col in gdf.columns:
+        gdf["field_id"] = gdf[id_col].astype(str)
+    else:
+        gdf["field_id"] = [f"field_{i}" for i in range(len(gdf))]
+    if gdf.crs is None:
+        gdf = gdf.set_crs("EPSG:4326")
+
+    master_path = Path(fields_master_parquet)
+    fields_meta_by_id: dict[str, dict] = {}
+    if master_path.exists():
+        fm_df = pd.read_parquet(master_path)
+        fm_df["field_id"] = fm_df["field_id"].astype(str)
+        fields_meta_by_id = {row["field_id"]: row for row in fm_df.to_dict("records")}
+        gdf = gdf[gdf["field_id"].isin(fields_meta_by_id)].copy()
+
+    if gdf.empty:
+        raise ValueError("Brak pasujących pól między GeoJSON a fields_master.parquet.")
+
+    with rasterio.open(items[0][1]) as ref_src:
+        ref_crs = ref_src.crs
+        ref_transform = ref_src.transform
+        ref_height = ref_src.height
+        ref_width = ref_src.width
+
+    gdf_utm = gdf.to_crs(ref_crs).reset_index(drop=True)
+    field_records: list[dict] = []
+    shapes: list[tuple] = []
+
+    for row in gdf_utm.itertuples():
+        geom = row.geometry
+        if geom is None or geom.is_empty:
+            continue
+        fid = str(row.field_id)
+        meta = fields_meta_by_id.get(fid)
+        if meta is not None:
+            area_ha = float(meta.get("area_ha", geom.area / 10000.0))
+            crop_code = meta.get("crop_code", np.nan)
+            crop_name = str(meta.get("crop", "inne"))
+            fallback = dict(meta)
+        else:
+            area_ha = float(getattr(row, "area_ha", geom.area / 10000.0))
+            crop_code = getattr(row, "crop_code", np.nan)
+            crop_name = _map_crop_name(crop_code)
+            fallback = {"area_ha": area_ha, "crop_code": crop_code, "crop": crop_name}
+
+        if area_ha < min_area_ha:
+            continue
+
+        label_idx = len(field_records) + 1
+        shapes.append((geom, label_idx))
+        field_records.append(
+            {
+                "field_id": fid,
+                "area_ha": area_ha,
+                "crop_code": crop_code,
+                "crop": crop_name,
+                "fallback": fallback,
+            }
+        )
+
+    if not shapes:
+        raise ValueError("Brak ważnych poligonów pól po filtrowaniu min_area_ha.")
+
+    label_grid = rasterio.features.rasterize(
+        shapes=shapes,
+        out_shape=(ref_height, ref_width),
+        transform=ref_transform,
+        fill=0,
+        dtype=np.int32,
+    )
+    rows_all, cols_all = np.nonzero(label_grid > 0)
+    if len(rows_all) == 0:
+        raise ValueError("Żaden piksel Sentinel-2 nie leży wewnątrz geometrii pól.")
+
+    labels_1d = label_grid[rows_all, cols_all]
+    order = np.argsort(labels_1d, kind="mergesort")
+    labels_sorted = labels_1d[order]
+    rows_sorted = rows_all[order].astype(np.int32)
+    cols_sorted = cols_all[order].astype(np.int32)
+
+    n_scenes = len(items)
+    n_px_total = len(rows_sorted)
+    ndvi_seq = np.full((n_scenes, n_px_total), np.nan, dtype=np.float32)
+    ndmi_seq = np.full((n_scenes, n_px_total), np.nan, dtype=np.float32)
+    scene_dates: list[str] = []
+
+    for t_idx, (obs_date, tif_path) in enumerate(items):
+        scene_dates.append(obs_date)
+        with rasterio.open(tif_path) as src:
+            has_precomputed, band_indexes = detect_scene_bands(src)
+            same_grid = (
+                src.crs == ref_crs
+                and src.transform == ref_transform
+                and src.width == ref_width
+                and src.height == ref_height
+            )
+            if same_grid:
+                ma = src.read(band_indexes, masked=True)
+            else:
+                with WarpedVRT(
+                    src,
+                    crs=ref_crs,
+                    transform=ref_transform,
+                    width=ref_width,
+                    height=ref_height,
+                    resampling=Resampling.bilinear,
+                    nodata=np.nan,
+                ) as vrt:
+                    ma = vrt.read(band_indexes, masked=True)
+
+            arr = np.where(ma.mask, np.nan, ma.data.astype(np.float32))
+            ndvi_2d, ndmi_2d = arrays_to_ndvi_ndmi(arr, has_precomputed=has_precomputed, nodata=src.nodata)
+            ndvi_seq[t_idx] = ndvi_2d[rows_sorted, cols_sorted]
+            ndmi_seq[t_idx] = ndmi_2d[rows_sorted, cols_sorted]
+
+    rng = np.random.default_rng(seed)
+    eff_min_valid = min(max(1, int(min_valid_scenes)), n_scenes)
+    h3_lookup = load_h3_soil_lookup(soil_h3_parquet)
+
+    split_pts = np.flatnonzero(np.diff(labels_sorted)) + 1
+    starts = np.concatenate(([0], split_pts))
+    ends = np.concatenate((split_pts, [n_px_total]))
+
+    sel_global_idxs: list[np.ndarray] = []
+    sel_field_meta_idxs: list[int] = []
+    sel_n_valid: list[np.ndarray] = []
+
+    for start_i, end_i in zip(starts, ends):
+        label_idx = int(labels_sorted[start_i]) - 1
+        f_ndvi = ndvi_seq[:, start_i:end_i]
+        f_ndmi = ndmi_seq[:, start_i:end_i]
+        valid_tp = np.isfinite(f_ndvi) & np.isfinite(f_ndmi)
+        n_valid_px = valid_tp.sum(axis=0)
+        cand_local = np.flatnonzero(n_valid_px >= eff_min_valid)
+        if len(cand_local) == 0:
+            continue
+
+        if len(cand_local) <= pixels_per_field:
+            chosen_local = cand_local
+        else:
+            mean_ndvi = np.nanmean(np.where(valid_tp[:, cand_local], f_ndvi[:, cand_local], np.nan), axis=0)
+            sorted_cand = cand_local[np.argsort(mean_ndvi, kind="mergesort")]
+            strata = np.array_split(sorted_cand, pixels_per_field)
+            chosen_local = np.asarray(
+                [int(chunk[rng.integers(0, len(chunk))]) for chunk in strata if len(chunk) > 0],
+                dtype=np.int64,
+            )
+
+        sel_global_idxs.append(start_i + chosen_local)
+        sel_field_meta_idxs.extend([label_idx] * len(chosen_local))
+        sel_n_valid.append(n_valid_px[chosen_local])
+
+    if not sel_global_idxs:
+        raise ValueError("Żaden piksel nie spełnił kryterium min_valid_scenes obserwacji.")
+
+    all_sel_idx = np.concatenate(sel_global_idxs)
+    all_sel_rows = rows_sorted[all_sel_idx]
+    all_sel_cols = cols_sorted[all_sel_idx]
+    all_sel_nvalid = np.concatenate(sel_n_valid).astype(np.int32)
+    all_meta_idxs = np.asarray(sel_field_meta_idxs, dtype=np.int32)
+
+    xs_utm, ys_utm = rasterio.transform.xy(ref_transform, all_sel_rows, all_sel_cols, offset="center")
+    lons, lats = rasterio.warp.transform(
+        ref_crs,
+        "EPSG:4326",
+        np.asarray(xs_utm, dtype=np.float64),
+        np.asarray(ys_utm, dtype=np.float64),
+    )
+    pixel_lons = np.asarray(lons, dtype=np.float64)
+    pixel_lats = np.asarray(lats, dtype=np.float64)
+
+    n_selected = len(all_sel_idx)
+    pixel_ids = [
+        f"{field_records[m_idx]['field_id']}_r{int(r)}_c{int(c)}"
+        for m_idx, r, c in zip(all_meta_idxs, all_sel_rows, all_sel_cols)
+    ]
+    field_ids_col = [field_records[m_idx]["field_id"] for m_idx in all_meta_idxs]
+    area_col = np.asarray([field_records[m_idx]["area_ha"] for m_idx in all_meta_idxs], dtype=np.float32)
+    crop_code_col = np.asarray([field_records[m_idx]["crop_code"] for m_idx in all_meta_idxs], dtype=np.float64)
+    crop_col = [field_records[m_idx]["crop"] for m_idx in all_meta_idxs]
+
+    soil_arrays: dict[str, np.ndarray] = {
+        col: np.zeros(n_selected, dtype=np.float32) for col in PIXEL_SOIL_VALUE_COLS
+    }
+    h3_col = np.asarray([None] * n_selected, dtype=object)
+
+    # Grupowane przypisanie gleby H3 wg field_id (1 macierz odległości na pole)
+    pos_by_meta: dict[int, list[int]] = {}
+    for pos_i, m_idx in enumerate(all_meta_idxs):
+        pos_by_meta.setdefault(int(m_idx), []).append(pos_i)
+
+    for m_idx, pos_list in pos_by_meta.items():
+        pos_arr = np.asarray(pos_list, dtype=np.int64)
+        rec = field_records[m_idx]
+        assigned = assign_pixels_to_h3_soil(
+            field_id=rec["field_id"],
+            pixel_lats=pixel_lats[pos_arr],
+            pixel_lons=pixel_lons[pos_arr],
+            h3_lookup=h3_lookup,
+            fallback_row=rec["fallback"],
+        )
+        h3_col[pos_arr] = assigned["h3_index_10"]
+        for col in PIXEL_SOIL_VALUE_COLS:
+            soil_arrays[col][pos_arr] = assigned[col]
+
+    pixel_master_df = pd.DataFrame(
+        {
+            "pixel_id": pixel_ids,
+            "field_id": field_ids_col,
+            "h3_index_10": h3_col,
+            "row": all_sel_rows,
+            "col": all_sel_cols,
+            "pixel_lat": np.round(pixel_lats, 6),
+            "pixel_lon": np.round(pixel_lons, 6),
+            "area_ha": area_col,
+            "crop_code": crop_code_col,
+            "crop": crop_col,
+            **soil_arrays,
+            "n_valid_scenes": all_sel_nvalid,
+        }
+    )
+
+    sel_ndvi = ndvi_seq[:, all_sel_idx]
+    sel_ndmi = ndmi_seq[:, all_sel_idx]
+    valid_sel = np.isfinite(sel_ndvi) & np.isfinite(sel_ndmi)
+    t_idxs, p_idxs = np.nonzero(valid_sel)
+
+    pixel_id_arr = np.asarray(pixel_ids, dtype=object)
+    field_id_arr = np.asarray(field_ids_col, dtype=object)
+    date_arr = np.asarray(scene_dates, dtype=object)
+
+    pixel_sat_df = pd.DataFrame(
+        {
+            "pixel_id": pixel_id_arr[p_idxs],
+            "field_id": field_id_arr[p_idxs],
+            "date": date_arr[t_idxs],
+            "ndvi": np.round(sel_ndvi[t_idxs, p_idxs], 4).astype(np.float32),
+            "ndmi": np.round(sel_ndmi[t_idxs, p_idxs], 4).astype(np.float32),
+        }
+    )
+    if len(set(scene_dates)) < len(scene_dates) and not pixel_sat_df.empty:
+        pixel_sat_df = pixel_sat_df.drop_duplicates(subset=["pixel_id", "date"], keep="last").reset_index(drop=True)
+
+    out_master_path = Path(out_master_path)
+    out_sat_path = Path(out_sat_path)
+    out_master_path.parent.mkdir(parents=True, exist_ok=True)
+    out_sat_path.parent.mkdir(parents=True, exist_ok=True)
+    pixel_master_df.to_parquet(out_master_path, index=False)
+    pixel_sat_df.to_parquet(out_sat_path, index=False)
+    print(
+        f"[ML PREP] Zapisano pixel_master ({len(pixel_master_df)} pikseli / {len(pos_by_meta)} pól) -> {out_master_path}"
+    )
+    print(
+        f"[ML PREP] Zapisano pixel_satellite_indices ({len(pixel_sat_df)} obserwacji) -> {out_sat_path}"
+    )
+    return pixel_master_df, pixel_sat_df
 
 
 def _map_fields_to_nearest_grid(
@@ -541,15 +949,31 @@ def generate_synthetic_demo_dataset(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Przygotowanie tabeli fields_master lub syntetycznych danych --demo dla ML."
+        description="Przygotowanie tabel ML (fields_master / pixel_master / --demo)."
     )
     parser.add_argument("--demo", action="store_true", help="Wygeneruj syntetyczny zestaw demo w data/ml/demo.")
-    parser.add_argument("--out-dir", type=Path, default=None, help="Katalog wyjściowy (dla --demo lub build).")
+    parser.add_argument("--pixels", action="store_true", help="Zbuduj tabele pikselowe pixel_master i pixel_satellite_indices.")
+    parser.add_argument("--fields-geojson", type=Path, default=Path("data/fields/lowicki_fields_crops.geojson"))
+    parser.add_argument("--tiff-dir", type=Path, default=Path("data/satellite/lowicki_2024-03-01_to_2024-10-31"))
+    parser.add_argument("--soil-h3-parquet", type=Path, default=Path("data/soil/field_soil_h3_cells.parquet"))
+    parser.add_argument("--pixels-per-field", type=int, default=9)
+    parser.add_argument("--out-dir", type=Path, default=None, help="Katalog wyjściowy (domyślnie data/ml lub data/ml/demo).")
     args = parser.parse_args()
 
     if args.demo:
         target_dir = args.out_dir or (DEFAULT_DATA_DIR / "demo")
         generate_synthetic_demo_dataset(out_dir=target_dir)
+    elif args.pixels:
+        target_dir = args.out_dir or DEFAULT_DATA_DIR
+        extract_pixel_dataset_from_tiffs(
+            fields_geojson=args.fields_geojson,
+            tiff_inputs=args.tiff_dir,
+            soil_h3_parquet=args.soil_h3_parquet,
+            fields_master_parquet=target_dir / "fields_master.parquet",
+            out_master_path=target_dir / "pixel_master.parquet",
+            out_sat_path=target_dir / "pixel_satellite_indices.parquet",
+            pixels_per_field=args.pixels_per_field,
+        )
     else:
         crops_geojson = Path("bk/fields_crops.geojson")
         soil_parquet = Path("data/soil/fields_soil_profiles.parquet")

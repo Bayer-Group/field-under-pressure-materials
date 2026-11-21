@@ -120,17 +120,14 @@ def encode_static_features(field_row: pd.Series | dict) -> np.ndarray:
     return np.asarray([*soil_vals, *crop_oh], dtype=np.float32)
 
 
-def build_field_daily_series(
-    field_row: pd.Series | dict,
-    sat_df: pd.DataFrame,
+def _prepare_weather_axis(
     weather_df: pd.DataFrame,
     date_start: str | pd.Timestamp,
     date_end: str | pd.Timestamp,
-    max_interp_gap_days: int = 10,
-) -> dict[str, np.ndarray] | None:
+) -> dict | None:
     """
-    Skleja nieregularne obserwacje Sentinel-2 i dzienną pogodę na wspólną,
-    ciągłą oś dni kalendarzowych [date_start, date_end] dla jednego pola.
+    Buduje wspólną dzienną oś pogodowo-sezonową [date_start, date_end] dla pola
+    (współdzieloną przez pole i wszystkie jego piksele).
     """
     dates = pd.date_range(pd.Timestamp(date_start), pd.Timestamp(date_end), freq="D")
     n = len(dates)
@@ -140,7 +137,6 @@ def build_field_daily_series(
     date_strs = dates.strftime("%Y-%m-%d")
     base = pd.DataFrame({"date": date_strs})
 
-    # 1. Pogoda (ciągła oś dzienna)
     w_sub = weather_df.drop_duplicates(subset=["date"], keep="last").copy()
     w_merged = base.merge(w_sub[["date", *WEATHER_COLS]], on="date", how="left")
     for col in WEATHER_COLS:
@@ -153,60 +149,6 @@ def build_field_daily_series(
     if w_merged[list(WEATHER_COLS)].isna().any().any():
         return None
 
-    # 2. Obserwacje Sentinel-2 (nieregularne)
-    if sat_df.empty:
-        return None
-    s_sub = sat_df.drop_duplicates(subset=["date"], keep="last").copy()
-    s_merged = base.merge(s_sub[["date", "ndvi", "ndmi"]], on="date", how="left")
-    ndvi_obs = pd.to_numeric(s_merged["ndvi"], errors="coerce").to_numpy(dtype=np.float32)
-    ndmi_obs = pd.to_numeric(s_merged["ndmi"], errors="coerce").to_numpy(dtype=np.float32)
-
-    valid_obs = np.isfinite(ndvi_obs) & np.isfinite(ndmi_obs)
-    if valid_obs.sum() == 0:
-        return None
-
-    obs_mask = valid_obs.astype(np.float32)
-
-    # days_since_obs (znormalizowane do [0, 1] względem 30 dni)
-    days_since = np.full(n, 30.0, dtype=np.float32)
-    last_obs_idx = -1
-    for i in range(n):
-        if valid_obs[i]:
-            last_obs_idx = i
-            days_since[i] = 0.0
-        elif last_obs_idx >= 0:
-            days_since[i] = min(float(i - last_obs_idx), 30.0)
-    days_since_norm = (days_since / 30.0).astype(np.float32)
-
-    # Odległość do najbliższej obserwacji (przód/tył) pod tryb 'interpolated'
-    days_until = np.full(n, 9999.0, dtype=np.float32)
-    next_obs_idx = -1
-    for i in range(n - 1, -1, -1):
-        if valid_obs[i]:
-            next_obs_idx = i
-            days_until[i] = 0.0
-        elif next_obs_idx >= 0:
-            days_until[i] = float(next_obs_idx - i)
-    # dokładna odległość wstecz (bez ucinania na 30 dniach)
-    exact_prev = np.full(n, 9999.0, dtype=np.float32)
-    prev_i = -1
-    for i in range(n):
-        if valid_obs[i]:
-            prev_i = i
-            exact_prev[i] = 0.0
-        elif prev_i >= 0:
-            exact_prev[i] = float(i - prev_i)
-    nearest_gap = np.minimum(exact_prev, days_until)
-
-    # Przyczynowe wypełnianie dla wejść modelu (x_hist, last_targets) — zero przecieku z przyszłości
-    ndvi_causal = pd.Series(ndvi_obs).ffill().bfill().to_numpy(dtype=np.float32)
-    ndmi_causal = pd.Series(ndmi_obs).ffill().bfill().to_numpy(dtype=np.float32)
-
-    # Interpolacja liniowa używana WYŁĄCZNIE jako cel (y_target) w trybie target_mode='interpolated'
-    ndvi_interp = pd.Series(ndvi_obs).interpolate(method="linear").ffill().bfill().to_numpy(dtype=np.float32)
-    ndmi_interp = pd.Series(ndmi_obs).interpolate(method="linear").ffill().bfill().to_numpy(dtype=np.float32)
-
-    # 3. Sklejanie macierzy cech
     weather_mat = w_merged[list(WEATHER_COLS)].to_numpy(dtype=np.float32)
     precip_idx = WEATHER_COLS.index("precip_sum_mm")
     weather_mat[:, precip_idx] = np.log1p(np.clip(weather_mat[:, precip_idx], 0.0, None))
@@ -214,18 +156,6 @@ def build_field_daily_series(
     doy = dates.day_of_year.to_numpy(dtype=np.float32)
     doy_sin = np.sin(2.0 * np.pi * doy / 365.25).astype(np.float32)
     doy_cos = np.cos(2.0 * np.pi * doy / 365.25).astype(np.float32)
-
-    hist_matrix = np.column_stack(
-        [
-            ndvi_causal,
-            ndmi_causal,
-            obs_mask,
-            days_since_norm,
-            weather_mat,
-            doy_sin,
-            doy_cos,
-        ]
-    ).astype(np.float32)
 
     future_matrix = np.column_stack(
         [
@@ -235,12 +165,109 @@ def build_field_daily_series(
         ]
     ).astype(np.float32)
 
+    date_strs_arr = date_strs.to_numpy()
+    return {
+        "date_strs": date_strs_arr,
+        "date_to_idx": {str(d): i for i, d in enumerate(date_strs_arr)},
+        "weather_mat": weather_mat,
+        "doy_sin": doy_sin,
+        "doy_cos": doy_cos,
+        "future_matrix": future_matrix,
+    }
+
+
+def build_field_daily_series(
+    field_row: pd.Series | dict,
+    sat_df: pd.DataFrame,
+    weather_df: pd.DataFrame,
+    date_start: str | pd.Timestamp,
+    date_end: str | pd.Timestamp,
+    max_interp_gap_days: int = 10,
+    precomputed_weather: dict | None = None,
+) -> dict[str, np.ndarray] | None:
+    """
+    Skleja nieregularne obserwacje Sentinel-2 i dzienną pogodę na wspólną,
+    ciągłą oś dni kalendarzowych [date_start, date_end] dla jednego pola lub piksela.
+    """
+    w_axis = (
+        precomputed_weather
+        if precomputed_weather is not None
+        else _prepare_weather_axis(weather_df, date_start=date_start, date_end=date_end)
+    )
+    if w_axis is None:
+        return None
+
+    date_strs_arr = w_axis["date_strs"]
+    date_to_idx = w_axis["date_to_idx"]
+    n = len(date_strs_arr)
+    if n == 0 or sat_df.empty:
+        return None
+
+    # 2. Obserwacje Sentinel-2 (nieregularne) zmapowane na indeksy osi dziennej
+    s_sub = sat_df.drop_duplicates(subset=["date"], keep="last")
+    ndvi_obs = np.full(n, np.nan, dtype=np.float32)
+    ndmi_obs = np.full(n, np.nan, dtype=np.float32)
+
+    s_dates = s_sub["date"].astype(str).tolist()
+    s_ndvi = pd.to_numeric(s_sub["ndvi"], errors="coerce").to_numpy(dtype=np.float32)
+    s_ndmi = pd.to_numeric(s_sub["ndmi"], errors="coerce").to_numpy(dtype=np.float32)
+    for d_val, v_ndvi, v_ndmi in zip(s_dates, s_ndvi, s_ndmi):
+        idx = date_to_idx.get(d_val)
+        if idx is not None:
+            ndvi_obs[idx] = v_ndvi
+            ndmi_obs[idx] = v_ndmi
+
+    valid_obs = np.isfinite(ndvi_obs) & np.isfinite(ndmi_obs)
+    obs_idx = np.flatnonzero(valid_obs)
+    if len(obs_idx) == 0:
+        return None
+
+    obs_mask = valid_obs.astype(np.float32)
+    pos = np.arange(n, dtype=np.int64)
+
+    # days_since_obs (znormalizowane do [0, 1] względem 30 dni) oraz dokładna odległość wstecz/wprzód
+    prev_rank = np.searchsorted(obs_idx, pos, side="right") - 1
+    has_prev = prev_rank >= 0
+    prev_pos = np.where(has_prev, obs_idx[np.maximum(prev_rank, 0)], obs_idx[0])
+
+    exact_prev = np.where(has_prev, (pos - prev_pos).astype(np.float32), 9999.0)
+    days_since_norm = (np.where(has_prev, np.minimum(exact_prev, 30.0), 30.0) / 30.0).astype(np.float32)
+
+    next_rank = np.searchsorted(obs_idx, pos, side="left")
+    has_next = next_rank < len(obs_idx)
+    next_pos = np.where(has_next, obs_idx[np.minimum(next_rank, len(obs_idx) - 1)], obs_idx[-1])
+    days_until = np.where(has_next, (next_pos - pos).astype(np.float32), 9999.0)
+    nearest_gap = np.minimum(exact_prev, days_until)
+
+    # Przyczynowe wypełnianie dla wejść modelu (x_hist, last_targets) — zero przecieku z przyszłości
+    ndvi_causal = ndvi_obs[prev_pos].astype(np.float32)
+    ndmi_causal = ndmi_obs[prev_pos].astype(np.float32)
+
+    # Interpolacja liniowa używana WYŁĄCZNIE jako cel (y_target) w trybie target_mode='interpolated'
+    pos_f = pos.astype(np.float64)
+    obs_f = obs_idx.astype(np.float64)
+    ndvi_interp = np.interp(pos_f, obs_f, ndvi_obs[obs_idx].astype(np.float64)).astype(np.float32)
+    ndmi_interp = np.interp(pos_f, obs_f, ndmi_obs[obs_idx].astype(np.float64)).astype(np.float32)
+
+    # 3. Sklejanie macierzy cech
+    hist_matrix = np.column_stack(
+        [
+            ndvi_causal,
+            ndmi_causal,
+            obs_mask,
+            days_since_norm,
+            w_axis["weather_mat"],
+            w_axis["doy_sin"],
+            w_axis["doy_cos"],
+        ]
+    ).astype(np.float32)
+
     static_vec = encode_static_features(field_row)
 
     return {
-        "dates": date_strs.to_numpy(),
+        "dates": date_strs_arr,
         "hist_matrix": hist_matrix,
-        "future_matrix": future_matrix,
+        "future_matrix": w_axis["future_matrix"],
         "static_vec": static_vec,
         "ndvi_causal": ndvi_causal,
         "ndmi_causal": ndmi_causal,
@@ -259,6 +286,7 @@ class FieldTimeSeriesDataset(Dataset):
     """
     Okna przesuwne (56 dni historii -> 7 dni prognozy NDVI i NDMI)
     z maską utraty dla nieregularnych obserwacji Sentinel-2.
+    Obsługuje zarówno tryb pól (`entity_col='field_id'`), jak i pikseli 10m (`entity_col='pixel_id'`).
     """
 
     def __init__(
@@ -272,40 +300,62 @@ class FieldTimeSeriesDataset(Dataset):
         max_interp_gap_days: int = 10,
         min_hist_obs: int = 2,
         scaler: FeatureScaler | None = None,
+        entity_col: str = "field_id",
+        anchor_stride: int = 1,
     ):
         self.history_days = history_days
         self.forecast_days = forecast_days
         self.scaler = scaler
+        self.entity_col = entity_col
         self.samples: list[dict] = []
 
         fields_df = pd.read_parquet(fields_master_parquet)
         sat_df = pd.read_parquet(satellite_indices_parquet)
         weather_df = pd.read_parquet(weather_daily_parquet)
 
+        if entity_col not in fields_df.columns:
+            raise ValueError(f"Brak kolumny '{entity_col}' w {fields_master_parquet}.")
+        if entity_col not in sat_df.columns:
+            raise ValueError(f"Brak kolumny '{entity_col}' w {satellite_indices_parquet}.")
+
         fields_df["field_id"] = fields_df["field_id"].astype(str)
+        fields_df[entity_col] = fields_df[entity_col].astype(str)
         sat_df["field_id"] = sat_df["field_id"].astype(str)
+        sat_df[entity_col] = sat_df[entity_col].astype(str)
         weather_df["field_id"] = weather_df["field_id"].astype(str)
 
-        sat_by_field = {fid: grp for fid, grp in sat_df.groupby("field_id")}
+        sat_by_entity = {eid: grp for eid, grp in sat_df.groupby(entity_col)}
         weather_by_field = {fid: grp for fid, grp in weather_df.groupby("field_id")}
+        weather_axis_cache: dict[str, dict | None] = {}
 
-        for _, f_row in fields_df.iterrows():
+        eff_min_hist_obs = max(1, int(min_hist_obs))
+        eff_stride = max(1, int(anchor_stride))
+
+        for f_row in fields_df.to_dict("records"):
             fid = f_row["field_id"]
-            if fid not in sat_by_field or fid not in weather_by_field:
+            eid = f_row[entity_col]
+            if eid not in sat_by_entity or fid not in weather_by_field:
                 continue
 
             w_sub = weather_by_field[fid]
-            s_sub = sat_by_field[fid]
-            d_start = w_sub["date"].min()
-            d_end = w_sub["date"].max()
+            if fid not in weather_axis_cache:
+                weather_axis_cache[fid] = _prepare_weather_axis(
+                    w_sub,
+                    date_start=w_sub["date"].min(),
+                    date_end=w_sub["date"].max(),
+                )
+            w_axis = weather_axis_cache[fid]
+            if w_axis is None:
+                continue
 
             series = build_field_daily_series(
                 f_row,
-                s_sub,
+                sat_by_entity[eid],
                 w_sub,
-                date_start=d_start,
-                date_end=d_end,
+                date_start=w_axis["date_strs"][0],
+                date_end=w_axis["date_strs"][-1],
                 max_interp_gap_days=max_interp_gap_days,
+                precomputed_weather=w_axis,
             )
             if series is None:
                 continue
@@ -314,8 +364,7 @@ class FieldTimeSeriesDataset(Dataset):
             if n < history_days + forecast_days:
                 continue
 
-            eff_min_hist_obs = max(1, int(min_hist_obs))
-            for anchor in range(history_days - 1, n - forecast_days):
+            for anchor in range(history_days - 1, n - forecast_days, eff_stride):
                 h_start = anchor - history_days + 1
                 h_end = anchor + 1
                 f_start = anchor + 1
@@ -354,6 +403,7 @@ class FieldTimeSeriesDataset(Dataset):
                 self.samples.append(
                     {
                         "field_id": fid,
+                        "entity_id": eid,
                         "anchor_date": str(series["dates"][anchor]),
                         "x_hist": series["hist_matrix"][h_start:h_end],
                         "x_future": series["future_matrix"][f_start:f_end],
@@ -396,7 +446,7 @@ def split_indices(
 ) -> tuple[list[int], list[int]]:
     """
     Dzieli próbki na zbiór treningowy i walidacyjny bez wycieku danych
-    (wg pól lub chronologicznie wg daty zakotwiczenia).
+    (wg nadrzędnych pól `field_id` lub chronologicznie wg daty zakotwiczenia).
     """
     n = len(dataset)
     if n < 2:
@@ -416,6 +466,9 @@ def split_indices(
         print("[UWAGA] Tylko 1 pole w zbiorze — przełączam podział walidacyjny na tryb czasowy ('time').")
 
     # Podział czasowy (bez przecieku w przyszłość)
-    ordered = sorted(range(n), key=lambda i: (dataset.samples[i]["anchor_date"], dataset.samples[i]["field_id"]))
+    ordered = sorted(
+        range(n),
+        key=lambda i: (dataset.samples[i]["anchor_date"], dataset.samples[i].get("entity_id", dataset.samples[i]["field_id"])),
+    )
     cut = max(1, min(n - 1, int(round(n * (1.0 - val_ratio)))))
     return ordered[:cut], ordered[cut:]
