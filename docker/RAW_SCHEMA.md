@@ -8,7 +8,8 @@ decided yet. The current database structure is in [`README.md`](README.md); this
 ## Scope
 
 - **Region:** Mazowieckie only (2,428 grid cells, `l1_name = 'Mazowieckie'`).
-- **Time-varying data** (weather, IMERG): local dates **2024-05-01 … 2024-06-30** (61 days = 1,464 hours), source year 2024.
+- **Time-varying data:** hourly weather for local dates **2024-04-01 … 2024-06-30** (91 days = 2,184 hours); daily weather and
+  IMERG daily for the **whole of 2024** (366 days, needed for the growth stage from 1 February); source year 2024.
 - **Static data** (soil, crop map): the whole of Mazowieckie.
 - **MVP crop and disease:** wheat / septoria. Other crops (e.g. maize) are optional and later.
 - **Dates are the original source dates.** Any demo time shift is applied later (#20 / API) and is NOT part of this layer.
@@ -30,9 +31,9 @@ contract must use `raw.<table>`; until the rename is applied, `fup.<table>` is t
 | Table | Source | Key | Rows (Mazowieckie scope) | Status |
 | --- | --- | --- | --- | --- |
 | `raw.grid_cell` | `weather_grids/weather_grids.parquet` | `grid_id` | 21,196 (2,428 in scope) | **loaded** (with `l1_name` and `elevation`) |
-| `raw.weather_hourly` | `weather_hourly/year=2024/voivodeship=mazowieckie/*.parquet` + IMERG hourly | `(grid_id, utc_time)` | 3,554,592 | **loaded** |
-| `raw.weather_daily` | `weather_daily/year=2024/voivodeship=mazowieckie/*.parquet` | `(grid_id, date)` | 148,108 | **loaded** |
-| `raw.imerg_daily` | `imerg_daily/daily/2024/precip_daily_2024_Mazowieckie.parquet` | `(grid_id, date)` | 148,108 | **loaded** |
+| `raw.weather_hourly` | `weather_hourly/year=2024/voivodeship=mazowieckie/*.parquet` + IMERG hourly | `(grid_id, utc_time)` | 5,302,752 | **loaded** |
+| `raw.weather_daily` | `weather_daily/year=2024/voivodeship=mazowieckie/*.parquet` | `(grid_id, date)` | 888,648 | **loaded** |
+| `raw.imerg_daily` | `imerg_daily/daily/2024/precip_daily_2024_Mazowieckie.parquet` | `(grid_id, date)` | 888,648 | **loaded** |
 | `raw.soil_h3` | `soil/voivodeship=mazowieckie/Mazowieckie_isric_250_v2.parquet` | `h3_index_10` | 2,491,086 | **loaded** |
 | `raw.cropland_cty` (raster) | `cropland/year=2024/CLMS_HRLVLCC_CTY_PL_*.tif` (15 tiles) | `rid` (tile file in `tile`) | 15 files, 29,334 raster tiles of 256×256 (181 MB in the database) | **loaded** |
 | `raw.crop_class` | CTY legend | `code` | 21 | loaded |
@@ -137,3 +138,7 @@ losslessly before sending: 150–250 MB become 2–7 MB). The database is 2.3 GB
 crop raster 0.2 GB). Checks after the load: row counts equal the source; hourly weather has 1,464 hours for each of the
 2,428 cells and no NULLs; the soil geometries are valid (SRID 4326); the class counts inside a polygon from the loaded raster
 equal an independent `rasterio` read. The data on the external disk (34 GB) is mostly not loaded: only this scope is.
+
+**Later extension (2026-11-21):** hourly weather was widened from May–June to April–June (5,302,752 rows, 5 minutes) and the daily weather and IMERG daily
+were loaded for the whole year (888,648 rows each, 1.5 minutes). Checked: the daily mean, maximum and minimum temperature equal the aggregates of the
+hourly values for every cell and day (difference 0.000 °C), and IMERG daily equals the sum of the hourly values (up to rounding, at most 0.05 mm).
