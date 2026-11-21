@@ -157,6 +157,31 @@
     .fc-more { margin-top: 8px; border-top: 1px solid var(--line); }
     .fc-more summary { display: flex; align-items: center; min-height: 44px; color: var(--green); font-size: 13px; font-weight: 700; cursor: pointer; }
     .fc-more .fc-facts { padding-bottom: 4px; }
+    .fc-scale { display: grid; gap: 4px; margin-top: 10px; }
+    .fc-scale-bar { position: relative; display: grid; grid-template-columns: 44fr 44fr 12fr; gap: 2px; height: 12px; }
+    .fc-scale-bar > span:not(.fc-scale-mark):not(.fc-scale-range), .risk-legend-bar > span { border-radius: 3px; }
+    .fc-scale-low { background: linear-gradient(90deg, rgb(181,223,190), rgb(31,107,58)); }
+    .fc-scale-medium { background: linear-gradient(90deg, rgb(246,207,124), rgb(168,96,10)); }
+    .fc-scale-high { background: #c7463e; }
+    .fc-scale-mark { position: absolute; top: 50%; width: 18px; height: 18px; border: 3px solid #fff; border-radius: 50%; transform: translate(-50%, -50%); box-shadow: 0 1px 5px rgba(20,44,30,.45); }
+    .fc-scale-mark.small { width: 12px; height: 12px; border-width: 2px; }
+    .fc-scale-range { position: absolute; top: -3px; bottom: -3px; border: 2px solid #15221b; border-radius: 6px; background: rgba(255,255,255,.35); }
+    .fc-scale-labels { display: grid; grid-template-columns: 44fr 44fr 12fr; gap: 2px; color: #5f7266; font-size: 10px; font-weight: 650; }
+    .fc-scale-labels span:last-child { text-align: right; }
+    .fc-summary.tone-high .fc-scale-labels { color: rgba(255,255,255,.88); }
+    .fc-index-head { display: flex; align-items: baseline; justify-content: space-between; }
+    .fc-index-head h2 { margin: 0; }
+    .fc-index-value { font-size: 20px; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+    .fc-index-note { margin: 8px 0 0; color: #5f7266; font-size: 12px; line-height: 1.4; }
+    .risk-legend { display: none; position: absolute; z-index: 2; top: max(16px, env(safe-area-inset-top)); left: 80px; width: 168px; padding: 9px 11px; border: 1px solid rgba(255,255,255,.85); border-radius: 15px; background: rgba(248,251,247,.92); box-shadow: 0 4px 16px rgba(24,50,35,.14); backdrop-filter: blur(16px); color: #344f3d; font-size: 10px; font-weight: 650; pointer-events: none; }
+    .app.sandbox-mode .risk-legend { display: grid; gap: 4px; }
+    .risk-legend-title { font-size: 11px; font-weight: 750; }
+    .risk-legend-bar, .risk-legend-labels { display: grid; grid-template-columns: 44fr 44fr 12fr; gap: 2px; }
+    .risk-legend-bar { height: 8px; }
+    .risk-legend-labels span:last-child { text-align: right; }
+    .risk-legend-none { display: flex; align-items: center; gap: 4px; color: #5f7266; font-weight: 600; }
+    .risk-legend-swatch { width: 10px; height: 10px; border-radius: 3px; background: #89928c; }
+    .risk-legend-swatch.none { margin-left: 4px; background: #c3cac5; outline: 1px dashed #6f7a73; }
     .fc-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
     .fc-soon { display: grid; justify-items: center; gap: 1px; min-height: 52px; padding: 6px 8px; }
     .fc-soon small { color: #7a8a7f; font-size: 10px; font-weight: 600; }
@@ -543,7 +568,7 @@
     .results button:hover { background: #edf5ee; }
     .maplibregl-ctrl-bottom-right { bottom: min(68dvh, 570px); }
     .maplibregl-ctrl-attrib { font-size: 10px !important; }
-    @media (min-width: 720px) { .top { left: 24px; right: 24px; width: auto; top: 24px; } .sheet { left: 24px; bottom: 0; right: auto; width: 390px; max-height: calc(100dvh - 115px); border-radius: 25px 25px 0 0; border-bottom: 0; } .sheet.search-hidden { transform: translateY(calc(100% + 12px)); } .maplibregl-ctrl-top-right { bottom: max(26px, env(safe-area-inset-bottom) + 12px); } .maplibregl-ctrl-bottom-right { bottom: 0; } .results, .parcel-step { left: 24px; right: 84px; width: auto; top: 82px; } .results.after-parcel-step { top: 140px; } .parcel-step.searching { top: calc(50% + 38px); } .results.searching.after-parcel-step { top: calc(50% + 96px); } }
+    @media (min-width: 720px) { .risk-legend { top: 24px; left: 88px; } .top { left: 24px; right: 24px; width: auto; top: 24px; } .sheet { left: 24px; bottom: 0; right: auto; width: 390px; max-height: calc(100dvh - 115px); border-radius: 25px 25px 0 0; border-bottom: 0; } .sheet.search-hidden { transform: translateY(calc(100% + 12px)); } .maplibregl-ctrl-top-right { bottom: max(26px, env(safe-area-inset-bottom) + 12px); } .maplibregl-ctrl-bottom-right { bottom: 0; } .results, .parcel-step { left: 24px; right: 84px; width: auto; top: 82px; } .results.after-parcel-step { top: 140px; } .parcel-step.searching { top: calc(50% + 38px); } .results.searching.after-parcel-step { top: calc(50% + 96px); } }
     @media (prefers-reduced-motion: reduce) { .vertex-demo-shape, .vertex-demo-pointer, .vertex-demo-added, .vertex-demo-first { animation: none; } .vertex-demo-added { opacity: 1; } .vertex-demo-pointer { transform: translate(105px,42px); } .demo-marquee-parcel { animation: none !important; fill: rgba(23,101,68,.35); } .demo-draw-triangle { display: none; } .demo-tap-pointer, .demo-draw-pointer { opacity: 1; animation: none; transform: translate(92px, 72px); } .demo-draw-line, .demo-draw-point { opacity: 1; animation: none !important; } .demo-tap-fill { animation: none; fill: rgba(23,101,68,.35); } .demo-tap-ring { animation: none; opacity: 0; } *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; scroll-behavior: auto !important; } .demo-marquee { opacity: 1; transform: none; stroke-dashoffset: 0; } .demo-pointer { opacity: 1; transform: translate(157px, 94px); } }
   </style>
 </head>
@@ -621,6 +646,12 @@
     </div>
     <div id="results" class="results" aria-label="Search results"></div>
     <div id="zoom-hint" class="zoom-hint" hidden>Zoom in to see parcel boundaries.</div>
+    <aside id="risk-legend" class="risk-legend" aria-label="Map legend">
+      <span class="risk-legend-title">Septoria risk</span>
+      <span class="risk-legend-bar" aria-hidden="true"><span class="fc-scale-low"></span><span class="fc-scale-medium"></span><span class="fc-scale-high"></span></span>
+      <span class="risk-legend-labels"><span>Low</span><span>Moderate</span><span>High</span></span>
+      <span class="risk-legend-none"><span class="risk-legend-swatch unknown" aria-hidden="true"></span>No level <span class="risk-legend-swatch none" aria-hidden="true"></span>Not assessed</span>
+    </aside>
     <aside id="crop-draw-toolbar" class="crop-draw-toolbar" hidden>
       <p id="crop-vertex-notice" class="crop-vertex-notice" role="status" aria-live="polite"></p>
       <div class="crop-draw-actions">
@@ -857,7 +888,7 @@
       const mapRect = map.getContainer().getBoundingClientRect();
       const drawerRect = sheet.getBoundingClientRect();
       const mobile = window.matchMedia('(max-width: 719px)').matches;
-      const padding = { top: 85, right: 24, bottom: 24, left: 24 };
+      const padding = { top: sandboxActive ? 118 : 85, right: 24, bottom: 24, left: 24 };   // room for the risk legend
       if (mobile) padding.bottom = Math.max(24, mapRect.bottom - Math.max(mapRect.top, drawerRect.top) + 20);
       else if (drawerRect.right > mapRect.left && drawerRect.left < mapRect.right) padding.left = Math.max(24, drawerRect.right - mapRect.left + 20);
       if (options.onlyIfObscured) {
@@ -1412,7 +1443,7 @@
     }
     function sandboxSeverity(row) {
       const tone = sandboxTone(row);
-      if (sandboxRank[tone]) return sandboxRank[tone] + (row.status === 'ok' ? .5 : 0);
+      if (sandboxRank[tone]) return sandboxRank[tone] + (row.status === 'ok' ? .5 : 0) + (Number.isFinite(row.risk_index) ? row.risk_index * .1 : 0);
       return tone === 'unknown' ? .25 : 0;
     }
     function sandboxSummary(row) {
@@ -1423,9 +1454,51 @@
       if (['ok', 'protected'].includes(row.status) && level) return level;
       return ({ protected: 'Protected', uncertain: 'Uncertain', insufficient_data: 'Not enough data', stage_unknown: 'Growth stage unknown', out_of_window: 'Outside susceptible stage' })[row.status] || 'No assessment';
     }
+    // ---- risk_index (backend contract): 0 at 0 wet hours, 0.5 at the moderate threshold, 1 at the high threshold and above,
+    // linear in between, null without a risk class. index_low / index_high bound it when hours are missing.
+    const SANDBOX_RAMP = { low: [[0, [181, 223, 190]], [.5, [31, 107, 58]]], medium: [[.5, [246, 207, 124]], [1, [168, 96, 10]]] };
+    /** Index of an assessment as { value, low, high, range }; null when the day has no definite risk class. */
+    function sandboxIndex(row) {
+      if (!sandboxRank[sandboxTone(row)] || !Number.isFinite(row.risk_index)) return null;
+      const low = Number.isFinite(row.index_low) ? row.index_low : row.risk_index;
+      const high = Number.isFinite(row.index_high) ? row.index_high : row.risk_index;
+      return { value: row.risk_index, low, high, range: Math.abs(high - low) > 1e-9 };
+    }
+    function sandboxIndexText(index) { return index.range ? `${index.low.toFixed(2)}–${index.high.toFixed(2)}` : index.value.toFixed(2); }
+    /** Colour for one index within its class: the hue keeps the class, the shade shows the position inside it. */
+    function sandboxIndexColor(tone, value) {
+      if (tone === 'high') return '#c7463e';
+      const stops = SANDBOX_RAMP[tone];
+      if (!stops) return tone === 'unknown' ? '#89928c' : '#c3cac5';
+      const [[a, from], [b, to]] = stops;
+      const t = Math.min(1, Math.max(0, ((Number.isFinite(value) ? value : (a + b) / 2) - a) / (b - a)));
+      return `rgb(${from.map((channel, i) => Math.round(channel + (to[i] - channel) * t)).join(',')})`;
+    }
+    /** Horizontal scale 0–1 with the class bands and markers for one or more areas. */
+    function sandboxScale(items, options = {}) {
+      const wrap = sandboxElement('div', 'fc-scale');
+      const bar = sandboxElement('div', 'fc-scale-bar'); bar.setAttribute('aria-hidden', 'true');
+      bar.append(sandboxElement('span', 'fc-scale-low'), sandboxElement('span', 'fc-scale-medium'), sandboxElement('span', 'fc-scale-high'));
+      items.forEach(item => {
+        const at = value => `${Math.min(1, Math.max(0, value)) * 88}%`;
+        if (item.index.range) {
+          const band = sandboxElement('span', 'fc-scale-range'); band.style.left = at(item.index.low); band.style.width = `calc(${at(item.index.high)} - ${at(item.index.low)})`; bar.append(band);
+        } else {
+          const mark = sandboxElement('span', `fc-scale-mark${items.length > 1 ? ' small' : ''}`); mark.style.left = item.index.value >= 1 ? '94%' : at(item.index.value);
+          mark.style.background = sandboxIndexColor(item.tone, item.index.value); bar.append(mark);
+        }
+      });
+      const labels = sandboxElement('div', 'fc-scale-labels'); labels.setAttribute('aria-hidden', 'true');
+      labels.append(sandboxElement('span', '', 'Low'), sandboxElement('span', '', 'Moderate'), sandboxElement('span', '', 'High'));
+      wrap.append(bar, labels);
+      if (options.label) wrap.setAttribute('aria-label', options.label);
+      wrap.setAttribute('role', 'img');
+      return wrap;
+    }
     function sandboxRiskBadge(row) {
       const tone = sandboxTone(row);
-      const text = sandboxSummary(row) + (row?.status === 'protected' && sandboxRank[row.risk_class] ? ' · protected' : '');
+      const index = sandboxIndex(row);
+      const text = sandboxSummary(row) + (index ? ` · ${sandboxIndexText(index)}` : '') + (row?.status === 'protected' && sandboxRank[row.risk_class] ? ' · protected' : '');
       return sandboxElement('span', `risk-badge risk-${tone === 'none' ? 'none' : tone}`, text);
     }
     /** Return the most severe assessment among areas for one day. */
@@ -1621,6 +1694,8 @@
       if (missing) notes.push(`${missing} ${missing === 1 ? 'area' : 'areas'} without a risk level`);
       if (loading && loading !== ids.length) notes.push(`${loading} still loading`);
       if (notes.length) summary.append(sandboxElement('p', 'fc-summary-note', notes.join(' · ')));
+      const indexed = ids.map(id => ({ id, tone: sandboxTone(sandboxAssessment(id, day)), index: sandboxIndex(sandboxAssessment(id, day)) })).filter(item => item.index);
+      if (indexed.length) summary.append(sandboxScale(indexed, { label: `Risk index of ${indexed.length} ${indexed.length === 1 ? 'area' : 'areas'}: ${indexed.map(item => `${sandboxAreaName(item.id)} ${sandboxIndexText(item.index)}`).join(', ')}` }));
       const heading = sandboxElement('div', 'risk-list-heading'); heading.append(sandboxElement('strong', '', 'Area groups'), sandboxElement('span', '', `${sandboxSets.length}`));
       const list = sandboxElement('div', 'sandbox-list fc-list');
       sandboxSets.slice().sort((a, b) => sandboxSeverity(sandboxWorst(b.areaIds, day)) - sandboxSeverity(sandboxWorst(a.areaIds, day))).forEach(set => {
@@ -1636,6 +1711,8 @@
       const summary = sandboxElement('section', `fc-summary tone-${sandboxTone(worst)}`); summary.setAttribute('aria-live', 'polite');
       summary.append(sandboxElement('p', 'fc-summary-title', sandboxRank[sandboxTone(worst)] ? `Highest in this group: ${sandboxSummary(worst)}` : worst === 'loading' ? 'Loading assessments…' : 'No risk level for this day'));
       summary.append(sandboxElement('p', 'fc-summary-note', `${set.areaIds.length} neighbouring areas. Each area has its own assessment.`));
+      const indexed = set.areaIds.map(id => ({ id, tone: sandboxTone(sandboxAssessment(id, day)), index: sandboxIndex(sandboxAssessment(id, day)) })).filter(item => item.index);
+      if (indexed.length) summary.append(sandboxScale(indexed, { label: `Risk index of ${indexed.length} ${indexed.length === 1 ? 'area' : 'areas'}: ${indexed.map(item => `${sandboxAreaName(item.id)} ${sandboxIndexText(item.index)}`).join(', ')}` }));
       const list = sandboxElement('div', 'sandbox-list fc-list');
       set.areaIds.slice().sort((a, b) => sandboxSeverity(sandboxAssessment(b, day)) - sandboxSeverity(sandboxAssessment(a, day)))
         .forEach(id => list.append(sandboxRow(`row:${id}`, sandboxAreaName(id), sandboxLabel(sandboxFeature(id)?.properties?.farmer_crop_id), sandboxAssessment(id, day), () => sandboxSelect(id, { focus: true }))));
@@ -1673,6 +1750,18 @@
       } else if (!row) level.append(sandboxElement('p', 'fc-level-note', 'No assessment is available for this day.'));
       else if (notes[row.status]) level.append(sandboxElement('p', 'fc-level-note', notes[row.status]));
       const parts = [level];
+      const index = row && typeof row === 'object' ? sandboxIndex(row) : null;
+      if (index) {
+        const scale = sandboxElement('section', 'fc-section fc-index');
+        const head = sandboxElement('div', 'fc-index-head');
+        head.append(sandboxElement('h2', '', 'Risk index'), sandboxElement('strong', 'fc-index-value', sandboxIndexText(index)));
+        scale.append(head, sandboxScale([{ index, tone }], { label: `Risk index ${sandboxIndexText(index)} on a scale from 0 to 1` }));
+        scale.append(sandboxElement('p', 'fc-index-note', index.range
+          ? 'Some weather hours are missing, so the index lies somewhere in this range. '
+          : ''));
+        scale.lastChild.textContent += 'The index follows the longest wet spell: 0 means no wet hours, 0.5 is where moderate risk starts and 1 is where high risk starts. It stops at 1 and is not a probability of disease.';
+        parts.push(scale);
+      }
       if (row && typeof row === 'object') {
         // Factor dots: red raises the chance of septoria, yellow is moderate, green lowers it, grey is unknown.
         // The wet spell alone sets the backend risk level, so its dot uses that level's colour.
@@ -2064,7 +2153,9 @@
       const scope = new Set(sandboxView.mode === 'farm' ? sandboxAreaIds() : sandboxCurrentSet()?.areaIds || []);
       source.setData({ type: 'FeatureCollection', features: sandboxFeatures.map(feature => {
         const id = feature.properties?.crop_area_id;
-        return { ...feature, properties: { ...feature.properties, tone: sandboxTone(sandboxAssessment(id, sandboxDay)), focus: scope.has(id) } };
+        const row = sandboxAssessment(id, sandboxDay), tone = sandboxTone(row), index = sandboxIndex(row);
+        // One colour per area: the class and its index (the midpoint of a range), never a gradient inside the area.
+        return { ...feature, properties: { ...feature.properties, tone, focus: scope.has(id), color: sandboxIndexColor(tone, index ? (index.low + index.high) / 2 : null) } };
       }) });
       map.setFilter('sandbox-highlight', ['==', ['get', 'crop_area_id'], sandboxView.mode === 'area' && sandboxSelected ? sandboxSelected : '']);
       map.setFilter('sandbox-scope', sandboxView.mode === 'farm' ? ['==', ['get', 'crop_area_id'], ''] : ['==', ['get', 'focus'], true]);
@@ -2089,6 +2180,7 @@
         const worst = sandboxWorst(ids, sandboxDay);
         const highCount = ids.filter(id => sandboxTone(sandboxAssessment(id, sandboxDay)) === 'high').length;
         const element = sandboxElement('button', `fc-marker tone-${sandboxTone(worst)}`); element.type = 'button';
+        const worstIndex = sandboxIndex(worst); if (worstIndex) element.style.background = sandboxIndexColor(sandboxTone(worst), worstIndex.value);
         element.classList.toggle('active', Boolean(single) && sandboxView.mode !== 'farm' && sandboxView.setId === single.id);
         const name = single ? single.name : `${cluster.sets.length} groups`;
         element.append(sandboxElement('span', 'fc-marker-dot'), sandboxElement('span', '', name));
@@ -2104,9 +2196,9 @@
     }
     function sandboxSource() {
       if (map.getSource('sandbox-areas')) return;
-      const tone = ['match', ['get', 'tone'], 'low', '#328250', 'medium', '#d2932b', 'high', '#c7463e', 'unknown', '#89928c', '#c3cac5'];
+      const tone = ['to-color', ['get', 'color']];
       map.addSource('sandbox-areas', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-      map.addLayer({ id: 'sandbox-fill', type: 'fill', source: 'sandbox-areas', paint: { 'fill-color': tone, 'fill-opacity': ['case', ['boolean', ['get', 'focus'], false], .6, .28] } });
+      map.addLayer({ id: 'sandbox-fill', type: 'fill', source: 'sandbox-areas', paint: { 'fill-color': tone, 'fill-opacity': ['case', ['boolean', ['get', 'focus'], false], .72, .3] } });
       map.addLayer({ id: 'sandbox-outline', type: 'line', source: 'sandbox-areas', paint: { 'line-color': ['case', ['==', ['get', 'tone'], 'none'], '#6f7a73', '#31493a'], 'line-width': 1.5 } });
       map.addLayer({ id: 'sandbox-scope', type: 'line', source: 'sandbox-areas', filter: ['==', ['get', 'crop_area_id'], ''], paint: { 'line-color': '#15221b', 'line-width': 2.5 } });
       map.addLayer({ id: 'sandbox-highlight', type: 'line', source: 'sandbox-areas', filter: ['==', ['get', 'crop_area_id'], ''], paint: { 'line-color': '#fff', 'line-width': 4 } });
