@@ -150,11 +150,11 @@
         else {
           const term = query.number.trim();
           const fullId = /^\d{6}_\d\.\d{4}\.\d+(?:\/\d+)?$/.test(term);
-          const combined = term.match(/^(.+?)\s+(\d+(?:\/\d+)?)$/);
+          const combined = term.match(/^(.+?)\s+(\d+(?:\/\d*)?)$/);
           const number = query.locality ? term : (combined ? combined[2] : term);
           const locality = query.locality || (combined ? combined[1] : '');
           results = fullId ? parcels.filter(p => p.cadastral_id.toLowerCase() === term.toLowerCase()) :
-            /^\d+(?:\/\d+)?$/.test(number) ? parcels.filter(p => p.parcel_number.toLowerCase() === number.toLowerCase() &&
+            /^\d+(?:\/\d*)?$/.test(number) ? parcels.filter(p => p.parcel_number.toLowerCase().startsWith(number.toLowerCase()) &&
               (!locality || `${p.locality} ${p.commune}`.toLowerCase().startsWith(locality.toLowerCase()))) :
               parcels.filter(p => `${p.locality} ${p.commune}`.toLowerCase().startsWith(term.toLowerCase()));
         }

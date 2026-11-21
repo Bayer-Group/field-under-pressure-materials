@@ -6,7 +6,7 @@ For the team workflow and backend integration checklist, see [Mock API guide](..
 
 ```js
 const data = FarmerData.createProvider({ mode: 'mock' });
-const { parcels } = await data.findParcels({ number: 'DEMO-001' });
+const { parcels } = await data.findParcels({ number: 'Krzewie 123/4' });
 const matches = await data.findParcels({ lon: 20.76, lat: 52.175 });
 const { crops } = await data.getCrops();
 const { fields } = await data.listFields();
@@ -38,7 +38,7 @@ const data = FarmerData.createProvider({
 });
 ```
 
-Backend mode uses `fetch` and the contract's `/parcels`, `/crops`, and `/fields` paths. It does not fall back to mock data if the backend fails. The real endpoints do not yet exist or have not been verified; integration, CORS, authentication and persistence remain backend work. Callers must catch rejected promises and present a useful message.
+Backend mode uses `fetch` and the contract's `/parcels`, `/crops`, and `/fields` paths. The viewer creates its provider near the start of the script in `web/index.html`; switch that configuration to `mode: 'backend'` and set `baseUrl` when the endpoints are ready. Both search entry points use the same `findParcels` method. For autocomplete the backend must support partial locality and parcel-number queries, the optional `locality` filter, and return the locality, commune, area and cadastral ID metadata used by the suggestions; these search extensions are not yet agreed or implemented in the real API. It does not fall back to mock data if the backend fails. The real endpoints do not yet exist or have not been verified; integration, CORS, authentication and persistence remain backend work. Callers must catch rejected promises and present a useful message.
 
 ## Read-only QGIS layer
 
