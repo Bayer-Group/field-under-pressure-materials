@@ -33,7 +33,7 @@ def _work_hours(work_from: Optional[int], work_to: Optional[int]) -> Optional[tu
 
 
 def _window(w: dict) -> dict:
-    return dict(w, start=service.iso(w["start"]), end=service.iso(w["end"]))
+    return dict(w, start=service.iso(w["start"]), end=service.iso(w["end"]), latest_start=service.iso(w["latest_start"]))
 
 
 def _summary(result: dict) -> dict:
@@ -49,6 +49,7 @@ def _summary(result: dict) -> dict:
         "windows_found": len(result["windows"]),
         "best_window_start": service.iso(best["start"]) if best else None,
         "best_window_end": service.iso(best["end"]) if best else None,
+        "best_window_latest_start": service.iso(best["latest_start"]) if best else None,
         "best_window_hours": best["hours"] if best else None,
         "best_window_margin_ms": best["wind_margin_ms"] if best else None,
         "best_window_confidence": best["confidence"] if best else None,
