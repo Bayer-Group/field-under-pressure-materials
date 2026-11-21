@@ -18,14 +18,21 @@ GENERA = ["Fusarium", "Macrophomina", "Gaeumannomyces", "Rhizoctonia", "Thanatep
           "Mortierella", "Alternaria", "Bipolaris", "Cochliobolus", "Pyrenophora"]
 RHIZ = ["Rhizoctonia", "Thanatephorus", "Ceratobasidium"]
 
-_ID_RE = re.compile(r"^(?P<site>[A-Z]{4})_(?P<plotnum>\d{3})-(?P<hz>[MO])-[\d.]+-[\d.]+-(?P<date>\d{8})")
+# Second depth field is optional: from 2022 NEON core IDs carry one (e.g. KONA_001-M-21-20240409-GEN-DNA1).
+_ID_RE = re.compile(r"^(?P<site>[A-Z]{4})_(?P<plotnum>\d{3})-(?P<hz>[MO])-[\d.]+(?:-[\d.]+)?-(?P<date>\d{8})")
+
+# ITS taxonomy products, in order of preference when a DNA sample is in both:
+# .002 (current pipeline, ~2016+, mct_* tables) and .001 (old pipeline, 2014-2018, mcc_* tables).
+# The two pipelines differ (reference DB, OTU vs sequence variant): keep `product` as a covariate.
+ITS_PRODUCTS = {"DP1.10081.002": "mct_soilSampleMetadata_ITS",
+                "DP1.10081.001": "mcc_soilSeqVariantMetadata_ITS"}
 
 
 def get_token() -> str | None:
     from dotenv import load_dotenv
     from .config import ROOT
     load_dotenv(ROOT / ".env")
-    return os.environ.get("NEON_API_TOKEN") or None
+    return os.environ.get("NEON_API_TOKEN") or os.environ.get("NEON_TOKEN") or None
 
 
 def parse_sample_id(s: str) -> dict:
@@ -87,18 +94,52 @@ def _pick(df: pd.DataFrame, *cands: str) -> str | None:
     return None
 
 
-def load_its_raw() -> pd.DataFrame:
-    d = RAW_NEON / "DP1.10081.001"
-    cand = [p for p in d.glob("*.parquet") if "its" in p.name.lower() and "taxonomy" in p.name.lower()
-            and "pertaxon" not in p.name.lower().replace("persample", "")]
-    cand = [p for p in cand if "persample" in p.name.lower()] or cand
-    if not cand:
-        raise FileNotFoundError("no ITS per-sample taxonomy table in " + str(d))
-    return pd.read_parquet(cand[0])
+def its_taxonomy_path(product: str) -> Path:
+    """Assembled per-sample ITS taxonomy written by fetch_its_sample_files()."""
+    prefix = ITS_PRODUCTS[product].split("_")[0]  # mct / mcc
+    return RAW_NEON / product / f"{prefix}_soilPerSampleTaxonomy_ITS.parquet"
 
 
-def build_its_genus(raw: pd.DataFrame) -> pd.DataFrame:
-    """Per core -> per (plotID, collectDate) genus reads; long format incl. all genera (zeros for genera of interest)."""
+def select_its_runs(raw: pd.DataFrame, preference=tuple(ITS_PRODUCTS)) -> pd.DataFrame:
+    """One run per DNA sample: the deepest run within a product, then the preferred product.
+
+    NEON re-sequences some samples (several metadata rows / sequencerRunIDs per dnaSampleID) and some
+    DNA samples appear in both DP1.10081.002 and .001. Rows need dnaSampleID and individualCount;
+    `product` and `sequencerRunID` are used when present."""
+    df = raw.copy()
+    if "product" not in df:
+        df["product"] = preference[-1]
+    if "sequencerRunID" not in df:
+        df["sequencerRunID"] = ""
+    df["sequencerRunID"] = df["sequencerRunID"].fillna("").astype(str)
+    df["_cnt"] = pd.to_numeric(df["individualCount"], errors="coerce").fillna(0)
+    depth = df.groupby(["product", "dnaSampleID", "sequencerRunID"])["_cnt"].sum().rename("_depth").reset_index()
+    depth["_rank"] = depth["product"].map({p: i for i, p in enumerate(preference)}).fillna(len(preference))
+    best = (depth.sort_values(["dnaSampleID", "_rank", "_depth"], ascending=[True, True, False])
+            .drop_duplicates("dnaSampleID")[["product", "dnaSampleID", "sequencerRunID"]])
+    out = df.merge(best, on=["product", "dnaSampleID", "sequencerRunID"], how="inner")
+    return out.drop(columns=["_cnt"])
+
+
+def load_its_raw(products=tuple(ITS_PRODUCTS)) -> pd.DataFrame:
+    """Per-sample ITS taxonomy of all available products, one run per DNA sample (see select_its_runs)."""
+    parts = []
+    for p in products:
+        f = its_taxonomy_path(p)
+        if f.exists():
+            df = pd.read_parquet(f)
+            df["product"] = p
+            parts.append(df)
+    if not parts:
+        raise FileNotFoundError(f"no ITS per-sample taxonomy under {RAW_NEON} (run scripts/02_fetch_neon.py)")
+    return select_its_runs(pd.concat(parts, ignore_index=True), preference=tuple(products))
+
+
+def build_its_core(raw: pd.DataFrame) -> pd.DataFrame:
+    """Per core (dnaSampleID) genus reads and share of the core's fungal reads; long format.
+
+    Columns: site, plotID, horizon, collectDate, soilSampleID (core, = NMDC biosample name), dnaSampleID,
+    product, sequenceCountQF, genus, reads, total_reads (fungal reads of the core), share_pct."""
     df = raw.copy()
     idc = _pick(df, "dnaSampleID", "sampleID")
     gc = _pick(df, "genus")
@@ -115,27 +156,67 @@ def build_its_genus(raw: pd.DataFrame) -> pd.DataFrame:
     kc = _pick(df, "kingdom")
     if kc:  # total_reads = fungal reads only (unassigned/non-fungal ASVs have empty kingdom)
         df = df[df[kc].astype("string").str.lower() == "fungi"].copy()
-    df["core"] = df[idc].astype(str)
+    df["dnaSampleID"] = df[idc].astype(str)
+    df["soilSampleID"] = df["dnaSampleID"].str.replace(r"-GEN(-DNA\d+)?$", "", regex=True)
     df["_cnt"] = pd.to_numeric(df[cc], errors="coerce").fillna(0)
     df["genus"] = df[gc].astype("string").str.strip()
-    df = df[df["horizon"] == "M"] if (df["horizon"] == "M").any() else df
+    # fungal reads without a genus stay visible (cores with only such reads would otherwise vanish)
+    df["genus"] = df["genus"].mask(df["genus"].isna() | (df["genus"] == ""), "unclassified_Fungi")
+    for col, default in (("product", ""), ("sequenceCountQF", "")):
+        if col not in df:
+            df[col] = default
+    df["sequenceCountQF"] = df["sequenceCountQF"].fillna("")
+    key = ["site", "plotID", "horizon", "collectDate", "soilSampleID", "dnaSampleID", "product", "sequenceCountQF"]
+    total = df.groupby(key)["_cnt"].sum().rename("total_reads").reset_index()
+    g = (df.dropna(subset=["genus"]).groupby(key + ["genus"])["_cnt"].sum().rename("reads").reset_index())
+    g = g.merge(total, on=key)
+    g["share_pct"] = np.where(g["total_reads"] > 0, 100 * g["reads"] / g["total_reads"], np.nan)
+    return g.sort_values(["site", "plotID", "collectDate", "dnaSampleID", "genus"]).reset_index(drop=True)
+
+
+def build_its_genus(raw: pd.DataFrame, qc_ok_only: bool = True) -> pd.DataFrame:
+    """Per (plotID, collectDate) genus abundance from per-core ITS; long format incl. zeros for GENERA.
+
+    rel_abund_pct is the MEAN of per-core shares (each core weighs equally, like the equal-mass cores pooled
+    into a NEON composite); reads and total_reads are sums over the included cores. With qc_ok_only, cores
+    flagged sequenceCountQF == "Below threshold" are excluded (missing flag counts as OK)."""
+    core = build_its_core(raw)
+    core = core[core["horizon"] == "M"] if (core["horizon"] == "M").any() else core
+    if qc_ok_only:
+        core = core[core["sequenceCountQF"] != "Below threshold"]
     grp = ["site", "plotID", "collectDate"]
-    total = df.groupby(grp)["_cnt"].sum().rename("total_reads")
-    ncores = df.groupby(grp)["core"].nunique().rename("n_cores")
-    g = df.dropna(subset=["genus"]).groupby(grp + ["genus"])["_cnt"].sum().rename("reads").reset_index()
-    # zero rows for genera of interest so detection frequency is well-defined
-    base = total.reset_index()[grp]
-    zero = base.merge(pd.DataFrame({"genus": GENERA}), how="cross")
-    g = zero.merge(g, on=grp + ["genus"], how="outer").fillna({"reads": 0})
-    g = g.merge(total.reset_index(), on=grp).merge(ncores.reset_index(), on=grp)
-    g["rel_abund_pct"] = np.where(g["total_reads"] > 0, 100 * g["reads"] / g["total_reads"], np.nan)
-    g["year"] = g["collectDate"].dt.year
-    g["dnaSampleID"] = g.merge(
-        df.groupby(grp)["core"].agg(lambda s: ";".join(sorted(set(s)))).rename("ids").reset_index(),
-        on=grp, how="left")["ids"].values
-    g["collectDate"] = g["collectDate"].dt.date
-    return g[["site", "plotID", "collectDate", "year", "dnaSampleID", "n_cores", "genus", "reads", "total_reads",
-              "rel_abund_pct"]].sort_values(["site", "plotID", "collectDate", "genus"]).reset_index(drop=True)
+    cores = core.drop_duplicates("dnaSampleID")
+    per = cores.groupby(grp).agg(total_reads=("total_reads", "sum"), n_cores=("dnaSampleID", "nunique"),
+                                 dnaSampleID=("dnaSampleID", lambda s: ";".join(sorted(s))),
+                                 product=("product", lambda s: ";".join(sorted(set(s) - {""})))).reset_index()
+    # every (core, genus) pair so cores without a genus contribute a 0 share to the mean
+    ids = cores[grp + ["dnaSampleID"]]
+    allg = ids.merge(pd.DataFrame({"genus": sorted(set(core["genus"]) | set(GENERA))}), how="cross")
+    allg = allg.merge(core[["dnaSampleID", "genus", "reads", "share_pct"]], on=["dnaSampleID", "genus"],
+                      how="left").fillna({"reads": 0, "share_pct": 0.0})
+    g = allg.groupby(grp + ["genus"]).agg(reads=("reads", "sum"), rel_abund_pct=("share_pct", "mean")).reset_index()
+    g = g[(g["reads"] > 0) | g["genus"].isin(GENERA)]
+    g = g.merge(per, on=grp)
+    g["year"] = pd.to_datetime(g["collectDate"]).dt.year
+    g["collectDate"] = pd.to_datetime(g["collectDate"]).dt.date
+    return g[["site", "plotID", "collectDate", "year", "dnaSampleID", "n_cores", "product", "genus", "reads",
+              "total_reads", "rel_abund_pct"]].sort_values(["site", "plotID", "collectDate", "genus"]
+                                                           ).reset_index(drop=True)
+
+
+def pooling_map(raw_dir: Path | None = None) -> pd.DataFrame:
+    """Core -> metagenome composite from DP1.10086.001 sls_metagenomicsPooling (one row per pooled core).
+
+    Columns: soilSampleID (core sampleID = NMDC biosample name), genomicsSampleID, plotID, collectDate."""
+    f = (raw_dir or RAW_NEON / "DP1.10086.001") / "sls_metagenomicsPooling.parquet"
+    if not f.exists():
+        return pd.DataFrame(columns=["soilSampleID", "genomicsSampleID", "plotID", "collectDate"])
+    p = pd.read_parquet(f)
+    p = p[p["genomicsPooledIDList"].notna()]
+    p = p.assign(soilSampleID=p["genomicsPooledIDList"].str.split("|")).explode("soilSampleID")
+    p["soilSampleID"] = p["soilSampleID"].str.strip()
+    p["collectDate"] = pd.to_datetime(p["collectDate"], errors="coerce").dt.tz_localize(None).dt.date
+    return p[["soilSampleID", "genomicsSampleID", "plotID", "collectDate"]].drop_duplicates().reset_index(drop=True)
 
 
 def _wide(g: pd.DataFrame) -> pd.DataFrame:
@@ -255,18 +336,20 @@ def build_qpcr_plot(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-# ---------------------------------------------------------------- ITS per-sample files (current release has no mct_* tables)
-def fetch_its_sample_files(workers: int = 8) -> pd.DataFrame:
-    """RELEASE-2026 ships ITS only as per-sample sequence-variant CSVs (public storage URLs listed in
-    mcc_soilSeqVariantMetadata_ITS). Download them, keep taxonomy + counts (no sequences), save one parquet."""
+# ---------------------------------------------------------------- ITS per-sample files
+def fetch_its_sample_files(product: str = "DP1.10081.002", workers: int = 8) -> pd.DataFrame:
+    """ITS taxon tables come as per-sample CSVs (public storage URLs listed in the product's sample-metadata
+    table: mct_soilSampleMetadata_ITS for .002, mcc_soilSeqVariantMetadata_ITS for .001). Download all of them
+    (every run of re-sequenced samples; select_its_runs() picks one later), keep taxonomy + counts (no
+    sequences), save one parquet at its_taxonomy_path(product)."""
     import io
     from concurrent.futures import ThreadPoolExecutor
     from . import http
-    d = RAW_NEON / "DP1.10081.001"
-    meta = pd.read_parquet(d / "mcc_soilSeqVariantMetadata_ITS.parquet")
-    meta = meta[meta["downloadFileUrl"].notna()].drop_duplicates("dnaSampleID")
-    keep = ["dnaSampleID", "kingdom", "phylum", "class", "order", "family", "genus", "specificEpithet",
-            "scientificName", "individualCount"]
+    d = RAW_NEON / product
+    meta = pd.read_parquet(d / f"{ITS_PRODUCTS[product]}.parquet")
+    meta = meta[meta["downloadFileUrl"].notna()].drop_duplicates("downloadFileUrl")
+    keep = ["dnaSampleID", "sequencerRunID", "kingdom", "phylum", "class", "order", "family", "genus",
+            "specificEpithet", "scientificName", "individualCount"]
 
     def one(row):
         try:
@@ -275,15 +358,23 @@ def fetch_its_sample_files(workers: int = 8) -> pd.DataFrame:
         except Exception:  # noqa: BLE001
             return None
         df["individualCount"] = pd.to_numeric(df["individualCount"], errors="coerce")
+        if "sequencerRunID" not in df or df["sequencerRunID"].isna().all():
+            df["sequencerRunID"] = row.get("sequencerRunID")
         df["collectDate"] = row["collectDate"]
         df["sequenceCountQF"] = row["sequenceCountQF"]
-        df["release"] = row["release"]
+        df["sampleFilteredReadNumber"] = row.get("sampleFilteredReadNumber")
+        df["release"] = row.get("release")
+        df["product"] = product
         return df
 
+    rows = [r for _, r in meta.iterrows()]
     with ThreadPoolExecutor(workers) as ex:
-        res = list(ex.map(one, [r for _, r in meta.iterrows()]))
+        res = list(ex.map(one, rows))
     ok = [r for r in res if r is not None]
-    print(f"  ITS per-sample files: {len(ok)}/{len(res)} downloaded")
+    failed = [row["downloadFileUrl"].rsplit("/", 1)[-1] for row, r in zip(rows, res) if r is None]
+    print(f"  {product} ITS per-sample files: {len(ok)}/{len(res)} downloaded")
+    if failed:
+        print(f"  FAILED ({len(failed)}): {', '.join(failed[:10])}{' ...' if len(failed) > 10 else ''}")
     out = pd.concat(ok, ignore_index=True)
-    out.to_parquet(d / "mcc_soilPerSampleTaxonomy_ITS.parquet", index=False)
+    out.to_parquet(its_taxonomy_path(product), index=False)
     return out
