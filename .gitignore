@@ -1,3 +1,10 @@
 data/
 __pycache__/
 *.part
+.venv/
+.env
+*.zip
+.pytest_cache/
+.DS_Store
+data/cache/
+outputs/

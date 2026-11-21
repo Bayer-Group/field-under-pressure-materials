@@ -13,7 +13,7 @@ classed as cropland, this script:
 2. lists every NMDC data object linked to the sample in ``data_objects.csv``
    (including URLs of raw reads, BAMs, MAG bins that are *not* downloaded);
 3. downloads the small, analysis-ready outputs (read-based taxonomy, KEGG/EC
-   counts, QC and annotation stats) into ``files/<SITE>/<sample name>/``.
+   counts, QC and annotation stats) into ``objects/<data_object_id>/`` (one copy per unique object).
 
 Usage:
     uv run scripts/pull_nmdc_cropland.py                 # STER + KONA
@@ -52,13 +52,25 @@ WANTED = {
     "QC Statistics": "qc_filterStats.txt",
 }
 
+# --types keys -> data_object_type (EC / Centrifuge are selectable but off by default)
+TYPE_KEYS = {
+    "kraken2": "Kraken2 Classification Report",
+    "gottcha2": "GOTTCHA2 Report Full",
+    "centrifuge": "Centrifuge output report file",
+    "ko": "Annotation KEGG Orthology",
+    "ec": "Annotation Enzyme Commission",
+    "annotation_stats": "Annotation Statistics",
+    "qc": "QC Statistics",
+}
+DEFAULT_TYPES = ["kraken2", "gottcha2", "ko", "annotation_stats", "qc"]
+
 SAMPLE_FIELDS = [
     "id", "name", "site", "plot", "horizon", "depth_min_m", "depth_max_m",
     "collection_date", "year", "latitude", "longitude", "elev",
     "ph", "temp_c", "water_content_g_per_g", "org_carb_pct", "nitro_pct",
     "carb_nitro_ratio", "ammonium_nitrogen", "tot_nitro_content",
     "env_local_scale", "soil_horizon", "gold_biosample", "insdc_biosample",
-    "img_taxon", "n_data_objects", "has_kraken2", "has_ko",
+    "img_taxon", "n_data_objects", "has_kraken2", "has_ko", "metagenome_key",
 ]
 
 DO_FIELDS = [
@@ -182,11 +194,11 @@ def _wf_version(name: str) -> tuple[int, str]:
     return (int(m.group(1)) if m else 0, name or "")
 
 
-def select_objects(dos: list[dict]) -> dict[str, dict]:
+def select_objects(dos: list[dict], types: set[str] | None = None) -> dict[str, dict]:
     best: dict[str, dict] = {}
     for d in dos:
         t = d.get("data_object_type")
-        if t in WANTED and d.get("url"):
+        if t in WANTED and d.get("url") and (types is None or t in types):
             if t not in best or _wf_version(d["name"]) > _wf_version(best[t]["name"]):
                 best[t] = d
     return best
@@ -234,12 +246,15 @@ def main() -> None:
     ap.add_argument("--sites", nargs="+", default=["STER", "KONA"])
     ap.add_argument("--out", type=Path, default=Path("data/nmdc"))
     ap.add_argument("--dry-run", action="store_true", help="list only, no downloads")
+    ap.add_argument("--types", nargs="+", default=DEFAULT_TYPES, choices=sorted(TYPE_KEYS),
+                    help="which data object types to download (default: %(default)s)")
     ap.add_argument("--workers", type=int, default=4)
     args = ap.parse_args()
+    wanted_types = {TYPE_KEYS[k] for k in args.types}
 
     samples: list[dict] = []
     do_rows: list[dict] = []
-    jobs: list[tuple[str, Path, int | None, str | None]] = []
+    jobs: dict[Path, tuple[str, Path, int | None, str | None]] = {}  # deduped by data-object id
 
     for site in args.sites:
         bios = fetch_biosamples(site)
@@ -249,13 +264,19 @@ def main() -> None:
             linked = {futs[f]["id"]: f.result() for f in as_completed(futs)}
         for b in sorted(bios, key=lambda x: x["name"]):
             dos = linked[b["id"]]
-            samples.append(flatten_biosample(b, dos))
-            chosen = {d["id"] for d in select_objects(dos).values()}
+            sel = select_objects(dos, wanted_types)
+            row = flatten_biosample(b, dos)
+            mg = sel.get("Annotation KEGG Orthology") or sel.get("Kraken2 Classification Report")
+            row["metagenome_key"] = mg["id"] if mg else ""
+            samples.append(row)
+            chosen = {d["id"] for d in sel.values()}
             for d in sorted(dos, key=lambda x: (x.get("data_object_type") or "", x.get("name") or "")):
                 local = ""
                 if d["id"] in chosen:
-                    local = args.out / "files" / site / b["name"] / WANTED[d["data_object_type"]]
-                    jobs.append((d["url"], local, d.get("file_size_bytes"), d.get("md5_checksum")))
+                    # shared by all biosamples pooled into the same metagenome
+                    local = (args.out / "objects" / d["id"].replace(":", "_")
+                             / WANTED[d["data_object_type"]])
+                    jobs.setdefault(local, (d["url"], local, d.get("file_size_bytes"), d.get("md5_checksum")))
                 do_rows.append({
                     "biosample_id": b["id"], "biosample_name": b["name"], "site": site,
                     "data_object_id": d["id"], "data_object_type": d.get("data_object_type"),
@@ -272,6 +293,7 @@ def main() -> None:
     print("\nsite year  samples  with_taxonomy", file=sys.stderr)
     for k in sorted(by_site_year):
         print(f"{k[0]} {k[1]}  {by_site_year[k]:>7}  {processed[k]:>13}", file=sys.stderr)
+    jobs = list(jobs.values())
     total = sum(j[2] or 0 for j in jobs)
     print(f"\n{len(jobs)} files selected, {total / 1e6:.1f} MB", file=sys.stderr)
     print(f"wrote {args.out / 'samples.csv'} and {args.out / 'data_objects.csv'}", file=sys.stderr)

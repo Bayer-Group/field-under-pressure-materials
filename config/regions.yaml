@@ -1,0 +1,18 @@
+# Two ~30x30 km analysis windows centred on the NEON cultivated-crop soil plots.
+# half_km = half window side. bbox is derived in code (src/cropfit/config.py).
+crs_albers: "EPSG:5070"
+years_history: [2008, 2025]
+windows:
+  STER:
+    name: "North Sterling, Logan Co., CO (dryland)"
+    center_lat: 40.4679
+    center_lon: -103.0252
+    half_km: 15
+    state_fips: "08"
+  KONA:
+    name: "Konza agroecosystem, Riley/Geary Co., KS"
+    center_lat: 39.1457
+    center_lon: -96.6152
+    half_km: 15
+    state_fips: "20"
+crops: [corn, soybean, winter_wheat, sorghum, sunflower]
