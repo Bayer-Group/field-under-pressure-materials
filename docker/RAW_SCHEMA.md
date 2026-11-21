@@ -2,7 +2,7 @@
 
 **Status: for review by the whole team.** This is the input for the curated-layer contract and for the wheat/septoria
 business logic (see the epic "Wheat/septoria risk pipeline: raw → curated → served"). Everything here was measured on the
-prepared data on the external disk (`HACKATHON/raw`) and on the database on the VM. Items marked **PROPOSAL** are not
+prepared data on the external disk (`HACKATHON/raw`) and on the database on the VM, where the whole scope is now loaded. Items marked **PROPOSAL** are not
 decided yet. The current database structure is in [`README.md`](README.md); this file extends it to all organizer layers.
 
 ## Scope
@@ -29,12 +29,12 @@ contract must use `raw.<table>`; until the rename is applied, `fup.<table>` is t
 
 | Table | Source | Key | Rows (Mazowieckie scope) | Status |
 | --- | --- | --- | --- | --- |
-| `raw.grid_cell` | `weather_grids/weather_grids.parquet` | `grid_id` | 21,196 loaded (2,428 in scope) | loaded; extra columns pending |
+| `raw.grid_cell` | `weather_grids/weather_grids.parquet` | `grid_id` | 21,196 (2,428 in scope) | **loaded** (with `l1_name` and `elevation`) |
 | `raw.weather_hourly` | `weather_hourly/year=2024/voivodeship=mazowieckie/*.parquet` + IMERG hourly | `(grid_id, utc_time)` | 3,554,592 | **loaded** |
-| `raw.weather_daily` | `weather_daily/year=2024/voivodeship=mazowieckie/*.parquet` | `(grid_id, date)` | 148,108 | to load |
-| `raw.imerg_daily` | `imerg_daily/daily/2024/precip_daily_2024_Mazowieckie.parquet` | `(grid_id, date)` | 148,108 | to load |
-| `raw.soil_h3` | `soil/voivodeship=mazowieckie/Mazowieckie_isric_250_v2.parquet` | `h3_index_10` | 2,491,086 | to load |
-| `raw.cropland_cty` (raster) | `cropland/year=2024/CLMS_HRLVLCC_CTY_PL_*.tif` (15 tiles) | `rid` (tile file in `tile`) | 15 files, about 1.9 G pixels (about 28,000 raster tiles of 256×256) | to load (method decided) |
+| `raw.weather_daily` | `weather_daily/year=2024/voivodeship=mazowieckie/*.parquet` | `(grid_id, date)` | 148,108 | **loaded** |
+| `raw.imerg_daily` | `imerg_daily/daily/2024/precip_daily_2024_Mazowieckie.parquet` | `(grid_id, date)` | 148,108 | **loaded** |
+| `raw.soil_h3` | `soil/voivodeship=mazowieckie/Mazowieckie_isric_250_v2.parquet` | `h3_index_10` | 2,491,086 | **loaded** |
+| `raw.cropland_cty` (raster) | `cropland/year=2024/CLMS_HRLVLCC_CTY_PL_*.tif` (15 tiles) | `rid` (tile file in `tile`) | 15 files, 29,334 raster tiles of 256×256 (181 MB in the database) | **loaded** |
 | `raw.crop_class` | CTY legend | `code` | 21 | loaded |
 | `raw.ingest_log` | loader | `id` | one row per loaded file | loaded |
 
@@ -54,7 +54,7 @@ relative humidity 18…100 %, hourly precipitation 0…23.6 mm.
 - `precipitation` comes from **IMERG hourly**, joined on `(grid_id, utc_time)` at load time (the weather files have no precipitation column).
 - Not stored: `elevation` (moves to `grid_cell`) and the wind components `u_component_of_wind_10m`, `v_component_of_wind_10m`.
 
-### `raw.weather_daily`: daily weather (to load)
+### `raw.weather_daily`: daily weather (loaded)
 Key `(grid_id, date)`; `date` is the local calendar date. The file has 50 columns: the key, `elevation` (constant per
 cell, stored in `grid_cell` instead) and 47 measured columns (units as in `data/weather.md`):
 `min/max/avg/midpoint_temperature` · `min/max/avg_dew_point_temperature` · `min/max/avg_atmospheric_pressure` ·
@@ -78,7 +78,8 @@ One row per H3 cell: `h3_index_10` text PK (15 characters), `hid` bigint (partit
 Measured: about 0.6 % of cells have NULL values (no soil data); textures are mostly Sandy Loam and Loamy Sand.
 **Units to verify:** `data/soil.md` says sand/silt/clay are in `g/100g (%)`, but the root-zone `clay`, `sand`, `silt`
 values are **fractions 0.04…0.92**. `data/soil.md` also lists `band_*` as floats while the data has text, and names the
-texture column `soil_texture` while the file has `soilTexture`. The table keeps the **file's** names and values.
+texture column `soil_texture` while the file has `soilTexture`. The table keeps the **file's values**; column names are
+lower-cased (`band_om`, `band_cec`, `band_ph`) and `soilTexture` is stored as `soil_texture`.
 
 ### `raw.cropland_cty`: CLMS crop types 2024 (raster, 10 m, EPSG:4326, uint16)
 15 tiles cover Mazowieckie (`…_PL_0, 7, 13, 14, 22, 23, 24, 28, 33, 35, 36, 42, 43, 44, 46`); 3.6 GB in total,
@@ -127,8 +128,12 @@ unchanged (source file name in `tile`). The tiles are not aligned to each other 
 - Spatial keys: EPSG:4326, longitude/latitude order.
 - Every loaded file has a row in `raw.ingest_log` (dataset, file, rows, load time).
 
-## Loading plan and cost
+## Loading (measured)
 
-The loader runs on a laptop and sends data through an SSH tunnel at about 1.1 MB/s (measured): hourly weather for the scope
-took 19 minutes. Estimates: daily weather and IMERG daily < 5 minutes; soil about 25 minutes; the crop tiles are the heavy
-part (3.6 GB uncompressed), so they are compressed lossless before transfer or loaded on the VM.
+All tables above are loaded in the VM database for the Mazowieckie scope (2026-11-21), with `scripts/load_db.py`
+(see [`README.md`](README.md)). The whole load took about 10 minutes through an SSH tunnel with compression (`-C`):
+grid, hourly and daily weather and IMERG 3.5 min, soil 3 min, the 15 crop tiles 3 min (each tile is compressed
+losslessly before sending: 150–250 MB become 2–7 MB). The database is 2.3 GB (soil 1.4 GB, hourly weather 0.8 GB,
+crop raster 0.2 GB). Checks after the load: row counts equal the source; hourly weather has 1,464 hours for each of the
+2,428 cells and no NULLs; the soil geometries are valid (SRID 4326); the class counts inside a polygon from the loaded raster
+equal an independent `rasterio` read. The data on the external disk (34 GB) is mostly not loaded: only this scope is.
