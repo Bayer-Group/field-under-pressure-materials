@@ -8,3 +8,5 @@ __pycache__/
 .DS_Store
 data/cache/
 outputs/
+web/node_modules/
+web/dist/

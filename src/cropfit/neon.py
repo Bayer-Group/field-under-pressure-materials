@@ -229,6 +229,26 @@ def build_its_genus(raw: pd.DataFrame, qc_ok_only: bool = True) -> pd.DataFrame:
                                                            ).reset_index(drop=True)
 
 
+def its_genus_lineage(raw: pd.DataFrame) -> pd.DataFrame:
+    """genus -> phylum, class for the fungal genera in the per-sample ITS taxonomy (both pipelines).
+
+    A genus name that maps to several lineages (rare; reference updates) gets the one with most reads.
+    Placeholder names (`<taxon>_cls_Incertae_sedis`) are kept as given: the viewer treats them as unnamed.
+    `unclassified_Fungi` (build_its_core's name for reads without a genus) is not in the table."""
+    cols = {k: _pick(raw, k) for k in ("kingdom", "phylum", "class", "genus", "individualCount")}
+    if None in cols.values():
+        raise KeyError(f"ITS lineage columns missing: {list(raw.columns)}")
+    df = pd.DataFrame({k: raw[c] for k, c in cols.items()})
+    df = df[df["kingdom"].astype("string").str.lower() == "fungi"]
+    for c in ("phylum", "class", "genus"):
+        df[c] = df[c].astype("string").str.strip().replace("", pd.NA)
+    df = df.dropna(subset=["genus"])
+    df["reads"] = pd.to_numeric(df["individualCount"], errors="coerce").fillna(0)
+    best = (df.groupby(["genus", "phylum", "class"], dropna=False)["reads"].sum().reset_index()
+            .sort_values(["genus", "reads"], ascending=[True, False]).drop_duplicates("genus"))
+    return best[["genus", "phylum", "class"]].reset_index(drop=True)
+
+
 def pooling_map(raw_dir: Path | None = None) -> pd.DataFrame:
     """Core -> metagenome composite from DP1.10086.001 sls_metagenomicsPooling (one row per pooled core).
 

@@ -33,6 +33,9 @@ ts = ts.merge(bt, on=["plotID", "collectDate"], how="left")
 ts.to_parquet(PROCESSED / "plot_its_timeseries.parquet", index=False)
 neon.plot_its_latest(ts).to_parquet(PROCESSED / "plot_its.parquet", index=False)
 print("its_genus", len(g), "timeseries", len(ts), "plot_its", ts.plotID.nunique())
+lin = neon.its_genus_lineage(raw)  # genus -> phylum, class (for the GUI's fungi composition view)
+lin.to_parquet(PROCESSED / "its_genus_lineage.parquet", index=False)
+print("its_genus_lineage", len(lin), "genera")
 
 # ---- chemistry
 t = {os.path.basename(f)[:-8]: pd.read_parquet(f) for f in glob.glob(str(R / "DP1.10086.001" / "sls_*.parquet"))}

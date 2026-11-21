@@ -174,6 +174,33 @@ def kraken_genus(rep: pd.DataFrame) -> pd.DataFrame:
     return g
 
 
+LINEAGE_RANKS = {"D": "domain", "P": "phylum", "C": "class", "O": "order", "F": "family", "G": "genus"}
+_RANK_ORDER = "RDKPCOFGS"
+PROKARYOTES = ("Bacteria", "Archaea")
+
+
+def kraken_lineage(rep: pd.DataFrame, domains=PROKARYOTES) -> pd.DataFrame:
+    """Clade reads per taxon at the main ranks, with the taxon's domain and phylum; prokaryotes only.
+
+    Columns: rank (domain|phylum|class|order|family|genus), name, domain, phylum, reads. The report is
+    depth-first, so the last taxon seen at each higher rank is the current row's ancestor. Intermediate ranks
+    (D1, P2, ...) are skipped; a taxon with no phylum in its lineage gets phylum None."""
+    current: dict[str, str] = {}
+    rows = []
+    for rank, name, reads in zip(rep["rank"], rep["name"], rep["clade_reads"]):
+        base = rank[:1]
+        if base not in _RANK_ORDER or base in ("U",):
+            continue
+        if len(rank) == 1:              # a main rank resets everything below it
+            for r in _RANK_ORDER[_RANK_ORDER.index(base):]:
+                current.pop(r, None)
+            current[base] = name
+        if rank in LINEAGE_RANKS and current.get("D") in domains:
+            rows.append((LINEAGE_RANKS[rank], name, current["D"], current.get("P"), int(reads)))
+    out = pd.DataFrame(rows, columns=["rank", "name", "domain", "phylum", "reads"])
+    return out.groupby(["rank", "name", "domain", "phylum"], as_index=False, dropna=False)["reads"].sum()
+
+
 def gottcha_genus(path: Path) -> pd.DataFrame:
     d = pd.read_csv(path, sep="\t", dtype={"NOTE": str})
     d = d[d["LEVEL"] == "genus"].copy()

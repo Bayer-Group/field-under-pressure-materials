@@ -15,7 +15,7 @@ Related: `docs/nmdc-data-guide.md` (how to interpret the NMDC files and how STER
 ```bash
 uv venv --python 3.12 .venv            # geo wheels are risky on newer system Pythons
 uv pip install --python .venv/bin/python -e .
-.venv/bin/python -m pytest -q          # 111 tests, no network, no data needed
+.venv/bin/python -m pytest -q          # 125 tests, no network, no data needed
 ```
 
 The package is `cropfit` in `src/cropfit/` (the name is historical). Scripts add `src/` to `sys.path` themselves; run them from the repo root: `.venv/bin/python scripts/<name>.py`. `e1_match.py` and `pull_nmdc_cropland.py` use paths relative to the current directory, so run them from the repo root.
@@ -64,13 +64,14 @@ Pipeline order (what produces what):
 |---|---|---|
 | NMDC download | `scripts/pull_nmdc_cropland.py` | `data/nmdc/` |
 | NEON download | `scripts/02_fetch_neon.py` (needs token) | `data/raw/neon/` |
-| NEON tables | `scripts/02b_build_neon_features.py` (offline) | `its_core_genus`, `its_genus`, `plot_its*`, `neon_metagenome_pooling`, `neon_chem`, `neon_qpcr` |
+| NEON tables | `scripts/02b_build_neon_features.py` (offline) | `its_core_genus`, `its_genus`, `its_genus_lineage`, `plot_its*`, `neon_metagenome_pooling`, `neon_chem`, `neon_qpcr` |
 | Event registry | `scripts/01_build_events.py` (offline, after 02b and 05) | `events`, `plot_geometry`, `event_cores` (see 3.9) |
 | Plot tables | `scripts/03_build_plots.py` (after 01) | `plots`, `plot_crop_history`, `plot_climate_yearly`, `plot_weather_daily` |
 | Field tables | `scripts/04_build_fields.py` (needs CSB zip) | `fields`, `plot_csb`, `csb_raw_<site>` |
-| NMDC tables | `scripts/05_build_biology.py` (offline) | `metagenomes`, `ko_*`, `taxa_genus`, `plot_biology*` |
+| NMDC tables | `scripts/05_build_biology.py` (offline) | `metagenomes`, `ko_*`, `taxa_genus`, `taxa_lineage`, `plot_biology*` |
 | Satellite | `scripts/08_fetch_satellite.py` (after 01) | `plot_vi_timeseries`, `plot_season` |
 | Aerial photos | `scripts/09_fetch_aerial.py [naip] [aop]` (after 01; `aop` needs token) | `plot_aerial`, chips under `data/raw/imagery/` |
+| Greenness maps (for the GUI) | `scripts/13_fetch_ndvi_maps.py` (after 08; network, resumable) | `plot_ndvi_maps`, Sentinel-2 NDVI chips (10 m, 1 km around each plot, one per clear date) under `data/raw/imagery/s2_ndvi/` |
 | Event features | `scripts/07_build_event_features.py` (offline, last) | `event_features`, `event_table` (see 3.9) |
 | Association scan | `scripts/11_association_scan.py` (offline, after 07, under a minute) | `association_scan` (see 3.10) |
 | Knowledge base | `scripts/14_build_kb.py [--refresh]` (downloads ~1 MB + ~179 MB once) | `kb_fungaltraits_genus`, `kb_genus_crop_host`, `kb_usda_species_crop`, `kb_meta.json` |
@@ -121,7 +122,8 @@ Note: `03_build_plots.py` takes its plots from the event registry (the 29 plots 
   - `metagenomes.parquet`, 59 rows, one per composite metagenome: `metagenome_key, site, plotID, date, year, n_biosamples, biosample_names, ph_mean, temp_c, water_content_g_per_g, org_carb_pct, nitro_pct, carb_nitro_ratio, ammonium_nitrogen, n_ko_genes, marker_mean, ko_depth_ok, kraken_total_reads, kraken_bacteria_reads, kraken_unclassified_pct, has_kraken`.
   - `ko_counts_all.parquet`, 131,076 rows, long: `metagenome_key, ko, count` (58 metagenomes, 8,458 distinct KOs).
   - `ko_panel.parquet`, 1,914 rows: panel KOs only, with `gene, function_group, count, per_genome_eq` (count divided by the mean of 5 single-copy marker KOs: K03043, K03553, K02950, K02967, K02982) and `per_million`.
-  - `taxa_genus.parquet`, 67,237 rows: `metagenome_key, source (kraken2|gottcha2), genus, reads, pct_of_bacteria, filtered` (59 Kraken2 metagenomes, 46 GOTTCHA2).
+  - `taxa_genus.parquet`, 67,237 rows: `metagenome_key, source (kraken2|gottcha2), genus, reads, pct_of_bacteria, filtered` (59 Kraken2 metagenomes, 46 GOTTCHA2). Caution: `pct_of_bacteria` divides by Bacteria reads only, but the genus rows also include archaea, viruses and animals, so a sample can sum past 100% (one KONA 2017 metagenome with 113 bacterial reads reaches 170%).
+  - `taxa_lineage.parquet`, 100,975 rows: `metagenome_key, rank (domain|phylum|class|order|family|genus), name, domain, phylum, reads` (Kraken2 clade reads, Bacteria and Archaea only, each taxon with its phylum; `nmdc.kraken_lineage()`). Use it for shares: divide by the summed `domain` rows of the metagenome. Measured: named phyla cover 95-98% of those reads, classes 87-94%, genera 74-82%. Used by the GUI's soil microbes view.
   - `plot_biology_timeseries.parquet` (59 rows) and `plot_biology.parquet` (latest per plot, 26 rows): percentile and status columns per KO function group and per genus; see `docs/feature_contract.md` (Biology).
 - **Join keys:** `plotID` + date to NEON portal products (chemistry, qPCR, ITS); `plotID` to plot coordinates (`resources/neon_soil_plots_landcover.csv`, strip `.basePlot.bgc`); `metagenome_key` between all NMDC tables.
 - **Sample-name regex** (`nmdc.NAME_RE`): `SITE_NNN-H-X[-Y]-YYYYMMDD`, for example `KONA_001-M-16-31.5-20190619`. **2022 names have a single depth field** (`STER_006-M-21-20220607`), so the second depth group is optional. `plotID = SITE_NNN`, `H` is the horizon (M mineral, O organic; all cropland samples here are M).
@@ -165,6 +167,7 @@ Note: `03_build_plots.py` takes its plots from the event registry (the 29 plots 
   - `its_core_genus.parquet` (long, one row per core and genus): `site, plotID, horizon, collectDate, soilSampleID` (core, equals the NMDC biosample name)`, dnaSampleID, product, sequenceCountQF, genus, reads, total_reads` (fungal reads of the core)`, share_pct`. All cores, QC flag kept. Fungal reads without a genus are kept as `unclassified_Fungi`.
   - `its_genus.parquet` (long): `site, plotID, collectDate, year, dnaSampleID (semicolon-joined cores), n_cores, product, genus, reads, total_reads, rel_abund_pct, its_below_threshold_share`. **Only cores passing NEON's read check** (`sequenceCountQF != "Below threshold"`; `neon.build_its_genus(..., qc_ok_only=False)` keeps all). `rel_abund_pct` is the **mean of per-core shares** (each core weighs equally, like the equal-mass cores in a composite), not pooled reads, so one deep core cannot dominate. `reads` and `total_reads` are sums over the included cores (fungal reads only). Zero rows are added for the 18 genera in `neon.GENERA` so detection frequency is defined.
   - `plot_its_timeseries.parquet` (149 rows) and `plot_its.parquet` (latest per plot, 26 rows), wide: `bio_its_share_<Genus>`, `bio_its_detected_<Genus>`, `bio_its_pct_<Genus>` (percentile within site), plus a `Rhizoctonia_complex` (Rhizoctonia + Thanatephorus + Ceratobasidium). Percentiles now span both pipelines: compare with care.
+  - `its_genus_lineage.parquet` (1,359 genera): `genus, phylum, class` from the per-sample ITS taxonomy of both pipelines (`neon.its_genus_lineage()`; a genus with several lineages gets the one with most reads). Placeholder names such as `Hypocreales_gen_Incertae_sedis` are kept; the GUI counts them as "no name at this rank". `unclassified_Fungi` (about 23% of fungal reads on average) has no row.
   - `neon_metagenome_pooling.parquet` (228 rows): `soilSampleID, genomicsSampleID, plotID, collectDate`, one row per core pooled into a metagenome composite.
   - `neon_chem.parquet` (715 rows): per `plotID, collectDate` means of `organic_c_pct, total_n_pct, cn_ratio, ph_water, ph_cacl2, soil_moisture`, plus `n_cores`, `site`.
   - `neon_qpcr.parquet` (128 plot-dates): `fungal_copies, bacterial_copies, archaeal_copies, n_cores, n_cores_fungal, unit`.

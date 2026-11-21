@@ -28,7 +28,7 @@ def main() -> None:
                **{v: (k, "mean") for k, v in N.CHEM_COLS.items()}).reset_index()
     mg["year"] = mg["date"].str[:4].astype(int)
 
-    ko_rows, all_rows, kraken_info, tax_rows = [], [], {}, []
+    ko_rows, all_rows, kraken_info, tax_rows, lin_rows = [], [], {}, [], []
     panel_kos = set(panel["ko"])
     markers = list(panel.loc[panel["function_group"] == "marker", "ko"])
     stats = {}
@@ -51,6 +51,8 @@ def main() -> None:
             kraken_info[key] = N.kraken_summary(rep)
             kg = N.kraken_genus(rep); kg["source"] = "kraken2"; kg["metagenome_key"] = key
             tax_rows.append(kg)
+            kl = N.kraken_lineage(rep); kl.insert(0, "metagenome_key", key)
+            lin_rows.append(kl)
         gfile = files.get("GOTTCHA2 Report Full")
         if gfile:
             gg = N.gottcha_genus(gfile); gg["source"] = "gottcha2"; gg["metagenome_key"] = key
@@ -73,6 +75,8 @@ def main() -> None:
     ko_panel.to_parquet(PROCESSED / "ko_panel.parquet", index=False)
     ko_all.to_parquet(PROCESSED / "ko_counts_all.parquet", index=False)
     taxa.to_parquet(PROCESSED / "taxa_genus.parquet", index=False)
+    lineage = pd.concat(lin_rows, ignore_index=True)
+    lineage.to_parquet(PROCESSED / "taxa_lineage.parquet", index=False)
 
     # ---- per-metagenome metrics (time series) and plot_biology (latest)
     ts = mg[["metagenome_key", "site", "plotID", "year", "date", "ko_depth_ok", "has_kraken"]].copy()
@@ -121,7 +125,7 @@ def main() -> None:
     # ---- summary
     print(mg.groupby(["site", "year"]).agg(n=("metagenome_key", "size"), depth_ok=("ko_depth_ok", "sum")))
     print(f"wrote {len(mg)} metagenomes, {len(ko_panel)} panel rows, {len(ko_all)} all-KO rows, "
-          f"{len(taxa)} taxa rows, {len(latest)} plots")
+          f"{len(taxa)} taxa rows, {len(lineage)} lineage rows, {len(latest)} plots")
 
 
 if __name__ == "__main__":

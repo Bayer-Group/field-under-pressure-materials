@@ -61,3 +61,28 @@ def test_pct_within():
     df = pd.DataFrame({"site": ["A"] * 4, "year": [1] * 4, "v": [1, 2, 3, 4]})
     p, n = N.pct_within(df, "v", mask=pd.Series([True, True, True, False]))
     assert p.iloc[2] == 100 and n.iloc[0] == 3 and pd.isna(p.iloc[3])
+
+
+def test_kraken_lineage_tracks_ancestors_and_skips_non_prokaryotes():
+    rep = pd.DataFrame([
+        (90.0, 900, 900, "U", 0, "unclassified"),
+        (10.0, 100, 1, "R", 1, "root"),
+        (9.0, 90, 0, "R1", 131567, "cellular organisms"),
+        (8.0, 80, 5, "D", 2, "Bacteria"),
+        (4.0, 40, 0, "D1", 1783272, "Terrabacteria group"),        # intermediate rank: ignored
+        (4.0, 40, 5, "P", 201174, "Actinobacteria"),
+        (3.0, 30, 30, "G", 1883, "Streptomyces"),                   # class/order/family missing: still under its phylum
+        (2.0, 20, 5, "P", 1224, "Proteobacteria"),
+        (1.5, 15, 15, "C", 28211, "Alphaproteobacteria"),
+        (0.5, 5, 5, "G", 9999, "Orphanella"),                       # a genus with no class row is still placed under the last phylum seen
+        (1.0, 10, 10, "D", 2759, "Eukaryota"),
+        (1.0, 10, 10, "G", 5506, "Fusarium"),                       # eukaryote: left out
+    ], columns=["pct", "clade_reads", "direct_reads", "rank", "taxid", "name"])
+    out = N.kraken_lineage(rep).set_index(["rank", "name"])
+    assert out.loc[("domain", "Bacteria"), "reads"] == 80
+    assert out.loc[("genus", "Streptomyces"), "phylum"] == "Actinobacteria"
+    assert out.loc[("class", "Alphaproteobacteria"), "phylum"] == "Proteobacteria"
+    assert out.loc[("genus", "Orphanella"), "phylum"] == "Proteobacteria"
+    assert "Fusarium" not in out.index.get_level_values("name")
+    assert "Terrabacteria group" not in out.index.get_level_values("name")
+    assert set(out["domain"]) == {"Bacteria"}

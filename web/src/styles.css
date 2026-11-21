@@ -1,0 +1,138 @@
+:root {
+  --bg: #f6f7f5;
+  --surface: #fff;
+  --ink: #1d2420;
+  --muted: #66716a;
+  --line: #dfe4df;
+  --green: #1f6f43;
+  --visit: #c2410c;
+  --photo: #1d4ed8;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color: var(--ink);
+}
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+body { background: var(--bg); }
+a { color: var(--green); }
+h1 { font-size: 1.25rem; margin: 0; }
+h2 { font-size: 1rem; margin: 0; }
+
+.app { display: flex; flex-direction: column; height: 100%; }
+.topbar { padding: 10px 16px; background: var(--surface); border-bottom: 1px solid var(--line); }
+.brand { font-weight: 650; color: var(--ink); text-decoration: none; }
+
+.explorer { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.map-area { position: relative; flex: 1; min-height: 240px; }
+.map { position: absolute; inset: 0; }
+.panel { background: var(--surface); border-top: 1px solid var(--line); padding: 12px 16px 14px; }
+.panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.message { color: var(--muted); margin: 8px 0; }
+.message.error { color: #b42318; }
+
+.chart-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 20px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 18px; font-size: 0.8rem; color: var(--muted); }
+.legend i { display: inline-block; width: 9px; height: 9px; margin-right: 6px; }
+.key-dot { border-radius: 50%; background: var(--green); }
+.key-visit { background: var(--visit); transform: rotate(45deg); }
+/* dragging across the chart chooses a date: it must not select the text around it */
+.chart { user-select: none; -webkit-user-select: none; }
+.chart svg { display: block; }
+.chart .grid { stroke: var(--line); stroke-width: 1; }
+.chart .tick { fill: var(--muted); font-size: 11px; }
+.chart .dot { fill: var(--green); fill-opacity: 0.75; }
+.chart .hit { fill: transparent; }
+.chart .visit-line { stroke: var(--visit); stroke-width: 1; stroke-opacity: 0.3; pointer-events: none; }
+.chart .visit { cursor: pointer; outline: none; }
+.chart .visit path { fill: var(--visit); }
+.chart .visit:hover path, .chart .visit:focus-visible path { stroke: var(--ink); stroke-width: 1.5; }
+.chart .cursor { stroke-width: 1.5; pointer-events: none; }
+.chart .cursor.photo { stroke: var(--photo); }
+.chart .cursor.greenness { stroke: var(--ink); }
+.chart .map-scrub, .chart .photo-lane { cursor: ew-resize; outline: none; touch-action: none; }
+.chart .map-scrub:focus-visible .hit { stroke: var(--line); stroke-width: 2; }
+.key-photo { border-radius: 50%; background: var(--surface); border: 2px solid var(--photo); }
+.chart .photo-lane .track { stroke: var(--line); stroke-width: 4; stroke-linecap: round; }
+.chart .photo-lane .stop { fill: var(--surface); stroke: var(--photo); stroke-width: 2; }
+.chart .photo-lane .stop.on { fill: var(--photo); stroke: var(--surface); }
+.chart .photo-lane:focus-visible .track { stroke: var(--photo); stroke-opacity: 0.4; }
+.layer-choice { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; margin-top: 2px; font-size: 0.85rem; color: var(--muted); }
+.layer-choice label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+.layer-choice label.on, .layer-choice b { color: var(--ink); }
+.layer-choice input { accent-color: var(--green); margin: 0; }
+.layer-choice .hint { margin-left: auto; font-size: 0.78rem; }
+
+.map.inspectable { cursor: crosshair; }
+.leaflet-image-layer.crisp { image-rendering: pixelated; }
+/* colours: keep in step with NDVI_RAMP in src/cropfit/overlay.py (0 to 1) */
+.ndvi-legend {
+  position: absolute; left: 10px; bottom: 24px; z-index: 1000; width: 190px; padding: 8px 10px;
+  background: var(--surface); border-radius: 8px; box-shadow: 0 1px 5px rgb(0 0 0 / 0.3); font-size: 0.75rem; color: var(--muted);
+}
+.ndvi-legend .bar { height: 10px; border-radius: 3px; background: linear-gradient(to right, #a6763e, #d9b36c 20%, #e9e08a 40%, #8cc45a 60%, #2f8f3a 80%, #0b5a24); }
+.ndvi-legend .ends { display: flex; justify-content: space-between; margin-top: 3px; color: var(--ink); }
+.ndvi-legend .hint { margin-top: 4px; }
+
+.page { max-width: 720px; width: 100%; margin: 0 auto; padding: 20px 16px; }
+.page h1 { margin-top: 14px; }
+.sub { color: var(--muted); margin: 4px 0 16px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.card ul { margin: 8px 0 0; padding-left: 20px; }
+
+/* plot panel tabs */
+.panel { max-height: 62vh; overflow-y: auto; }
+.panel-head .tabs { display: flex; gap: 4px; margin-right: auto; margin-left: 12px; }
+.panel-head .tabs a { padding: 4px 10px; border-radius: 999px; color: var(--muted); text-decoration: none; font-size: 0.9rem; }
+.panel-head .tabs a:hover { background: var(--bg); color: var(--ink); }
+.panel-head .tabs a[aria-current='page'] { background: var(--green); color: #fff; }
+
+/* soil microbiome */
+.microbiome .controls { display: flex; flex-wrap: wrap; gap: 8px 22px; margin: 4px 0 14px; }
+.choice { display: flex; flex-direction: column; gap: 4px; }
+.choice-label { font-size: 0.75rem; color: var(--muted); }
+.seg-buttons { display: flex; flex-wrap: wrap; gap: 4px; }
+.seg-buttons button {
+  font: inherit; font-size: 0.85rem; padding: 4px 10px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--surface); color: var(--ink); cursor: pointer;
+}
+.seg-buttons button:hover:not(:disabled) { border-color: var(--muted); }
+.seg-buttons button[aria-pressed='true'] { background: var(--ink); border-color: var(--ink); color: #fff; }
+.seg-buttons button:disabled { color: var(--line); cursor: default; }
+.seg-buttons .few { color: var(--visit); }
+.seg-buttons button[aria-pressed='true'] .few { color: #fdba74; }
+.notes { margin: 6px 0 10px; padding-left: 18px; font-size: 0.8rem; color: var(--muted); }
+.notes li.caution { color: #9a3412; font-weight: 600; }
+.notes li.caution::marker { content: '⚠ '; }
+
+.composition { margin-top: 6px; }
+.seg-bar { position: relative; height: 28px; }
+.seg {
+  position: absolute; top: 0; bottom: 0; display: flex; align-items: center; padding-left: 6px;
+  font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden;
+}
+.seg.round { border-radius: 4px; }
+.seg.dim { opacity: 0.45; }
+.seg.on { box-shadow: 0 0 0 2px var(--ink); z-index: 1; }
+.seg-readout { margin: 6px 0 0; min-height: 1.3em; font-size: 0.8rem; color: var(--muted); }
+.seg-readout b { color: var(--ink); font-weight: 600; }
+.comp-legend { margin: 6px 0 10px; }
+.comp-legend i { border-radius: 2px; }
+.comp-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+.comp-table th { text-align: left; font-weight: 500; color: var(--muted); font-size: 0.75rem; padding: 4px 6px; border-bottom: 1px solid var(--line); }
+.comp-table td { padding: 3px 6px; border-bottom: 1px solid var(--line); }
+.comp-table .num { text-align: right; }
+.comp-table .muted, .comp-table tr.rest td { color: var(--muted); }
+.comp-table tr.on td { background: var(--bg); }
+.comp-table .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 8px; vertical-align: -1px; }
+@media (max-width: 600px) {
+  .panel-head { flex-wrap: wrap; }
+  .panel-head .tabs { order: 3; margin-left: 0; width: 100%; }
+}
+.card .card-sub { margin-top: 14px; }
+
+.taxon-search { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 0 0 8px; }
+.taxon-search input {
+  font: inherit; font-size: 0.85rem; width: min(100%, 320px); padding: 5px 9px;
+  border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink);
+}
+.taxon-search input:focus { outline: 2px solid var(--green); outline-offset: -1px; border-color: transparent; }
+.search-count { font-size: 0.8rem; color: var(--muted); }
