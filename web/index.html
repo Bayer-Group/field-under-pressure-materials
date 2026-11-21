@@ -48,15 +48,19 @@
     .status { position: absolute; z-index: 3; top: calc(max(16px, env(safe-area-inset-top)) + 61px); left: 16px; right: 16px; margin: 0; padding: 10px 13px; border-radius: 12px; background: #fff; box-shadow: 0 5px 20px rgba(24,50,35,.12); font-size: 13px; line-height: 1.4; }
     .status:empty { display: none; }
     .status { background: rgba(239,247,240,.84); border: 1px solid rgba(255,255,255,.7); backdrop-filter: blur(18px); color: #294c36; }
-    .map-guide { display: none; position: absolute; z-index: 3; left: 16px; right: 78px; bottom: calc(var(--drawer-height, 61px) + 14px); grid-template-columns: 62px minmax(0, 1fr) 26px; align-items: center; gap: 9px; padding: 10px; border: 1px solid rgba(255,255,255,.82); border-radius: 18px; background: rgba(248,251,247,.94); box-shadow: 0 8px 28px rgba(24,50,35,.18); backdrop-filter: blur(18px); }
+    .map-guide { display: none; position: absolute; z-index: 3; left: 50%; bottom: calc(var(--drawer-height, 61px) + 12px); width: min(84vw, 320px); transform: translateX(-50%); justify-items: center; gap: 0; text-align: center; pointer-events: none; }
     .map-guide.visible { display: grid; animation: guide-enter 260ms cubic-bezier(.22,1,.36,1) both; }
-    .map-guide-illustration { width: 62px; height: 54px; color: var(--green); stroke-width: 1.3; }
-    .map-guide-copy { display: grid; gap: 3px; min-width: 0; }
-    .map-guide-copy strong { font-size: 12px; }
-    .map-guide-copy span { color: #53685a; font-size: 11px; line-height: 1.35; }
-    .map-guide-close { display: grid; place-items: center; width: 26px; height: 30px; padding: 0; border: 0; border-radius: 9px; background: transparent; color: #63736a; }
-    .map-guide-close svg { width: 16px; height: 16px; }
-    @keyframes guide-enter { from { opacity: 0; transform: translateY(8px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
+    .map-guide-illustration { width: min(100%, 270px); height: 150px; overflow: visible; filter: drop-shadow(0 2px 3px rgba(22,49,31,.24)); }
+    .demo-parcel { fill: rgba(237,246,237,.48); stroke: rgba(255,255,255,.96); stroke-width: 2.5; }
+    .demo-parcel-line { fill: none; stroke: rgba(33,83,55,.58); stroke-width: 1.2; }
+    .demo-marquee { fill: rgba(23,101,68,.24); stroke: #176544; stroke-width: 3; stroke-dasharray: 7 4; stroke-dashoffset: 40; transform-box: fill-box; transform-origin: left top; animation: select-area 4.2s ease-in-out infinite; }
+    .demo-pointer { fill: #176544; stroke: #fff; stroke-width: 2.2; filter: drop-shadow(0 1px 2px rgba(0,0,0,.4)); animation: drag-pointer 4.2s ease-in-out infinite; }
+    .map-guide-copy { display: grid; gap: 2px; padding: 0 8px; color: #17251c; text-shadow: 0 1px 7px rgba(255,255,255,.95), 0 0 2px rgba(255,255,255,.95); }
+    .map-guide-copy strong { font-size: 13px; }
+    .map-guide-copy span { color: #3d5144; font-size: 11px; line-height: 1.35; }
+    @keyframes guide-enter { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+    @keyframes select-area { 0%,12% { opacity: 0; transform: scale(.05); } 26%,66% { opacity: 1; transform: scale(1); } 78%,100% { opacity: 0; transform: scale(1); } }
+    @keyframes drag-pointer { 0%,12% { opacity: 0; transform: translate(0, 0); } 20% { opacity: 1; transform: translate(0, 0); } 54%,66% { opacity: 1; transform: translate(-84px, -44px); } 78%,100% { opacity: 0; transform: translate(-84px, -44px); } }
     .sheet.collapsed { max-height: 61px; overflow: hidden; padding-bottom: 8px; }
     .drawer-content { max-height: 520px; opacity: 1; overflow-y: auto; transition: max-height 220ms ease, opacity 150ms ease; }
     .sheet.collapsed .drawer-content { max-height: 0; opacity: 0; overflow: hidden; pointer-events: none; }
@@ -99,7 +103,7 @@
     .maplibregl-ctrl-bottom-right { bottom: min(68dvh, 570px); }
     .maplibregl-ctrl-attrib { font-size: 10px !important; }
     @media (min-width: 720px) { .top { left: 24px; right: auto; width: 440px; top: 24px; } .sheet { left: 24px; bottom: 0; right: auto; width: 390px; max-height: calc(100dvh - 115px); border-radius: 25px 25px 0 0; border-bottom: 0; } .sheet.search-hidden { transform: translateY(calc(100% + 12px)); } .maplibregl-ctrl-bottom-right { bottom: 0; } .status { left: 24px; right: auto; width: 440px; top: 84px; } .results { left: 24px; right: auto; width: 380px; top: 82px; } }
-    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; scroll-behavior: auto !important; } }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; scroll-behavior: auto !important; } .demo-marquee { opacity: 1; transform: none; stroke-dashoffset: 0; } .demo-pointer { opacity: 1; transform: translate(-84px, -44px); } }
   </style>
 </head>
 <body>
@@ -107,15 +111,16 @@
     <div id="map" aria-label="Mapa działek"></div>
     <div id="selection-rectangle" class="selection-rectangle" aria-hidden="true"></div>
     <div id="search-backdrop" class="search-backdrop"></div>
-    <aside id="map-guide" class="map-guide" role="note" aria-label="Jak zaznaczyć działki na mapie" aria-hidden="true">
-      <svg class="map-guide-illustration" viewBox="0 0 72 58" aria-hidden="true">
-        <path d="M5 6h25v21H5zM32 6h34v21H32zM5 30h25v22H5zM32 30h34v22H32z" fill="#e8f0e8" stroke="#84988b" />
-        <rect x="3" y="4" width="48" height="29" rx="3" fill="rgba(23,101,68,.12)" stroke="currentColor" stroke-width="1.7" stroke-dasharray="4 3" />
-        <path d="m57 39 8 9-4 .5-1.5 4-4.5-13.5Z" fill="#176544" stroke="#fff" stroke-width="1.2" />
-        <path d="M57 42 49 34" stroke="#176544" stroke-width="1.8" stroke-linecap="round" />
+    <aside id="map-guide" class="map-guide" role="note" aria-label="Animacja zaznaczania działek na mapie" aria-hidden="true">
+      <svg class="map-guide-illustration" viewBox="0 0 220 150" aria-hidden="true">
+        <path class="demo-parcel" d="m20 27 68-13 23 47-41 35-59-20z" />
+        <path class="demo-parcel" d="m90 14 75 13 19 53-73-19z" />
+        <path class="demo-parcel" d="m70 98 41-35 73 19-14 54-82 4z" />
+        <path class="demo-parcel-line" d="m13 76 57 22m20-84-2 60m19-13-14 54m72-101 19 53" />
+        <rect class="demo-marquee" x="18" y="22" width="139" height="72" rx="4" />
+        <path class="demo-pointer" d="M177 111V91a4 4 0 0 1 8 0v12l3-4a4 4 0 0 1 7 4l-8 16c-3 6-8 9-14 9h-2c-5 0-8-3-10-7l-4-9c-1-4 5-6 7-2l3 5v-4Z" />
       </svg>
-      <div class="map-guide-copy"><strong>Przytrzymaj i przeciągnij</strong><span>Ramką zaznaczysz kilka działek. Stuknij jedną, aby ją dodać lub odznaczyć.</span></div>
-      <button id="close-map-guide" class="map-guide-close" type="button" aria-label="Zamknij podpowiedź"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg></button>
+      <div class="map-guide-copy"><strong>Przytrzymaj i przeciągnij</strong><span>Zaznacz kilka działek ramką. Stuknij pojedynczą działkę, aby ją dodać lub odznaczyć.</span></div>
     </aside>
     <div class="top" id="top-controls">
       <form class="search" id="search-form" role="search">
@@ -196,7 +201,6 @@
     /** Dismiss the map-selection hint and remove it from the accessibility tree. */
     function hideMapGuide() { mapGuide.classList.remove('visible'); mapGuide.setAttribute('aria-hidden', 'true'); }
     drawerToggle.addEventListener('click', () => { hideMapGuide(); setDrawer(sheet.classList.contains('collapsed')); });
-    document.getElementById('close-map-guide').addEventListener('click', hideMapGuide);
     searchBackdrop.addEventListener('click', () => setSearch(false));
     document.addEventListener('keydown', event => { if (event.key === 'Escape' && topControls.classList.contains('searching')) setSearch(false); });
     const map = new maplibregl.Map({
