@@ -62,5 +62,5 @@ Crop group vocabulary (exact strings): `corn, soybean, winter_wheat, spring_whea
 | `bio_pct_<group>` | functional-potential percentile within site-year (groups: `nitrification, denitrification, nosZ, p_mobilisation, n_fixation, phlD, acdS, chitinase`), only when depth_ok |
 | `bio_status_<group>` | `ok` / `insufficient_depth` (metagenome below depth gate) / `not_detected` (0 genes in the whole site-year reference set, e.g. phlD) / `too_few_genes` (<20 genes summed over the reference set, e.g. n_fixation). Percentile is NaN unless `ok`. Never render `not_detected` as "absent". |
 | `bio_genus_pct_<Genus>` | read share percentile (Kraken2, % of bacterial reads) within site-year, e.g. `Bradyrhizobium` |
-| `bio_its_pct_<Genus>` | NEON ITS genus relative-abundance percentile within site (≤2017), e.g. `Fusarium, Macrophomina, Gaeumannomyces, Rhizoctonia, Sclerotinia` |
+| `bio_its_pct_<Genus>` | NEON ITS genus relative-abundance percentile within site (2016-2024; mixes ITS pipelines DP1.10081.001 and .002, see AGENT.md 3.2), e.g. `Fusarium, Macrophomina, Gaeumannomyces, Rhizoctonia, Sclerotinia` |
 | `bio_its_detected_<Genus>` | bool |

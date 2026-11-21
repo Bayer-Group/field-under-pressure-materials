@@ -52,10 +52,11 @@ Pipeline order (what produces what):
 |---|---|---|
 | NMDC download | `scripts/pull_nmdc_cropland.py` | `data/nmdc/` |
 | NEON download | `scripts/02_fetch_neon.py` (needs token) | `data/raw/neon/` |
-| NEON tables | `scripts/02b_build_neon_features.py` (offline) | `its_genus`, `plot_its*`, `neon_chem`, `neon_qpcr` |
+| NEON tables | `scripts/02b_build_neon_features.py` (offline) | `its_core_genus`, `its_genus`, `plot_its*`, `neon_metagenome_pooling`, `neon_chem`, `neon_qpcr` |
 | Plot tables | `scripts/03_build_plots.py` | `plots`, `plot_crop_history`, `plot_climate_yearly` |
 | Field tables | `scripts/04_build_fields.py` (needs CSB zip) | `fields`, `plot_csb`, `csb_raw_<site>` |
 | NMDC tables | `scripts/05_build_biology.py` (offline) | `metagenomes`, `ko_*`, `taxa_genus`, `plot_biology*` |
+| Joined table | `scripts/06_build_joined.py` (offline, after 02b and 05) | `joined_metagenomes`, `joined_fungi_genus` (see 3.8) |
 
 Note: `03_build_plots.py` and `04_build_fields.py` carry the `window`/`plot` selection logic of the original prototype (the 44 NEON "cultivatedCrops" plots; the two windows in `config/regions.yaml`). To reuse them elsewhere, edit `config/regions.yaml` and the plot filter in `03_build_plots.py`.
 
@@ -63,7 +64,7 @@ Note: `03_build_plots.py` and `04_build_fields.py` carry the `window`/`plot` sel
 
 ## 1. Keys, secrets and what never goes into git
 
-- **Only one key is needed: the NEON API token.** Put it in a gitignored `.env` as `NEON_API_TOKEN=...` (template: `.env.example`). Since June 2026 the NEON portal calls in this repo need it. Never paste it in chat, logs or commits. `neon.get_token()` loads it via python-dotenv.
+- **Only one key is needed: the NEON API token.** Put it in a gitignored `.env` as `NEON_API_TOKEN=...` (template: `.env.example`; `NEON_TOKEN` is accepted as a fallback name). Since June 2026 the NEON portal calls in this repo need it. Never paste it in chat, logs or commits. `neon.get_token()` loads it via python-dotenv.
 - **Everything else is keyless:** NMDC, SSURGO/SDA, Daymet, Planetary Computer CDL (anonymous signed URLs via the `planetary-computer` package), CSB and CDL downloads from USDA, NASS, JRC LUCAS, GlobalFungi table, Open-Meteo, NASA POWER.
 - **Never commit** `.env`, anything under `data/`, or `data/links.txt`. The latter (if you have it from the hackathon organisers) holds pre-signed S3 URLs with session tokens. `.gitignore` covers `data/`, `.env`, `*.zip`, `.venv/`, `outputs/`, `*.part`.
 - **User-Agent:** NMDC rejects some default client user agents and NEON asks for one. `http.py` sets one for all calls; `pull_nmdc_cropland.py` sets its own. If you write new code, set a UA.
@@ -114,28 +115,44 @@ Note: `03_build_plots.py` and `04_build_fields.py` carry the `window`/`plot` sel
 ### 3.2 NEON data portal: DP1.10081 (ITS), DP1.10109 (qPCR), DP1.10086 (soil chemistry)
 
 - **What:**
-  - DP1.10081.001: soil microbe community composition. In the current release, ITS (fungi) comes **only as per-sample sequence-variant CSV files**, linked from the table `mcc_soilSeqVariantMetadata_ITS`; there are no `mct_*` taxonomy tables.
+  - **DP1.10081.002** (current pipeline) and **DP1.10081.001** (old pipeline): soil microbe community taxonomy / composition. ITS (fungi) taxon tables come **as per-sample CSV files** linked from a sample-metadata table: `mct_soilSampleMetadata_ITS` (.002) and `mcc_soilSeqVariantMetadata_ITS` (.001). Note the different product code: an earlier version of this guide only knew .001 and missed every year after 2017. The two pipelines are **not directly comparable** (different bioinformatics and reference data); the processed tables carry `product`, keep it as a covariate or compare within one pipeline.
   - DP1.10109.001: soil microbe group abundances (qPCR of fungi, bacteria, archaea).
-  - DP1.10086.001: soil physical and chemical properties (periodic): chemistry (`sls_soilChemistry`), pH (`sls_soilpH`), moisture (`sls_soilMoisture`), core collection, plus `ntr_*` lab tables.
+  - DP1.10086.001: soil physical and chemical properties (periodic): chemistry (`sls_soilChemistry`), pH (`sls_soilpH`), moisture (`sls_soilMoisture`), core collection, **metagenome pooling** (`sls_metagenomicsPooling`: which cores make up each metagenome composite), plus `ntr_*` lab tables.
 - **Coverage:** STER and KONA in the default scripts (set `neon.SITES` for others).
-  - ITS per-sample taxonomy: **2016-2017 only** (321 metadata records; the assembled taxonomy table has 37,601 rows for 249 distinct samples): KONA 2017, STER 2016 and 2017.
+  - ITS per-sample taxonomy (measured, 506 cores after picking one run per DNA sample; cores passing NEON's read check in brackets):
+
+    | Site | Year | Product | Cores (OK) |
+    |---|---|---|---|
+    | KONA | 2017 | .001 | 58 (28) |
+    | KONA | 2019 | .002 | 83 (66) |
+    | KONA | 2024 | .002 | 90 (89) |
+    | STER | 2016 | .001 / .002 | 88 (30) / 14 (10) |
+    | STER | 2017 | .001 | 87 (47) |
+    | STER | 2022 | .002 | 86 (86) |
+
+    149 plot-dates on 26 plots. STER 2013-2014 have ITS only as raw reads (DP1.10108.001), not processed here.
   - qPCR: STER 2013, 2014, 2016, 2017 and KONA 2017 (844 raw rows).
   - Chemistry and pH: 2013 to 2026 (the newest releases may be provisional; the pull uses `include_provisional=True`).
+  - Pooling: 76 composites, 228 cores.
 - **Access:** NEON data portal API through the `neonutilities` package; **token required** (`NEON_API_TOKEN` in `.env`, sent as `X-API-Token`). `include_provisional=True`, release "current". The per-sample ITS CSVs are public storage URLs; the code fetches them with `http.get` (UA set).
-- **Download:** `.venv/bin/python scripts/02_fetch_neon.py [DPID ...]` (default: the three products). Raw tables land as parquet under `data/raw/neon/<DPID>/<table>.parquet`; for DP1.10081 the script then downloads the per-sample ITS CSVs (8 threads), keeps taxonomy and counts only, and writes `mcc_soilPerSampleTaxonomy_ITS.parquet`.
-- **Size and time:** raw parquet is small (1.5 MB total on disk after conversion: 10081 about 0.3 MB, 10086 about 1.1 MB, 10109 about 0.1 MB). The download time of 10 to 20 minutes in `README`/plan is an estimate (not re-measured here).
+- **Download:** `.venv/bin/python scripts/02_fetch_neon.py [DPID ...]` (default: DP1.10081.002, DP1.10081.001, DP1.10109.001, DP1.10086.001). Raw tables land as parquet under `data/raw/neon/<DPID>/<table>.parquet`; for each ITS product the script then downloads **every** per-sample ITS CSV (all runs of re-sequenced samples, 8 threads; 275/275 for .002 and 321/321 for .001, measured), keeps taxonomy and counts only, and writes `mct_soilPerSampleTaxonomy_ITS.parquet` / `mcc_soilPerSampleTaxonomy_ITS.parquet`. Failed downloads are listed by file name.
+- **Size and time:** raw parquet is small (a few MB). The full pull took a few minutes on 21 Nov 2026 (not timed precisely).
 - **Processing:** `scripts/02b_build_neon_features.py` (offline).
+  - `neon.load_its_raw()` combines both ITS products and keeps **one run per DNA sample**: the deepest run within a product (NEON re-sequenced some samples), then .002 over .001 when a sample is in both (14 cores in STER 2016).
+  - `neon.parse_sample_id` accepts IDs with one or two depth fields (from 2022 on NEON IDs have one, e.g. `KONA_001-M-21-20240409-GEN-DNA1`; the earlier regex silently dropped all 2022 and 2024 samples).
 - **Processed outputs:**
-  - `its_genus.parquet` (4,437 rows, long): `site, plotID, collectDate, year, dnaSampleID (semicolon-joined cores), n_cores, genus, reads, total_reads, rel_abund_pct, its_below_threshold_share`. One row per plot-date and genus (351 genera, 26 plots, 85 plot-dates); zero rows are added for the 18 genera in `neon.GENERA` so detection frequency is defined. `total_reads` counts **fungal reads only** (kingdom Fungi).
-  - `plot_its_timeseries.parquet` (85 rows) and `plot_its.parquet` (latest per plot, 26 rows), wide: `bio_its_share_<Genus>`, `bio_its_detected_<Genus>`, `bio_its_pct_<Genus>` (percentile within site), plus a `Rhizoctonia_complex` (Rhizoctonia + Thanatephorus + Ceratobasidium).
+  - `its_core_genus.parquet` (long, one row per core and genus): `site, plotID, horizon, collectDate, soilSampleID` (core, equals the NMDC biosample name)`, dnaSampleID, product, sequenceCountQF, genus, reads, total_reads` (fungal reads of the core)`, share_pct`. All cores, QC flag kept. Fungal reads without a genus are kept as `unclassified_Fungi`.
+  - `its_genus.parquet` (long): `site, plotID, collectDate, year, dnaSampleID (semicolon-joined cores), n_cores, product, genus, reads, total_reads, rel_abund_pct, its_below_threshold_share`. **Only cores passing NEON's read check** (`sequenceCountQF != "Below threshold"`; `neon.build_its_genus(..., qc_ok_only=False)` keeps all). `rel_abund_pct` is the **mean of per-core shares** (each core weighs equally, like the equal-mass cores in a composite), not pooled reads, so one deep core cannot dominate. `reads` and `total_reads` are sums over the included cores (fungal reads only). Zero rows are added for the 18 genera in `neon.GENERA` so detection frequency is defined.
+  - `plot_its_timeseries.parquet` (149 rows) and `plot_its.parquet` (latest per plot, 26 rows), wide: `bio_its_share_<Genus>`, `bio_its_detected_<Genus>`, `bio_its_pct_<Genus>` (percentile within site), plus a `Rhizoctonia_complex` (Rhizoctonia + Thanatephorus + Ceratobasidium). Percentiles now span both pipelines: compare with care.
+  - `neon_metagenome_pooling.parquet` (228 rows): `soilSampleID, genomicsSampleID, plotID, collectDate`, one row per core pooled into a metagenome composite.
   - `neon_chem.parquet` (715 rows): per `plotID, collectDate` means of `organic_c_pct, total_n_pct, cn_ratio, ph_water, ph_cacl2, soil_moisture`, plus `n_cores`, `site`.
   - `neon_qpcr.parquet` (128 plot-dates): `fungal_copies, bacterial_copies, archaeal_copies, n_cores, n_cores_fungal, unit`.
-- **Join keys:** `plotID` + `collectDate` to NMDC metagenomes (same day in practice; use a few days of tolerance). NEON `dnaSampleID` embeds the biosample name, for example `STER_026-M-8-11.5-20130716-GEN-DNA1`; `neon.parse_sample_id` extracts site, plotID, horizon and date.
+- **Join keys:** to NMDC metagenomes, **exactly through the cores**: NMDC `biosample_names` and `its_core_genus.soilSampleID` are the same core IDs, and `neon_metagenome_pooling` gives NEON's own core list per composite (`scripts/06_build_joined.py` does this, see 3.8). `plotID` + `collectDate` (a few days of tolerance) works for plot-date tables such as `neon_chem`. NEON `dnaSampleID` embeds the core ID, for example `STER_026-M-8-11.5-20130716-GEN-DNA1`; `neon.parse_sample_id` extracts site, plotID, horizon and date.
 - **Pitfalls:**
-  - **ITS flags:** `sequenceCountQF` is "Below threshold" for 211 of 321 metadata records (the share of such cores per plot-date is stored as `its_below_threshold_share`); such samples have few reads (plot-date fungal reads range from 358 to 94,392, median 9,863). Treat low-read samples with care and always show `total_reads`.
+  - **ITS flags:** `sequenceCountQF` is "Below threshold" for 150 of 506 cores, mostly in the old pipeline (.001: 128 of 233). Those cores are excluded from `its_genus` and the joined table; `its_below_threshold_share` reports the share per plot-date. Plot-date fungal reads (passing cores) range from 576 to about 790,000, median about 33,000; always show `total_reads`.
+  - **Two pipelines.** KONA 2017 and STER 2016-2017 (mostly .001) are not directly comparable with KONA 2019/2024 and STER 2022 (.002). Year-to-year changes across that boundary may be method, not biology.
   - **qPCR units are copies per ng of extracted DNA** (`meanCopyNumber`), not per gram of soil. Values range from 0 to about 188,000 (median about 59). Not an absolute abundance; multiplying a relative ITS share by it gives only an approximation (see `scripts/e3_qpcr_scale.py`).
   - ITS genus assignments cannot separate species (Fusarium covers pathogens and non-pathogens). ITS fungal primers under-capture Glomeromycota and miss oomycetes.
-  - The ITS pull downloads hundreds of small CSVs; failed downloads are silently dropped (the script prints `n/N downloaded`).
 
 ### 3.3 SSURGO: soil properties (USDA Soil Data Access)
 
@@ -205,6 +222,34 @@ Note: `03_build_plots.py` and `04_build_fields.py` carry the `window`/`plot` sel
 - **Pitfalls:** genus values are relative abundance (% of fungal reads), genus level only; `ITS_total` and `fungal_reads` tell you the depth. Barcoding regions differ across studies (`barcoding_region`). Country is a strong confounder in any cross-site model (group your cross-validation by country).
 
 ---
+
+### 3.8 Joined table: bacteria + fungi + soil per metagenome
+
+- **What:** one row per NMDC metagenome (composite of up to 3 cores) with NMDC soil and depth columns, Kraken2 bacterial genus shares, KO panel function groups, NEON chemistry, and NEON ITS fungal shares from **exactly the cores pooled into that metagenome**.
+- **Build:** `.venv/bin/python scripts/06_build_joined.py` (offline; after 02b and 05).
+- **Outputs** (`data/processed/`):
+  - `joined_metagenomes.parquet` (59 rows, 72 columns): all `metagenomes.parquet` columns, plus
+    - `genomicsSampleID, pooling_check`: NMDC's core list compared with NEON's pooling table (`match` for 55; `mismatch` for 4 STER 2013 metagenomes, where NMDC holds separate metagenomes for subsets of one NEON composite);
+    - `neon_*`: `neon_chem` for the plot-date (+-3 days);
+    - `ko_<function_group>`: summed `per_genome_eq` of the KO panel (meaningful only where `ko_depth_ok`);
+    - `bac_share_<genus>` for `nmdc.BIO_GENERA` (% of bacterial reads);
+    - `n_fungal_cores_any, n_fungal_cores_ok, fungal_reads, fungal_products`;
+    - `fun_share_<genus>` for `neon.GENERA` + `Rhizoctonia_complex`: mean per-core share (% of fungal reads) over the metagenome's QC-passing cores; NA when it has none.
+  - `joined_fungi_genus.parquet` (long): `metagenome_key, genus, rel_abund_pct` for all genera (32 metagenomes, 738 genera).
+- **Coverage (measured):**
+
+  | Site | Year | Metagenomes | With fungi | Depth OK | Depth OK and fungi |
+  |---|---|---|---|---|---|
+  | KONA | 2017 | 10 | 7 | 0 | 0 |
+  | KONA | 2019 | 7 | 7 | 0 | 0 |
+  | STER | 2013 | 7 | 0 | 0 | 0 |
+  | STER | 2014 | 8 | 0 | 0 | 0 |
+  | STER | 2016 | 9 | 2 | 0 | 0 |
+  | STER | 2017 | 9 | 7 | 2 | 2 |
+  | STER | 2022 | 9 | 9 | 8 | 8 |
+
+  Only 10 metagenomes have both usable gene profiles and fungal data, 8 of them STER 2022. Without DP1.10081.002 it would be 2.
+- **Pitfalls:** `fungal_products` mixes the two ITS pipelines; 32 rows and hundreds of genera is a p >> n setting, so use a small set of chosen features.
 
 ## 4. Quick recipes
 
