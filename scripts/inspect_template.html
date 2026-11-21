@@ -58,6 +58,7 @@ h3{font-size:13px;margin:14px 0 6px}
   <section id="overview"></section>
   <section id="plot"></section>
   <section id="event"></section>
+  <section id="assoc"></section>
   <section id="compare"></section>
   <section id="tables"></section>
 </main>
@@ -67,9 +68,10 @@ const $ = (s, el=document) => el.querySelector(s);
 const esc = v => String(v).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fmt = v => v === null || v === undefined ? '<span class="miss">–</span>' : v && v.html ? v.html : (typeof v === 'number' ? (Number.isInteger(v) ? v : +v.toPrecision(4)) : esc(v));
 const rows = (arr, cols) => (arr || []).map(r => Object.fromEntries(cols.map((c, i) => [c, r[i]])));
+const img = p => (D.images && D.images[p]) || '../../' + esc(p);   // embedded in the standalone build
 const day = s => Date.parse(s + 'T00:00:00Z') / 864e5;
 const EV = rows(D.events, D.event_cols), PL = rows(D.plots, D.plot_cols);
-const state = {plot: (EV.find(e => e.has_metagenome) || EV[0]).plotID, event: null, table: null, x: null, y: null};
+const state = {plot: (EV.find(e => e.has_metagenome) || EV[0]).plotID, event: null, table: null, x: null, y: null, site: 'all', adj: false, af: {scope: 'STER', group: 'all', timing: 'all', shape: 'all', q: true, text: ''}};
 
 function tableHTML(cols, data, opt={}) {
   const numeric = cols.map((c, i) => data.some(r => typeof r[i] === 'number'));
@@ -79,7 +81,7 @@ function tableHTML(cols, data, opt={}) {
 
 // ---------- tiny SVG charts
 function chart({w=1100, h=230, series=[], marks=[], bands=[], xdate=true, xlab='', ylab='', xr=null, yr=null}) {
-  const m = {l: 46, r: 12, t: 10, b: xlab ? 44 : 26};
+  const m = {l: ylab ? 62 : 46, r: 12, t: 10, b: xlab ? 44 : 26};
   const pts = series.flatMap(s => s.pts);
   if (!pts.length && !marks.length) return '<p class="miss">no data</p>';
   const xs = pts.map(p => p[0]).concat(marks.map(k => k.x)), ys = pts.map(p => p[1]);
@@ -96,7 +98,7 @@ function chart({w=1100, h=230, series=[], marks=[], bands=[], xdate=true, xlab='
   for (const k of marks) if (k.x >= x0 && k.x <= x1) o += `<line x1="${X(k.x)}" x2="${X(k.x)}" y1="${m.t}" y2="${h - m.b}" stroke="${k.color}" stroke-width="${k.w || 1.5}" stroke-dasharray="${k.dash || ''}"><title>${esc(k.label)}</title></line>`;
   for (const s of series) {
     if (s.line && s.pts.length > 1) o += `<polyline fill="none" stroke="${s.color}" stroke-width="1.2" opacity=".7" points="${s.pts.map(p => X(p[0]) + ',' + Y(p[1])).join(' ')}"/>`;
-    for (const p of s.pts) o += `<circle cx="${X(p[0])}" cy="${Y(p[1])}" r="${s.r || 2.6}" fill="${s.color}" opacity=".85"><title>${esc(p[2] || '')}</title></circle>`;
+    if (s.r !== 0) for (const p of s.pts) o += `<circle cx="${X(p[0])}" cy="${Y(p[1])}" r="${s.r || 2.6}" fill="${s.color}" opacity=".85"><title>${esc(p[2] || '')}</title></circle>`;
   }
   if (ylab) o += `<text x="12" y="${m.t + 4}" transform="rotate(-90 12 ${m.t + 4})" text-anchor="end">${esc(ylab)}</text>`;
   if (xlab) o += `<text x="${(m.l + w - m.r) / 2}" y="${h - 6}" text-anchor="middle">${esc(xlab)}</text>`;
@@ -153,7 +155,7 @@ function plotView() {
     chart({w: 540, h: 180, series: [{color: 'var(--acc)', line: true, pts: chem.filter(c => c.ph_water !== null).map(c => [day(c.collectDate), c.ph_water, `${c.collectDate} pH ${c.ph_water}`])}], marks: marks.filter(k => !k.dash), xr, ylab: 'pH'}) +
     chart({w: 540, h: 180, series: [{color: 'var(--ok)', line: true, pts: inorg.filter(c => c.nitrate_n_mgkg !== null).map(c => [day(c.collectDate), c.nitrate_n_mgkg, `${c.collectDate} nitrate ${c.nitrate_n_mgkg}`])}, {color: 'var(--warn)', line: true, pts: inorg.filter(c => c.ammonium_n_mgkg !== null).map(c => [day(c.collectDate), c.ammonium_n_mgkg, `${c.collectDate} ammonium ${c.ammonium_n_mgkg}`])}], marks: marks.filter(k => !k.dash), xr, ylab: 'mg N/kg'}) + '</div></div>';
   h += `<div class="card"><h2>Aerial photos (${aer.length})</h2><p class="note">Yellow square = the 40 m plot. NAIP: USDA flights, 0.3–1 m. NEON camera: 10 cm, flight month known, not the day. Camera values are not calibrated: compare within one photo, not between photos.</p><div class="gallery">` +
-    aer.map(a => `<figure><a href="../../${esc(a.preview)}" target="_blank"><img loading="lazy" src="../../${esc(a.preview)}" alt=""></a><figcaption><b>${a.date_precision === 'month' ? a.date.slice(0, 7) : a.date}</b> · ${a.source === 'naip' ? 'NAIP' : 'NEON camera'} · ${fmt(a.gsd_m)} m<br>${a.ndvi_mean !== null ? 'NDVI ' + fmt(a.ndvi_mean) + ' ± ' + fmt(a.ndvi_std) : 'green index ' + fmt(a.exg_mean) + ' ± ' + fmt(a.exg_std)}</figcaption></figure>`).join('') + (aer.length ? '' : '<p class="miss">none fetched yet (scripts/09_fetch_aerial.py)</p>') + '</div></div>';
+    aer.map(a => `<figure><a href="${img(a.preview)}" target="_blank"><img loading="lazy" src="${img(a.preview)}" alt=""></a><figcaption><b>${a.date_precision === 'month' ? a.date.slice(0, 7) : a.date}</b> · ${a.source === 'naip' ? 'NAIP' : 'NEON camera'} · ${fmt(a.gsd_m)} m<br>${a.ndvi_mean !== null ? 'NDVI ' + fmt(a.ndvi_mean) + ' ± ' + fmt(a.ndvi_std) : 'green index ' + fmt(a.exg_mean) + ' ± ' + fmt(a.exg_std)}</figcaption></figure>`).join('') + (aer.length ? '' : '<p class="miss">none fetched yet (scripts/09_fetch_aerial.py)</p>') + '</div></div>';
   h += `<div class="card"><h2>Static properties</h2><div class="grid">${Object.entries(p).filter(([k]) => !['plotID', 'site', 'x_5070', 'y_5070'].includes(k)).map(([k, v]) => `<div class="kv"><b>${esc(k)}</b>${fmt(v)}</div>`).join('')}</div></div>`;
   const mg = (D.mgmt || {})[state.plot] || [], pc = (D.cover || {})[state.plot] || [];
   h += `<div class="card"><h2>Reported management (${mg.length})</h2><p class="note">Farm operations reported to NEON for this plot (site-wide reports included, see scope).</p><div class="scroll" style="max-height:300px">${mg.length ? tableHTML(D.mgmt_cols, mg) : '<p class="miss">none</p>'}</div></div>`;
@@ -181,7 +183,7 @@ function eventView() {
   const roles = ['state', 'forcing', 'management', 'response'], RL = {state: 'Soil state', forcing: 'Weather and climate', management: 'Management', response: 'Plant condition (imagery)'};
   for (const r of roles) {
     const f = F.filter(x => x.role === r);
-    h += `<div class="card"><h2>${RL[r]} <span class="meta">(${f.length})</span></h2>` + (f.length ? `<div class="scroll">${tableHTML(['dataset', 'variable', 'time window', 'value', 'observed', 'lag (d)', 'source'], f.map(x => [x.modality, x.variable, x.window, x.value !== null ? x.value : (x.variable === 'preview' ? {html: `<a href="../../${esc(x.value_text)}" target="_blank">open photo</a>`} : x.value_text), x.obs_date, x.lag_days, x.source]))}</div>` : '<p class="miss">nothing linked</p>') + '</div>';
+    h += `<div class="card"><h2>${RL[r]} <span class="meta">(${f.length})</span></h2>` + (f.length ? `<div class="scroll">${tableHTML(['dataset', 'variable', 'time window', 'value', 'observed', 'lag (d)', 'source'], f.map(x => [x.modality, x.variable, x.window, x.value !== null ? x.value : (x.variable === 'preview' ? {html: `<a href="${img(x.value_text)}" target="_blank">open photo</a>`} : x.value_text), x.obs_date, x.lag_days, x.source]))}</div>` : '<p class="miss">nothing linked</p>') + '</div>';
   }
   el.innerHTML = h;
   $('#evsel').onchange = ev => { state.event = ev.target.value; state.plot = EV.find(x => x.event_id === state.event).plotID; eventView() };
@@ -196,15 +198,69 @@ function compareView() {
   state.y = state.y || cols.find(c => c.startsWith('its_share_Fusarium')) || cols[1];
   const opt = s => cols.map(c => `<option ${c === s ? 'selected' : ''}>${esc(c)}</option>`).join('');
   const sites = [...new Set(T.map(t => t.site))], col = {STER: 'var(--warn)', KONA: 'var(--acc)'};
-  const pts = T.filter(t => t[state.x] !== null && t[state.y] !== null);
-  const r = (() => { if (pts.length < 3) return null; const rk = k => { const s = pts.map((p, i) => [p[k], i]).sort((a, b) => a[0] - b[0]); const o = []; s.forEach(([v, i], j) => o[i] = j); return o };
-    const a = rk(state.x), b = rk(state.y), n = pts.length, ma = (n - 1) / 2; let num = 0, da = 0, db = 0; for (let i = 0; i < n; i++) { num += (a[i] - ma) * (b[i] - ma); da += (a[i] - ma) ** 2; db += (b[i] - ma) ** 2 } return num / Math.sqrt(da * db) })();
+  const both = T.filter(t => t[state.x] !== null && t[state.y] !== null);
+  const pts = both.filter(t => state.site === 'all' || t.site === state.site), nSite = T.filter(t => state.site === 'all' || t.site === state.site).length;
+  const rho = P => { if (P.length < 3) return null; const rk = k => { const s = P.map((p, i) => [p[k], i]).sort((a, b) => a[0] - b[0]); const o = []; for (let i = 0; i < s.length;) { let j = i; while (j < s.length && s[j][0] === s[i][0]) j++; for (let q = i; q < j; q++) o[s[q][1]] = (i + j - 1) / 2; i = j } return o };
+    const a = rk(state.x), b = rk(state.y), n = P.length, ma = (n - 1) / 2; let num = 0, da = 0, db = 0; for (let i = 0; i < n; i++) { num += (a[i] - ma) * (b[i] - ma); da += (a[i] - ma) ** 2; db += (b[i] - ma) ** 2 } return da && db ? num / Math.sqrt(da * db) : null };
+  const perSite = sites.map(s => { const P = both.filter(t => t.site === s), r = rho(P); return `${s} ${r === null ? 'n/a' : r.toFixed(2)} (n=${P.length})` }).join(' · ');
+  // optional: remove site x year differences (centre x and sqrt(y) within each batch), as the scan does
+  const nonneg = pts.every(p => p[state.y] >= 0), ty = v => nonneg ? Math.sqrt(v) : v;
+  let P = pts.map(p => ({e: p, x: p[state.x], y: p[state.y]}));
+  if (state.adj) {
+    const g = {}; for (const p of P) { const k = p.e.site + p.e.year; (g[k] = g[k] || []).push(p) }
+    P = Object.values(g).filter(a => a.length > 1).flatMap(a => { const mx = a.reduce((s, p) => s + p.x, 0) / a.length, my = a.reduce((s, p) => s + ty(p.y), 0) / a.length; return a.map(p => ({e: p.e, x: p.x - mx, y: ty(p.y) - my})) });
+  }
+  const r = rho(P.map(p => ({[state.x]: p.x, [state.y]: p.y})));
+  // curves: running median over 6 equal-count bins, and a quadratic fit (on sqrt(y) for shares: the bell-shaped response)
+  const S = [...P].sort((a, b) => a.x - b.x), med = a => { const s = [...a].sort((u, v) => u - v), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2 };
+  const nb = Math.min(6, Math.floor(S.length / 5)), bins = [];
+  for (let i = 0; i < nb; i++) { const a = S.slice(Math.floor(i * S.length / nb), Math.floor((i + 1) * S.length / nb)); if (a.length) bins.push([med(a.map(p => p.x)), med(a.map(p => p.y)), `median of ${a.length} events`]) }
+  let curve = [], fitNote = '';
+  if (S.length >= 8) {
+    const f = v => state.adj || !nonneg ? v : Math.sqrt(v), inv = v => state.adj || !nonneg ? v : Math.max(v, 0) ** 2;
+    const mx = S.reduce((s, p) => s + p.x, 0) / S.length, sx = Math.sqrt(S.reduce((s, p) => s + (p.x - mx) ** 2, 0) / S.length) || 1;
+    const M = [[0, 0, 0], [0, 0, 0], [0, 0, 0]], V = [0, 0, 0];
+    for (const p of S) { const z = (p.x - mx) / sx, b = [1, z, z * z], yy = f(p.y); for (let i = 0; i < 3; i++) { V[i] += b[i] * yy; for (let j = 0; j < 3; j++) M[i][j] += b[i] * b[j] } }
+    const det = m => m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+    const d0 = det(M), co = [0, 1, 2].map(k => det(M.map((row, i) => row.map((v, j) => j === k ? V[i] : v))) / d0);
+    if (isFinite(co[2])) { const x0 = S[0].x, x1 = S[S.length - 1].x; for (let i = 0; i <= 60; i++) { const x = x0 + (x1 - x0) * i / 60, z = (x - mx) / sx; curve.push([x, inv(co[0] + co[1] * z + co[2] * z * z), '']) }
+      const tp = -co[1] / (2 * co[2]) * sx + mx; if (tp > x0 && tp < x1) fitNote = ` · fitted curve turns at x = ${+tp.toPrecision(4)} (${co[2] < 0 ? 'maximum' : 'minimum'})` }
+  }
+  const A = rows(D.assoc || [], D.assoc_cols || []).filter(a => a.predictor === state.x && a.response === state.y);
+  const scanHTML = A.length ? `<h3>What the scan found for this pair</h3>` + tableHTML(['scope', 'events used', 'rank corr. (raw)', 'rank corr. within site-year', 'any-shape strength', 'p', 'q', 'shape', 'turning point at', 'rank corr. within plot'],
+      A.map(a => [a.scope, a.n_adj, a.rho, a.rho_adj, a.dcor_adj, a.p, a.q, a.shape, a.turning_point, a.rho_within_plot])) : ((D.assoc ? '<p class="note">This pair is not in the scan (not a microbiome-vs-environment pair, or too few events).</p>' : ''));
   el.innerHTML = `<div class="card"><h2>Compare any two columns of the event table</h2><p class="note">One dot per sampling event with biology. Column names read dataset__variable__time-window; microbiome columns have no prefix (its_share_*, bac_share_*, ko_*). Few events, two sites, mixed years and sequencing pipelines: use this to look, not to conclude.</p>
     <div class="row"><label>x <select id="cx">${opt(state.x)}</select></label><label>y <select id="cy">${opt(state.y)}</select></label>
-    <span class="meta">${pts.length} of ${T.length} events have both${r !== null ? ' · rank correlation ' + r.toFixed(2) : ''}</span></div>
-    <div class="legend">${sites.map(s => `<span><i style="background:${col[s] || 'var(--mute)'}"></i>${s}</span>`).join('')}</div>` +
-    chart({w: 900, h: 420, xdate: false, xlab: state.x, ylab: state.y, series: sites.map(s => ({color: col[s] || 'var(--mute)', r: 3.6, pts: pts.filter(p => p.site === s).map(p => [p[state.x], p[state.y], `${p.event_id}\nx ${p[state.x]}\ny ${p[state.y]}`])}))}) + '</div>';
-  $('#cx').onchange = e => { state.x = e.target.value; compareView() }; $('#cy').onchange = e => { state.y = e.target.value; compareView() };
+    <label>site <select id="cs">${['all'].concat(sites).map(s => `<option ${s === state.site ? 'selected' : ''}>${s}</option>`).join('')}</select></label>
+    <label><input type="checkbox" id="cadj" ${state.adj ? 'checked' : ''}> remove site × year differences</label></div>
+    <div class="row"><span class="meta">${P.length} of ${nSite} events shown${r !== null ? ' · rank correlation ' + r.toFixed(2) : ' · too few points for a correlation'}${fitNote}</span></div>
+    <p class="note">Rank correlation within each site (raw values): ${perSite}. With both sites pooled, a difference between the sites alone can create or hide a correlation.${state.adj ? ' Axes now show deviations from the mean of the same site and year' + (nonneg ? ' (y on a square-root scale)' : '') + '.' : ''}</p>
+    <div class="legend">${sites.map(s => `<span><i style="background:${col[s] || 'var(--mute)'}"></i>${s}</span>`).join('')}<span><i style="background:var(--ink);border-radius:0;height:2px;vertical-align:3px"></i>running median</span><span><i style="background:var(--bad);border-radius:0;height:2px;vertical-align:3px"></i>quadratic fit (an optimum shows as a hump)</span></div>` +
+    chart({w: 900, h: 420, xdate: false, xlab: state.x, ylab: state.y, series: sites.map(s => ({color: col[s] || 'var(--mute)', r: 3.6, pts: P.filter(p => p.e.site === s).map(p => [p.x, p.y, `${p.e.event_id}\nx ${+p.x.toPrecision(4)}\ny ${+p.y.toPrecision(4)}`])}))
+      .concat([{color: 'var(--bad)', line: true, r: 0, pts: curve}, {color: 'var(--ink)', line: true, r: 3, pts: bins}])}) + scanHTML + '</div>';
+  $('#cs').onchange = e => { state.site = e.target.value; compareView() }; $('#cx').onchange = e => { state.x = e.target.value; compareView() }; $('#cy').onchange = e => { state.y = e.target.value; compareView() };
+  $('#cadj').onchange = e => { state.adj = e.target.checked; compareView() };
+}
+
+// ---------- associations
+function assocView() {
+  const el = $('#assoc');
+  if (!D.assoc) { el.innerHTML = '<div class="card"><p class="miss">association_scan.parquet not built yet (scripts/11_association_scan.py)</p></div>'; return }
+  const A = rows(D.assoc, D.assoc_cols), f = state.af, grp = r => r.startsWith('its_') ? 'fungi' : r.startsWith('bac_') ? 'bacteria' : r.startsWith('ko_') ? 'genes' : 'abundance';
+  const sel = (id, vals, cur) => `<select id="${id}">${vals.map(v => `<option ${v === cur ? 'selected' : ''}>${v}</option>`).join('')}</select>`;
+  const F = A.filter(a => a.scope === f.scope && (f.group === 'all' || grp(a.response) === f.group) && (f.timing === 'all' || a.timing === f.timing) && (f.shape === 'all' || a.shape === f.shape) && (!f.q || a.q < 0.1) && (!f.text || (a.response + ' ' + a.predictor).toLowerCase().includes(f.text.toLowerCase())));
+  const tot = A.filter(a => a.scope === f.scope);
+  el.innerHTML = `<div class="card"><h2>Association scan: microbiome against environment</h2>
+    <p class="note">Every microbiome column against every environmental column, tested for dependence of <b>any shape</b>, not only straight lines. These are observations of 28 plots at two sites, not experiments: nothing here proves cause. Each column answers one question, from weak to strong evidence:</p>
+    <p class="note"><b>any-shape strength</b> (distance correlation, 0–1) and its <b>p</b>: is there any dependence, including a hump? Computed within site × year, so differences between sites, years or sequencing pipelines cannot produce it. <b>q</b>: p corrected for the ${tot.length} pairs tested in this scope (below 0.1 = at most about 1 in 10 such findings is expected to be false). <b>shape</b>: rising, falling, <i>hump</i> (an optimum inside the observed range, the bell-shaped response) or valley. <b>within plot</b>: does the same plot change in the same direction over time (rules out constant plot differences; empty for constant properties). <b>timing</b>: only a predictor fixed <i>before</i> sampling can be a cause; "at sampling" and "around" can equally be an effect. Events of one plot are not independent, so p is optimistic.</p>
+    <div class="row"><label>scope ${sel('fa', [...new Set(A.map(a => a.scope))], f.scope)}</label><label>microbiome ${sel('fg', ['all', 'fungi', 'bacteria', 'genes', 'abundance'], f.group)}</label>
+    <label>timing ${sel('ft', ['all', ...new Set(A.map(a => a.timing))], f.timing)}</label><label>shape ${sel('fs', ['all', 'hump', 'valley', 'rising', 'falling', 'none clear'], f.shape)}</label>
+    <label><input type="checkbox" id="fq" ${f.q ? 'checked' : ''}> q &lt; 0.1 only</label><input id="fx" placeholder="filter by name" value="${esc(f.text)}">
+    <span class="meta">${F.length} of ${tot.length} pairs · click a row to see it</span></div>
+    <div id="alist" class="scroll" style="max-height:640px">${F.length ? tableHTML(['microbiome', 'environment', 'timing', 'events', 'rank corr. within site-year', 'any-shape strength', 'p', 'q', 'shape', 'turning point at', 'within plot'], F.slice(0, 400).map(a => [a.response, a.predictor, a.timing, a.n_adj, a.rho_adj, a.dcor_adj, a.p, a.q, a.shape, a.turning_point, a.rho_within_plot]), {click: true}) : '<p class="miss">no pair passes these filters</p>'}</div></div>`;
+  const set = (id, k, ev = 'onchange', get = e => e.target.value) => $('#' + id)[ev] = e => { f[k] = get(e); assocView(); if (k === 'text') { const i = $('#fx'); i.focus(); i.setSelectionRange(i.value.length, i.value.length) } };
+  set('fa', 'scope'); set('fg', 'group'); set('ft', 'timing'); set('fs', 'shape'); set('fq', 'q', 'onchange', e => e.target.checked); set('fx', 'text', 'oninput');
+  $('#alist').onclick = e => { const tr = e.target.closest('tr.click'); if (tr) { const a = F[+tr.dataset.k]; state.x = a.predictor; state.y = a.response; state.site = a.scope === 'both' ? 'all' : a.scope; state.adj = true; show('compare') } };
 }
 
 // ---------- tables
@@ -218,7 +274,7 @@ function tablesView() {
   $('#tsel').onchange = e => { state.table = e.target.value; tablesView() };
 }
 
-const TABS = {overview: ['Overview', overview], plot: ['Plot', plotView], event: ['Event', eventView], compare: ['Compare', compareView], tables: ['Tables', tablesView]};
+const TABS = {overview: ['Overview', overview], plot: ['Plot', plotView], event: ['Event', eventView], assoc: ['Associations', assocView], compare: ['Compare', compareView], tables: ['Tables', tablesView]};
 function show(id) {
   for (const s of document.querySelectorAll('section')) s.classList.toggle('on', s.id === id);
   for (const b of document.querySelectorAll('nav button')) b.classList.toggle('on', b.dataset.id === id);
@@ -227,7 +283,7 @@ function show(id) {
 $('#nav').innerHTML = Object.entries(TABS).map(([k, v]) => `<button data-id="${k}">${v[0]}</button>`).join('');
 $('#nav').onclick = e => { if (e.target.dataset.id) show(e.target.dataset.id) };
 $('#meta').textContent = `built ${D.generated} · ${D.datasets.length} tables`;
-const h0 = location.hash.slice(1).split('/'); if (h0[1]) state.plot = h0[1]; show(TABS[h0[0]] ? h0[0] : 'overview');
+const h0 = location.hash.slice(1).split('/'); if (h0[1]) { if (h0[0] === 'compare') state.site = h0[1]; else state.plot = h0[1] } show(TABS[h0[0]] ? h0[0] : 'overview');
 </script>
 </body>
 </html>

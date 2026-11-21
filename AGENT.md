@@ -15,7 +15,7 @@ Related: `docs/nmdc-data-guide.md` (how to interpret the NMDC files and how STER
 ```bash
 uv venv --python 3.12 .venv            # geo wheels are risky on newer system Pythons
 uv pip install --python .venv/bin/python -e .
-.venv/bin/python -m pytest -q          # 33 tests, no network, no data needed
+.venv/bin/python -m pytest -q          # 37 tests, no network, no data needed
 ```
 
 The package is `cropfit` in `src/cropfit/` (the name is historical). Scripts add `src/` to `sys.path` themselves; run them from the repo root: `.venv/bin/python scripts/<name>.py`. `e1_match.py` and `pull_nmdc_cropland.py` use paths relative to the current directory, so run them from the repo root.
@@ -37,6 +37,7 @@ The package is `cropfit` in `src/cropfit/` (the name is historical). Scripts add
 | `aerial.py` | Aerial photo chips and in-plot statistics: NAIP and the NEON airborne camera. |
 | `terrain.py` | Elevation, slope, aspect, relative position from the 3DEP 10 m elevation model. |
 | `link.py` | Temporal operators that attach every dataset to the sampling events (see 3.9). |
+| `assoc.py` | Association scan between microbiome and environmental columns (any shape, within site x year; see 3.10). |
 | `e1.py` | Open-Meteo / NASA POWER climate for EU points, plus modelling helpers used by the LUCAS experiment (needs scikit-learn). |
 
 Lookup tables in `rules/` (generic, read by the code): `cdl_codes.csv` (all 132 CDL codes to a crop-group vocabulary), `ko_panel.csv` (KEGG KOs of interest with function group and caveat), `lucas_lc1_groups.csv` (LUCAS land-cover codes with `is_cereal`; documentation only, `e1_match.py` hard-codes its own cereal rule B11-B19). Small input tables in `resources/` are listed under each dataset.
@@ -68,7 +69,8 @@ Pipeline order (what produces what):
 | Satellite | `scripts/08_fetch_satellite.py` (after 01) | `plot_vi_timeseries`, `plot_season` |
 | Aerial photos | `scripts/09_fetch_aerial.py [naip] [aop]` (after 01; `aop` needs token) | `plot_aerial`, chips under `data/raw/imagery/` |
 | Event features | `scripts/07_build_event_features.py` (offline, last) | `event_features`, `event_table` (see 3.9) |
-| Inspector | `scripts/10_inspect_data.py` (offline) | `outputs/inspect/index.html`, a developer page to look at all of the above |
+| Association scan | `scripts/11_association_scan.py` (offline, after 07, under a minute) | `association_scan` (see 3.10) |
+| Inspector | `scripts/10_inspect_data.py [--standalone]` (offline) | `outputs/inspect/index.html`, a developer page to look at all of the above |
 | Joined table | `scripts/06_build_joined.py` (offline, after 02b and 05) | `joined_metagenomes`, `joined_fungi_genus` (see 3.8) |
 
 Note: `03_build_plots.py` takes its plots from the event registry (the 29 plots that were actually sampled). `04_build_fields.py` still carries the two windows of `config/regions.yaml`. The site list is defined once, as the keys of `windows` in `config/regions.yaml` (`config.sites()`); only the standalone NMDC pull script has its own `--sites` default.
@@ -293,6 +295,18 @@ Note: `03_build_plots.py` takes its plots from the event registry (the 29 plots 
   - `season` uses the calendar year; autumn growth of winter wheat belongs to the year before.
   - Imagery before the sampling date is plant input to the soil community; imagery after it is an outcome. `lag_days` tells which.
   - Not done: NEON hyperspectral indices and canopy height (the lidar height model is set to 0 below 2 m, useless for crops), CSB field polygons (zip absent), Sentinel-1 radar.
+
+### 3.10 Association scan (microbiome against environment)
+
+- **What:** `scripts/11_association_scan.py` tests every microbiome column of `event_table` (`its_share_*`, `bac_share_*`, `ko_*` where depth is sufficient, qPCR fungal and bacterial copies) against every numeric environmental column, per site and for both sites together. Output `association_scan.parquet`, one row per pair and scope; browse it in the inspector (tabs Associations and Compare).
+- **Why not a plain correlation:** a response can have an optimum (bell shape, e.g. along pH) that leaves the correlation near zero, and two sites or years that differ in both variables can fake one. The scan therefore reports:
+  - `dcor_adj`, `p`, `q`: distance correlation (any shape) on values centred within site x year, permutation test shuffling only inside a site-year, Benjamini-Hochberg q per scope;
+  - `rho`, `rho_adj`: rank correlation raw and within site-year;
+  - `shape`, `turning_point`, `p_curve`, `r2_line`, `r2_curve`: quadratic fit on sqrt(value) with site-year intercepts; `hump` = significant concave curve with its maximum inside the central 80% of the predictor;
+  - `rho_within_plot`: rank correlation on values centred per plot (constant plot differences removed; empty for static predictors);
+  - `timing`: `before` / `at sampling` / `around (may be after)` / `constant`, from the time window.
+- **Result (measured, 3,532 pairs):** STER 73 pairs with q < 0.1 (38 with q < 0.05), both sites together 38, KONA none. Of the pairs with q < 0.1 that can be checked within plots, half keep their direction there. Soil pH shows no association that survives correction in either site (the pH range inside a site is narrow: KONA about 5.2-6.6, STER 6.2-8.5).
+- **Limits:** observational, 28 plots, two sites: the scan finds candidates, it does not show cause. Events of one plot are not independent, so p-values are optimistic. Fungal shares are relative: one genus rising pushes others down. Several strong STER pairs involve the NEON airborne photo, which has 38 events from two campaigns.
 
 ## 4. Quick recipes
 

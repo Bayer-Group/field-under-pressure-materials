@@ -5,6 +5,13 @@
 Not an app for users: a way to see what has been retrieved, how complete it is and how the pieces line up in
 time. Offline, no server, no external libraries; aerial previews are referenced from data/raw/imagery/.
 Re-run after any pipeline step to refresh.
+
+    .venv/bin/python scripts/10_inspect_data.py --standalone   ->  outputs/inspect/inspect_standalone.html
+
+--standalone embeds the aerial previews (as small JPEGs) so the single file can be copied to another machine
+and opened there, e.g. when working over SSH. Alternative without copying: serve the repo root
+(`python -m http.server 8765` there, `ssh -L 8765:localhost:8765 <host>` here) and open
+http://localhost:8765/outputs/inspect/index.html.
 """
 import json
 import sys
@@ -178,6 +185,12 @@ def main():
         data["table_cols"] = ["event_id", "site", "plotID", "year"] + num
         data["table"] = records(table, data["table_cols"])
 
+    sc = rd("association_scan")
+    if sc is not None:
+        data["assoc_cols"] = ["scope", "response", "predictor", "timing", "n_adj", "rho", "rho_adj", "dcor_adj", "p", "q",
+                              "shape", "turning_point", "p_curve", "r2_line", "r2_curve", "rho_within_plot", "n_plots"]
+        data["assoc"] = records(sc, data["assoc_cols"])
+
     its = rd("its_genus")
     if its is not None:
         its = events.assign_events(its.rename(columns={"collectDate": "date"}))
@@ -193,11 +206,24 @@ def main():
         data["mg_cols"] = cols
         data["mg"] = {k: records(g, cols) for k, g in mg.groupby("event_id")}
 
+    standalone = "--standalone" in sys.argv
+    if standalone and aer is not None:
+        import base64
+        import io
+        from PIL import Image
+        data["images"] = {}
+        for rel in aer["preview"].dropna().unique():
+            f = ROOT / rel
+            if f.exists():
+                buf = io.BytesIO()
+                Image.open(f).convert("RGB").save(buf, "JPEG", quality=72)
+                data["images"][rel] = "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
     OUT.mkdir(parents=True, exist_ok=True)
     html = (Path(__file__).with_name("inspect_template.html")).read_text()
     html = html.replace("/*__DATA__*/null", json.dumps(data, separators=(",", ":")).replace("</", "<\\/"))
-    (OUT / "index.html").write_text(html)
-    print(f"wrote {OUT / 'index.html'} ({(OUT / 'index.html').stat().st_size / 1e6:.1f} MB), "
+    target = OUT / ("inspect_standalone.html" if standalone else "index.html")
+    target.write_text(html)
+    print(f"wrote {target} ({target.stat().st_size / 1e6:.1f} MB), "
           f"{len(data['datasets'])} tables, {len(data['events'])} events")
 
 
