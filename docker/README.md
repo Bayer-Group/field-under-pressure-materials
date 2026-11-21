@@ -2,6 +2,7 @@
 
 The database behind the backend (FastAPI) for weather data, fields and crops. PostgreSQL 15 + PostGIS 3.3 in Docker.
 Source of truth for the structure: [`initdb/02_schema.sql`](initdb/02_schema.sql). Module rules: [`AGENTS.md`](AGENTS.md).
+All organizer layers (weather, soil, crop map) and the `raw` / `curated` / `app` layering are described in [`RAW_SCHEMA.md`](RAW_SCHEMA.md).
 
 ## Start
 
