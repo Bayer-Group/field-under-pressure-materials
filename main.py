@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import argparse
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 import os
 from pathlib import Path
 import sys
+import time
+import traceback
 import urllib.parse
 import urllib.request
+from zoneinfo import ZoneInfo
 import zipfile
 
 # Wymagane PRZED importem rasterio (publiczne COG Sentinel-2 / GeoParquet z AWS)
@@ -742,7 +745,32 @@ def build_cli() -> argparse.ArgumentParser:
     p.add_argument("--skip-download", action="store_true", help="Bez pobierania z sieci — użyj wyłącznie lokalnego cache.")
     p.add_argument("--force", action="store_true", help="Nadpisz istniejące pliki pośrednie / cache.")
     p.add_argument("--dry-run", action="store_true", help="Pokaż plan wykonania, wykryte województwa i status .env bez uruchamiania.")
+    p.add_argument(
+        "--telegram-cron",
+        action="store_true",
+        help="Zamiast pipeline'u trzymaj proces i codziennie o 00:00 (Europe/Warsaw) wywołaj sendTelegramAlert(top=3).",
+    )
     return p
+
+
+def run_telegram_alert_cron() -> None:
+    """Blokujący cron: sendTelegramAlert(top=3) codziennie o północy (Europe/Warsaw)."""
+    from telegram_alerts import sendTelegramAlert
+
+    tz = ZoneInfo("Europe/Warsaw")
+    print("[CRON] Alerty Telegram: codziennie o 00:00 Europe/Warsaw (sendTelegramAlert, top=3).")
+    while True:
+        now = datetime.now(tz)
+        nxt = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        if nxt <= now:
+            nxt += timedelta(days=1)
+        wait_s = (nxt - now).total_seconds()
+        print(f"[CRON] Następne wysłanie: {nxt.isoformat()} (za {wait_s:.0f}s)")
+        time.sleep(wait_s)
+        try:
+            sendTelegramAlert(top=3)
+        except Exception:
+            traceback.print_exc()
 
 
 def _print_ml_readiness_summary() -> None:
@@ -786,6 +814,9 @@ def main(argv: list[str] | None = None) -> None:
     os.chdir(ROOT)
     load_env_file(args.env_file)
 
+    if args.telegram_cron:
+        run_telegram_alert_cron()
+    
     # Walidacja dat
     d0 = date.fromisoformat(args.start_date)
     d1 = date.fromisoformat(args.end_date)
