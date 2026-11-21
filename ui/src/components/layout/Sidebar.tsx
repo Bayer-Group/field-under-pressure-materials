@@ -21,10 +21,14 @@ export function Sidebar({ activeSection, onSelectSection }: SidebarProps) {
 
   return (
     <aside className="sidebar" aria-label="Main navigation">
-      <div className="sidebar-brand" title={t.app.name}>
-        <span className="sidebar-brand-mark" aria-hidden="true">
-          FP
-        </span>
+      <div className="sidebar-brand" title={`${t.app.name} — ${t.app.subtitle}`}>
+        <img
+          className="sidebar-brand-mark"
+          src={`${import.meta.env.BASE_URL}SAGE_logo_kwadrat.png`}
+          alt={t.app.name}
+          width={36}
+          height={36}
+        />
       </div>
 
       <nav className="sidebar-nav">

@@ -1,7 +1,7 @@
 FROM mongo:8.0
 
 LABEL org.opencontainers.image.title="field-under-pressure-mongodb" \
-      org.opencontainers.image.description="MongoDB database for Hackathon GEO - Field Under Pressure (Crop Science)"
+      org.opencontainers.image.description="MongoDB database for S.A.G.E. — Smart Agricultural Guidance Engine"
 
 ENV MONGO_INITDB_DATABASE=field_under_pressure
 

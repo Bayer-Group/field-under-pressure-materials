@@ -35,7 +35,9 @@ export function TopBar({ activeSection }: TopBarProps) {
     <header className="topbar">
       <div className="topbar-left">
         <div className="topbar-title-group">
-          <span className="topbar-app-name">{t.app.name}</span>
+          <span className="topbar-app-name" title={`${t.app.name} — ${t.app.subtitle}`}>
+            {t.app.name}
+          </span>
           <span className="topbar-divider" aria-hidden="true">
             /
           </span>
