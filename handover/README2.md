@@ -36,3 +36,7 @@ ISOXML jako rozszerzenie jeśli zostanie czas
 
 10 Ja przychodze dostaje dane i robie lizmape warstw stref (czerwona, źółta, zielona) popup strefy z powierzchnią
 i dawką, w popupie pola karta "Mapa dawek" z oszczędnością i przyciskiem do pobrania.
+
+Może taka
+<img width="605" height="356" alt="image" src="https://github.com/user-attachments/assets/9a545133-67b3-4057-bfa6-29b8be66a55d" />
+
