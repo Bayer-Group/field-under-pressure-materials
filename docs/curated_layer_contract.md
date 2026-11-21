@@ -5,6 +5,26 @@ cannot be closed until `docs/wheat_septoria_logic.md` exists. All example rows a
 measured values. Raw names come only from [`docker/RAW_SCHEMA.md`](../docker/RAW_SCHEMA.md); farmer-side inputs come from
 `FARMER_INPUT_CONTRACT.md`.
 
+## Decisions after review (2026-11-21)
+
+Applied after the implementation review in #34 and the data loaded in the database:
+
+1. **Growth stage is estimated from the weather in v1** (`growth_stage_source = 'estimated'`): daily weather for the whole of 2024 is loaded, so the
+   vegetation resumption date and the degree-days since it can be computed (1.2). The calendar window (April to June) is only a fallback when
+   no estimate exists. Spring wheat stays `stage_unknown`.
+2. **Hourly weather now covers 2024-04-01 to 2024-06-30** (5,302,752 rows), so the 72 h look-back and the April part of the window have data.
+   Daily weather and IMERG daily cover the whole of 2024.
+3. **`spray_signal` is renamed `conditions_met`.** The prototype does not instruct anyone to spray (`PROJECT.md`); the field states that
+   conditions are favourable to the disease in a susceptible stage and the UI says so.
+4. **`app.crop_area.bbch_override`** (31, 37, 39, 51, 59, nullable) was added for `growth_stage_source = 'override'`. It is not in
+   `FARMER_INPUT_CONTRACT.md` yet.
+5. **App table names** are fixed (PR #42): `app.field`, `app.parcel`, `app.field_parcel`, `app.crop_area`, `app.spray`.
+6. **Configuration is TOML**, in `config/septoria.toml` (YAML would add a dependency).
+7. **Time shift (PROPOSAL):** the API applies +2 calendar years to the date, not a fixed number of days: `shift_days: 730` is exact only for
+   dates from 1 March 2024 on (2024 is a leap year; 29 February 2024 has no target).
+
+---
+
 ## 0. General rules
 
 - Tables are named `curated.<name>`. Raw tables are read-only for transformations.
@@ -16,9 +36,8 @@ measured values. Raw names come only from [`docker/RAW_SCHEMA.md`](../docker/RAW
 - **Coordinates.** Geometry is EPSG:4326, longitude/latitude order. Area, length and buffers are computed in EPSG:2180
   (`ST_Transform(geom, 2180)`), never in degrees. Responses state `"crs": "EPSG:4326"`.
 - **Repeatable.** Every transformation can be rerun for a time range or for a single crop area.
-- **Farmer input** lives in schema `app` (crop areas with geometry, farmer crop, sowing date, past sprays). Its table names are not
-  yet fixed; this contract uses the field names of `FARMER_INPUT_CONTRACT.md` (`crop_area_id`, `geometry`, `crop.farmer_crop_id`,
-  `sowing_date`, `past_sprays[].date`, `past_sprays[].protection_duration_days`).
+- **Farmer input** lives in schema `app`: `app.crop_area` (`crop_area_id`, `geom`, `farmer_crop_id`, `sowing_date`, optional `bbch_override`) and
+  `app.spray` (`spray_date`, `protection_duration_days`); see `docker/README.md`. Field names follow `FARMER_INPUT_CONTRACT.md`.
 
 ---
 
@@ -28,8 +47,9 @@ measured values. Raw names come only from [`docker/RAW_SCHEMA.md`](../docker/RAW
 
 **Grain.** One row = one grid cell × one hour. **Primary key:** `(grid_id, utc_time)`. **Time key:** `utc_time` (local `date` kept for joins).
 
-**Decision (PROPOSAL).** Hourly is the single source of truth. Daily values are derived from it (see 1.1), so `raw.weather_daily` and
-`raw.imerg_daily` are not needed for septoria v1.
+**Decision.** Hourly is the source of truth for the wet-hour indicators. `raw.weather_daily` (the whole of 2024) is used only for the daily mean
+temperature `t_mean`, which equals the mean of the hourly values (checked: difference 0.000 °C), so the growth stage can be estimated from
+1 February. `raw.imerg_daily` is not used in v1. Hourly weather is loaded for 2024-04-01 to 2024-06-30.
 
 | Column | Type | Unit | NULL | Description | Source |
 | --- | --- | --- | --- | --- | --- |
@@ -75,12 +95,12 @@ for other regions. Negative `wind_speed_2m` (min -1.4 km/h) is flagged, not corr
 | G-0001 | 2024-05-20 06:00Z | 70 | 0.0 | false |
 | G-0001 | 2024-05-20 07:00Z | NULL | NULL | NULL |
 
-### 1.1 `curated.weather_daily_features` (PROPOSAL, needed for the growth stage)
+### 1.1 `curated.weather_daily_features` (needed for the growth stage)
 
 Grain: cell × local `date`. Key `(grid_id, date)`. Derived from 1: `wet_hours` (count of `is_wet = true`), `valid_hours`
 (count of non-NULL `is_wet`), `expected_hours` (24, 23 or 25 on clock-change days), `coverage = valid_hours / expected_hours`.
-Added from the spray-window note (growth stage estimate): `t_mean` (real, °C, mean of hourly `temperature` over the local day, NULL
-if coverage is too low) and `gdd3` (real, °C·day) = `GREATEST(t_mean - 3, 0)`.
+Added from the spray-window note (growth stage estimate): `t_mean` (real, °C, = `raw.weather_daily.avg_temperature`, which equals the mean of the hourly
+`temperature` over the local day) and `gdd3` (real, °C·day) = `GREATEST(t_mean - 3, 0)`.
 
 ### 1.2 `curated.vegetation_resumption` (PROPOSAL)
 
@@ -89,12 +109,11 @@ days (team assumption); NULL if not found. Computed from `weather_daily_features
 `gdd_since_resumption` = sum of `gdd3` from `resumption_date` to that day (stored as a column of `weather_daily_features`).
 Zones for the risk table: **A** < ~160 °C·day, **B** ~160 to ~510, **C** > ~510 (starting values from the spray-window note, to be calibrated).
 
-**Consequence of the decided scope.** The weather window decided in `RAW_SCHEMA.md` is 2024-05-01 to 2024-06-30. Finding the resumption
-date and summing from it needs daily temperatures from 1 February, which are not in scope. So in v1 this table is **not built**:
-`resumption_date` and `gdd_since_resumption` stay NULL and the A/B/C zone is not computed. The only farmer input needed for the growth
-stage is the **sowing date**. The BBCH 30-59 window is then taken from the team's calendar fallback (**April to June**) for winter
-wheat (`growth_stage_source = 'calendar'`), and a farmer's BBCH tile, when given, overrides it (`override`). The table stays in the
-contract as a later extension if the weather window is widened.
+**Built in v1.** Daily temperatures for the whole of 2024 are in `raw.weather_daily`, so `resumption_date` and `gdd_since_resumption` are
+computed for every cell (2024: 2-3 February for all 2,428 cells, a very warm winter; zone B from early April, zone C from mid-May).
+The BBCH 30-59 window for winter wheat is then the zone-based estimate (`growth_stage_source = 'estimated'`); the April to June calendar
+window is the fallback when no resumption date exists (`calendar`), and a farmer's BBCH tile overrides both (`override`). The zone
+thresholds are starting values and are calibrated by the team.
 
 ---
 
@@ -121,7 +140,7 @@ The `GET /crops` list is fictional today, so this table must be re-checked when 
 
 | Column | Type | Unit | NULL | Description | Source |
 | --- | --- | --- | --- | --- | --- |
-| `crop_area_id` | text | | no | | `app` crop area |
+| `crop_area_id` | text | | no | | `app.crop_area` |
 | `year` | integer | | no | | `raw.cropland_cty.year` |
 | `class_code` | integer | | no | | pixel value, `raw.crop_class.code` |
 | `pixel_count` | bigint | | no | pixels of this class in the polygon | `raw.cropland_cty.rast` |
@@ -158,11 +177,11 @@ The row with `class_code = 0` is real "No cropland". Padding zeros were removed 
 
 | Column | Type | Unit | NULL | Description | Source |
 | --- | --- | --- | --- | --- | --- |
-| `crop_area_id` | text | | no | | `app` crop area |
+| `crop_area_id` | text | | no | | `app.crop_area` |
 | `soil_ph` | real | pH | yes | area-weighted mean of root-zone `ph` | `raw.soil_h3.ph` |
 | `soil_clay`, `soil_sand`, `soil_silt` | real | fraction 0-1 | yes | area-weighted mean | `raw.soil_h3.clay` / `sand` / `silt` |
 | `soil_om`, `soil_cec`, `soil_bulk_density` | real | as source | yes | area-weighted mean | `raw.soil_h3.om` / `cec` / `bulk_density` |
-| `soil_texture` | text | USDA class | yes | class with the largest area share | `raw.soil_h3.soilTexture` |
+| `soil_texture` | text | USDA class | yes | class with the largest area share | `raw.soil_h3.soil_texture` |
 | `soil_cell_count` | integer | | no | H3 cells intersecting the polygon | rule |
 | `soil_coverage` | real | 0-1 | no | share of polygon area covered by cells with non-NULL values | rule |
 | `crop_map_year` | integer | | yes | | `crop_area_crop_map.year` |
@@ -197,7 +216,7 @@ Hourly grain is not needed for the UI. The day's value is the indicator at the *
 
 | Column | Type | Unit | NULL | Description | Source |
 | --- | --- | --- | --- | --- | --- |
-| `crop_area_id` | text | | no | | `app` crop area |
+| `crop_area_id` | text | | no | | `app.crop_area` |
 | `disease` | text | | no | `septoria` in v1 | constant |
 | `date` | date | | no | local day | rule |
 | `grid_id` | text | | no | cell used | nearest cell to polygon centroid, `raw.grid_cell` |
@@ -207,11 +226,11 @@ Hourly grain is not needed for the UI. The day's value is the indicator at the *
 | `status` | text | | no | see below | rule |
 | `threshold_medium`, `threshold_high` | integer | h | no | thresholds used (10, 20) | configuration |
 | `coverage` | real | 0-1 | no | valid hours / 72 | rule |
-| `protected_until` | date | | yes | latest spray `date` + that spray's `protection_duration_days` | `app` past sprays |
+| `protected_until` | date | | yes | latest spray `date` + that spray's `protection_duration_days` | `app.spray` (`spray_date` + `protection_duration_days`) |
 | `growth_stage_zone` | text | | yes | `A` / `B` / `C`, NULL when unknown | `weather_daily_features.gdd_since_resumption` |
-| `growth_stage_source` | text | | yes | `calendar` (April-June window, v1 default), `estimated` (from weather, later) or `override` (farmer's BBCH tile) | rule / farmer input |
+| `growth_stage_source` | text | | yes | `estimated` (from weather, v1 default), `calendar` (April-June fallback when no estimate exists) or `override` (`app.crop_area.bbch_override`) | rule / farmer input |
 | `gdd_since_resumption` | real | °C·day | yes | sum used for the zone | `weather_daily_features` |
-| `spray_signal` | boolean | | no | true only when class = `high`, zone is B or C and the field is not protected | rule |
+| `conditions_met` | boolean | | no | true only when class = `high`, zone is B or C and the field is not protected | rule |
 | `reasons` | jsonb | | no | components for the "Why?" screen (`h_hours`, window start and end, threshold origin) | rule |
 | `computed_at` | timestamptz | | no | | system |
 | `model_version` | text | | no | constant string | constant |
@@ -233,7 +252,7 @@ A NULL `risk_class` is never shown as green "low".
 **Classification (from the team's thresholds note).** `h_hours >= 20` -> `high`; `>= 10` -> `medium`; else `low`. The threshold 20 h is
 "from literature" (SPOT-IT), the boundary 10 h is a "team assumption". The origin goes into `reasons`. Thresholds live in configuration.
 
-**Conditions of application (DEPENDS ON #33).** Per the team's spray-window note a spray signal needs all of: class `high` (H >= 20 h),
+**Conditions of application (DEPENDS ON #33).** Per the team's spray-window note the conditions flag (`conditions_met`) needs all of: class `high` (H >= 20 h),
 growth zone B or C (BBCH 30-59, estimated or confirmed), and more days since the last spray than its `protection_duration_days`
 (10 when the farmer gave no value; the farmer contract requires a positive duration for every recorded spray, so the default 10 only
 applies in the UI). Growth stage is estimated for winter wheat only (section 1.2); farmer's BBCH tiles (31, 37, 39, 51, 59) override it.
@@ -273,17 +292,11 @@ and needs no QGIS layer; it belongs to the API contract. In the demo the "foreca
 
 ## 4. Configuration (not in code)
 
-```
-septoria:
-  wet_hour: {rh_min: 85, precipitation_min_mm: 0.2}
-  window_hours: 72
-  thresholds: {medium: 10, high: 20}
-  threshold_origin: {high: literature, medium: team_assumption}
-  protection_days_default: 10
-  growth_stage_window: [30, 59]
-```
-
-Other diseases (white mould, yellow leaf spot) are `enabled: false` until the team enables them.
+The values live in [`config/septoria.toml`](../config/septoria.toml): TOML, because the repository already uses it and YAML would add a
+dependency. Keys: `window_hours` (72), `wet_hour` (RH >= 85 %, precipitation > 0.2 mm), `thresholds` (medium 10, high 20) with their
+`threshold_origin`, `protection_days_default` (10), `growth_stage` (resumption rule, degree-day base 3, zone limits 160 and 510, BBCH 30-59,
+calendar fallback), plus `min_coverage` (0.80, **an assumption**, open in #33) and `max_gap_hours` (4, from the thresholds note).
+White mould and yellow leaf spot are configured with `enabled = false`.
 
 ## 5. Open questions
 
@@ -295,11 +308,14 @@ Other diseases (white mould, yellow leaf spot) are `enabled: false` until the te
    dates from April to June (calendar fallback of the spray-window note); spring wheat is `stage_unknown`. Known limitation, accepted:
    the note's source data put heading (end of BBCH 59) around the first decade of June, so late June may be treated as in the window.
 2. Minimum coverage for a valid result and the fallback class. (#33)
-3. Continuous or total wet hours. (#33 / #37)
+3. Continuous or total wet hours. (#33 / #37) **Measured on 2024** (Mazowieckie, 1 April to 30 June, 2,428 cells, RH >= 85 %): with the longest
+   continuous run (this contract) "high" is reached on 1 % of cell-days (0.6 days per cell per season), with the total number of wet hours in 72 h
+   on 35 % (32 days). The choice decides whether the alert says anything; Piotrek decides. A check on 2020-2025 needs those years of hourly weather
+   (`scripts/septoria_threshold_check.py`).
 4. Crop area vs. cell: weather is per cell, so two crop areas in one cell differ only in window and protection.
 5. Soil depth: root-zone aggregates only, or also layered depths?
 6. Weather-cell polygons do not exist (`raw.grid_cell` has centres only); a QGIS layer of cells is points unless the backend generates approximate squares (step about 0.044 deg), labelled as approximate.
-7. Table names of the `app` schema (crop area, sprays) are needed to finish the `Source` columns.
+7. ~~Table names of the `app` schema~~ **Done** (PR #42, see the decisions above).
 8. Section 6: names and shapes of `GET /fields/context` and `GET /weather/cells`, and whether the crop raster is exposed to QGIS or only per-field results (`crop_area_crop_map`).
 
 ## 6. Served to QGIS
@@ -362,7 +378,7 @@ values are fictional.
         "date": "2024-05-20",
         "risk_class": "high",
         "status": "ok",
-        "spray_signal": true,
+        "conditions_met": true,
         "h_hours": 26, "h_low": 26, "h_high": 26,
         "threshold_medium": 10, "threshold_high": 20,
         "coverage": 1.0,
