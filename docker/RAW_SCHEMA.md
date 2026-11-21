@@ -34,7 +34,7 @@ contract must use `raw.<table>`; until the rename is applied, `fup.<table>` is t
 | `raw.weather_daily` | `weather_daily/year=2024/voivodeship=mazowieckie/*.parquet` | `(grid_id, date)` | 148,108 | to load |
 | `raw.imerg_daily` | `imerg_daily/daily/2024/precip_daily_2024_Mazowieckie.parquet` | `(grid_id, date)` | 148,108 | to load |
 | `raw.soil_h3` | `soil/voivodeship=mazowieckie/Mazowieckie_isric_250_v2.parquet` | `h3_index_10` | 2,491,086 | to load |
-| `raw.cropland_cty` (raster) | `cropland/year=2024/CLMS_HRLVLCC_CTY_PL_*.tif` (15 tiles) | tile id | 15 tiles, 1.9 G pixels | to load (method open) |
+| `raw.cropland_cty` (raster) | `cropland/year=2024/CLMS_HRLVLCC_CTY_PL_*.tif` (15 tiles) | `rid` (tile file in `tile`) | 15 files, about 1.9 G pixels (about 28,000 raster tiles of 256×256) | to load (method decided) |
 | `raw.crop_class` | CTY legend | `code` | 21 | loaded |
 | `raw.ingest_log` | loader | `id` | one row per loaded file | loaded |
 
@@ -87,9 +87,16 @@ texture column `soil_texture` while the file has `soilTexture`. The table keeps 
 **overlap**, and the padding is filled with **0**, the same value as "No cropland", and there is no nodata tag.
 Counting pixels over all tiles that touch a polygon therefore adds padding zeros. Any use of this raster must mosaic with
 "non-zero wins" before counting. The raw table keeps tiles unchanged; the mosaic belongs to the curated layer.
-**Storage: open, decided in the raster spike issue.** The `postgis_raster` extension is available in the database image,
-but the `raster2pgsql` tool is **not**. Candidates: PostGIS raster tiles loaded from the GeoTIFFs, or GeoTIFF files kept on
-the VM and registered as out-of-database rasters. Whatever is chosen, the raw table keeps the tiles unchanged (file name kept).
+**Storage (decided, raster spike): PostGIS raster tiles in the database.** GeoTIFF is supported (read by GDAL inside PostGIS).
+The loader compresses each tile losslessly (DEFLATE) in memory, sends the bytes to the database and the server converts
+them with `ST_FromGDALRaster` + `ST_Tile(…, 256, 256)`; no files on the VM and no `raster2pgsql` are needed (the tool is not in
+the database image, the `postgis_raster` extension is). Measured on one tile: 153 MB → 1.7 MB compressed upload, 4.9 MB in the
+database, 1,247 raster tiles, and the class counts inside a polygon equal an independent `rasterio` read (35 ms per field;
+the out-of-database alternative needed 1.6 s). Table:
+`raw.cropland_cty(rid serial PK, tile text, year int, rast raster)`, one row per 256×256 raster tile, GiST index on
+`ST_ConvexHull(rast)`. The loading session needs `SET postgis.gdal_enabled_drivers = 'GTiff'`. The raw table keeps the tiles
+unchanged (source file name in `tile`). The tiles are not aligned to each other (each has its own grid), so the mosaic with
+"non-zero wins" is built in the curated layer by resampling with nearest neighbour onto one grid.
 
 ### `raw.crop_class`
 `code` integer PK, `name` text; the 21 CTY classes (0, 1110 Wheat, 1120 Barley, 1130 Maize, …, 65535 Outside area).
