@@ -115,8 +115,10 @@ def refresh_field_context(cur, crop_area_id: str, crop_map: list[tuple[int, int]
          map_class, farmer_class, differs))
 
 
-def refresh_risk(cur, crop_area_id: str, d0: date, d1: date, rules: septoria.Rules) -> int:
-    """Rewrite curated.risk_assessment of the crop area for the local days d0..d1; returns the number of rows."""
+def refresh_risk(cur, crop_area_id: str, d0: date, d1: date, rules: septoria.Rules, reason: str = "recompute") -> int:
+    """Rewrite curated.risk_assessment of the crop area for the local days d0..d1; returns the number of rows.
+    Changes of class, status or conditions_met are logged in curated.risk_change with the given reason
+    (created, recompute, spray, sowing, weather, rules)."""
     cur.execute(CELL_SQL, {"id": crop_area_id})
     row = cur.fetchone()
     if not row:
@@ -139,6 +141,9 @@ def refresh_risk(cur, crop_area_id: str, d0: date, d1: date, rules: septoria.Rul
                 "AND date BETWEEN %s AND %s", (grid_id, d0, d1))
     gdd = {r[0]: r[1] for r in cur.fetchall()}
 
+    cur.execute("SELECT date, risk_class, status, conditions_met FROM curated.risk_assessment WHERE crop_area_id = %s "
+                "AND disease = %s AND date BETWEEN %s AND %s", (crop_area_id, DISEASE, d0, d1))
+    previous = {r[0]: tuple(r[1:]) for r in cur.fetchall()}
     cur.execute("DELETE FROM curated.risk_assessment WHERE crop_area_id = %s AND disease = %s AND date BETWEEN %s AND %s",
                 (crop_area_id, DISEASE, d0, d1))
     n = 0
@@ -162,17 +167,25 @@ def refresh_risk(cur, crop_area_id: str, d0: date, d1: date, rules: septoria.Rul
              r["threshold_medium"], r["threshold_high"], r["coverage"], r["protected_until"], r["growth_stage_zone"],
              r["growth_stage_source"], r["gdd_since_resumption"], r["conditions_met"], json.dumps(r["reasons"]),
              datetime.now(timezone.utc), r["model_version"], r["input_hash"]))
+        old, new = previous.get(day), (r["risk_class"], r["status"], r["conditions_met"])
+        if old != new:                                             # log only real changes (and the first calculation)
+            o = old or (None, None, None)
+            cur.execute(
+                "INSERT INTO curated.risk_change (crop_area_id, disease, date, reason, old_class, new_class, old_status, "
+                "new_status, old_conditions_met, new_conditions_met, new_input_hash) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                (crop_area_id, DISEASE, day, "created" if old is None else reason, o[0], new[0], o[1], new[1], o[2], new[2],
+                 r["input_hash"]))
         n += 1
         day += timedelta(days=1)
     return n
 
 
-def refresh(con, crop_area_id: str, d0: date, d1: date, rules: septoria.Rules) -> dict:
+def refresh(con, crop_area_id: str, d0: date, d1: date, rules: septoria.Rules, reason: str = "recompute") -> dict:
     """Refresh everything for one crop area inside the caller's transaction."""
     with con.cursor() as cur:
         crop_map = refresh_crop_map(cur, crop_area_id)
         refresh_field_context(cur, crop_area_id, crop_map)
-        days = refresh_risk(cur, crop_area_id, d0, d1, rules)
+        days = refresh_risk(cur, crop_area_id, d0, d1, rules, reason)
     return {"crop_area_id": crop_area_id, "map_classes": len(crop_map), "risk_days": days}
 
 
