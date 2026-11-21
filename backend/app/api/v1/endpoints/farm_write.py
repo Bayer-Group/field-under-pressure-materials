@@ -117,9 +117,10 @@ def _clone(con, schema: str, table: str, where: str, params: dict, replace: dict
         params)
 
 
-@router.get("/crops", summary="Crops a farmer can choose")
+@router.get("/crops", summary="Crops a farmer can choose (shape of FARMER_INPUT_CONTRACT.md)")
 def crops(con=Depends(get_db)):
-    return con.execute("SELECT farmer_crop_id, label FROM curated.crop_mapping ORDER BY farmer_crop_id").fetchall()
+    rows = con.execute("SELECT farmer_crop_id, label FROM curated.crop_mapping ORDER BY farmer_crop_id").fetchall()
+    return {"crops": [{"id": r["farmer_crop_id"], "label": r["label"]} for r in rows], "data_status": "mock"}
 
 
 @router.post("/sandbox", summary="Start a sandbox for a visitor (no password)")

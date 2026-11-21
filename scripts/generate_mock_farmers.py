@@ -10,9 +10,10 @@ Needs the curated weather features and `curated.septoria_cell_day` (scripts/buil
    demo clock is pinned to it (serve.demo_time), so "today" in the app shows that day.
 2. Farmers have profiles: large (10-16 crop areas clustered around one place), medium (4-7), small (1-3) and scattered (4-6 crop
    areas at different places, mixed crops). Places are grid cells chosen by their class on the demo day (about 35 % high, 40 % medium,
-   25 % low), so the map has red, amber and green fields. Crop areas are rectangles of about 2-25 ha placed on pixels of the
-   farmer's crop in the 2024 CTY crop map (maize and soy on their own pixels; a few farmers say wheat where the map says otherwise);
-   they never overlap and the crop map inside must be dominated by the crop expected there.
+   25 % low), so the map has red, amber and green fields. Each crop area is a real cadastral parcel (GUGiK ULDK, cached in
+   app.parcel) found at a pixel of the farmer's crop in the 2024 CTY crop map (maize and soy on their own pixels; a few farmers say
+   wheat where the map says otherwise), shrunk by 3 m from its boundary so that it never reaches a neighbour's parcel; a parcel is
+   used once, the crop map inside must be dominated by the crop expected there, and the field is linked to its parcel (field_parcel).
 3. Sprays relative to the demo day: some just sprayed (still protected), some expired (red again), some in April.
 4. Every crop area is refreshed (crop map, field context, risk assessment) and the logins are written (`analyst` and
    farmer001, farmer002, ... with the given password, demo only; the analyst gets a random password unless --analyst-password).
@@ -27,6 +28,7 @@ import os
 import random
 import secrets
 import sys
+import time
 import tomllib
 from datetime import date, timedelta
 from pathlib import Path
@@ -36,6 +38,8 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 from backend.app.core.security import hash_password  # noqa: E402
 from backend.app.domain import septoria  # noqa: E402
+from backend.app.ingestion.uldk_connector import UldkError  # noqa: E402
+from backend.app.services.parcels import find_by_xy  # noqa: E402
 from refresh_crop_area import refresh, refresh_crop_map  # noqa: E402
 
 CODES = {"wheat": 1110, "maize": 1130, "soy": 1420}
@@ -49,18 +53,16 @@ FROM p JOIN raw.cropland_cty t ON t.year = 2024 AND ST_Intersects(t.rast::geomet
 WHERE ST_Value(t.rast, 1, p.g) = %(code)s
 LIMIT %(want)s
 """
-RECTANGLE = """
-SELECT ST_AsEWKT(ST_Transform(ST_Rotate(
-    ST_MakeEnvelope(ST_X(c) - %(w)s / 2, ST_Y(c) - %(h)s / 2, ST_X(c) + %(w)s / 2, ST_Y(c) + %(h)s / 2, 2180),
-    %(angle)s, c), 4326))
-FROM (SELECT ST_Transform(ST_SetSRID(ST_MakePoint(%(lon)s, %(lat)s), 4326), 2180) AS c) x
+SHRINK = """
+WITH s AS (SELECT ST_Transform(ST_Buffer(ST_Transform(geom, 2180), -%(buf)s), 4326) AS g FROM app.parcel WHERE parcel_id = %(pid)s)
+SELECT ST_AsEWKT(g), ST_Area(g::geography) / 10000 FROM s WHERE NOT ST_IsEmpty(g) AND GeometryType(g) IN ('POLYGON', 'MULTIPOLYGON')
 """
-OVERLAPS = "SELECT EXISTS (SELECT 1 FROM app.crop_area WHERE geom && ST_GeomFromEWKT(%(g)s) AND ST_Intersects(geom, ST_GeomFromEWKT(%(g)s)))"
-PROFILES = [  # name, share of farmers, fields (min, max), sites, cluster radius (deg), field side (m), crops
-    ("large", 0.08, (10, 16), 1, 0.05, (230, 500), [("wheat", 90), ("maize", 6), ("soy", 4)]),
-    ("medium", 0.25, (4, 7), 1, 0.04, (180, 420), [("wheat", 85), ("maize", 10), ("soy", 5)]),
-    ("small", 0.45, (1, 3), 1, 0.02, (130, 300), [("wheat", 88), ("maize", 8), ("soy", 4)]),
-    ("scattered", 0.22, (4, 6), 4, 0.02, (150, 380), [("wheat", 55), ("maize", 25), ("soy", 20)]),
+INSET_M, MIN_HA, MAX_HA = 3.0, 0.3, 60.0      # distance from the parcel boundary; accepted size of the crop area
+PROFILES = [  # name, share of farmers, fields (min, max), sites, cluster radius (deg), crops
+    ("large", 0.08, (10, 16), 1, 0.05, [("wheat", 90), ("maize", 6), ("soy", 4)]),
+    ("medium", 0.25, (4, 7), 1, 0.04, [("wheat", 85), ("maize", 10), ("soy", 5)]),
+    ("small", 0.45, (1, 3), 1, 0.02, [("wheat", 88), ("maize", 8), ("soy", 4)]),
+    ("scattered", 0.22, (4, 6), 4, 0.02, [("wheat", 55), ("maize", 25), ("soy", 20)]),
 ]
 SITE_CLASS_WEIGHTS = [("high", 35), ("medium", 40), ("low", 25)]
 
@@ -102,12 +104,13 @@ def main(argv=None) -> int:
     if not dsn:
         sys.exit("no connection string: set env LOAD_DB_DSN or pass --dsn")
     import psycopg
+    from psycopg.rows import dict_row
     rnd = random.Random(a.seed)
     with open(a.config, "rb") as fh:
         rules = septoria.Rules.from_config(tomllib.load(fh))
     pw_hash = hash_password(a.password)                    # one salt for all demo users is enough for a demonstration
     analyst_pw = a.analyst_password or secrets.token_urlsafe(9)
-    with psycopg.connect(dsn) as con:
+    with psycopg.connect(dsn) as con, psycopg.connect(dsn, row_factory=dict_row) as pcon:     # pcon: parcel cache
         cur = con.cursor()
         cur.execute("SELECT setseed(%s)", ((a.seed % 1000) / 1000.0,))
         day = a.day or pick_day(cur)
@@ -129,9 +132,29 @@ def main(argv=None) -> int:
         plan = plan[:a.farmers] + [PROFILES[2][0]] * max(0, a.farmers - len(plan))
         profile = {p[0]: p for p in PROFILES}
         stats = {"areas": 0, "skipped": 0}
+        tried: set[str] = set()                                    # parcels already used or rejected in this run
+        failures = [0]
+
+        def parcel_at(lon: float, lat: float):
+            """The id of the (cached) parcel under the point, or None (no parcel, already tried, service failure)."""
+            try:
+                found = find_by_xy(pcon, lon, lat)
+                pcon.commit()
+            except UldkError:
+                pcon.rollback()
+                failures[0] += 1
+                if failures[0] >= 8:
+                    sys.exit("GUGiK ULDK does not answer (8 failures in a row); try again later")
+                return None
+            failures[0] = 0
+            time.sleep(0.05)                                       # be gentle with the public service
+            if not found or found[0]["parcel_id"] in tried:
+                return None
+            return found[0]["parcel_id"]
+
         cls_count = {}
         for i, pname in enumerate(plan, start=1):
-            _, _, (fmin, fmax), n_sites, radius, (smin, smax), crops = profile[pname]
+            _, _, (fmin, fmax), n_sites, radius, crops = profile[pname]
             owner = f"farmer-{i:03d}"
             cur.execute("INSERT INTO app.demo_user (login, password_hash, owner_id, role, display_name) "
                         "VALUES (%s, %s, %s, 'farmer', %s)", (f"farmer{i:03d}", pw_hash, owner, f"Farmer {i:03d}"))
@@ -150,18 +173,22 @@ def main(argv=None) -> int:
                 pts = points_near(cur, lon0, lat0, radius, raster_crop, 12) or points_near(cur, lon0, lat0, radius * 2, "wheat", 12)
                 placed = False
                 for lon, lat in pts:
-                    cur.execute(RECTANGLE, {"lon": lon, "lat": lat, "w": rnd.uniform(smin, smax), "h": rnd.uniform(smin, smax),
-                                            "angle": rnd.uniform(0, 3.14159)})
-                    ewkt = cur.fetchone()[0]
-                    cur.execute(OVERLAPS, {"g": ewkt})
-                    if cur.fetchone()[0]:
+                    pid = parcel_at(lon, lat)
+                    if pid is None:
                         continue
+                    tried.add(pid)
+                    cur.execute(SHRINK, {"pid": pid, "buf": INSET_M})
+                    shrunk = cur.fetchone()
+                    if not shrunk or not (MIN_HA <= shrunk[1] <= MAX_HA):
+                        continue
+                    ewkt = shrunk[0]
                     fid, cid = f"f-{owner}-{k + 1}", f"ca-{owner}-{k + 1}"
                     sowing = date(2023, 9, 20) + timedelta(days=rnd.randint(0, 35))
                     cur.execute("INSERT INTO app.field (field_id, name, owner_id, data_status) VALUES (%s, %s, %s, 'mock')",
                                 (fid, f"Field {k + 1}", owner))
                     cur.execute("INSERT INTO app.crop_area (crop_area_id, field_id, geom, farmer_crop_id, sowing_date) "
                                 "VALUES (%s, %s, ST_GeomFromEWKT(%s), %s, %s)", (cid, fid, ewkt, crop, sowing))
+                    cur.execute("INSERT INTO app.field_parcel (field_id, parcel_id) VALUES (%s, %s)", (fid, pid))
                     rows = refresh_crop_map(cur, cid)           # keep the place only if the crop map is dominated by the crop expected there
                     dominant = min(rows, key=lambda x: (-x[1], x[0]))[0] if rows else None
                     if dominant != CODES[raster_crop]:
