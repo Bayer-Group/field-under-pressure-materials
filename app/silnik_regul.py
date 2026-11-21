@@ -303,71 +303,6 @@ def apply_farm_profile(
     return df
 
 
-def load_agronomic_rules() -> pd.DataFrame:
-    path = DATA_DIR / "reguly_agronomiczne.csv"
-    if not path.exists():
-        return pd.DataFrame(
-            columns=[
-                "rule_id",
-                "uprawa",
-                "zagrozenie",
-                "temp_min_c",
-                "temp_max_c",
-                "wilgotnosc_min_pct",
-                "opad_24h_min_mm",
-                "wiatr_max_ms",
-                "ndvi_prog",
-                "decyzja",
-                "poziom_ryzyka",
-                "komunikat",
-                "ph_min",
-                "ph_max",
-                "soc_max_g_kg",
-                "zalecany_nawoz",
-                "nawozy_eko",
-                "dawka_nawozu_kg_ha",
-                "preparat_eko",
-                "metoda_oprysku",
-                "decyzja_norm",
-            ]
-        )
-    df = pd.read_csv(path, sep=None, engine="python", encoding="utf-8-sig")
-    df.columns = [c.strip() for c in df.columns]
-
-    if "rule_id" not in df.columns:
-        df["rule_id"] = [f"R-{i+1:03d}" for i in range(len(df))]
-    if "poziom_ryzyka" not in df.columns:
-        df["poziom_ryzyka"] = "ŚREDNI"
-    if "zalecany_nawoz" not in df.columns:
-        df["zalecany_nawoz"] = ""
-    if "nawozy_eko" not in df.columns:
-        df["nawozy_eko"] = ""
-    if "preparat_eko" not in df.columns:
-        df["preparat_eko"] = ""
-    if "metoda_oprysku" not in df.columns:
-        df["metoda_oprysku"] = ""
-
-    df["decyzja_norm"] = df["decyzja"].apply(normalize_decision)
-
-    numeric_cols = [
-        "temp_min_c",
-        "temp_max_c",
-        "wilgotnosc_min_pct",
-        "opad_24h_min_mm",
-        "wiatr_max_ms",
-        "ndvi_prog",
-        "ph_min",
-        "ph_max",
-        "soc_max_g_kg",
-        "dawka_nawozu_kg_ha",
-    ]
-    for col in numeric_cols:
-        if col in df.columns:
-            df[col] = _to_float_series(df[col])
-        else:
-            df[col] = float("nan")
-
-    return df
 
 
 def load_optional_crop_recommendations() -> Optional[pd.DataFrame]:
@@ -533,34 +468,6 @@ def recommend_fertilization(
     }
 
 
-def _rule_matches_row(rule, row) -> bool:
-    if pd.notna(rule.temp_min_c) and pd.notna(row.temp_c) and row.temp_c < rule.temp_min_c:
-        return False
-    if pd.notna(rule.temp_max_c) and pd.notna(row.temp_c) and row.temp_c > rule.temp_max_c:
-        return False
-    if pd.notna(rule.wilgotnosc_min_pct) and pd.notna(row.humidity_pct) and row.humidity_pct < rule.wilgotnosc_min_pct:
-        return False
-    if pd.notna(rule.opad_24h_min_mm) and pd.notna(row.precip_24h_mm) and row.precip_24h_mm < rule.opad_24h_min_mm:
-        return False
-    if pd.notna(rule.wiatr_max_ms) and pd.notna(row.wind_ms) and row.wind_ms > rule.wiatr_max_ms:
-        return False
-
-    if pd.notna(rule.ndvi_prog) and pd.notna(row.ndvi):
-        if rule.decyzja_norm in {"ZASIEJ", "ZBIERAJ"}:
-            if row.ndvi > rule.ndvi_prog:
-                return False
-        else:
-            if row.ndvi < rule.ndvi_prog:
-                return False
-
-    if pd.notna(rule.ph_min) and pd.notna(row.soil_ph) and row.soil_ph < rule.ph_min:
-        return False
-    if pd.notna(rule.ph_max) and pd.notna(row.soil_ph) and row.soil_ph > rule.ph_max:
-        return False
-    if pd.notna(rule.soc_max_g_kg) and pd.notna(row.soil_soc) and row.soil_soc > rule.soc_max_g_kg:
-        return False
-
-    return True
 
 
 def evaluate_fields(
@@ -728,3 +635,295 @@ def evaluate_fields(
     merged["rekomendowana_uprawa"] = recommended_crops
     merged["uzasadnienie_glebowe"] = soil_reasons
     return merged
+
+
+CROP_RULE_ALIASES = {
+    "pszenica ozima": "Pszenica ozima",
+    "pszenica jara": "Pszenica jara",
+    "jęczmień jary": "Jęczmień jary",
+    "jęczmień": "Jęczmień jary",
+    "jęczmień ozimy": "Jęczmień jary",
+    "żyto ozime": "Żyto",
+    "żyto": "Żyto",
+    "owies zwyczajny": "Owies",
+    "owies": "Owies",
+    "pszenżyto ozime": "Pszenżyto ozime",
+    "pszenżyto": "Pszenżyto ozime",
+    "kukurydza na ziarno": "Kukurydza",
+    "kukurydza": "Kukurydza",
+    "rzepak ozimy": "Rzepak ozimy",
+    "rzepak": "Rzepak ozimy",
+    "ziemniak jadalny": "Ziemniaki",
+    "ziemniaki": "Ziemniaki",
+    "burak cukrowy": "Buraki cukrowe",
+    "buraki cukrowe": "Buraki cukrowe",
+    "soja / bobik (strączkowe)": "Rośliny strączkowe",
+    "rośliny strączkowe": "Rośliny strączkowe",
+    "użytki zielone": "Użytki zielone",
+}
+
+CEREAL_CROPS = {
+    "Pszenica ozima",
+    "Pszenica jara",
+    "Jęczmień jary",
+    "Żyto",
+    "Owies",
+    "Pszenżyto ozime",
+}
+
+RISK_PRIORITY = {
+    "KRYTYCZNY": 5,
+    "WYSOKI": 4,
+    "ŚREDNI": 3,
+    "NISKI": 2,
+    "OPTYMALNY": 1,
+}
+
+DECISION_PRIORITY = {
+    "CZEKAJ": 6,
+    "PRYSKAJ TERAZ": 5,
+    "ZASIEJ": 4,
+    "NAWOŹ": 3,
+    "ZBIERAJ": 2,
+    "MONITORUJ": 1,
+}
+
+
+def load_agronomic_rules() -> pd.DataFrame:
+    ensure_base_reference_data()
+    for fname in ("reguly_agronomiczne.csv", "reguly_agronomiczne_v2_3.csv"):
+        p = DATA_DIR / fname
+        if p.exists():
+            sample = p.read_text(encoding="utf-8-sig", errors="ignore")[:1024]
+            sep = "," if sample.count(",") >= sample.count(";") else ";"
+            df = pd.read_csv(p, sep=sep, encoding="utf-8-sig")
+            df.columns = [str(c).strip() for c in df.columns]
+            for opt_col, default_val in (
+                ("dawka_nawozu_kg_ha", 0.0),
+                ("preparat_eko", "Brak"),
+                ("metoda_oprysku", "Standardowa agrotechnika"),
+            ):
+                if opt_col not in df.columns:
+                    df[opt_col] = default_val
+            return df
+    return pd.DataFrame()
+
+
+def _canonical_crop_for_rules(crop_name: str) -> str:
+    clean = str(crop_name or "").strip()
+    return CROP_RULE_ALIASES.get(clean.lower(), clean)
+
+
+def _rule_matches_row(
+    rule: pd.Series,
+    temp_c: float,
+    humidity_pct: float,
+    precip_24h_mm: float,
+    wind_ms: float,
+    ndvi: float,
+    soil_ph: float,
+    soil_soc: float,
+) -> bool:
+    dec = normalize_decision(rule.get("decyzja", ""))
+    zag = str(rule.get("zagrozenie", "")).lower()
+    kom = str(rule.get("komunikat", "")).lower()
+
+    t_min = pd.to_numeric(rule.get("temp_min_c"), errors="coerce")
+    t_max = pd.to_numeric(rule.get("temp_max_c"), errors="coerce")
+    h_min = pd.to_numeric(rule.get("wilgotnosc_min_pct"), errors="coerce")
+    p_min = pd.to_numeric(rule.get("opad_24h_min_mm"), errors="coerce")
+    w_max = pd.to_numeric(rule.get("wiatr_max_ms"), errors="coerce")
+    ndvi_thr = pd.to_numeric(rule.get("ndvi_prog"), errors="coerce")
+    ph_min = pd.to_numeric(rule.get("ph_min"), errors="coerce")
+    ph_max = pd.to_numeric(rule.get("ph_max"), errors="coerce")
+    soc_max = pd.to_numeric(rule.get("soc_max_g_kg"), errors="coerce")
+
+    if pd.notna(ph_min) and soil_ph < float(ph_min):
+        return False
+    if pd.notna(ph_max) and soil_ph > float(ph_max):
+        return False
+    if pd.notna(soc_max) and float(soc_max) < 90.0 and soil_soc > float(soc_max):
+        return False
+
+    # Specjalna obsługa reguł blokujących CZEKAJ (wiatr > 4 m/s, opad >= 8 mm, stres > 26°C)
+    if dec == "CZEKAJ":
+        if pd.notna(t_max) and temp_c > float(t_max):
+            return False
+        if pd.notna(h_min) and humidity_pct < float(h_min):
+            return False
+
+        # Reguła czysto wiatrowa (np. R-01: wiatr > 4 m/s, opad_24h_min_mm == 0, wiatr_max_ms == 99)
+        if pd.notna(w_max) and float(w_max) >= 90.0 and (pd.isna(p_min) or float(p_min) <= 0.0) and (pd.isna(t_min) or float(t_min) < 25.0):
+            return wind_ms > 4.0
+
+        # Reguła łączona wiatr > 4 m/s LUB opad >= p_min (np. R-07, R-16, R-21, ..., R-49)
+        if pd.notna(w_max) and float(w_max) >= 90.0 and pd.notna(p_min) and float(p_min) > 0.0:
+            wind_block = wind_ms > 4.0
+            rain_block = precip_24h_mm >= float(p_min)
+            heat_block = (pd.notna(t_min) and float(t_min) >= 25.0 and temp_c >= float(t_min))
+            if pd.notna(t_min) and float(t_min) >= 25.0:
+                return wind_block or rain_block or heat_block
+            return (wind_block or rain_block) and (pd.isna(t_min) or temp_c >= float(t_min))
+
+        # Reguła stresu termicznego / suszowego (np. R-12, R-20: temp >= 26°C oraz niski wigor NDVI <= ndvi_prog)
+        if pd.notna(t_min) and temp_c < float(t_min):
+            return False
+        if pd.notna(ndvi_thr) and float(ndvi_thr) > 0.0 and ndvi > float(ndvi_thr):
+            return False
+        if pd.notna(p_min) and precip_24h_mm < float(p_min):
+            return False
+        if pd.notna(w_max) and float(w_max) < 90.0 and wind_ms > float(w_max):
+            return False
+        return True
+
+    # Standardowe reguły zabiegowe: ZASIEJ, NAWOŹ, PRYSKAJ TERAZ, ZBIERAJ, MONITORUJ
+    if pd.notna(t_min) and temp_c < float(t_min):
+        return False
+    if pd.notna(t_max) and temp_c > float(t_max):
+        return False
+    if pd.notna(h_min) and humidity_pct < float(h_min):
+        return False
+    if pd.notna(p_min) and precip_24h_mm < float(p_min):
+        return False
+    if pd.notna(w_max) and wind_ms > float(w_max):
+        return False
+
+    if pd.notna(ndvi_thr) and float(ndvi_thr) > 0.0:
+        if dec in ("ZASIEJ", "ZBIERAJ"):
+            if ndvi > float(ndvi_thr):
+                return False
+        else:
+            if ndvi < float(ndvi_thr):
+                return False
+
+    return True
+
+
+def evaluate_fields_with_rules(
+    fields_df: pd.DataFrame,
+    weather_slice_df: pd.DataFrame,
+    rules_df: pd.DataFrame,
+    eco_mode: bool = False,
+) -> pd.DataFrame:
+    if fields_df.empty:
+        return fields_df.copy()
+
+    df = fields_df.copy()
+    if not weather_slice_df.empty and "grid_id" in weather_slice_df.columns:
+        w_dedup = weather_slice_df.drop_duplicates(subset=["grid_id"], keep="last")
+        w_cols = [c for c in ("grid_id", "temp_c", "humidity_pct", "wind_ms", "precip_24h_mm", "soil_moisture") if c in w_dedup.columns]
+        df = df.merge(w_dedup[w_cols], on="grid_id", how="left")
+
+    df["temp_c"] = pd.to_numeric(df.get("temp_c", 14.0), errors="coerce").fillna(14.0)
+    df["humidity_pct"] = pd.to_numeric(df.get("humidity_pct", 65.0), errors="coerce").fillna(65.0)
+    df["wind_ms"] = pd.to_numeric(df.get("wind_ms", 2.5), errors="coerce").fillna(2.5)
+    df["precip_24h_mm"] = pd.to_numeric(df.get("precip_24h_mm", 0.0), errors="coerce").fillna(0.0)
+    df["soil_moisture"] = pd.to_numeric(df.get("soil_moisture", 0.25), errors="coerce").fillna(0.25)
+    df["ndvi"] = pd.to_numeric(df.get("ndvi", 0.5), errors="coerce").fillna(0.5)
+    df["soil_ph"] = pd.to_numeric(df.get("soil_ph", 6.2), errors="coerce").fillna(6.2)
+    df["soil_soc"] = pd.to_numeric(df.get("soil_soc", 16.0), errors="coerce").fillna(16.0)
+    df["area_ha"] = pd.to_numeric(df.get("area_ha", 1.0), errors="coerce").fillna(1.0)
+
+    out_records = []
+    for row in df.itertuples(index=False):
+        raw_crop = str(getattr(row, "crop_name", "Pszenica ozima"))
+        is_fallow = raw_crop == FALLOW_LABEL
+        canon_crop = _canonical_crop_for_rules(raw_crop)
+        row_eco = bool(getattr(row, "is_eco", eco_mode))
+
+        if not rules_df.empty:
+            if is_fallow:
+                cand_rules = rules_df[rules_df["decyzja"].astype(str).str.upper().isin(SOWING_ALIASES)].copy()
+            else:
+                allowed_crops = {canon_crop, "WSZYSTKIE"}
+                if canon_crop in CEREAL_CROPS:
+                    allowed_crops.add("Zboża ogółem")
+                cand_rules = rules_df[rules_df["uprawa"].astype(str).str.strip().isin(allowed_crops)].copy()
+                if cand_rules.empty:
+                    cand_rules = rules_df[rules_df["uprawa"].astype(str).str.strip() == "WSZYSTKIE"].copy()
+        else:
+            cand_rules = pd.DataFrame()
+
+        matched = []
+        if not cand_rules.empty:
+            for _, r_rule in cand_rules.iterrows():
+                if _rule_matches_row(
+                    r_rule,
+                    temp_c=float(row.temp_c),
+                    humidity_pct=float(row.humidity_pct),
+                    precip_24h_mm=float(row.precip_24h_mm),
+                    wind_ms=float(row.wind_ms),
+                    ndvi=float(row.ndvi),
+                    soil_ph=float(row.soil_ph),
+                    soil_soc=float(row.soil_soc),
+                ):
+                    matched.append(r_rule)
+
+        if matched:
+            matched.sort(
+                key=lambda r: (
+                    RISK_PRIORITY.get(str(r.get("poziom_ryzyka", "")).strip().upper(), 0),
+                    DECISION_PRIORITY.get(normalize_decision(r.get("decyzja", "")), 0),
+                    1 if str(r.get("uprawa", "")).strip() == canon_crop else 0,
+                ),
+                reverse=True,
+            )
+            best = matched[0]
+            rule_id = str(best.get("rule_id", "R-00"))
+            decyzja = normalize_decision(best.get("decyzja", "MONITORUJ"))
+            poziom_ryzyka = str(best.get("poziom_ryzyka", "NISKI")).strip().upper()
+            komunikat = str(best.get("komunikat", ""))
+            zalecany_nawoz = str(best.get("zalecany_nawoz", "Brak"))
+            nawozy_eko = str(best.get("nawozy_eko", "Brak"))
+            preparat_eko = str(best.get("preparat_eko", "Brak"))
+            metoda_oprysku = str(best.get("metoda_oprysku", "Standardowa agrotechnika"))
+            raw_dose = pd.to_numeric(best.get("dawka_nawozu_kg_ha"), errors="coerce")
+            dawka_kg_ha = float(raw_dose) if pd.notna(raw_dose) else 0.0
+        else:
+            rule_id = "R-OK"
+            decyzja = "ZASIEJ" if is_fallow else "MONITORUJ"
+            poziom_ryzyka = "OPTYMALNY" if is_fallow else "NISKI"
+            komunikat = (
+                "Stanowisko przygotowane pod siew — wybierz gatunek w doradcy siewu."
+                if is_fallow
+                else "Stabilne warunki pogodowe i wegetacyjne — prowadź standardową lustrację łanu."
+            )
+            zalecany_nawoz = "Brak"
+            nawozy_eko = "Brak"
+            preparat_eko = "Brak"
+            metoda_oprysku = "Lustracja polowa"
+            dawka_kg_ha = 0.0
+
+        # W trybie EKO priorytetowo pokazujemy dopuszczony nawóz lub preparat EKO
+        aktywny_srodek_eko = (
+            preparat_eko
+            if (nawozy_eko.lower().startswith("brak") and not preparat_eko.lower().startswith("brak"))
+            else nawozy_eko
+        )
+        wyswietlany_nawoz = aktywny_srodek_eko if row_eco else zalecany_nawoz
+        ilosc_nawozu_kg = round(dawka_kg_ha * float(row.area_ha), 1)
+
+        rec_crop = "-"
+        if decyzja == "ZASIEJ":
+            if is_fallow:
+                rec_crop = "Rzepak ozimy / Pszenica ozima" if float(row.soil_ph) >= 5.8 else "Żyto / Owies / Pszenżyto ozime"
+            else:
+                rec_crop = raw_crop
+
+        rec_dict = row._asdict()
+        rec_dict.update({
+            "rule_id": rule_id,
+            "decyzja": decyzja,
+            "poziom_ryzyka": poziom_ryzyka,
+            "komunikat": komunikat,
+            "zalecany_nawoz": wyswietlany_nawoz,
+            "nawozy_eko": aktywny_srodek_eko,
+            "preparat_eko": preparat_eko,
+            "metoda_oprysku": metoda_oprysku,
+            "dawka_nawozu_kg_ha": round(dawka_kg_ha, 1),
+            "ilosc_nawozu_kg": ilosc_nawozu_kg,
+            "rekomendowana_uprawa": rec_crop,
+        })
+        out_records.append(rec_dict)
+
+    return pd.DataFrame(out_records)
