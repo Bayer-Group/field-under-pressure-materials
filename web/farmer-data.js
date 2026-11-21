@@ -15,9 +15,15 @@
   const polygon = (west, south, east, north) => ({
     type: 'Polygon', coordinates: [[[west, south], [east, south], [east, north], [west, north], [west, south]]]
   });
-  const parcels = Array.from({ length: 5 }, (_, i) => ({
+  const parcels = [
+    { parcel_number: '123/4', cadastral_id: '141201_1.0001.123/4', locality: 'Krzewie', commune: 'Wolsztyn', area_ha: 2.35 },
+    { parcel_number: '124/1', cadastral_id: '141201_1.0001.124/1', locality: 'Krzewie', commune: 'Wolsztyn', area_ha: 1.82 },
+    { parcel_number: '123/4', cadastral_id: '080401_2.0002.123/4', locality: 'Krzewie', commune: 'Nowa Sól', area_ha: 0.98 },
+    { parcel_number: '77/2', cadastral_id: '301204_5.0001.77/2', locality: 'Nowa Wieś', commune: 'Siedlec', area_ha: 3.17 },
+    { parcel_number: '18/3', cadastral_id: '301204_5.0002.18/3', locality: 'Teresin', commune: 'Wolsztyn', area_ha: 1.42 }
+  ].map((metadata, i) => ({
     parcel_id: `parcel-demo-${i + 1}`,
-    parcel_number: `DEMO-${String(i + 1).padStart(3, '0')}`,
+    ...metadata,
     geometry: polygon(20.75 + i * 0.01, 52.17, 20.76 + i * 0.01, 52.18)
   }));
   const initialFields = parcels.slice(0, 3).map((parcel, i) => ({
@@ -139,8 +145,19 @@
         const byNumber = typeof query.number === 'string' && query.number.trim() !== '';
         const byCoordinates = Number.isFinite(query.lon) && Number.isFinite(query.lat) && Math.abs(query.lon) <= 180 && Math.abs(query.lat) <= 90;
         if (byNumber === byCoordinates) throw providerError(400, 'INVALID_REQUEST', 'Provide either a parcel number or valid map coordinates.');
-        const results = byNumber ? parcels.filter(p => p.parcel_number.toLowerCase() === query.number.trim().toLowerCase()) :
-          parcels.filter(p => ringContains(p.geometry.coordinates[0], query.lon, query.lat));
+        let results;
+        if (!byNumber) results = parcels.filter(p => ringContains(p.geometry.coordinates[0], query.lon, query.lat));
+        else {
+          const term = query.number.trim();
+          const fullId = /^\d{6}_\d\.\d{4}\.\d+(?:\/\d+)?$/.test(term);
+          const combined = term.match(/^(.+?)\s+(\d+(?:\/\d+)?)$/);
+          const number = query.locality ? term : (combined ? combined[2] : term);
+          const locality = query.locality || (combined ? combined[1] : '');
+          results = fullId ? parcels.filter(p => p.cadastral_id.toLowerCase() === term.toLowerCase()) :
+            /^\d+(?:\/\d+)?$/.test(number) ? parcels.filter(p => p.parcel_number.toLowerCase() === number.toLowerCase() &&
+              (!locality || `${p.locality} ${p.commune}`.toLowerCase().startsWith(locality.toLowerCase()))) :
+              parcels.filter(p => `${p.locality} ${p.commune}`.toLowerCase().startsWith(term.toLowerCase()));
+        }
         return { parcels: copy(results), data_status: 'mock' };
       },
       async getCrops() { requireService(); return { crops: copy(crops), data_status: 'mock' }; },
@@ -188,6 +205,7 @@
       findParcels(query) {
         const params = new URLSearchParams();
         if (query && query.number !== undefined) params.set('number', query.number);
+        if (query && query.locality !== undefined) params.set('locality', query.locality);
         if (query && query.lon !== undefined) params.set('lon', query.lon);
         if (query && query.lat !== undefined) params.set('lat', query.lat);
         return request(`/parcels?${params}`);
