@@ -387,7 +387,14 @@ with tab_pola:
     )
 
     total_fields = len(result_df)
-    total_area_ha = total_fields * 1.50
+    if "area_ha" in result_df.columns and not result_df.empty:
+        total_area_ha = float(result_df["area_ha"].sum())
+        area_label = "Łączny areał pól"
+        area_hint = f"Średnio {float(result_df['area_ha'].mean()):.1f} ha na pojedyncze pole"
+    else:
+        total_area_ha = total_fields * 1.50
+        area_label = "{area_label}"
+        area_hint = "{area_hint}"
     avg_humidity = float(result_df["humidity_pct"].mean()) if not result_df.empty else 0.0
     ready_fields = int(result_df["decyzja"].isin(["PRYSKAJ TERAZ", "NAWOŹ", "ZASIEJ"]).sum())
     avg_temp = float(result_df["temp_c"].mean()) if not result_df.empty else 0.0
