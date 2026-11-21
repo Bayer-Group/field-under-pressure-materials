@@ -13,9 +13,6 @@ import { functionsHref, greennessHref, microbesHref, navigate, planHref, plotHre
 import { bySite, formatLatLon, shortId, siteName } from './sites'
 import { useFetch } from './useFetch'
 
-// How far around the plot the map shows: aerial photos cover about 120-240 m, greenness maps 1 km.
-const CONTEXT_M: Record<MapLayer, number> = { photo: 130, greenness: 1050, none: 130 }
-
 /** Map of all plots beside a panel. With no plot chosen the panel lists the plots by site; once one is chosen
  *  it has one tab per kind of plot data: the timeline (greenness, visits, aerial photos; the image chosen on it
  *  is laid over the map), the soil microbiome, the soil characteristics, the crop disease risk and the products to consider. Panels for future backend results become further tabs. */
@@ -73,7 +70,7 @@ export function Explorer({ plotId, tab, sampleId, unit, crop, view }: {
         {error ? (
           <p className="message error">Could not load data: {error}</p>
         ) : !plotId ? (
-          <Overview plots={plots.data} focusSite={focusSite} onFocusSite={setFocusSite} onHighlight={setHighlight} />
+          <Overview plots={plots.data} focusSite={focusSite} highlight={highlight} onFocusSite={setFocusSite} onHighlight={setHighlight} />
         ) : plots.data && !selected ? (
           <p className="message">Plot {plotId} was not found. <a href="#/">Back to all plots</a></p>
         ) : !selected ? (
@@ -109,9 +106,9 @@ export function Explorer({ plotId, tab, sampleId, unit, crop, view }: {
       <section className="map-area" aria-label="Map">
         <PlotMap
           plots={plots.data ?? []} selected={selected} focusSite={focusSite} highlight={highlight}
-          overlay={selected ? overlay : null} contextM={CONTEXT_M[layer]}
+          overlay={selected ? overlay : null}
           base={baseMap}
-          onSelect={open} onSite={setFocusSite} inspect={selected ? inspect : undefined}
+          onSelect={open} onSite={setFocusSite} onHover={setHighlight} inspect={selected ? inspect : undefined}
         />
         {selected && !loading && (
           <LayerControl photos={photoList} maps={mapList} layer={layer}
@@ -124,8 +121,9 @@ export function Explorer({ plotId, tab, sampleId, unit, crop, view }: {
 }
 
 /** The panel with no plot chosen: what this is, and every plot by site. */
-function Overview({ plots, focusSite, onFocusSite, onHighlight }: {
-  plots: Plot[] | null; focusSite: string | null; onFocusSite: (s: string | null) => void; onHighlight: (id: string | null) => void
+function Overview({ plots, focusSite, highlight, onFocusSite, onHighlight }: {
+  plots: Plot[] | null; focusSite: string | null; highlight: string | null
+  onFocusSite: (s: string | null) => void; onHighlight: (id: string | null) => void
 }) {
   if (!plots) return <p className="message">Loading plots…</p>
   const groups = bySite(plots)
@@ -137,6 +135,7 @@ function Overview({ plots, focusSite, onFocusSite, onHighlight }: {
         been over the years, its aerial photos and soil sampling visits, the microbes found in its soil and what
         they can do, and the crop disease risk and products to consider that follow from them.
       </p>
+      <p className="overview-hint">Pick a plot below or click its dot on the map. Hover a plot to find it on the map.</p>
       {groups.map(({ site, plots: ps }) => (
         <section key={site} className={`site-card ${focusSite === site ? 'focused' : ''}`}>
           <div className="site-head">
@@ -144,16 +143,17 @@ function Overview({ plots, focusSite, onFocusSite, onHighlight }: {
               <h2>{siteName(site)}</h2>
               <span className="muted">Site {site} · {ps.length} plots</span>
             </div>
-            <button className="ghost" onClick={() => onFocusSite(focusSite === site ? null : site)}>
-              {focusSite === site ? 'Show all sites' : 'Zoom map here'}
+            <button className="ghost zoom-site" aria-pressed={focusSite === site} onClick={() => onFocusSite(focusSite === site ? null : site)}>
+              {focusSite === site ? '⤢ Show all sites' : '⌖ Zoom map here'}
             </button>
           </div>
           <ul className="plot-grid" onPointerLeave={() => onHighlight(null)}>
             {ps.map((p) => (
               <li key={p.plot_id}>
-                <a href={plotHref(p.plot_id)} title={`Plot ${p.plot_id}`}
+                <a href={plotHref(p.plot_id)} title={`Open plot ${p.plot_id}`} className={highlight === p.plot_id ? 'hot' : undefined}
                   onPointerEnter={() => onHighlight(p.plot_id)} onFocus={() => onHighlight(p.plot_id)} onBlur={() => onHighlight(null)}>
-                  {shortId(p)}
+                  <small>Plot</small>
+                  <b>{shortId(p)}</b>
                 </a>
               </li>
             ))}

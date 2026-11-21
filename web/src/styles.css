@@ -70,17 +70,48 @@ button { font: inherit; color: inherit; }
 .message.error { color: #b42318; }
 
 /* ---------- overview ---------- */
-.overview .lead { color: var(--ink-2); margin: 6px 0 18px; max-width: 60ch; }
-.site-card { border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 14px; }
+.overview .lead { color: var(--ink-2); margin: 6px 0 10px; max-width: 60ch; }
+.overview-hint { color: var(--muted); font-size: 0.85rem; margin: 0 0 18px; }
+.site-card { border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px 18px; margin-bottom: 16px; transition: border-color 0.15s, box-shadow 0.15s; }
 .site-card.focused { border-color: var(--green); box-shadow: 0 0 0 1px var(--green); }
-.site-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
+.site-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px; }
+.site-head h2 { font-size: 1.05rem; }
 .site-head .muted { font-size: 0.82rem; }
-.plot-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(62px, 1fr)); gap: 6px; }
+.ghost.zoom-site { padding: 8px 14px; font-size: 0.9rem; font-weight: 500; border-radius: 8px; }
+.ghost.zoom-site[aria-pressed='true'] { background: var(--green-wash); border-color: var(--green); color: var(--green); }
+.plot-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 10px; }
 .plot-grid a {
-  display: block; text-align: center; padding: 7px 0; border: 1px solid var(--line); border-radius: 7px;
-  color: var(--ink); text-decoration: none; font-variant-numeric: tabular-nums; font-size: 0.9rem; background: var(--surface-2);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; min-height: 64px; padding: 10px 6px;
+  border: 1px solid var(--line-2); border-radius: 9px; background: var(--surface);
+  color: var(--ink); text-decoration: none; font-variant-numeric: tabular-nums;
+  box-shadow: 0 1px 2px rgb(16 24 20 / 0.05); transition: background 0.12s, border-color 0.12s, color 0.12s, transform 0.12s, box-shadow 0.12s;
 }
-.plot-grid a:hover, .plot-grid a:focus-visible { background: var(--green); border-color: var(--green); color: #fff; }
+.plot-grid a small { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); transition: color 0.12s; }
+.plot-grid a b { font-size: 1.2rem; font-weight: 650; line-height: 1.15; }
+.plot-grid a:hover, .plot-grid a:focus-visible, .plot-grid a.hot {
+  background: var(--green); border-color: var(--green); color: #fff; transform: translateY(-1px); box-shadow: var(--shadow);
+}
+.plot-grid a:hover small, .plot-grid a:focus-visible small, .plot-grid a.hot small { color: rgb(255 255 255 / 0.8); }
+.plot-grid a:active { transform: none; }
+@media (max-width: 600px) { .plot-grid { grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 8px; } }
+
+/* map controls: back to the starting view, north arrow, scale bar and ratio */
+.map-reset a { display: flex !important; align-items: center; justify-content: center; color: var(--ink-2) !important; }
+.map-reset a:hover { color: var(--ink) !important; }
+.north-arrow {
+  display: flex; align-items: center; justify-content: center; width: 34px; height: 46px;
+  background: rgb(255 255 255 / 0.92); border-radius: 7px; box-shadow: 0 1px 4px rgb(0 0 0 / 0.25); color: var(--ink); pointer-events: auto;
+}
+.leaflet-control-scale-line {
+  border-color: var(--ink-2); border-width: 0 2px 2px; background: rgb(255 255 255 / 0.85); color: var(--ink);
+  font-size: 0.72rem; font-weight: 600; padding: 1px 6px 0; line-height: 1.4;
+}
+.scale-ratio {
+  background: rgb(255 255 255 / 0.85); color: var(--ink); font-size: 0.72rem; font-weight: 600; font-variant-numeric: tabular-nums;
+  padding: 1px 6px; border-radius: 4px; clear: none !important;
+}
+.leaflet-bottom.leaflet-right .leaflet-control-scale { margin-bottom: 4px; }
+.leaflet-bottom.leaflet-right .scale-ratio { margin-bottom: 4px; }
 
 .site-label {
   display: flex !important; flex-direction: column; width: max-content !important; height: auto !important;
