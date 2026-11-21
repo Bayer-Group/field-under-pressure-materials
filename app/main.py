@@ -1,4 +1,3 @@
-from pathlib import Path
 import json
 import pandas as pd
 import numpy as np
@@ -6,6 +5,10 @@ import plotly.express as px
 import plotly.graph_objects as go
 import pydeck as pdk
 import streamlit as st
+import base64
+from pathlib import Path
+
+
 
 from farmhand import render_farmhand_bubble
 
@@ -31,6 +34,14 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed",
 )
+
+def _load_logo_data_uri(logo_path: Path) -> str | None:
+    if not logo_path.exists():
+        return None
+    ext = logo_path.suffix.lower().lstrip(".")
+    mime = "image/svg+xml" if ext == "svg" else f"image/{'jpeg' if ext == 'jpg' else ext}"
+    encoded = base64.b64encode(logo_path.read_bytes()).decode("utf-8")
+    return f"data:{mime};base64,{encoded}"
 
 st.markdown(
     """
@@ -345,19 +356,31 @@ loc_summary = (
     f"gm. {farm_profile.get('gmina', 'Nie wybrano obszaru')}"
 )
 
+logo_uri = _load_logo_data_uri(
+    Path(__file__).resolve().parents[1] / "assets" / "farmit_logo.png"
+)
+logo_html = (
+    f'<img src="{logo_uri}" alt="farmIT logo" '
+    f'style="height: 44px; width: auto; object-fit: contain; flex-shrink: 0; border-radius: 8px;" />'
+    if logo_uri
+    else ""
+)
+
+
 st.markdown(
-    f"""
-    <div class="farm-header">
-        <div>
-            <h1 class="farm-title">farmIT</h1>
-            <div class="farm-sub">Spokojny podgląd pogody, prac na polach i doboru upraw dla gospodarstwa</div>
-        </div>
-        <div class="farm-sub" style="text-align:right;">
-            <strong>{farm_label}</strong> ({my_fields_count} działek &middot; EKO: {eco_fields_count}) &middot; <strong>{mode_badge}</strong><br/>
-            <span>{loc_summary} &middot; 🟢 LIVE: {pd.Timestamp.now(tz='Europe/Warsaw').strftime('%d.%m.%Y, %H:%M')}</span>
-        </div>
-    </div>
-    """,
+    f"""<div class="farm-header">
+<div>
+<div style="display: flex; align-items: center; gap: 10px;">
+{logo_html}
+<h1 class="farm-title" style="line-height: 1.1;">farmIT</h1>
+</div>
+<div class="farm-sub">Spokojny podgląd pogody, prac na polach i doboru upraw dla gospodarstwa</div>
+</div>
+<div class="farm-sub" style="text-align:right;">
+<strong>{farm_label}</strong> ({my_fields_count} działek &middot; EKO: {eco_fields_count}) &middot; <strong>{mode_badge}</strong><br>
+<span>{loc_summary} &middot; 🟢 LIVE: {pd.Timestamp.now(tz='Europe/Warsaw').strftime('%d.%m.%Y, %H:%M')}</span>
+</div>
+</div>""",
     unsafe_allow_html=True,
 )
 
