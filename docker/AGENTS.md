@@ -17,6 +17,7 @@ The `docker/` folder contains an optional container setup for teams that want to
 docker/
 ├── docker-compose.yml       # Service definitions: postgis (5432), minio (9000/9001), titiler (8080)
 ├── README.md                # Database description: start, connection, tables, source mapping, loading
+├── RAW_SCHEMA.md            # Raw layer: all organizer data (Mazowieckie MVP), keys, columns, source issues
 ├── VM.md                    # GCP machine with the database: access, start/SSH/stop, tunnel, permissions
 └── initdb/                  # SQL scripts run on the first PostGIS start (empty volume)
     ├── 01_extensions.sql    # PostGIS + the fup schema
