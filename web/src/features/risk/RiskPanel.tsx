@@ -2,7 +2,7 @@ import { getCropRisk, getCropRiskUnits, type PlotCropRisk, type RiskUnitRef } fr
 import { Choice } from '../../Choice'
 import { formatDate } from '../../format'
 import { useState } from 'react'
-import { navigate, riskHref } from '../../router'
+import { navigate, planHref, riskHref } from '../../router'
 import { useFetch } from '../../useFetch'
 import { Breakdown } from './Breakdown'
 import { FollowupTests } from './FollowupTests'
@@ -12,9 +12,9 @@ import { SkippedList } from './SkippedList'
 
 const good = (u: RiskUnitRef) => u.method === 'current' && !u.low_depth
 /** The unit shown when the route names none: the first well-sequenced one of the current method, else the first. */
-const defaultUnit = (list: RiskUnitRef[]) => list.find(good) ?? list[0]
+export const defaultUnit = (list: RiskUnitRef[]) => list.find(good) ?? list[0]
 /** The unit to open when switching to `year`. */
-const pickInYear = (list: RiskUnitRef[], year: number) => {
+export const pickInYear = (list: RiskUnitRef[], year: number) => {
   const inYear = list.filter((u) => u.year === year)
   return inYear.find(good) ?? inYear.find((u) => u.method === 'current') ?? inYear[0]
 }
@@ -134,6 +134,7 @@ function Body({ data, plotId, unit, crop, across, setAcross, picked, pick }: {
           <Heatmap rows={data.crops} plotId={plotId} unit={unit} selected={sel} across={across} nUnits={data.n_units_in_group} onSelect={onSelect} />
           <Breakdown plot={sel.plot} unit={unit} crop={sel.crop} />
           <FollowupTests plot={sel.plot} unit={unit} crop={sel.crop} />
+          <p className="risk-note"><a href={planHref(sel.plot, unit, sel.crop)}>Products to consider for this crop on {sel.plot}</a></p>
         </>
       )}
       <Details data={data} />

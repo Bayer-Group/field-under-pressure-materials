@@ -6,8 +6,9 @@ import { FunctionsPanel } from './features/functions/FunctionsPanel'
 import { MicrobiomePanel } from './features/microbiome/MicrobiomePanel'
 import { PlotTimeline, type MapLayer, type TimelineChoice } from './features/timeline/PlotTimeline'
 import { formatDate } from './format'
+import { PlanPanel } from './features/plan/PlanPanel'
 import { RiskPanel } from './features/risk/RiskPanel'
-import { functionsHref, microbesHref, navigate, plotHref, riskHref, type PlotTab } from './router'
+import { functionsHref, microbesHref, navigate, planHref, plotHref, riskHref, type PlotTab } from './router'
 import { bySite, formatLatLon, shortId, siteName } from './sites'
 import { useFetch } from './useFetch'
 
@@ -16,8 +17,8 @@ const CONTEXT_M: Record<MapLayer, number> = { photo: 130, greenness: 1050, none:
 
 /** Map of all plots beside a panel. With no plot chosen the panel lists the plots by site; once one is chosen
  *  it has one tab per kind of plot data: the timeline (greenness, visits, aerial photos; the image chosen on it
- *  is laid over the map), the soil microbiome, the soil functions and the crop disease risk. Panels for future backend results become further tabs. */
-const tabHref = (tab: PlotTab, id: string) => (tab === 'microbes' ? microbesHref(id) : tab === 'risk' ? riskHref(id) : tab === 'functions' ? functionsHref(id) : plotHref(id))
+ *  is laid over the map), the soil microbiome, the soil functions, the crop disease risk and the products to consider. Panels for future backend results become further tabs. */
+const tabHref = (tab: PlotTab, id: string) => (tab === 'microbes' ? microbesHref(id) : tab === 'risk' ? riskHref(id) : tab === 'plan' ? planHref(id) : tab === 'functions' ? functionsHref(id) : plotHref(id))
 
 export function Explorer({ plotId, tab, sampleId, unit, crop }: {
   plotId: string | null; tab: PlotTab; sampleId: string | null; unit: string | null; crop: string | null
@@ -80,6 +81,8 @@ export function Explorer({ plotId, tab, sampleId, unit, crop }: {
               <MicrobiomePanel plotId={selected.plot_id} sampleId={sampleId} />
             ) : tab === 'risk' ? (
               <RiskPanel plotId={selected.plot_id} unit={unit} crop={crop} />
+            ) : tab === 'plan' ? (
+              <PlanPanel plotId={selected.plot_id} unit={unit} crop={crop} />
             ) : tab === 'functions' ? (
               <FunctionsPanel plotId={selected.plot_id} sampleId={sampleId} />
             ) : timelineError ? (
@@ -180,6 +183,7 @@ function PlotHead({ plot, plots, tab, onOpen }: { plot: Plot; plots: Plot[]; tab
         <a href={microbesHref(plot.plot_id)} aria-current={tab === 'microbes' ? 'page' : undefined}>Soil microbes</a>
         <a href={functionsHref(plot.plot_id)} aria-current={tab === 'functions' ? 'page' : undefined}>Soil functions</a>
         <a href={riskHref(plot.plot_id)} aria-current={tab === 'risk' ? 'page' : undefined}>Crop disease risk</a>
+        <a href={planHref(plot.plot_id)} aria-current={tab === 'plan' ? 'page' : undefined}>Treatment plan</a>
       </nav>
     </div>
   )
