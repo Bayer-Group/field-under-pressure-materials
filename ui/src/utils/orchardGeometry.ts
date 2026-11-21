@@ -249,7 +249,7 @@ export function calculateRowTrees(
 /**
  * Builds the exact payload expected by the backend to persist:
  * - `Tree` collection documents (`_id`, `orchardId`, `coordinates`, `healthIndex: null`, `species: CropPref ObjectId`)
- * - `Orchard.rows` embedded entries (`start`, `end`, `averageSpacingMeters`, `defaultSpecies`, ordered `treeIds`)
+ * - `Orchard.rows` embedded entries (`start`, `end`, `averageSpacingMeters`, ordered `treeIds`)
  */
 export function buildOrchardLayoutPayload(
   orchard: OrchardBoundaryDoc,
@@ -277,7 +277,6 @@ export function buildOrchardLayoutPayload(
       start: calc.row.start,
       end: calc.row.end,
       averageSpacingMeters: calc.row.averageSpacingMeters,
-      defaultSpecies: calc.row.species,
       treeIds: rowTreeIds,
     });
   }

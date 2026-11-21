@@ -90,6 +90,7 @@ export function RowLineEditorPage() {
         }
 
         // Convert any pre-existing Orchard.rows (empty on first entry) into DraftRow[]
+        const fallbackSpecies = cropsRes.data[0]?._id ?? '';
         if (orchardRes.data.rows.length > 0) {
           setRows(
             orchardRes.data.rows.map((r) => ({
@@ -98,7 +99,7 @@ export function RowLineEditorPage() {
               start: r.start,
               end: r.end,
               averageSpacingMeters: r.averageSpacingMeters,
-              species: r.defaultSpecies,
+              species: fallbackSpecies,
               treeSpeciesOverrides: {},
             })),
           );

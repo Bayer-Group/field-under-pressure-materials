@@ -151,7 +151,6 @@ export interface OrchardRowDoc {
   start: GeoCoord;
   end: GeoCoord;
   averageSpacingMeters: number;
-  defaultSpecies: ObjectIdString;
   /** Ordered list of MongoDB ObjectIds pointing to documents in the `Tree` collection */
   treeIds: ObjectIdString[];
 }
@@ -218,7 +217,6 @@ export interface SaveOrchardLayoutRequest {
     start: GeoCoord;
     end: GeoCoord;
     averageSpacingMeters: number;
-    defaultSpecies: ObjectIdString;
     treeIds: ObjectIdString[];
   }>;
   trees: TreeDoc[];

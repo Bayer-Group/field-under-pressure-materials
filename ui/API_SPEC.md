@@ -270,7 +270,6 @@ Główny endpoint zapisu z **Edytora Linii Rzędów**. Przyjmuje narysowane rzę
       "start": { "lat": 51.84461, "lng": 20.85192 },
       "end": { "lat": 51.84462, "lng": 20.85355 },
       "averageSpacingMeters": 3.5,
-      "defaultSpecies": "6b00ce879a422805ed102006",
       "treeIds": [
         "67401e000001000001000001",
         "67401e000001000001000002"
@@ -314,7 +313,6 @@ Główny endpoint zapisu z **Edytora Linii Rzędów**. Przyjmuje narysowane rzę
         "start": { "lat": 51.84461, "lng": 20.85192 },
         "end": { "lat": 51.84462, "lng": 20.85355 },
         "averageSpacingMeters": 3.5,
-        "defaultSpecies": "6b00ce879a422805ed102006",
         "treeIds": [
           "67401e000001000001000001",
           "67401e000001000001000002"
