@@ -64,7 +64,61 @@ def list_rasters(credentials, export_name):
             params["pageToken"] = token
 
 
+def download_raster(credentials, file, destination):
+    path = destination / file["name"]
+    with (
+        drive_errors(),
+        AuthorizedSession(credentials) as client,
+        client.get(
+            f"{DRIVE_FILES}/{file['id']}",
+            params={"alt": "media"},
+            stream=True,
+            timeout=(5, 60),
+        ) as response,
+    ):
+        response.raise_for_status()
+        with path.open("wb") as stream:
+            for chunk in response.iter_content(chunk_size=128 * 1024):
+                stream.write(chunk)
+    return path
+
+
 def stream_raster(credentials, export_name, file_id):
+    return stream_drive_raster(
+        credentials, file_id, lambda name: is_raster_file(export_name, name)
+    )
+
+
+def find_saved_raster(credentials, name):
+    if not re.fullmatch(r"[A-Za-z0-9_. -]+\.tiff?", name, re.IGNORECASE):
+        raise HTTPException(404, "Nie znaleziono zapisanego pliku GeoTIFF.")
+    with drive_errors(), AuthorizedSession(credentials) as client:
+        response = client.get(
+            DRIVE_FILES,
+            params={
+                "q": f"trashed = false and name = '{name}'",
+                "fields": "files(id,name),nextPageToken",
+            },
+            timeout=(5, 15),
+        )
+        response.raise_for_status()
+        result = response.json()
+        files = result.get("files", [])
+    if not files:
+        raise HTTPException(404, "Plik eksportu nie jest dostępny na Dysku Google.")
+    if len(files) != 1 or result.get("nextPageToken"):
+        raise HTTPException(409, "Nazwa rastra na Dysku nie jest jednoznaczna.")
+    return files[0]
+
+
+def stream_saved_raster(credentials, name):
+    file = find_saved_raster(credentials, name)
+    return stream_drive_raster(
+        credentials, file["id"], lambda filename: filename == name
+    )
+
+
+def stream_drive_raster(credentials, file_id, name_matches):
     client = AuthorizedSession(credentials)
     url = f"{DRIVE_FILES}/{file_id}"
     with drive_errors():
@@ -74,7 +128,7 @@ def stream_raster(credentials, export_name, file_id):
             )
             metadata.raise_for_status()
             file = metadata.json()
-            if file.get("trashed") or not is_raster_file(export_name, file["name"]):
+            if file.get("trashed") or not name_matches(file["name"]):
                 raise HTTPException(404, "Nie znaleziono rastra dla tego zadania.")
             response = client.get(
                 url, params={"alt": "media"}, stream=True, timeout=(5, 60)

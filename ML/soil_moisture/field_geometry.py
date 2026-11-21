@@ -87,13 +87,15 @@ def orchard_ids(value):
     return [value, ObjectId(value)] if ObjectId.is_valid(value) else [value]
 
 
-def read_field_features(path=None):
+def read_field_features(path=None, *, orchard_id=None):
     if path is not None:
         with path.open(encoding="utf-8-sig") as stream:
             return geojson_features(json.load(stream), str(path))
 
     query = {"geometry": {"$exists": True, "$ne": None}}
-    selected = os.getenv("MONGO_ORCHARD_ID", "").strip()
+    selected = (
+        os.getenv("MONGO_ORCHARD_ID", "") if orchard_id is None else orchard_id
+    ).strip()
     if selected:
         query["_id"] = {"$in": orchard_ids(selected)}
 

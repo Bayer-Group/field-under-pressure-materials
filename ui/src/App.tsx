@@ -4,7 +4,7 @@ import { TopBar } from './components/layout/TopBar';
 import { DashboardPage } from './components/pages/DashboardPage';
 import { PlaceholderSectionPage } from './components/pages/PlaceholderSectionPage';
 import { RowLineEditorPage } from './components/pages/RowLineEditorPage';
-import { SoilMoisturePage } from './components/pages/SoilMoisturePage';
+import { AnalyticsPage } from './components/pages/AnalyticsPage';
 import { LanguageProvider } from './contexts/LanguageContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 
@@ -28,7 +28,7 @@ function AppShell() {
             />
           ) : null}
           <div hidden={activeSection !== 'analytics'}>
-            <SoilMoisturePage />
+            <AnalyticsPage active={activeSection === 'analytics'} />
           </div>
         </main>
       </div>

@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from google.auth.exceptions import GoogleAuthError
 from pydantic import BaseModel, ConfigDict, model_validator
 
+from backend.analytics import router as analytics_router
 from backend.raster_exports import RASTER_NAME_PATTERN, list_rasters, stream_raster
 from ML.soil_moisture.earth_engine import (
     RASTER_TASK_NAME,
@@ -70,6 +71,7 @@ class RasterFiles(BaseModel):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.gee_error = None
+    app.state.gee_lock = gee_lock
     try:
         project = earth_engine_project()
         credentials = ee.data.get_persistent_credentials()
@@ -86,6 +88,7 @@ async def lifespan(app: FastAPI):
 
 
 my_app = FastAPI(title="Field Under Pressure API", lifespan=lifespan)
+my_app.include_router(analytics_router)
 my_app.add_middleware(
     CORSMiddleware,
     allow_origins=[

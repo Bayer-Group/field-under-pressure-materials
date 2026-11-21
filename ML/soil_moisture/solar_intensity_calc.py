@@ -101,10 +101,14 @@ def weather_energy(observer, hours):
 
 def solar_summary(day, observer):
     hours = completed_day_hours(day)
+    actual, source = weather_energy(observer, hours)
+    return summarize_energy(day, observer, hours, actual, source)
+
+
+def summarize_energy(day, observer, hours, actual, source):
     reference = reference_energy(observer, hours)
     if reference <= 0:
         raise ValueError("Brak dodatniego promieniowania referencyjnego za tę dobę.")
-    actual, source = weather_energy(observer, hours)
     ratio = actual / reference
     level = next(
         (name for threshold, name in LEVEL_THRESHOLDS if ratio >= threshold), "poor"

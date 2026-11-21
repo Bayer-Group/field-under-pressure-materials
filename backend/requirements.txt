@@ -1,4 +1,4 @@
--r ../ML/soil_moisture/requirements-core.txt
+-r ../ML/soil_moisture/requirements-analysis.txt
 fastapi>=0.115
 pydantic>=2
 uvicorn>=0.30

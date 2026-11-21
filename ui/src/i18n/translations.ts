@@ -210,7 +210,7 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     nav: {
       dashboard: 'Dashboard',
       rowEditor: 'Edytor linii rzędów',
-      analytics: 'Wilgotność gleby',
+      analytics: 'Analityka',
       layers: 'Warstwy i skany (placeholder)',
       settings: 'Ustawienia (placeholder)',
       placeholderHint: 'Ikony tymczasowe',
@@ -425,7 +425,7 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     nav: {
       dashboard: 'Dashboard',
       rowEditor: 'Row Line Editor',
-      analytics: 'Soil moisture',
+      analytics: 'Analytics',
       layers: 'Layers & Scans (placeholder)',
       settings: 'Settings (placeholder)',
       placeholderHint: 'Placeholder icons',

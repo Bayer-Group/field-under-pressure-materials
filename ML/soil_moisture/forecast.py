@@ -189,6 +189,27 @@ def fit_weather_model(history):
     return model.fit(features, changes), validation
 
 
+def projection_inputs(coordinates, anchor, now, days):
+    history_end = min(now.date() - 7 * DAY, anchor.date() - DAY)
+    history = load_weather(
+        ARCHIVE_URL,
+        coordinates,
+        (*WEATHER_COLUMNS, MOISTURE),
+        start_date=(history_end - 180 * DAY).isoformat(),
+        end_date=history_end.isoformat(),
+        models="era5_seamless",
+    )
+    model, validation = fit_weather_model(history)
+    weather = load_weather(
+        FORECAST_URL,
+        coordinates,
+        WEATHER_COLUMNS,
+        past_days=(now.date() - anchor.date()).days,
+        forecast_days=days + 2,
+    )
+    return model, validation, weather
+
+
 def forecast_fields(config=None, *, model_asset=None, now=None):
     config = config or sar.SoilMoistureConfig()
     now = (now or datetime.now(UTC)).astimezone(UTC).replace(microsecond=0)

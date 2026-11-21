@@ -10,6 +10,19 @@ python -m uvicorn backend.main:my_app --host 127.0.0.1 --port 8000
 
 Formularz możesz przetestować przez [Swagger UI](http://127.0.0.1:8000/docs).
 
+## Panel analityka
+
+- `GET /api/analytics/orchards` zwraca identyfikatory i nazwy pól z MongoDB.
+- `GET /api/analytics/orchards/{orchard_id}` zwraca geometrię, wskaźniki, ocenę pola i punkty drzew.
+- `GET /api/analytics/orchards/{orchard_id}/rasters/{kind}` zwraca zapisany GeoTIFF dla `moisture` albo `ndvi`.
+- `POST /api/analytics/orchards/{orchard_id}/jobs` uruchamia analizę pola w tle. `GET /api/analytics/orchards/{orchard_id}/jobs/latest` zwraca ostatni stan zadania.
+
+Analiza używa geometrii jednego pola i tworzy cztery eksporty w folderze `field_analytics` na Dysku Google. Wilgotność opiera się na scenie z 45-dniowego okna kończącego się 14 dni przed uruchomieniem, aby uwzględnić dostępność ERA5-Land. NDVI obejmuje 45 dni do daty sceny włącznie. pH i tekstura dotyczą głębokości 0 cm. Raport pogody i nasłonecznienia dotyczy ostatniej zakończonej doby w strefie Warszawy. Prognoza obejmuje trzy dni, gdy jest dostępna. Automatyczny import przyjmuje po jednym GeoTIFF-ie na warstwę. Zadanie zatrzymane przez restart backendu można ponowić po wygaśnięciu blokady.
+
+Ocena jest orientacyjna. Wagi startowe to wilgotność 25%, NDVI 20%, pH 15%, tekstura 10%, nasłonecznienie 10%, temperatura 10% i prognoza wilgotności 10%. Wynik jest średnią ważoną z dostępnych czynników. Przy pokryciu poniżej 55% API zwraca status „za mało danych”. Wynik 30–59 wskazuje obserwację, a 60–100 oznacza zagrożenie. Ocena drzewa korzysta z wartości pod drzewem i wspólnych warunków pola. Porównania pH, tekstury, światła i temperatury korzystają z `CropPref.Ecology`. Panel pokazuje też opady i ET₀, które wchodzą do prognozy wilgotności. Wagi oraz progi wymagają kalibracji na pomiarach terenowych.
+
+Grupy tekstury są uproszczeniem kodów USDA z OpenLandMap. Progi wilgotności zależą od grupy tekstury i pełnią funkcję orientacyjną. [Kody OpenLandMap](https://developers.google.com/earth-engine/datasets/catalog/OpenLandMap_SOL_SOL_TEXTURE-CLASS_USDA-TT_M_v02) · [Pojemność wodna gleby USDA](https://www.nrcs.usda.gov/sites/default/files/2022-10/nrcs142p2_051590.pdf)
+
 ## Dane przesyłane z UI
 
 Wyślij `POST /api/soil-moisture` jako JSON z datami `YYYY-MM-DD`. Przedział od `start` do `test_start` służy do treningu, a przedział od `test_start` do `end` do testu. Data `end` jest wyłączona z zakresu.

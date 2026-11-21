@@ -18,6 +18,12 @@ npm run typecheck
 npm run build
 ```
 
+## Analityka pól
+
+W zakładce **Analityka** wybierz pole z kolekcji `Orchard` i kliknij **Pobierz dane pola**. Backend uruchomi eksporty wilgotności, NDVI, pH i tekstury. Gdy pojawi się GeoTIFF, backend odczyta wartości pola i drzew, a panel pokaże je i przełączy mapę na nową warstwę. Ukończone warstwy można przeglądać po odświeżeniu strony i po błędzie innego eksportu. Wybierz drzewo na mapie lub w tabeli, aby sprawdzić przypisany piksel Sentinel‑1 i dostępne odczyty. Po zapisaniu rastrów backend uzupełni pogodę, nasłonecznienie i dostępną prognozę. Pola DEMO od razu pokazują dane przykładowe.
+
+Jeśli chcesz samodzielnie wybrać daty eksportu, możesz wykonać [analizę pola w CLI](../db/SETUP.md#podsumowanie-pola-w-orchard). Panel pobiera zapisane GeoTIFF-y z Google Drive według nazw w `Orchard.analysis`. Gdy plik jest niedostępny lub nazwa jest powielona na Dysku, można wczytać lokalny GeoTIFF do podglądu.
+
 ## API Endpoints & Placeholder Architecture
 
 Pełna specyfikacja wszystkich endpointów, parametrów, schematów MongoDB oraz podkładu satelitarnego znajduje się w [`API_SPEC.md`](./API_SPEC.md).

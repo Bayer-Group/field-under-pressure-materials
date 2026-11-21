@@ -13,7 +13,7 @@ earthengine authenticate
 docker compose -f docker-compose.yml -f docker-compose.gee.yml up -d --build
 ```
 
-Jeśli kolekcja `Orchard` jest pusta, [zaimportuj granice pól](db/SETUP.md#import-przykładowej-geometrii-pól). Otwórz [UI](http://127.0.0.1:5173) lub [Swagger API](http://127.0.0.1:8000/docs). W **Wilgotność gleby** uruchom analizę dla wybranego zakresu dat. Raster pojawi się po zakończeniu eksportu. Do odczytu wyniku wymagany jest dostęp konta Earth Engine do Google Drive. Możesz uruchomić stos poleceniem `docker compose up -d --build`, aby korzystać z danych demonstracyjnych i lokalnego podglądu GeoTIFF bez logowania do Earth Engine.
+Jeśli kolekcja `Orchard` jest pusta, [zaimportuj granice pól](db/SETUP.md#import-przykładowej-geometrii-pól). Otwórz [UI](http://127.0.0.1:5173) lub [Swagger API](http://127.0.0.1:8000/docs). W **Analityce** wybierz pole i kliknij **Pobierz dane pola**, aby rozpocząć eksporty i automatyczny zapis wyników. Konto Earth Engine musi mieć dostęp do Google Drive. Możesz uruchomić stos poleceniem `docker compose up -d --build`, aby korzystać z danych demonstracyjnych i lokalnego podglądu GeoTIFF bez logowania do Earth Engine.
 
 Nadpisania konfiguracji
 
@@ -22,8 +22,9 @@ Nadpisania konfiguracji
 | `EARTHENGINE_PROJECT` | Nadpisuje `project_id` z pliku JSON. Argument `--project` w CLI ma najwyższy priorytet. |
 | `EARTHENGINE_CREDENTIALS_FILE` | Ścieżka do pliku logowania na hoście. Domyślnie `~/.config/earthengine/credentials`. |
 | `EARTHENGINE_MODEL_ASSET` | Identyfikator zapisanego modelu radarowego używanego w prognozie API. |
-| `MONGO_ORCHARD_ID` | Ogranicza analizę i prognozę do wybranego pola. |
-| `MONGO_URI` | Adres MongoDB dla skryptów i opcjonalne nadpisanie połączenia backendu. Adres backendu uruchomionego w Dockerze musi być osiągalny z jego sieci. |
+| `MONGO_ORCHARD_ID` | Ogranicza polecenia CLI i starsze zadania wilgotności do wybranego pola. |
+| `MONGO_URI` | Adres MongoDB dla skryptów i backendu uruchamianych bezpośrednio na hoście. |
+| `BACKEND_MONGO_URI` | Opcjonalny adres MongoDB dla backendu w Dockerze. Domyślnie backend łączy się z usługą `mongodb`. |
 | `UI_PORT`, `BACKEND_PORT`, `MONGO_PORT` | Porty udostępnione na hoście. |
 
 ## Kod i dane

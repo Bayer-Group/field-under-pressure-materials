@@ -1,4 +1,4 @@
-"""Assign Sentinel-1 pixels, weather and solar data to trees in MongoDB."""
+"""Save raster, weather and solar results for fields and trees in MongoDB."""
 
 import argparse
 import json
@@ -27,9 +27,18 @@ from ML.soil_moisture.field_geometry import (
     mongo_database,
     orchard_ids,
 )
+from ML.soil_moisture.raster_sampling import analyze_raster
+from ML.soil_moisture.soil_parameters import DEPTHS_CM
 
 OUTPUT_COLLECTION = "TreePixelAnalysis"
 BANDS = ("vv_db", "vh_db", "soil_moisture_m3_m3")
+LAYER_FIELDS = {
+    "moisture": "soil_moisture",
+    "ndvi": "ndvi",
+    "ph": "soil_parameters.ph",
+    "texture": "soil_parameters.texture",
+}
+LAYER_LIMITS = {"moisture": (0, 1), "ndvi": (-1, 1), "ph": (0, 14), "texture": (1, 12)}
 
 
 def key(*parts):
@@ -52,28 +61,23 @@ def load_orchard(database, orchard_id):
     trees = list(
         database.Tree.find(
             {"orchardId": {"$in": [orchard["_id"], str(orchard["_id"])]}},
-            {"geometry": 1, "geo": 1, "species": 1},
+            {"geometry": 1, "geo": 1, "coordinates": 1, "species": 1},
         ).sort("_id", 1)
     )
-    if not trees:
-        raise ValueError("Brak drzew w Tree z orchardId wskazującym podane pole.")
-    return boundary, trees
+    return orchard["_id"], boundary, trees
 
 
-def tree_positions(trees, boundary):
-    positions, failures = {}, {}
-    for tree in trees:
-        tree_id = str(tree["_id"])
-        geometry = tree.get("geometry") or {}
-        geo = tree.get("geo") or {}
-        coordinates = (
-            geometry.get("coordinates")
-            if isinstance(geometry, dict) and geometry.get("type") == "Point"
-            else [geo.get("lng"), geo.get("lat")]
-            if isinstance(geo, dict)
-            else None
-        )
-        if not (
+def tree_coordinates(tree):
+    for source in (tree.get("geometry"), tree.get("coordinates"), tree.get("geo")):
+        if isinstance(source, dict):
+            coordinates = (
+                source.get("coordinates")
+                if source.get("type") == "Point"
+                else (source.get("lng"), source.get("lat"))
+            )
+        else:
+            coordinates = source
+        if (
             isinstance(coordinates, (tuple, list))
             and len(coordinates) >= 2
             and all(
@@ -85,9 +89,18 @@ def tree_positions(trees, boundary):
             and -180 <= coordinates[0] <= 180
             and -90 <= coordinates[1] <= 90
         ):
+            return tuple(coordinates[:2])
+    return None
+
+
+def tree_positions(trees, boundary):
+    positions, failures = {}, {}
+    for tree in trees:
+        tree_id = str(tree["_id"])
+        position = tree_coordinates(tree)
+        if position is None:
             failures[tree_id] = "invalid_coordinates"
             continue
-        position = tuple(coordinates[:2])
         if not boundary.covers(Point(position)):
             failures[tree_id] = "outside_orchard"
             continue
@@ -203,22 +216,8 @@ def predict_pixels(pixels, coordinates, anchor, now, days):
     }
     if not active or not days:
         return {}
-    history_end = min(now.date() - 7 * forecast.DAY, anchor.date() - forecast.DAY)
-    history = forecast.load_weather(
-        forecast.ARCHIVE_URL,
-        coordinates,
-        (*forecast.WEATHER_COLUMNS, forecast.MOISTURE),
-        start_date=(history_end - 180 * forecast.DAY).isoformat(),
-        end_date=history_end.isoformat(),
-        models="era5_seamless",
-    )
-    model, validation = forecast.fit_weather_model(history)
-    weather = forecast.load_weather(
-        forecast.FORECAST_URL,
-        coordinates,
-        forecast.WEATHER_COLUMNS,
-        past_days=(now.date() - anchor.date()).days,
-        forecast_days=days + 2,
+    model, validation, weather = forecast.projection_inputs(
+        coordinates, anchor, now, days
     )
     values = np.array(list(active.values()))
     series = {pixel_id: [] for pixel_id in active}
@@ -244,71 +243,188 @@ def predict_pixels(pixels, coordinates, anchor, now, days):
     }
 
 
-def analyze(database, args, now):
-    boundary, trees = load_orchard(database, args.orchard_id)
-    positions, failures = tree_positions(trees, boundary)
-    pixels, assignments = sample_pixels(
-        args.raster, args.scene_id, args.acquired_at, positions
-    )
-    representative = boundary.representative_point()
-    coordinates = (representative.x, representative.y)
-    context = orchard_context(args.date, coordinates)
-    predictions = {}
-    forecast_error = None
-    try:
-        predictions = predict_pixels(
-            pixels, coordinates, args.acquired_at, now, args.forecast_days
+class FieldAnalysis:
+    def __init__(self, database, args, *, run_id=None):
+        self.database = database
+        self.args = args
+        self.run_id = run_id
+        self.orchard_id, self.boundary, self.trees = load_orchard(
+            database, args.orchard_id
         )
-    except forecast.WeatherError as error:
-        forecast_error = str(error)
+        self.positions, self.failures = tree_positions(self.trees, self.boundary)
+        self.pixels, self.assignments = {}, {}
+        self.statistics, self.readings = {}, {}
+        self.context = None
+        self.predictions, self.forecast_error = {}, None
 
-    collection = database[OUTPUT_COLLECTION]
-    operations = []
-    summary = {"trees": len(trees), "pixels": len(pixels), "sample_status": {}}
-    for tree in trees:
-        tree_id = str(tree["_id"])
-        status, pixel = assignments.get(tree_id, (failures.get(tree_id), None))
-        pixel_id = pixel["id"] if pixel else None
-        summary["sample_status"][status] = summary["sample_status"].get(status, 0) + 1
-        observation_id = key(
-            args.orchard_id,
-            tree_id,
-            args.scene_id,
-            args.acquired_at.isoformat(),
-            args.date.isoformat(),
+    def collect(self, kind, path):
+        is_soil = kind in ("ph", "texture")
+        stats, readings = analyze_raster(
+            path,
+            self.boundary,
+            {} if kind == "moisture" else self.positions,
+            limits=LAYER_LIMITS[kind],
+            categorical=kind == "texture",
+            all_touched=is_soil,
+            last_band=kind == "moisture",
         )
-        row = {
-            "orchard_id": args.orchard_id,
-            "tree_id": tree_id,
-            "species": tree.get("species"),
-            "tree_coordinates_lon_lat": list(positions[tree_id])
-            if tree_id in positions
-            else None,
-            "scene_id": args.scene_id,
-            "acquired_at_utc": args.acquired_at,
-            "sample_status": status,
-            "pixel_id": pixel_id,
-            "pixel": pixel,
-            "context": context,
-        }
-        if pixel_id in predictions:
-            row["soil_moisture_forecast"] = predictions[pixel_id]
-        elif args.forecast_days:
-            row["soil_moisture_forecast"] = {
-                "status": "unavailable" if forecast_error else "no_soil_data",
-                "issued_at_utc": now,
+        if kind == "moisture":
+            self.pixels, self.assignments = sample_pixels(
+                path, self.args.scene_id, self.args.acquired_at, self.positions
+            )
+            stats["mean_m3_m3"] = stats.pop("mean")
+            stats["scene_id"] = self.args.scene_id
+            stats["acquired_at_utc"] = self.args.acquired_at
+        elif is_soil and self.args.soil_depth_cm is not None:
+            stats["depth_cm"] = self.args.soil_depth_cm
+        self.statistics[kind] = stats
+        self.readings[kind] = readings
+
+    def context_and_forecast(self, now):
+        point = self.boundary.representative_point()
+        coordinates = (point.x, point.y)
+        self.context = orchard_context(self.args.date, coordinates)
+        if "moisture" in self.statistics:
+            try:
+                self.predictions = predict_pixels(
+                    self.pixels,
+                    coordinates,
+                    self.args.acquired_at,
+                    now,
+                    self.args.forecast_days,
+                )
+            except forecast.WeatherError as error:
+                self.forecast_error = str(error)
+
+    def orchard_fields(self):
+        fields = {LAYER_FIELDS[kind]: stats for kind, stats in self.statistics.items()}
+        if self.context is not None:
+            local_date = self.context["date_local"]
+            fields["weather"] = {"date_local": local_date, **self.context["weather"]}
+            fields["solar_intensity"] = {
+                "date_local": local_date,
+                "timezone": self.context["timezone"],
+                **self.context["solar"],
             }
-        operations.append(
-            UpdateOne({"_id": observation_id}, {"$set": row}, upsert=True)
-        )
-    collection.bulk_write(operations, ordered=False)
+        return fields
+
+    def preview(self):
+        values = self.orchard_fields()
+        soil = {
+            kind: values.pop(LAYER_FIELDS[kind])
+            for kind in ("ph", "texture")
+            if LAYER_FIELDS[kind] in values
+        }
+        if soil:
+            values["soil_parameters"] = soil
+        return {"run_id": self.run_id, **values}
+
+    def save_orchard(self):
+        if self.run_id is not None:
+            update = {"$set": {"analysis": self.preview()}}
+        else:
+            update = {
+                "$set": {
+                    f"analysis.{name}": value
+                    for name, value in self.orchard_fields().items()
+                },
+                "$unset": {"analysis.run_id": ""},
+            }
+        result = self.database.Orchard.update_one({"_id": self.orchard_id}, update)
+        if result.matched_count != 1:
+            raise OSError("Rekord Orchard został usunięty podczas analizy.")
+
+    def save_trees(self, now, kinds):
+        collection = self.database[OUTPUT_COLLECTION]
+        operations = []
+        counts = {}
+        orchard = str(self.orchard_id)
+        for tree in self.trees:
+            tree_id = str(tree["_id"])
+            position = self.positions.get(tree_id)
+            status, pixel = self.assignments.get(
+                tree_id, (self.failures.get(tree_id, "pending"), None)
+            )
+            pixel_id = pixel["id"] if pixel else None
+            counts[status] = counts.get(status, 0) + 1
+            row = {
+                "orchard_id": orchard,
+                "tree_id": tree_id,
+                "species": tree.get("species"),
+                "tree_coordinates_lon_lat": list(position) if position else None,
+                "scene_id": self.args.scene_id,
+                "acquired_at_utc": self.args.acquired_at,
+            }
+            if self.run_id is not None:
+                observation_id = key(orchard, tree_id, self.run_id)
+                row["analysis_run_id"] = self.run_id
+            else:
+                observation_id = key(
+                    orchard,
+                    tree_id,
+                    self.args.scene_id,
+                    self.args.acquired_at.isoformat(),
+                    self.args.date.isoformat(),
+                )
+            if "moisture" in kinds:
+                row.update(sample_status=status, pixel_id=pixel_id, pixel=pixel)
+            elif tree_id in self.failures:
+                row["sample_status"] = status
+            for kind in kinds:
+                if kind == "moisture":
+                    continue
+                row[f"layers.{LAYER_FIELDS[kind]}"] = {
+                    "raster": self.statistics[kind]["raster"],
+                    "value": self.readings[kind][tree_id] if position else None,
+                }
+                if "depth_cm" in self.statistics[kind]:
+                    row[f"layers.{LAYER_FIELDS[kind]}"]["depth_cm"] = self.statistics[
+                        kind
+                    ]["depth_cm"]
+            if self.context is not None:
+                row["context"] = self.context
+                if pixel_id in self.predictions:
+                    row["soil_moisture_forecast"] = self.predictions[pixel_id]
+                elif self.args.forecast_days and "moisture" in self.statistics:
+                    row["soil_moisture_forecast"] = {
+                        "status": "unavailable"
+                        if self.forecast_error
+                        else "no_soil_data",
+                        "issued_at_utc": now,
+                    }
+            operations.append(
+                UpdateOne({"_id": observation_id}, {"$set": row}, upsert=True)
+            )
+        if operations:
+            collection.bulk_write(operations, ordered=False)
+        return {
+            "collection": collection.full_name,
+            "trees": len(self.trees),
+            "pixels": len(self.pixels),
+            "sample_status": counts,
+            "forecasted_pixels": len(self.predictions),
+            "forecast_error": self.forecast_error,
+        }
+
+
+def analyze(database, args, now):
+    analysis = FieldAnalysis(database, args)
+    for kind, path in (
+        ("moisture", args.raster),
+        ("ndvi", args.ndvi_raster),
+        ("ph", args.soil_ph_raster),
+        ("texture", args.soil_texture_raster),
+    ):
+        if path is not None:
+            analysis.collect(kind, path)
+    analysis.context_and_forecast(now)
+    summary = analysis.save_trees(now, analysis.statistics)
+    analysis.save_orchard()
     return {
-        "collection": collection.full_name,
         **summary,
-        "forecasted_pixels": len(predictions),
-        "forecast_error": forecast_error,
-        "weather_status": context["weather"]["status"],
-        "solar_status": context["solar"]["status"],
+        "weather_status": analysis.context["weather"]["status"],
+        "solar_status": analysis.context["solar"]["status"],
+        "orchard_analysis": analysis.orchard_fields(),
     }
 
 
@@ -325,6 +441,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--orchard-id", default=os.getenv("MONGO_ORCHARD_ID"))
     parser.add_argument("--raster", type=Path, required=True)
+    parser.add_argument("--ndvi-raster", type=Path)
+    parser.add_argument("--soil-ph-raster", type=Path)
+    parser.add_argument("--soil-texture-raster", type=Path)
+    parser.add_argument("--soil-depth-cm", type=int, choices=DEPTHS_CM)
     parser.add_argument(
         "--scene-id", required=True, help="Identyfikator sceny Sentinel-1."
     )
@@ -360,7 +480,7 @@ def main():
         parser.exit(1, f"{error}\n")
     except PyMongoError as error:
         parser.exit(1, f"Błąd MongoDB ({type(error).__name__}).\n")
-    print(json.dumps(summary, indent=2))
+    print(json.dumps(summary, indent=2, default=datetime.isoformat))
 
 
 if __name__ == "__main__":

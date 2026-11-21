@@ -34,7 +34,7 @@ function buildUrl(path: string, params?: Record<string, string | number | undefi
 }
 
 async function request<T>(
-  method: 'GET' | 'POST',
+  method: 'GET' | 'POST' | 'PATCH',
   path: string,
   options: RequestOptions = {},
   decode: (response: Response) => Promise<T> = (response) => response.json() as Promise<T>,
@@ -89,4 +89,6 @@ export const httpClient = {
     request('GET', path, options, (response) => response.blob(), 'image/tiff'),
   post: <T>(path: string, body: unknown, options?: Omit<RequestOptions, 'body'>) =>
     request<T>('POST', path, { ...options, body }),
+  patch: <T>(path: string, body: unknown, options?: Omit<RequestOptions, 'body'>) =>
+    request<T>('PATCH', path, { ...options, body }),
 };

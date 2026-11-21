@@ -22,6 +22,7 @@ import type {
   SaveOrchardLayoutResponse,
   TemperatureSeriesResponse,
   TimeRange,
+  TreeUpdatePayload,
 } from '../types/orchard';
 import { httpClient } from './httpClient';
 
@@ -88,7 +89,7 @@ export async function fetchOrchardPointCloud(
   signal?: AbortSignal,
 ): Promise<ApiResult<PointCloudData>> {
   const endpoint = API_ENDPOINTS.orchard.pointCloud;
-  return withPlaceholderFallback(
+  return fetchWidgetData(
     endpoint,
     () => httpClient.get<PointCloudData>(endpoint, { params: { orchardId }, signal }),
     () => getPlaceholderOrchardScene(orchardId).pointCloud,
@@ -100,7 +101,7 @@ export async function fetchOrchardTrees(
   signal?: AbortSignal,
 ): Promise<ApiResult<OrchardTree3D[]>> {
   const endpoint = API_ENDPOINTS.orchard.trees;
-  return withPlaceholderFallback(
+  return fetchWidgetData(
     endpoint,
     () => httpClient.get<OrchardTree3D[]>(endpoint, { params: { orchardId }, signal }),
     () => getPlaceholderOrchardScene(orchardId).trees,
@@ -112,7 +113,7 @@ export async function fetchRowLines(
   signal?: AbortSignal,
 ): Promise<ApiResult<RowLineRecord[]>> {
   const endpoint = API_ENDPOINTS.orchard.rowLines;
-  return withPlaceholderFallback(
+  return fetchWidgetData(
     endpoint,
     () => httpClient.get<RowLineRecord[]>(endpoint, { params: { orchardId }, signal }),
     () => getPlaceholderOrchardScene(orchardId).rowLines,
@@ -128,7 +129,7 @@ export async function submitRowLines(
   signal?: AbortSignal,
 ): Promise<ApiResult<RowLineRecord[]>> {
   const endpoint = API_ENDPOINTS.orchard.rowLines;
-  return withPlaceholderFallback(
+  return fetchWidgetData(
     endpoint,
     () => httpClient.post<RowLineRecord[]>(endpoint, { rows: payload }, { signal }),
     () =>
@@ -149,7 +150,7 @@ export async function updateTreeMetadata(
   signal?: AbortSignal,
 ): Promise<ApiResult<{ id: string; updated: boolean }>> {
   const endpoint = API_ENDPOINTS.orchard.treeById(treeId);
-  return withPlaceholderFallback(
+  return fetchWidgetData(
     endpoint,
     () => httpClient.patch<{ id: string; updated: boolean }>(endpoint, payload, { signal }),
     () => ({ id: treeId, updated: true }),
@@ -161,7 +162,7 @@ export async function updateTreeMetadata(
  */
 export async function fetchCropPrefs(signal?: AbortSignal): Promise<ApiResult<CropPrefDoc[]>> {
   const endpoint = API_ENDPOINTS.cropPrefs.list;
-  return withPlaceholderFallback(
+  return fetchWidgetData(
     endpoint,
     () => httpClient.get<CropPrefDoc[]>(endpoint, { signal }),
     () => getPlaceholderCropPrefs(),
@@ -177,7 +178,7 @@ export async function fetchOrchardBoundary(
   signal?: AbortSignal,
 ): Promise<ApiResult<OrchardBoundaryDoc>> {
   const endpoint = API_ENDPOINTS.orchard.byId(orchardId);
-  return withPlaceholderFallback(
+  return fetchWidgetData(
     endpoint,
     () => httpClient.get<OrchardBoundaryDoc>(endpoint, { signal }),
     () => getPlaceholderOrchardBoundary(orchardId),
@@ -194,7 +195,7 @@ export async function saveOrchardLayout(
   signal?: AbortSignal,
 ): Promise<ApiResult<SaveOrchardLayoutResponse>> {
   const endpoint = API_ENDPOINTS.orchard.layout(payload.orchardId);
-  return withPlaceholderFallback(
+  return fetchWidgetData(
     endpoint,
     () => httpClient.post<SaveOrchardLayoutResponse>(endpoint, payload, { signal }),
     () => getPlaceholderSaveOrchardLayoutResponse(payload),

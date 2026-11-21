@@ -38,11 +38,14 @@ class SoilMoistureConfig:
     export_model_asset: str | None = None
     export_tree_raster: bool = False
     raster_export_name: str = RASTER_TASK_NAME
+    coarse_training_inputs: bool = False
 
 
-def load_fields(path=None):
+def load_fields(path=None, *, orchard_id=None):
     fields = []
-    for index, record in enumerate(read_field_features(path), start=1):
+    for index, record in enumerate(
+        read_field_features(path, orchard_id=orchard_id), start=1
+    ):
         try:
             boundary = ee.Geometry(record["geometry"], proj="EPSG:4326", geodesic=False)
         except ee.EEException as error:
@@ -118,20 +121,27 @@ def radar_features(radar):
     return radar.addBands(difference.rename("VV_minus_VH"))
 
 
-def samples_for_scene(scene, region, min_coverage):
+def samples_for_scene(scene, region, min_coverage, *, coarse_training_inputs=False):
     scene = ee.Image(scene)
     label = ee.Image(scene.get("era5_image")).select(TARGET)
     label_grid = label.projection()
-    radar = radar_bands(scene)
-    vv = radar.select("VV")
+    vv = scene.select("VV")
     intermediate_grid = vv.projection().atScale(200)
+    if coarse_training_inputs:
+        # Read the SAR pyramid at 200 m before aggregating to ERA5-Land cells.
+        # The 10 m prediction uses the original image and never enters this reduction.
+        radar = radar_bands(scene.select(["VV", "VH"]).reproject(intermediate_grid))
+    else:
+        radar = radar_bands(scene)
+    vv = radar.select("VV")
     coverage = vv.mask().unmask(0, False).rename("radar_coverage")
-    averaged = (
-        radar.addBands(coverage)
-        .reduceResolution(ee.Reducer.mean(), maxPixels=4096)
-        .reproject(intermediate_grid)
-        .reduceResolution(ee.Reducer.mean(), maxPixels=8192)
-        .reproject(label_grid)
+    inputs = radar.addBands(coverage)
+    if not coarse_training_inputs:
+        inputs = inputs.reduceResolution(ee.Reducer.mean(), maxPixels=4096).reproject(
+            intermediate_grid
+        )
+    averaged = inputs.reduceResolution(ee.Reducer.mean(), maxPixels=8192).reproject(
+        label_grid
     )
     inputs = radar_features(averaged.select(["VV", "VH"])).updateMask(
         averaged.select("radar_coverage").gte(min_coverage)
@@ -142,10 +152,12 @@ def samples_for_scene(scene, region, min_coverage):
     )
 
 
-def samples_for(collection, region, min_coverage):
+def samples_for(collection, region, min_coverage, *, coarse_training_inputs=False):
     scene_list = collection.toList(collection.size())
     tables = scene_list.map(
-        lambda scene: samples_for_scene(scene, region, min_coverage)
+        lambda scene: samples_for_scene(
+            scene, region, min_coverage, coarse_training_inputs=coarse_training_inputs
+        )
     )
     return ee.FeatureCollection(tables).flatten()
 
@@ -219,8 +231,28 @@ def field_summary_task(prediction, fields, scene, grid, drive_folder):
     )
 
 
+def geotiff_task(image, region, grid, *, name, folder, description=None):
+    return ee.batch.Export.image.toDrive(
+        image=image.unmask(NODATA, False),
+        description=description or name,
+        fileNamePrefix=name,
+        folder=folder,
+        region=region,
+        crs=grid["crs"],
+        crsTransform=grid["transform"],
+        maxPixels=1_000_000_000,
+        fileFormat="GeoTIFF",
+        formatOptions={"cloudOptimized": True, "noData": NODATA},
+    )
+
+
 def create_tasks(args):
-    fields = load_fields(args.fields_geojson)
+    tasks, _ = create_exports(args)
+    return tasks
+
+
+def create_exports(args, *, orchard_id=None, export_tag=None):
+    fields = load_fields(args.fields_geojson, orchard_id=orchard_id)
     map_footprint = fields.geometry(maxError=1)
     export_region = map_footprint.bounds(maxError=1)
     if args.bounds is None:
@@ -250,8 +282,19 @@ def create_tasks(args):
             "Brak sceny Sentinel-1 obejmującej obszar mapy. Sprawdź daty i orbitę."
         )
 
-    train = samples_for(train_scenes, region, args.min_coverage)
-    test = samples_for(test_scenes, region, args.min_coverage)
+    coarse_training_inputs = getattr(args, "coarse_training_inputs", False)
+    train = samples_for(
+        train_scenes,
+        region,
+        args.min_coverage,
+        coarse_training_inputs=coarse_training_inputs,
+    )
+    test = samples_for(
+        test_scenes,
+        region,
+        args.min_coverage,
+        coarse_training_inputs=coarse_training_inputs,
+    )
     forest = train_forest(train)
     metrics = evaluate_model(
         test.classify(forest, PREDICTION), ee.Number(train.aggregate_mean(TARGET))
@@ -284,20 +327,16 @@ def create_tasks(args):
         .clipToCollection(fields)
     )
     raster_name = getattr(args, "raster_export_name", RASTER_TASK_NAME)
-    map_task = ee.batch.Export.image.toDrive(
-        image=prediction.unmask(NODATA, False),
-        description=raster_name,
-        fileNamePrefix=raster_name,
+    map_task = geotiff_task(
+        prediction,
+        export_region,
+        grid,
+        name=raster_name,
         folder=args.drive_folder,
-        region=export_region,
-        crs=grid["crs"],
-        crsTransform=grid["transform"],
-        maxPixels=1_000_000_000,
-        fileFormat="GeoTIFF",
-        formatOptions={"cloudOptimized": True, "noData": NODATA},
     )
     field_task = field_summary_task(prediction, fields, latest, grid, args.drive_folder)
     tasks = [metrics_task, map_task, field_task]
+    tree_scene = None
     if args.export_tree_raster:
         scene_id, stamp = ee.List(
             [
@@ -305,26 +344,20 @@ def create_tasks(args):
                 latest.date().format("yyyy-MM-dd'T'HH:mm:ss'Z'", "UTC"),
             ]
         ).getInfo()
-        filename = f"tree_pixels_{scene_id}"
-        print(f"Tree raster: {filename}.tif (UTC: {stamp})", flush=True)
-        tree_image = (
-            radar.clipToCollection(fields)
-            .addBands(prediction)
-            .toFloat()
-            .unmask(NODATA, False)
+        filename = (
+            f"{export_tag}_soil_moisture" if export_tag else f"tree_pixels_{scene_id}"
         )
+        tree_scene = {"scene_id": scene_id, "acquired_at": stamp, "name": filename}
+        print(f"Tree raster: {filename}.tif (UTC: {stamp})", flush=True)
+        tree_image = radar.clipToCollection(fields).addBands(prediction).toFloat()
         tasks.append(
-            ee.batch.Export.image.toDrive(
-                image=tree_image,
+            geotiff_task(
+                tree_image,
+                export_region,
+                grid,
+                name=filename,
                 description="sentinel1_tree_pixels",
-                fileNamePrefix=filename,
                 folder=args.drive_folder,
-                region=export_region,
-                crs=grid["crs"],
-                crsTransform=grid["transform"],
-                maxPixels=1_000_000_000,
-                fileFormat="GeoTIFF",
-                formatOptions={"cloudOptimized": True, "noData": NODATA},
             )
         )
     if args.export_model_asset:
@@ -335,7 +368,7 @@ def create_tasks(args):
                 assetId=args.export_model_asset,
             )
         )
-    return tasks
+    return tasks, tree_scene
 
 
 def main():

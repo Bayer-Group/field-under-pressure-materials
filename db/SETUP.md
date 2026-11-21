@@ -40,6 +40,18 @@ Adres do MongoDB Compass i lokalnych skryptów:
 mongodb://admin:admin123@localhost:27017/field_under_pressure?authSource=admin
 ```
 
+Lokalne skrypty mogą używać tego adresu w `MONGO_URI`. Backend w Dockerze domyślnie łączy się z usługą `mongodb`. Aby skierować go do innej bazy, ustaw `BACKEND_MONGO_URI` na adres osiągalny z kontenera.
+
+### Seed danych demonstracyjnych
+
+Z głównego katalogu repozytorium uruchom:
+
+```powershell
+docker compose run --rm seed
+```
+
+Seed dodaje dwa pola `DEMO`, sześć drzew, profil gatunkowy oraz syntetyczne wartości do panelu **Analityka**. Pola pokazują przykład wysokiego i niskiego ryzyka. Przy kolejnym uruchomieniu skrypt pomija istniejące rekordy. Dane demonstracyjne obejmują granice, punkty i wskaźniki liczbowe. Warstwy GeoTIFF pochodzą z osobnych eksportów.
+
 ### Import przykładowej geometrii pól
 
 Zainstaluj [zależności ML](../ML/soil_moisture/README.md) i uruchom w PowerShellu z katalogu repozytorium.
@@ -95,13 +107,13 @@ MONGO_URI="mongodb://admin:admin123@localhost:27017/?authSource=admin" ./db/scri
 
 ## Obserwacje satelitarne drzew
 
-W Compass otwórz kolekcję `Tree` i dodaj dokument z `orchardId` wskazującym rzeczywiste `Orchard._id`, gatunkiem oraz położeniem. Poniższy dokument w formacie Extended JSON pokazuje strukturę. Zastąp przykładowy identyfikator i współrzędne danymi swojego drzewa. Kolejność w `coordinates` to długość i szerokość geograficzna w WGS 84.
+W Compass otwórz kolekcję `Tree` i dodaj dokument z `orchardId` wskazującym rzeczywiste `Orchard._id`, gatunkiem oraz położeniem. Poniższy dokument w formacie Extended JSON pokazuje format używany przez bazę. Zastąp przykładowy identyfikator i współrzędne danymi swojego drzewa. Skrypt obsługuje również starsze rekordy z `geo` lub `geometry` typu GeoJSON `Point`.
 
 ```json
 {
   "orchardId": {"$oid": "000000000000000000000001"},
   "species": "jabłoń domowa",
-  "geometry": {"type": "Point", "coordinates": [21.01, 52.23]}
+  "coordinates": {"lat": 52.23, "lng": 21.01}
 }
 ```
 
@@ -120,7 +132,21 @@ python -m ML.soil_moisture.tree_pixel_analysis --raster "C:\dane\tree_pixels_SCE
 
 Dodaj `--forecast-days 3`, żeby dla świeżej sceny wyliczyć trzy kolejne dni prognozy wilgotności od chwili uruchomienia. Domyślną dobą pogody i nasłonecznienia jest dzień przed akwizycją w strefie Europe/Warsaw. Opcja `--date YYYY-MM-DD` ustawia inną zakończoną dobę.
 
-Wynik znajdziesz w `TreePixelAnalysis`. Dokument łączy drzewo i jego gatunek z pikselem, sceną, estymacją wilgotności, prognozą (jeśli uruchomiona) oraz pogodą i nasłonecznieniem dla pola. Te dwie ostatnie wartości pochodzą z reprezentatywnego punktu w polu i mają własne pola w `context`. Gdy danych zabraknie, skrypt zapisze status i poda podsumowanie zamiast wstawiać wartości zastępcze.
+Wyniki drzew znajdziesz w `TreePixelAnalysis`. Dokument łączy drzewo i jego gatunek z pikselem, sceną, estymacją wilgotności, prognozą (jeśli uruchomiona) oraz pogodą i nasłonecznieniem dla pola. Te dwie ostatnie wartości pochodzą z reprezentatywnego punktu w polu i mają własne pola w `context`. Gdy danych zabraknie, skrypt zapisze status i poda podsumowanie.
+
+### Podsumowanie pola w Orchard
+
+Pobierz warstwy z [eksportów NDVI i parametrów gleby](../ML/soil_moisture/README.md#ndvi-i-parametry-gleby). Podaj je razem z rastrem wilgotności, aby zapisać komplet danych w `Orchard.analysis`. Użyj plików obejmujących wybrane pole.
+
+```powershell
+python -m ML.soil_moisture.tree_pixel_analysis --orchard-id "ID_POLA" --raster "tree_pixels_SCENA.tif" --scene-id "ID_SCENY" --acquired-at "2025-07-28T16:40:00Z" --ndvi-raster "sentinel2_ndvi_20250701_20250801.tif" --soil-ph-raster "openlandmap_soil_ph_0cm.tif" --soil-texture-raster "openlandmap_soil_texture_0cm.tif" --soil-depth-cm 0
+```
+
+- `analysis.ndvi`, `analysis.soil_moisture` i `analysis.soil_parameters.ph` zawierają średnią i liczbę ważnych pikseli.
+- `analysis.soil_parameters.texture` zawiera najczęstszy kod USDA i rozkład liczby pikseli według klasy. Dla warstw gleby liczą się komórki przecinające pole. Każdy raster zachowuje własną siatkę.
+- `analysis.solar_intensity.level` zawiera kategorię nasłonecznienia, a pozostałe pola tego obiektu przechowują dobę, energię i referencję.
+
+Dodatkowe warstwy są opcjonalne. Podanie warstwy zapisuje jej podsumowanie i dodaje do `TreePixelAnalysis.layers` wartość z piksela pod każdym drzewem. Wartość `null` oznacza brak pokrycia lub ważnych danych dla danej warstwy. Analiza pola działa też w sadzie bez zapisanych drzew.
 
 Do analizy drzew grupuj po `tree_id` lub `species`. Przy agregacji wartości satelitarnych wybierz jedną obserwację z każdego `pixel_id` w analizowanej scenie i dobie. Ponowne wykonanie dla tego samego drzewa, sceny i doby aktualizuje jego obserwację. Uruchomienie bez prognozy zachowuje zapisaną wcześniej prognozę.
 

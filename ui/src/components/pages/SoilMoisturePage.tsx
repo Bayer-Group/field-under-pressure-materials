@@ -430,7 +430,7 @@ function AnalysisPanel({
   );
 }
 
-export function SoilMoisturePage() {
+export function SoilMoisturePage({ embedded = false }: { embedded?: boolean }) {
   const { t } = useLanguage();
   const [tasks, setTasks] = useState(readTaskHistory);
   const [statuses, setStatuses] = useState<TaskStatuses>({});
@@ -449,12 +449,12 @@ export function SoilMoisturePage() {
 
   return (
     <div className="dashboard-page">
-      <div className="page-intro">
+      {!embedded && <div className="page-intro">
         <div>
           <h1 className="page-title">{t.nav.analytics}</h1>
           <p className="page-subtitle">{t.soilMoisture.subtitle}</p>
         </div>
-      </div>
+      </div>}
       <RasterPanel taskId={latestRaster?.id} hasPendingRaster={hasPendingRaster} />
       <ForecastPanel />
       <AnalysisPanel tasks={tasks} setTasks={setTasks} statuses={statuses} setStatuses={setStatuses} />

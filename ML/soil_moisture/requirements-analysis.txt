@@ -1,0 +1,5 @@
+-r requirements-core.txt
+astral
+rasterio>=1.3
+shapely
+tzdata
