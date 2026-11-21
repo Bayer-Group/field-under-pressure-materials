@@ -95,6 +95,18 @@ Everything needs the sandbox token. Dates are in the shown time (`GET /clock`: "
 `142009_2.0016.31`) or a number; several matches are possible. A parcel comes from GUGiK ULDK and is cached, so the second request
 for the same place is fast and an outage of GUGiK does not matter for parcels already seen (502 only when the service is needed and
 does not answer). The `parcel_id` is the identifier of the cadastre. Mock parcels such as `parcel-demo-1` do not exist here.
+Each parcel also has the names of its place from GUGiK: `region` (the cadastral precinct: a village, or a number in a town),
+`commune`, `county`, `voivodeship` and a ready `location` for display ("Krępica, gm. Płońsk"; "Warszawa"; "Śródmieście 2, Radom").
+The same fields are in the `parcels` of `GET /fields`.
+
+**Parcel boundaries on the map (GUGiK WMS, no backend needed).** GUGiK publishes the parcels as a map service only (there is no WFS and
+no bulk download of vector parcels): the layers `dzialki` (boundaries), `numery_dzialek` (numbers), `uzytki` (land-use contours),
+`kontury`, `obreby`, `budynki` of `https://integracja.gugik.gov.pl/cgi-bin/KrajowaIntegracjaEwidencjiGruntow`, WMS 1.3.0, EPSG:3857, PNG,
+CORS open. It draws **thin outlines without fill, and only at scale 1:5000 or larger** (street level, about zoom 16 and up); from afar the
+image is empty. Template for MapLibre (raster source, `tileSize` 256, `minzoom` about 16):
+`https://integracja.gugik.gov.pl/cgi-bin/KrajowaIntegracjaEwidencjiGruntow?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=dzialki,numery_dzialek&STYLES=&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256&FORMAT=image/png&TRANSPARENT=TRUE`.
+The land use (`Oznaczenie użytku`, `Oznaczenie konturu`) can only be read for one point (`GetFeatureInfo`), it cannot filter the layer, so
+"agricultural or not" is not something this service can draw.
 
 **Field model.** `GET /fields` returns `{fields: [field], data_status: "mock"}`; `GET /fields/{id}` one field:
 

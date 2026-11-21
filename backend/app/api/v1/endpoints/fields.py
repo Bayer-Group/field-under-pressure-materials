@@ -24,6 +24,7 @@ from backend.app.core.config import MAX_AREA_HA, MAX_AREAS_OTHER, MAX_AREAS_SAND
 from backend.app.core.db import get_db, get_db_rw
 from backend.app.core.limits import RateLimiter, enforce
 from backend.app.services import geometry_validation as gv
+from backend.app.services.parcels import location_label
 
 router = APIRouter()
 
@@ -110,11 +111,14 @@ def load_fields(con, owner: str, only: Optional[str] = None) -> list[dict]:
     ids = [f["field_id"] for f in fields]
     parcels: dict[str, list] = {}
     for r in con.execute(
-            "SELECT fp.field_id, p.parcel_id, p.parcel_number, ST_AsGeoJSON(p.geom, 7)::jsonb AS geometry "
+            "SELECT fp.field_id, p.parcel_id, p.parcel_number, p.region, p.commune, p.county, p.voivodeship, "
+            "ST_AsGeoJSON(p.geom, 7)::jsonb AS geometry "
             "FROM app.field_parcel fp JOIN app.parcel p USING (parcel_id) WHERE fp.field_id = ANY(%s) ORDER BY p.parcel_id",
             (ids,)).fetchall():
-        parcels.setdefault(r["field_id"], []).append({"parcel_id": r["parcel_id"], "parcel_number": r["parcel_number"],
-                                                      "geometry": r["geometry"]})
+        parcels.setdefault(r["field_id"], []).append({
+            "parcel_id": r["parcel_id"], "parcel_number": r["parcel_number"], "region": r["region"], "commune": r["commune"],
+            "county": r["county"], "voivodeship": r["voivodeship"], "location": location_label(r["region"], r["commune"]),
+            "geometry": r["geometry"]})
     areas = con.execute(
         "SELECT t.crop_area_id, t.field_id, ST_AsGeoJSON(t.geom, 7)::jsonb AS geometry, t.farmer_crop_id, c.sowing_date, "
         "a.sprays_confirmed, m.farmer_crop_id AS map_crop_id, ST_Area(t.geom::geography) / 10000 AS area_ha, "

@@ -32,6 +32,11 @@ CREATE TABLE IF NOT EXISTS parcel (
     geom          geometry(Geometry, 4326) NOT NULL,
     CONSTRAINT parcel_geom_polygonal CHECK (GeometryType(geom) IN ('POLYGON', 'MULTIPOLYGON'))
 );
+-- Names from the cadastre service (GUGiK ULDK): region = the cadastral precinct (a village, or a number in a town).
+ALTER TABLE parcel ADD COLUMN IF NOT EXISTS region      text;
+ALTER TABLE parcel ADD COLUMN IF NOT EXISTS commune     text;
+ALTER TABLE parcel ADD COLUMN IF NOT EXISTS county      text;
+ALTER TABLE parcel ADD COLUMN IF NOT EXISTS voivodeship text;
 CREATE INDEX IF NOT EXISTS parcel_geom_gix ON parcel USING gist (geom);
 CREATE INDEX IF NOT EXISTS parcel_number_idx ON parcel (parcel_number);
 
