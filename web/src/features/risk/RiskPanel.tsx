@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { navigate, riskHref } from '../../router'
 import { useFetch } from '../../useFetch'
 import { Breakdown } from './Breakdown'
+import { FollowupTests } from './FollowupTests'
 import { Heatmap, type Selection } from './Heatmap'
 import { compact } from './labels'
 import { SkippedList } from './SkippedList'
@@ -132,6 +133,7 @@ function Body({ data, plotId, unit, crop, across, setAcross, picked, pick }: {
         <>
           <Heatmap rows={data.crops} plotId={plotId} unit={unit} selected={sel} across={across} nUnits={data.n_units_in_group} onSelect={onSelect} />
           <Breakdown plot={sel.plot} unit={unit} crop={sel.crop} />
+          <FollowupTests plot={sel.plot} unit={unit} crop={sel.crop} />
         </>
       )}
       <Details data={data} />
