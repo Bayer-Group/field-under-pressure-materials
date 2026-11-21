@@ -17,4 +17,4 @@ Mówimy o tym jak ulepszyć to musicie pokminić
 
 Odbieramy Apple Watche
 
-Idziemy do na piwo
+Idziemy na piwo
