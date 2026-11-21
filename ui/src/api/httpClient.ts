@@ -59,8 +59,39 @@ async function request<T>(method: 'GET' | 'POST' | 'PATCH' | 'DELETE', path: str
   }
 }
 
+async function requestArrayBuffer(
+  pathOrUrl: string,
+  options: Omit<RequestOptions, 'body'> & { isAbsoluteUrl?: boolean } = {},
+): Promise<ArrayBuffer> {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), apiConfig.binaryTimeoutMs);
+
+  const onExternalAbort = () => controller.abort();
+  options.signal?.addEventListener('abort', onExternalAbort, { once: true });
+
+  try {
+    const targetUrl = options.isAbsoluteUrl ? pathOrUrl : buildUrl(pathOrUrl, options.params);
+    const response = await fetch(targetUrl, {
+      method: 'GET',
+      headers: { Accept: 'application/octet-stream' },
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      throw new ApiError(`HTTP ${response.status}: ${response.statusText}`, response.status, pathOrUrl);
+    }
+
+    return await response.arrayBuffer();
+  } finally {
+    window.clearTimeout(timeout);
+    options.signal?.removeEventListener('abort', onExternalAbort);
+  }
+}
+
 export const httpClient = {
   get: <T>(path: string, options?: Omit<RequestOptions, 'body'>) => request<T>('GET', path, options),
+  getArrayBuffer: (pathOrUrl: string, options?: Omit<RequestOptions, 'body'> & { isAbsoluteUrl?: boolean }) =>
+    requestArrayBuffer(pathOrUrl, options),
   post: <T>(path: string, body: unknown, options?: Omit<RequestOptions, 'body'>) =>
     request<T>('POST', path, { ...options, body }),
   patch: <T>(path: string, body: unknown, options?: Omit<RequestOptions, 'body'>) =>

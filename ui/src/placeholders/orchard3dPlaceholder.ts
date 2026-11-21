@@ -1,76 +1,82 @@
 import {
   scoreToHealthStatus,
+  type GeoCoord,
   type HealthDistribution,
   type OrchardHealthSummary,
   type OrchardSceneResponse,
   type OrchardTree3D,
-  type Point3D,
   type PointCloudData,
   type RowLineRecord,
 } from '../types/orchard';
+import { wgs84ToEpsg2180 } from '../utils/crs2180';
 
 /**
- * [PLACEHOLDER] Deterministic 3D orchard generator (point cloud + row lines + calculated 3D trees).
+ * [PLACEHOLDER] Scene metadata for `Grojec A` (`_id: 6b01933c1dc02a368703a020`).
  *
- * Simulates the real backend pipeline:
- *   user-drawn row lines -> tree position calculation along each polyline ->
- *   projection onto terrain point cloud -> per-tree health scoring.
+ * Uses the REAL parcel boundary, rows (`R-01`, `R-02`), and 12 `Tree` GPS coordinates
+ * from local MongoDB `field_under_pressure`, paired with the real LiDAR file `/las/grojec.las`.
+ * Health scores are temporary demo placeholders until the backend calculates `Tree.healthIndex`.
  *
- * Remove `src/placeholders/` completely once the backend API is running.
+ * Remove `src/placeholders/` once the backend API is live.
  */
 
-function seededRandom(seed: number): () => number {
-  let state = seed >>> 0;
-  return () => {
-    state = (state * 1664525 + 1013904223) >>> 0;
-    return state / 0xffffffff;
-  };
-}
+const GROJEC_A_BOUNDARY_GEO: GeoCoord[] = [
+  { lat: 51.84447031436461, lng: 20.85185092156493 },
+  { lat: 51.845577735233036, lng: 20.85194842604751 },
+  { lat: 51.845542724553376, lng: 20.853352285976772 },
+  { lat: 51.845774353581064, lng: 20.853382621744633 },
+  { lat: 51.845798670667115, lng: 20.855111625449258 },
+  { lat: 51.84446227417943, lng: 20.853588952884014 },
+];
 
-/** Gentle orchard terrain relief (meters) */
-function sampleTerrainElevation(x: number, z: number): number {
-  return (
-    Math.sin(x * 0.065) * 0.85 +
-    Math.cos(z * 0.075) * 0.65 +
-    Math.sin((x + z) * 0.04) * 0.45
-  );
-}
+const GROJEC_A_ROWS_GEO = [
+  {
+    id: 'row-1795270903529-10',
+    label: 'R-01',
+    start: { lat: 51.845536, lng: 20.8539662 },
+    end: { lat: 51.8456036, lng: 20.8542839 },
+    spacing: 3.8,
+  },
+  {
+    id: 'row-1795271865542-2',
+    label: 'R-02',
+    start: { lat: 51.8454844, lng: 20.8543872 },
+    end: { lat: 51.845375, lng: 20.8541249 },
+    spacing: 3.8,
+  },
+];
 
-/**
- * Computes individual tree coordinates along a user-drawn polyline using uniform spacing.
- * Mirrors the calculation that the backend will perform after receiving POST /api/v1/orchard/row-lines.
- */
-function samplePositionsAlongPolyline(vertices: Point3D[], spacingMeters: number): Point3D[] {
-  if (vertices.length < 2 || spacingMeters <= 0) return [];
+// Real 12 Tree documents from live local MongoDB `Tree` for `Grojec A`
+// (demo healthScore assigned temporarily until backend computes `healthIndex`)
+const GROJEC_A_TREES_RAW: Array<{
+  id: string;
+  rowId: string;
+  rowLabel: string;
+  indexInRow: number;
+  geo: GeoCoord;
+  healthScore: number;
+  heightMeters: number;
+  canopyRadiusMeters: number;
+}> = [
+  { id: '67401e000001000001000001', rowId: 'row-1795270903529-10', rowLabel: 'R-01', indexInRow: 1, geo: { lat: 51.845542, lng: 20.8539944 }, healthScore: 86, heightMeters: 3.4, canopyRadiusMeters: 1.35 },
+  { id: '67401e000001000001000002', rowId: 'row-1795270903529-10', rowLabel: 'R-01', indexInRow: 2, geo: { lat: 51.8455531, lng: 20.8540467 }, healthScore: 79, heightMeters: 3.2, canopyRadiusMeters: 1.25 },
+  { id: '67401e000001000001000003', rowId: 'row-1795270903529-10', rowLabel: 'R-01', indexInRow: 3, geo: { lat: 51.8455642, lng: 20.8540989 }, healthScore: 62, heightMeters: 3.0, canopyRadiusMeters: 1.2 },
+  { id: '67401e000001000001000004', rowId: 'row-1795270903529-10', rowLabel: 'R-01', indexInRow: 4, geo: { lat: 51.8455754, lng: 20.8541512 }, healthScore: 36, heightMeters: 2.7, canopyRadiusMeters: 1.05 },
+  { id: '67401e000001000001000005', rowId: 'row-1795270903529-10', rowLabel: 'R-01', indexInRow: 5, geo: { lat: 51.8455865, lng: 20.8542034 }, healthScore: 10, heightMeters: 2.2, canopyRadiusMeters: 0.85 },
+  { id: '67401e000001000001000006', rowId: 'row-1795270903529-10', rowLabel: 'R-01', indexInRow: 6, geo: { lat: 51.8455976, lng: 20.8542557 }, healthScore: 81, heightMeters: 3.3, canopyRadiusMeters: 1.3 },
+  { id: '67401e000001000002000001', rowId: 'row-1795271865542-2', rowLabel: 'R-02', indexInRow: 1, geo: { lat: 51.8454775, lng: 20.8543705 }, healthScore: 88, heightMeters: 4.1, canopyRadiusMeters: 1.55 },
+  { id: '67401e000001000002000002', rowId: 'row-1795271865542-2', rowLabel: 'R-02', indexInRow: 2, geo: { lat: 51.8454584, lng: 20.8543247 }, healthScore: 84, heightMeters: 4.0, canopyRadiusMeters: 1.5 },
+  { id: '67401e000001000002000003', rowId: 'row-1795271865542-2', rowLabel: 'R-02', indexInRow: 3, geo: { lat: 51.8454393, lng: 20.8542789 }, healthScore: 67, heightMeters: 3.7, canopyRadiusMeters: 1.35 },
+  { id: '67401e000001000002000004', rowId: 'row-1795271865542-2', rowLabel: 'R-02', indexInRow: 4, geo: { lat: 51.8454201, lng: 20.8542332 }, healthScore: 91, heightMeters: 4.2, canopyRadiusMeters: 1.6 },
+  { id: '67401e000001000002000005', rowId: 'row-1795271865542-2', rowLabel: 'R-02', indexInRow: 5, geo: { lat: 51.845401, lng: 20.8541874 }, healthScore: 41, heightMeters: 3.1, canopyRadiusMeters: 1.15 },
+  { id: '67401e000001000002000006', rowId: 'row-1795271865542-2', rowLabel: 'R-02', indexInRow: 6, geo: { lat: 51.8453819, lng: 20.8541416 }, healthScore: 76, heightMeters: 3.9, canopyRadiusMeters: 1.45 },
+];
 
-  const result: Point3D[] = [];
-  let carry = 0;
-
-  for (let segIdx = 0; segIdx < vertices.length - 1; segIdx += 1) {
-    const a = vertices[segIdx];
-    const b = vertices[segIdx + 1];
-    const dx = b.x - a.x;
-    const dz = b.z - a.z;
-    const segLen = Math.hypot(dx, dz);
-    if (segLen < 1e-4) continue;
-
-    let dist = segIdx === 0 ? 0 : carry;
-    while (dist <= segLen) {
-      const t = dist / segLen;
-      const x = a.x + dx * t;
-      const z = a.z + dz * t;
-      result.push({
-        x: Number(x.toFixed(2)),
-        y: Number(sampleTerrainElevation(x, z).toFixed(2)),
-        z: Number(z.toFixed(2)),
-      });
-      dist += spacingMeters;
-    }
-    carry = dist - segLen;
-  }
-
-  return result;
-}
+// Default EPSG:2180 center matching grojec.las bounds ([627527.17..627747.74], [443637.04..443790.30])
+const GROJEC_LAS_ORIGIN = {
+  x: (627527.17 + 627747.74) / 2,
+  y: (443637.04 + 443790.3) / 2,
+};
 
 let cachedScene: OrchardSceneResponse | null = null;
 
@@ -79,158 +85,61 @@ function buildPlaceholderScene(orchardId: string): OrchardSceneResponse {
     return cachedScene;
   }
 
-  const rand = seededRandom(20261121);
   const nowIso = new Date().toISOString();
 
-  // 1. Simulated user-drawn row lines (polylines across the orchard parcel)
-  const rowCount = 9;
-  const rowSpacingZ = 5.4;
-  const treeSpacingX = 4.4;
-  const halfWidthX = 28;
-  const startZ = -((rowCount - 1) * rowSpacingZ) / 2;
-
-  const rowLines: RowLineRecord[] = [];
-  for (let r = 0; r < rowCount; r += 1) {
-    const baseZ = startZ + r * rowSpacingZ;
-    // Slight natural curve / parcel contour bend in the drawn line
-    const bend = Math.sin(r * 0.55) * 1.1;
-    const vertices: Point3D[] = [
-      { x: -halfWidthX, y: sampleTerrainElevation(-halfWidthX, baseZ), z: baseZ },
-      { x: 0, y: sampleTerrainElevation(0, baseZ + bend), z: baseZ + bend },
-      { x: halfWidthX, y: sampleTerrainElevation(halfWidthX, baseZ - bend * 0.4), z: baseZ - bend * 0.4 },
-    ];
-
-    rowLines.push({
-      id: `row-${String(r + 1).padStart(2, '0')}`,
+  const rowLines: RowLineRecord[] = GROJEC_A_ROWS_GEO.map((r) => {
+    const pStart = wgs84ToEpsg2180(r.start.lat, r.start.lng);
+    const pEnd = wgs84ToEpsg2180(r.end.lat, r.end.lng);
+    return {
+      id: r.id,
       orchardId,
-      rowLabel: `R-${String(r + 1).padStart(2, '0')}`,
-      vertices,
-      treeSpacingMeters: treeSpacingX,
+      rowLabel: r.label,
+      vertices: [
+        { x: Number((pStart.x - GROJEC_LAS_ORIGIN.x).toFixed(2)), y: 0, z: Number((-(pStart.y - GROJEC_LAS_ORIGIN.y)).toFixed(2)) },
+        { x: Number((pEnd.x - GROJEC_LAS_ORIGIN.x).toFixed(2)), y: 0, z: Number((-(pEnd.y - GROJEC_LAS_ORIGIN.y)).toFixed(2)) },
+      ],
+      treeSpacingMeters: r.spacing,
       createdAt: nowIso,
-    });
-  }
+    };
+  });
 
-  // 2. Calculate individual 3D tree placements along the drawn row lines
-  const trees: OrchardTree3D[] = [];
-  const baseLat = 51.8412; // Mazowieckie / Grójec orchard region placeholder
-  const baseLng = 20.8674;
+  const trees: OrchardTree3D[] = GROJEC_A_TREES_RAW.map((item) => {
+    const p = wgs84ToEpsg2180(item.geo.lat, item.geo.lng);
+    return {
+      id: item.id,
+      rowId: item.rowId,
+      rowLabel: item.rowLabel,
+      indexInRow: item.indexInRow,
+      position: {
+        x: Number((p.x - GROJEC_LAS_ORIGIN.x).toFixed(2)),
+        y: 0,
+        z: Number((-(p.y - GROJEC_LAS_ORIGIN.y)).toFixed(2)),
+      },
+      geo: item.geo,
+      heightMeters: item.heightMeters,
+      canopyRadiusMeters: item.canopyRadiusMeters,
+      healthScore: item.healthScore,
+      healthStatus: scoreToHealthStatus(item.healthScore),
+    };
+  });
 
-  for (const row of rowLines) {
-    const sampledPositions = samplePositionsAlongPolyline(row.vertices, row.treeSpacingMeters);
-    sampledPositions.forEach((pos, idx) => {
-      // Simulate two spatial stress pockets (e.g. frost hollow + disease cluster)
-      const distPocketA = Math.hypot(pos.x - 12, pos.z - 9);
-      const distPocketB = Math.hypot(pos.x + 15, pos.z + 11);
-
-      let healthScore = 82 + (rand() - 0.5) * 24;
-      if (distPocketA < 13) {
-        healthScore -= (1 - distPocketA / 13) * 74;
-      }
-      if (distPocketB < 10.5) {
-        healthScore -= (1 - distPocketB / 10.5) * 52;
-      }
-
-      // A few isolated dead/stressed trees
-      const outlierRoll = rand();
-      if (outlierRoll < 0.035) {
-        healthScore = 6 + rand() * 8;
-      } else if (outlierRoll < 0.09) {
-        healthScore = 24 + rand() * 18;
-      }
-
-      healthScore = Math.max(0, Math.min(100, Math.round(healthScore)));
-      const healthStatus = scoreToHealthStatus(healthScore);
-
-      const heightFactor = healthStatus === 'dead' ? 0.68 : healthStatus === 'poor' ? 0.82 : 1.0;
-      const heightMeters = Number(((3.0 + rand() * 1.3) * heightFactor).toFixed(2));
-      const canopyRadiusMeters = Number(((1.15 + rand() * 0.45) * heightFactor).toFixed(2));
-
-      trees.push({
-        id: `T-${row.rowLabel.replace('R-', '')}-${String(idx + 1).padStart(2, '0')}`,
-        rowId: row.id,
-        rowLabel: row.rowLabel,
-        indexInRow: idx + 1,
-        position: pos,
-        geo: {
-          lat: Number((baseLat + pos.z * 0.000009).toFixed(6)),
-          lng: Number((baseLng + pos.x * 0.000014).toFixed(6)),
-        },
-        heightMeters,
-        canopyRadiusMeters,
-        healthScore,
-        healthStatus,
-      });
-    });
-  }
-
-  // 3. Generate orchard LiDAR / photogrammetry point cloud (ground + canopy returns)
-  const positions: number[] = [];
-  const colors: number[] = [];
-
-  const groundPointsCount = 5200;
-  for (let i = 0; i < groundPointsCount; i += 1) {
-    const x = (rand() - 0.5) * 72;
-    const z = (rand() - 0.5) * 58;
-    const y = sampleTerrainElevation(x, z) + (rand() - 0.5) * 0.14;
-
-    positions.push(Number(x.toFixed(2)), Number(y.toFixed(2)), Number(z.toFixed(2)));
-
-    // Subtle earthy elevation gradient
-    const elevNorm = Math.max(0, Math.min(1, (y + 2.0) / 4.0));
-    colors.push(
-      Number((0.36 + elevNorm * 0.18).toFixed(3)),
-      Number((0.44 + elevNorm * 0.16).toFixed(3)),
-      Number((0.34 + elevNorm * 0.12).toFixed(3)),
-    );
-  }
-
-  // Canopy point cloud returns around each calculated tree
-  const statusRgb: Record<OrchardTree3D['healthStatus'], [number, number, number]> = {
-    dead: [0.16, 0.16, 0.18],
-    poor: [0.86, 0.2, 0.2],
-    moderate: [0.95, 0.52, 0.14],
-    healthy: [0.18, 0.68, 0.34],
-  };
-
-  const pointsPerCanopy = 46;
-  for (const tree of trees) {
-    const [rBase, gBase, bBase] = statusRgb[tree.healthStatus];
-    const crownCenterY = tree.position.y + tree.heightMeters * 0.62;
-    const rMax = tree.canopyRadiusMeters * 1.15;
-
-    for (let p = 0; p < pointsPerCanopy; p += 1) {
-      const theta = rand() * Math.PI * 2;
-      const phi = Math.acos(2 * rand() - 1);
-      const radius = rMax * Math.cbrt(rand());
-
-      const px = tree.position.x + radius * Math.sin(phi) * Math.cos(theta);
-      const py = crownCenterY + radius * 0.85 * Math.cos(phi);
-      const pz = tree.position.z + radius * Math.sin(phi) * Math.sin(theta);
-
-      positions.push(Number(px.toFixed(2)), Number(py.toFixed(2)), Number(pz.toFixed(2)));
-      const jitter = (rand() - 0.5) * 0.08;
-      colors.push(
-        Number(Math.max(0, Math.min(1, rBase + jitter)).toFixed(3)),
-        Number(Math.max(0, Math.min(1, gBase + jitter)).toFixed(3)),
-        Number(Math.max(0, Math.min(1, bBase + jitter)).toFixed(3)),
-      );
-    }
-  }
-
+  // Minimal fallback PointCloudData (real rendering uses binary `/las/grojec.las` via `fetchOrchardLasBuffer`)
   const pointCloud: PointCloudData = {
     orchardId,
-    pointCount: positions.length / 3,
-    positions,
-    colors,
+    pointCount: 0,
+    positions: [],
+    colors: [],
     bounds: {
-      min: { x: -36, y: -2.2, z: -29 },
-      max: { x: 36, y: 6.5, z: 29 },
+      min: { x: -115, y: 0, z: -80 },
+      max: { x: 115, y: 10, z: 80 },
     },
   };
 
   cachedScene = {
     orchardId,
-    orchardName: 'Sad Grójec — Sektor A (Placeholder)',
+    orchardName: 'Grojec A',
+    boundaryGeo: GROJEC_A_BOUNDARY_GEO,
+    rowsGeo: GROJEC_A_ROWS_GEO.map(({ id, label, start, end }) => ({ id, label, start, end })),
     pointCloud,
     trees,
     rowLines,

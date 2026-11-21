@@ -66,8 +66,9 @@ Wymagania ogólne po stronie backendu:
 |---|---|---|---|
 | `GET` | `/api/v1/weather/temperature` | Dashboard (wykres temp. min/max) | Dane pogodowe / `Orchard.environmentalData` |
 | `GET` | `/api/v1/orchard/health` | Dashboard (wskaźnik zdrowia sadu) | `Tree` (agregacja `healthIndex`) |
-| `GET` | `/api/v1/orchard/scene` | Dashboard (render 3D sadu) | `Orchard`, `Tree`, chmura punktów |
-| `GET` | `/api/v1/orchard/point-cloud` | Dashboard / warstwy 3D (granularny) | Chmura punktów LiDAR / fotogrametria |
+| `GET` | `/api/v1/orchard/scene` | Dashboard (metadane 3D, granica i drzewa) | `Orchard`, `Tree` |
+| `GET` | `/api/v1/orchards/{orchardId}/point-cloud.las` | Dashboard (binarna chmura punktów `.las`) | Pliki LiDAR `.las` (np. `ui/public/las/grojec.las`) |
+| `GET` | `/api/v1/orchard/point-cloud` | Dashboard / warstwy 3D (alternatywny JSON) | Chmura punktów LiDAR / fotogrametria |
 | `GET` | `/api/v1/orchard/trees` | Dashboard / warstwy 3D (granularny) | `Tree` |
 | `GET` | `/api/v1/orchard/row-lines` | Dashboard / podgląd rzędów | `Orchard.rows` |
 | `POST` | `/api/v1/orchard/row-lines` | Pomocniczy zapis samych polilinii | `Orchard.rows` |
@@ -185,7 +186,17 @@ Zwraca kompletny zestaw danych do renderera 3D (chmura punktów + pojedyncze drz
 
 ---
 
-### 3.4. Granularne endpointy danych 3D i drzew
+### 3.4. `GET /api/v1/orchards/{orchardId}/point-cloud.las` (binarna chmura punktów LiDAR)
+Zwraca surowy binarny plik **`.las`** (nieskompresowany LAS `1.1–1.4`, obsługiwane formaty punktów `0, 1, 2, 3, 6, 7, 8`) do bezpośredniego parsowania po stronie przeglądarki (`ui/src/utils/lasParser.ts`).
+
+- **Path param:** `orchardId` (`ObjectIdString`, dla prezentacji: `6b01933c1dc02a368703a020` → **`Grojec A`**)
+- **Nagłówki odpowiedzi:**
+  - `Content-Type: application/octet-stream`
+  - `Content-Disposition: inline; filename="grojec.las"`
+- **Układ współrzędnych (CRS):** PUWG 1992 (**`EPSG:2180`**). UI automatycznie przelicza wektory `Orchard` / `Tree` z **WGS 84 (`EPSG:4326`)** na `EPSG:2180` (`ui/src/utils/crs2180.ts`) oraz dopasowuje wysokość posadowienia drzew `Y` do siatki punktów gruntu (klasa ASPRS `2`) z pliku `.las`.
+- **Plik referencyjny w repozytorium:** `ui/public/las/grojec.las` (`LAS 1.2`, Point Format `3` z RGB i klasyfikacją, `513 074` punktów, zasięg `220.6 × 153.3 × 8.8 m`, sad **`Grojec A`**).
+
+### 3.5. Granularne endpointy danych 3D i drzew
 Przygotowane do niezależnego dociągania warstw:
 
 - **`GET /api/v1/orchard/point-cloud?orchardId={id}`** → zwraca sam obiekt `PointCloudData` (jak `scene.pointCloud`).

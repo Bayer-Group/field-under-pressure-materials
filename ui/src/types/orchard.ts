@@ -101,6 +101,15 @@ export interface PointCloudData {
 export interface OrchardSceneResponse {
   orchardId: string;
   orchardName: string;
+  /** Optional WGS 84 parcel boundary polygon for draping on top of the LAS cloud */
+  boundaryGeo?: GeoCoord[];
+  /** Optional WGS 84 row endpoints (for projecting onto LAS point cloud in EPSG:2180) */
+  rowsGeo?: Array<{
+    id: string;
+    label: string;
+    start: GeoCoord;
+    end: GeoCoord;
+  }>;
   pointCloud: PointCloudData;
   trees: OrchardTree3D[];
   rowLines: RowLineRecord[];

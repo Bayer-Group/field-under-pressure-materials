@@ -90,17 +90,14 @@ export function getPlaceholderOrchardBoundary(orchardId: ObjectIdString): Orchar
     { lat: 51.84446227417943, lng: 20.853588952884014 },
   ];
 
-  const centerLat = geometry.reduce((acc, p) => acc + p.lat, 0) / geometry.length;
-  const centerLng = geometry.reduce((acc, p) => acc + p.lng, 0) / geometry.length;
-
   return {
     _id: orchardId || '6b01933c1dc02a368703a020',
-    name: 'Orchard 6b01933c…a020 (DB Geometry)',
+    name: 'Grojec A',
     locationLabel: 'Okolice Grójca · WGS 84 (EPSG:4326)',
     geometry,
     center: {
-      lat: Number(centerLat.toFixed(7)),
-      lng: Number(centerLng.toFixed(7)),
+      lat: 51.8450065,
+      lng: 20.8530536,
     },
     areaHectares: 2.22,
     shapeAreaM2: 22195.94,

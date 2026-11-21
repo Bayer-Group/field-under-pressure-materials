@@ -15,7 +15,11 @@ export const apiConfig = {
   /** Defaults to true while backend endpoints are not yet live */
   usePlaceholders: rawUsePlaceholders !== 'false',
   requestTimeoutMs: 4000,
+  binaryTimeoutMs: 25000,
   defaultOrchardId: '6b01933c1dc02a368703a020',
+  defaultOrchardName: 'Grojec A',
+  /** Static repo LAS asset used while backend `.las` endpoint is in placeholder mode */
+  defaultLasAssetUrl: '/las/grojec.las',
 } as const;
 
 export const API_ENDPOINTS = {
@@ -29,6 +33,7 @@ export const API_ENDPOINTS = {
     health: '/api/v1/orchard/health',
     scene: '/api/v1/orchard/scene',
     pointCloud: '/api/v1/orchard/point-cloud',
+    lasPointCloud: (orchardId: string) => `/api/v1/orchards/${encodeURIComponent(orchardId)}/point-cloud.las`,
     trees: '/api/v1/orchard/trees',
     treeById: (treeId: string) => `/api/v1/orchard/trees/${encodeURIComponent(treeId)}`,
     rowLines: '/api/v1/orchard/row-lines',

@@ -105,6 +105,35 @@ export async function fetchOrchardPointCloud(
   );
 }
 
+/**
+ * Fetches binary `.las` point cloud for an orchard from the backend.
+ * In placeholder mode, streams the real repository asset `/las/grojec.las`.
+ */
+export async function fetchOrchardLasBuffer(
+  orchardId: ObjectIdString = apiConfig.defaultOrchardId,
+  signal?: AbortSignal,
+): Promise<ApiResult<ArrayBuffer>> {
+  const endpoint = API_ENDPOINTS.orchard.lasPointCloud(orchardId);
+  if (apiConfig.usePlaceholders) {
+    const buffer = await httpClient.getArrayBuffer(apiConfig.defaultLasAssetUrl, {
+      signal,
+      isAbsoluteUrl: true,
+    });
+    return {
+      data: buffer,
+      source: 'placeholder',
+      endpoint,
+    };
+  }
+
+  const buffer = await httpClient.getArrayBuffer(endpoint, { signal });
+  return {
+    data: buffer,
+    source: 'api',
+    endpoint,
+  };
+}
+
 export async function fetchOrchardTrees(
   orchardId: string = apiConfig.defaultOrchardId,
   signal?: AbortSignal,

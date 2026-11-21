@@ -66,9 +66,19 @@ export interface Translations {
     pointCloudLayer: string;
     treesLayer: string;
     rowLinesLayer: string;
+    boundaryLayer: string;
+    colorModeLabel: string;
+    colorRgb: string;
+    colorElevation: string;
+    colorClass: string;
+    reliefTooltip: string;
     viewOrbit: string;
     viewTop: string;
+    focusTrees: string;
     resetView: string;
+    importLas: string;
+    importLasTooltip: string;
+    loadingLas: string;
     pointsStat: string;
     treesStat: string;
     rowsStat: string;
@@ -207,12 +217,22 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     orchard3d: {
       title: 'Render 3D Sadu — Chmura Punktów i Drzewa',
       subtitle: 'Pojedyncze obiekty 3D wyliczone z linii rzędów nałożone na chmurę punktów terenu',
-      pointCloudLayer: 'Chmura punktów',
+      pointCloudLayer: 'Chmura .las',
       treesLayer: 'Drzewa 3D',
       rowLinesLayer: 'Linie rzędów',
+      boundaryLayer: 'Granica pola',
+      colorModeLabel: 'Kolorowanie chmury punktów',
+      colorRgb: 'RGB',
+      colorElevation: 'Wysokość',
+      colorClass: 'Klasy',
+      reliefTooltip: 'Przełącz skalę wysokości Z (×1 / ×1.8 / ×2.8)',
       viewOrbit: 'Widok 3D',
-      viewTop: 'Widok z góry',
+      viewTop: 'Z góry',
+      focusTrees: 'Drzewa',
       resetView: 'Resetuj kamerę',
+      importLas: 'Wczytaj .las',
+      importLasTooltip: 'Wczytaj lokalny plik LiDAR (.las) do podglądu 3D',
+      loadingLas: 'Ładowanie i parsowanie chmury punktów .las…',
       pointsStat: 'Punktów',
       treesStat: 'Drzew 3D',
       rowsStat: 'Rzędów',
@@ -351,12 +371,22 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     orchard3d: {
       title: '3D Orchard Render — Point Cloud & Trees',
       subtitle: 'Individual 3D tree objects placed from user-drawn row lines over the terrain point cloud',
-      pointCloudLayer: 'Point cloud',
+      pointCloudLayer: '.las Cloud',
       treesLayer: '3D Trees',
       rowLinesLayer: 'Row lines',
+      boundaryLayer: 'Boundary',
+      colorModeLabel: 'Point cloud color mode',
+      colorRgb: 'RGB',
+      colorElevation: 'Elevation',
+      colorClass: 'Class',
+      reliefTooltip: 'Cycle vertical relief scale Z (×1 / ×1.8 / ×2.8)',
       viewOrbit: '3D Orbit',
       viewTop: 'Top Map',
+      focusTrees: 'Trees',
       resetView: 'Reset Camera',
+      importLas: 'Load .las',
+      importLasTooltip: 'Load a local LiDAR (.las) file directly into the 3D viewer',
+      loadingLas: 'Loading & parsing .las point cloud…',
       pointsStat: 'Points',
       treesStat: '3D Trees',
       rowsStat: 'Rows',
