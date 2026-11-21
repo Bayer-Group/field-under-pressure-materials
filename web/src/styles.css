@@ -463,3 +463,48 @@ a.heat-row:hover { color: var(--ink); text-decoration-color: currentColor; }
 .dc-legend .sw.good { background: var(--surface); border-color: var(--green); }
 .dc-legend .sw.info { background: var(--surface); border-color: var(--line-2); }
 .dc-grid.wide { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); align-items: start; }
+
+/* ---------- genus hover descriptions ---------- */
+.genus-wrap { position: relative; display: inline-block; }
+.genus-name { text-decoration: underline dotted var(--muted); text-underline-offset: 3px; cursor: help; }
+.genus-name:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; border-radius: 2px; }
+.genus-tip {
+  position: fixed; z-index: 1000; width: max-content; max-width: 280px;
+  padding: 6px 9px; border-radius: 8px; background: var(--ink); color: #fff; box-shadow: var(--shadow);
+  font-size: 0.78rem; font-weight: 400; line-height: 1.35; white-space: normal; text-align: left;
+  pointer-events: none; visibility: hidden; opacity: 0; transition: opacity 0.1s;
+}
+.genus-tip.open { visibility: visible; opacity: 1; }
+.seg-desc { margin: 0 0 6px; font-size: 0.8rem; color: var(--ink-2); max-width: 70ch; }
+
+/* ---------- roles view ---------- */
+.roles-h { font-size: 0.95rem; margin: 18px 0 4px; }
+.roles-hint { font-size: 0.8rem; color: var(--muted); margin: 0 0 8px; }
+.roles-caveat { font-size: 0.75rem; color: var(--muted); margin-top: 18px; max-width: 760px; }
+.role-tree { list-style: none; margin: 0; padding: 0; }
+.role-row { display: grid; grid-template-columns: 18px minmax(140px, 240px) 1fr 3.8em 9.5em; align-items: center; gap: 8px; padding-top: 2px; padding-bottom: 2px; border-bottom: 1px solid var(--line); font-size: 0.86rem; box-sizing: border-box; }
+.role-row.sel { background: var(--green-wash); }
+.role-row.empty .role-label, .role-row.empty .role-n { opacity: 0.55; }
+.role-label { position: relative; }
+.role-btn { font: inherit; background: none; border: 0; padding: 2px 0; color: var(--ink); cursor: pointer; text-align: left; }
+.role-btn[aria-pressed='true'] { font-weight: 700; }
+.role-btn:focus-visible, .twist:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+.role-label:hover .role-tip, .role-label:focus-within .role-tip { visibility: visible; opacity: 1; }
+.role-tip { bottom: calc(100% + 2px); }
+.twist { padding: 0; width: 18px; font-size: 0.8rem; line-height: 1; }
+.role-bar { height: 8px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
+.role-bar span { display: block; height: 100%; min-width: 1px; border-radius: 4px; }
+.role-pct { text-align: right; font-variant-numeric: tabular-nums; }
+.role-n { font-size: 0.75rem; }
+.table-scroll { overflow-x: auto; }
+.table-scroll .comp-table { min-width: 720px; }
+.role-genera .comp-table tr.rest td { font-style: italic; }
+@media (max-width: 700px) { .role-row { grid-template-columns: 18px minmax(120px, 1fr) 3.8em; } .role-bar, .role-n { display: none; } }
+
+/* ---------- who may carry it ---------- */
+.dc-carriers { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); font-size: 0.78rem; }
+.dc-carriers .carrier-head { margin: 2px 0; color: var(--ink); }
+.carrier-agree { color: var(--muted); margin: 2px 0; font-size: 0.76rem; }
+.carrier-agree.caution { color: var(--caution); font-weight: 600; }
+.carrier-list { margin: 2px 0 0; }
+.carrier-sp { color: var(--muted); }

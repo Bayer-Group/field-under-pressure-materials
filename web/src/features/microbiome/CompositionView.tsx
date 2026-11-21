@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Composition } from '../../api'
+import { GenusName } from '../../GenusName'
 import { OTHER, UNASSIGNED, hasOwnColor, inkOn, phylumColor } from './colors'
 
 const pct = (v: number) => (v >= 10 ? v.toFixed(0) : v >= 0.1 ? v.toFixed(1) : v >= 0.01 ? v.toFixed(2) : v > 0 ? '<0.01' : '0') + '%'
@@ -9,7 +10,7 @@ const GAP = 2 // px of surface between two parts wide enough to carry one
 const MIN_GAPPED = 6 // parts narrower than this touch their neighbours (thousands of genera cannot all have gaps)
 const FIRST_ROWS = 25 // table rows shown before "Show all"
 
-interface Part { key: string; label: string; detail: string | null; pct: number; reads: number | null; color: string }
+interface Part { key: string; label: string; detail: string | null; description: string | null; pct: number; reads: number | null; color: string }
 
 const SINGULAR_TITLE = { phylum: 'Phylum', class: 'Class', genus: 'Genus' } as const
 const EXAMPLE = {
@@ -24,13 +25,13 @@ const EXAMPLE = {
 export function CompositionView({ data, query, onQuery }: { data: Composition; query: string; onQuery: (q: string) => void }) {
   const { kind, rank } = data
   const named: Part[] = data.taxa.map((t) => ({
-    key: t.name, label: t.name, detail: rank === 'phylum' ? null : t.phylum, pct: t.pct, reads: t.reads,
+    key: t.name, label: t.name, detail: rank === 'phylum' ? null : t.phylum, description: rank === 'genus' ? t.description ?? null : null, pct: t.pct, reads: t.reads,
     color: phylumColor(kind, t.phylum),
   }))
   const rest: Part[] = [
-    { key: '_other', label: `Other ${PLURAL[rank]}`, detail: `${data.n_taxa - data.taxa.length} more`,
+    { key: '_other', label: `Other ${PLURAL[rank]}`, detail: `${data.n_taxa - data.taxa.length} more`, description: null,
       pct: data.other_pct, reads: null, color: OTHER },
-    { key: '_unassigned', label: `No ${rank} name`, detail: 'reads that could not be named this precisely',
+    { key: '_unassigned', label: `No ${rank} name`, detail: 'reads that could not be named this precisely', description: null,
       pct: data.unassigned_pct, reads: null, color: UNASSIGNED },
   ].filter((p) => p.pct > 0)
 
@@ -89,6 +90,7 @@ export function CompositionView({ data, query, onQuery }: { data: Composition; q
           ? <><b>{hovered.label}</b>{hovered.detail && ` · ${hovered.detail}`} · {pct(hovered.pct)}{hovered.reads !== null && ` · ${fmt.format(hovered.reads)} reads`}</>
           : `${fmt.format(data.n_taxa)} ${PLURAL[rank]}. Point at the bar to name a part.`}
       </p>
+      {hovered?.description && <p className="seg-desc">{hovered.description}</p>}
       <div className="legend comp-legend">
         {legend.map((ph) => <span key={ph}><i style={{ background: phylumColor(kind, ph) }} />{ph}</span>)}
         {greyPhyla > 0 && <span><i style={{ background: OTHER }} />{greyPhyla} more {greyPhyla === 1 ? 'phylum' : 'phyla'} (listed in the table)</span>}
@@ -116,7 +118,8 @@ export function CompositionView({ data, query, onQuery }: { data: Composition; q
             <tr key={p.key} className={[hover === p.key ? 'on' : '', p.key.startsWith('_') ? 'rest' : '', short && i === FIRST_ROWS ? 'after-gap' : ''].join(' ')}
               onPointerEnter={() => setHover(p.key)}>
               <td>
-                <i className="swatch" style={{ background: p.color }} />{p.label}
+                <i className="swatch" style={{ background: p.color }} />
+                {rank === 'genus' && !p.key.startsWith('_') ? <GenusName name={p.label} description={p.description} /> : p.label}
                 {p.key.startsWith('_') && <span className="muted"> · {p.detail}</span>}
               </td>
               {rank !== 'phylum' && <td className="muted">{p.key.startsWith('_') ? '' : p.detail ?? '–'}</td>}

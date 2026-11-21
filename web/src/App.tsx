@@ -16,7 +16,7 @@ export function App() {
         </a>
         <span className="tagline">Satellite greenness, aerial photos and soil microbes for each sampled plot</span>
       </header>
-      {route.page === 'event' ? <EventDetails eventId={route.eventId} /> : <Explorer plotId={route.plotId} tab={route.tab} sampleId={route.sampleId} unit={route.unit} crop={route.crop} />}
+      {route.page === 'event' ? <EventDetails eventId={route.eventId} /> : <Explorer plotId={route.plotId} tab={route.tab} sampleId={route.sampleId} unit={route.unit} crop={route.crop} view={route.view} />}
     </div>
   )
 }

@@ -20,12 +20,15 @@ joined_fungi_genus (scripts/06) and fungal_guilds (scripts/14).
 from __future__ import annotations
 
 import datetime as dt
+from typing import Literal
 
 import pandas as pd
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from . import api as core
+from . import microbe_roles
+from .api_microbiome import MIN_BACTERIA_READS, _bacteria_taxa
 
 MATCH_DAYS = 7          # a NEON measurement within this many days of the metagenome counts as the same visit
 MIN_COUNT = 5           # fewer gene copies than this is a trace
@@ -34,6 +37,25 @@ MIN_FUNGAL_READS = 5_000
 # When a gene or fungal card is coloured "worth noticing" (rules on the sample alone, stated on the card):
 N2O_FLAG_RATIO = 10     # N2O-making genes (norB) per N2O-removing gene (nosZ), or no remover at all
 PATHOGEN_GENUS_FLAG = 15.0   # one genus that includes plant pathogens makes up this % of named fungal DNA
+# Named carriers (docs/microbe_roles.md section 6.3): shares are of the sample's classified bacterial + archaeal reads
+CARRIER_MIN_PCT = 0.1                 # summed share of a term's genera from which "known carriers are present"
+CARRIER_TOP = 5                       # genera listed per term
+BACTERIA_PATHOGEN_GENUS_FLAG = 1.0    # % of classified bacterial+archaeal reads, one mostly-pathogenic genus
+CARRIER_TERMS = ["n_fixation", "nitrification", "denitrification", "nosZ", "dnra", "p_mobilisation",
+                 "antibiotic_producer", "acdS", "chitinase"]   # = ontology terms with a ko_group, ontology order
+CARD_CARRIER_TERMS = {"nitrogen": ["n_fixation", "nitrification", "denitrification", "nosZ", "dnra"],
+                      "p_release": ["p_mobilisation"], "root_health": ["antibiotic_producer", "acdS", "chitinase"]}
+PATHWAY_TERM = {"Denitrification": "denitrification", "Nitrate kept as ammonium (DNRA)": "dnra",
+                "Nitrification": "nitrification", "Nitrogen fixation": "n_fixation"}   # Urea breakdown: no term
+GENE_STATUS_ORDER = ["found", "trace", "not_found", "too_few_genes"]
+AGREEMENT_TEXT = {
+    "both": "Genes found, and genera known to carry them are present.",
+    "genes_only": "Genes found, but no known carrier by name: they may come from unnamed or unexpected microbes.",
+    "names_only": "Known carriers present by name, but genes not found: sequencing depth may be too low, or these "
+                  "strains lack the genes.",
+    "neither": "Neither genes nor known carriers by name found.",
+    "unknown": "Too few genes to compare with the named carriers.",
+}
 
 # function_group in rules/ko_panel.csv -> (title, what it does, theme); used for the gene list
 GROUPS: dict[str, tuple[str, str, str]] = {
@@ -112,6 +134,7 @@ class FunctionGroup(BaseModel):
     theme: str                       # nitrogen | phosphorus | plant | pressure
     status: str                      # found | trace | not_found | too_few_genes
     genes: list[GeneCount]
+    term_id: str | None              # ontology term whose ko_group lists this group (phlD, hcnA -> antibiotic_producer)
 
 
 class PathwayStep(BaseModel):
@@ -127,6 +150,7 @@ class Pathway(BaseModel):
     steps: list[PathwayStep]
     complete: bool                   # every step found
     note: str | None
+    term_id: str | None              # ontology term of the pathway (None for urea breakdown)
 
 
 class FungalRole(BaseModel):
@@ -134,6 +158,7 @@ class FungalRole(BaseModel):
     label: str
     pct: float                       # share of fungal reads with a genus name
     top: list[str]                   # largest genera, "Fusarium 11.6%"
+    term_id: str | None              # ontology term of the FUNGuild category; label is the ontology label when set
 
 
 class Fungi(BaseModel):
@@ -163,16 +188,42 @@ class Implication(BaseModel):
 
 
 class DecisionCard(BaseModel):
-    card: str                        # n_now | n_release | soil | nitrogen | fungi | p_release | copper | root_health
+    card: str                        # n_now | n_release | soil | nitrogen | fungi | bacteria_pathogens | p_release | copper | root_health
     title: str
     status: str                      # good | watch | act (measured threshold) | notice (sample rule) | info | unknown
     headline: str                    # one short line for the card face
     flag: str | None                 # why the card is coloured, when it is
     finding: str                     # what is there, one or two sentences
     implications: list[Implication]  # what that can mean: possible upsides and risks, no prescriptions
-    basis: str                       # measured | genes | fungi
+    basis: str                       # measured | genes | fungi | names
     confidence: str                  # high | medium | low
     evidence: list[str]              # the numbers and rules behind the finding
+    carrier_terms: list[str] = []    # term ids to look up in FunctionProfile.carriers ("Who may carry it")
+
+
+Agreement = Literal["both", "genes_only", "names_only", "neither", "unknown"]
+
+
+class CarrierGenus(BaseModel):
+    name: str
+    pct: float                       # share of classified bacterial + archaeal reads, 4 decimals
+    term_id: str                     # term of the representative row (e.g. legume_symbiont under n_fixation)
+    confidence: Literal["high", "medium"]
+    evidence: str
+    species_examples: list[str]
+    description: str | None
+
+
+class Carriers(BaseModel):
+    term_id: str
+    label: str                       # ontology label
+    ko_groups: list[str]             # function groups behind the genes
+    pct: float                       # term pct from the roll-up (counted rows, term + descendants)
+    n_genera: int
+    top: list[CarrierGenus]          # largest first, at most CARRIER_TOP
+    genes: str                       # found | trace | not_found | too_few_genes: best status over ko_groups
+    agreement: Agreement
+    agreement_text: str
 
 
 class FunctionProfile(BaseModel):
@@ -187,6 +238,7 @@ class FunctionProfile(BaseModel):
     groups: list[FunctionGroup]
     measured: Measured | None
     notes: list[str]
+    carriers: list[Carriers]         # one per CARRIER_TERMS entry, that order; [] when taxa_lineage is missing
 
 
 # ---------------------------------------------------------------- data
@@ -241,7 +293,7 @@ def _pathways(copies: dict[str, int], deep: bool) -> list[Pathway]:
         st = [PathwayStep(step=s, genes=g, copies=sum(copies.get(x, 0) for x in g),
                           status=_status(sum(copies.get(x, 0) for x in g), deep)) for s, g in steps]
         out.append(Pathway(name=name, kegg_module=module, steps=st, note=note,
-                           complete=all(s.status == "found" for s in st)))
+                           complete=all(s.status == "found" for s in st), term_id=PATHWAY_TERM.get(name)))
     return out
 
 
@@ -277,15 +329,74 @@ def _fungi(r) -> Fungi | None:
     named["role"] = named["genus"].map(guilds["category"]) if len(guilds) else "no_guild"
     named["role"] = named["role"].fillna("no_guild")
     named["pct"] = 100 * named["rel_abund_pct"] / total
+    onto = microbe_roles.load_ontology().set_index("term_id")["label"]
     roles = []
     for role, sub in named.groupby("role"):
+        term = microbe_roles.FUNGUILD_CATEGORY_TERM.get(role)
         sub = sub.sort_values("pct", ascending=False)
-        roles.append(FungalRole(role=role, label=FUNGAL_ROLE.get(role, role), pct=round(float(sub["pct"].sum()), 2),
+        roles.append(FungalRole(role=role, label=onto[term] if term else FUNGAL_ROLE.get(role, role), term_id=term,
+                                pct=round(float(sub["pct"].sum()), 2),
                                 top=[f"{x.genus} {x.pct:.1f}%" if x.pct >= 0.05 else f"{x.genus} <0.1%"
                                      for x in sub.head(4).itertuples()]))
     roles.sort(key=lambda x: -x.pct)
     return Fungi(date=date, same_cores=same, reads=reads, named_pct=round(total / float(g["rel_abund_pct"].sum()) * 100, 1),
                  roles=roles)
+
+
+# ---------------------------------------------------------------- named carriers
+def _gene_status(onto_row, groups: dict[str, str]) -> str:
+    """Best gene status over the term's ko_groups: found > trace > not_found > too_few_genes."""
+    got = [groups[g] for g in onto_row.ko_groups if g in groups]
+    return min(got, key=GENE_STATUS_ORDER.index) if got else "too_few_genes"
+
+
+def _agreement(term_id: str, genes: str, pct: float) -> tuple[str, str]:
+    """Do the genes and the named genera tell the same story? (docs/microbe_roles.md 6.3 table)"""
+    names = pct >= CARRIER_MIN_PCT
+    if genes == "too_few_genes":
+        kind = "unknown"
+    elif genes in ("found", "trace"):
+        kind = "both" if names else "genes_only"
+    else:
+        kind = "names_only" if names else "neither"
+    text = AGREEMENT_TEXT[kind]
+    if genes == "trace":    # the cards call a trace "not found"; say so instead of "Genes found"
+        text = ("Only a trace of the genes (rare genes are often missed when DNA is assembled), but genera known to "
+                "carry them are present." if names else
+                "Only a trace of the genes, and no known carrier by name.")
+    if term_id == "antibiotic_producer":
+        text += " The marker genes (DAPG, hydrogen cyanide) cover only some antimicrobial producers."
+    return kind, text
+
+
+def _carriers(ru: microbe_roles.RollUp, groups: list[FunctionGroup]) -> list[Carriers]:
+    """Genera of this metagenome that are known for each gene-backed role, next to what the genes say."""
+    status = {g.group: g.status for g in groups}
+    terms = ru.terms.set_index("term_id", drop=False)
+    out = []
+    for tid in CARRIER_TERMS:
+        t = terms.loc[tid]
+        genes = _gene_status(t, status)
+        agreement, text = _agreement(tid, genes, float(t["pct"]))
+        top = ru.term_genera[ru.term_genera["term_id"] == tid].head(CARRIER_TOP)
+        out.append(Carriers(
+            term_id=tid, label=t["label"], ko_groups=list(t["ko_groups"]), pct=round(float(t["pct"]), 2),
+            n_genera=int(t["n_genera"]), genes=genes, agreement=agreement, agreement_text=text,
+            top=[CarrierGenus(name=x.name, pct=round(float(x.pct), 4), term_id=x.row_term_id,
+                              confidence=x.confidence, evidence=x.evidence, species_examples=list(x.species_examples),
+                              description=x.description if isinstance(x.description, str) else None)
+                 for x in top.itertuples()]))
+    return out
+
+
+def _bacteria_rollup(r) -> tuple[microbe_roles.RollUp | None, int]:
+    """Genus roll-up of the metagenome's bacteria + archaea (as in the Soil microbes tab) and its classified reads."""
+    if not _has("taxa_lineage"):
+        return None, 0
+    lin = core.table("taxa_lineage")
+    reads = int(lin[(lin["metagenome_key"] == r.metagenome_key) & (lin["rank"] == "domain")]["reads"].sum())
+    taxa = _bacteria_taxa(r.metagenome_key, "genus")
+    return microbe_roles.roll_up(taxa, "bacteria", ann=microbe_roles.load_annotations(core.PROCESSED)), reads
 
 
 # ---------------------------------------------------------------- cards
@@ -298,8 +409,71 @@ def _band(value: float, bands: list) -> tuple[str, str, str]:
     return next((name, kind, text) for top, name, kind, text in bands if value < top)
 
 
+def _abbrev(species: str) -> str:
+    """'Streptomyces scabies' -> 'S. scabies'."""
+    genus, _, rest = species.partition(" ")
+    return f"{genus[:1]}. {rest}" if rest else species
+
+
+def _bacteria_pathogen_card(ru: microbe_roles.RollUp, reads: int) -> DecisionCard:
+    """Named bacterial genera with plant pathogens, from the microbe-role roll-up (docs/microbe_roles.md 6.3).
+    Genera whose species are *mostly* pathogens (evidence well_known_genus) may colour the card; genera where
+    only some species are pathogens (Pseudomonas, Streptomyces) never do."""
+    imp = lambda kind, text: Implication(kind=kind, text=text)  # noqa: E731
+    label = dict(zip(ru.terms["term_id"], ru.terms["label"]))
+    path = ru.term_genera[ru.term_genera["term_id"] == "plant_pathogen"]
+    total = float(path["pct"].sum())
+    mostly = path[path["evidence"] == "well_known_genus"]
+    some = path[path["evidence"] != "well_known_genus"]
+    mostly_pct = float(mostly["pct"].sum())
+    flagged = mostly[mostly["pct"] >= BACTERIA_PATHOGEN_GENUS_FLAG].head(1)
+    flag = f"{flagged.iloc[0]['name']} alone is {flagged.iloc[0]['pct']:.1f}% of bacterial DNA" if len(flagged) else None
+    listed = path.head(4)                                     # term_genera is sorted largest first
+    names = lambda df: ", ".join(f"{x.name} {_p(x.pct)}" for x in df.head(3).itertuples())  # noqa: E731
+    if path.empty:
+        headline, finding = ("No genera known for plant pathogens",
+                             "No genus with a known plant pathogen was found among the classified bacterial DNA.")
+    else:
+        headline = (f"{_p(total)} from genera that include plant pathogens · "
+                    f"{_p(mostly_pct)} from mostly pathogenic genera")
+        parts = [f"{x.name} {_p(x.pct)}" + (f" ({_abbrev(x.species_examples[0])})" if x.species_examples else "")
+                 for x in listed.itertuples()]
+        finding = (f"Of the classified bacterial DNA, {_p(total)} is from genera that include plant pathogens: "
+                   + ", ".join(parts) + ".")
+    imps = []
+    if len(mostly):
+        imps.append(imp("risk", f"Genera whose species are mostly plant pathogens are present ({names(mostly)}). "
+                                "Disease also needs a susceptible crop and suitable weather."))
+    if len(some):
+        imps.append(imp("neutral", f"Most of this share is from genera where only some species cause disease "
+                                   f"({names(some)}); harmless relatives usually dominate in soil."))
+    imps.append(imp("neutral", "Names come from short DNA reads matched to reference genomes: small shares of "
+                               "well-known pathogen genera can be misassigned reads."))
+    ev = [f"{x.name} {x.pct:.2f}%: {label.get(x.row_term_id, x.row_term_id)}, {x.confidence} confidence, {x.source}"
+          + (f" ({'; '.join(x.species_examples[:2])})" if x.species_examples else "") for x in listed.itertuples()]
+    ev.append(f"Coloured when one genus whose species are mostly plant pathogens makes up "
+              f"{BACTERIA_PATHOGEN_GENUS_FLAG:.0f}% or more of the classified bacterial DNA.")
+    ev.append("Roles from the microbe role annotation (AI, with a second AI review of harmful genera), genus level.")
+    if reads < MIN_BACTERIA_READS:
+        ev.append("Few bacterial reads: small shares may be noise.")
+    return DecisionCard(card="bacteria_pathogens", title="Bacteria that include plant pathogens",
+                        status="notice" if flag else "info", headline=headline, flag=flag, finding=finding,
+                        implications=imps, basis="names", confidence="low", evidence=ev, carrier_terms=[])
+
+
 def _cards(copies: dict[str, int], pathways: list[Pathway], fungi: Fungi | None, m: Measured | None,
-           deep: bool, guilds: pd.DataFrame) -> list[DecisionCard]:
+           deep: bool, guilds: pd.DataFrame, bacteria: microbe_roles.RollUp | None = None,
+           bacteria_reads: int = 0) -> list[DecisionCard]:
+    """The cards of one sample; `bacteria` is the sample's genus roll-up (None without genus-level data)."""
+    cards = _gene_cards(copies, pathways, fungi, m, deep, guilds, bacteria, bacteria_reads)
+    for c in cards:
+        c.carrier_terms = CARD_CARRIER_TERMS.get(c.card, [])
+    return cards
+
+
+def _gene_cards(copies: dict[str, int], pathways: list[Pathway], fungi: Fungi | None, m: Measured | None,
+                deep: bool, guilds: pd.DataFrame, bacteria: microbe_roles.RollUp | None,
+                bacteria_reads: int) -> list[DecisionCard]:
     U, R, N = "upside", "risk", "neutral"
     imp = lambda kind, text: Implication(kind=kind, text=text)  # noqa: E731
     c = lambda *genes: sum(copies.get(x, 0) for x in genes)  # noqa: E731
@@ -442,6 +616,9 @@ def _cards(copies: dict[str, int], pathways: list[Pathway], fungi: Fungi | None,
                                   headline=headline, flag="; ".join(flags) or None, finding=finding,
                                   implications=imps, basis="fungi", confidence="low", evidence=ev
                                   + (["Few fungal reads: small shares may be noise."] if few else [])))
+
+    if bacteria is not None and len(bacteria.genera):     # names, not genes: independent of gene depth too
+        cards.append(_bacteria_pathogen_card(bacteria, bacteria_reads))
 
     if not deep:
         for card, title in [("nitrogen", "Nitrogen cycle microbes"), ("p_release", "Phosphorus release by microbes"),
@@ -617,11 +794,13 @@ def function_profile(sample_id: str):
     if rules.exists():
         k = pd.read_csv(rules)
         caveats = {g: (c if isinstance(c, str) else None) for g, c in zip(k["gene"], k["caveat"])}
+    onto = microbe_roles.load_ontology()
     groups = []
     for g, (title, meaning, theme) in GROUPS.items():
         genes = mine[mine["function_group"] == g]
         groups.append(FunctionGroup(group=g, title=title, meaning=meaning, theme=theme,
                                     status=_status(int(genes["count"].sum()), deep),
+                                    term_id=next(iter(microbe_roles.terms_for_ko_group(onto, g)), None),
                                     genes=[GeneCount(gene=x.gene, ko=x.ko, count=int(x.count),
                                                      caveat=caveats.get(x.gene)) for x in genes.itertuples()]))
 
@@ -629,6 +808,8 @@ def function_profile(sample_id: str):
     fungi = _fungi(r)
     guilds = core.table("fungal_guilds").set_index("genus") if _has("fungal_guilds") else pd.DataFrame()
     measured = _measured(r.plotID, r.date)
+    ru, bacteria_reads = _bacteria_rollup(r)
+    carriers = _carriers(ru, groups) if ru is not None else []
     notes = [f"This sample on its own: {r.n_ko_genes:,} genes were assembled from its DNA. Genes show what the "
              "microbes are equipped to do, not how active they are."]
     if not deep:
@@ -640,6 +821,10 @@ def function_profile(sample_id: str):
         notes.append("No NEON fungal (ITS) data for this soil within a week of the sample.")
     elif not _has("fungal_guilds"):
         notes.append("Fungal roles need FUNGuild: run scripts/16_fetch_funguild.py.")
+    if carriers:
+        notes.append("Who may carry it: genera of this sample's bacteria and archaea known for the role (AI "
+                     "annotation, medium or high confidence); shares are of the classified bacterial and archaeal reads.")
     return FunctionProfile(sample_id=r.sample_id, plot_id=r.plotID, date=r.date, n_genes=r.n_ko_genes,
-                           deep_enough=deep, cards=_rank(_cards(copies, pathways, fungi, measured, deep, guilds)),
-                           pathways=pathways, fungi=fungi, groups=groups, measured=measured, notes=notes)
+                           deep_enough=deep, cards=_rank(_cards(copies, pathways, fungi, measured, deep, guilds, ru, bacteria_reads)),
+                           pathways=pathways, fungi=fungi, groups=groups, measured=measured, notes=notes,
+                           carriers=carriers)
