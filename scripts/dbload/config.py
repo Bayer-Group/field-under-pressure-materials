@@ -7,7 +7,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
-DEFAULT_DATASETS = ("grid_cell", "weather_hourly", "field", "field_crop_share")
+DEFAULT_DATASETS = ("grid_cell", "weather_hourly", "field", "field_crop_share")   # config/load_db.toml enables more
 
 
 def _abs(root: Path, p) -> Path:
@@ -51,6 +51,7 @@ class Settings:
     years: set[int] | None = None
     voiv: set[str] | None = None
     months: set[int] | None = None
+    tiles: set[int] | None = None                # cropland tile numbers to load (None = every tile found)
     limit_files: int | None = None
     dry_run: bool = False
     validate_only: bool = False
@@ -77,6 +78,8 @@ class Settings:
             if "enabled" in ds:
                 s.enabled = tuple(ds["enabled"])
             s.batch_size = int(opt.get("batch_size", s.batch_size))
+            if opt.get("years"):
+                s.years = {int(y) for y in opt["years"]}
             if inp.get("fields"):
                 s.fields = _abs(root, inp["fields"])
             s.fields_source = inp.get("fields_source", s.fields_source)

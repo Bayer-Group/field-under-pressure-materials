@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import struct
 import sys
 import tempfile
 import unittest
@@ -28,6 +29,7 @@ from dbload import transforms as T
 from dbload.backends import register_backend
 from dbload.config import Settings, parse_months
 from dbload.fields import load_fields, to_ewkt
+from dbload.names import voiv_slug
 from dbload.pipeline import Pipeline
 from dbload.raster_agg import field_class_counts
 from dbload.sources import parse_parquet_path
@@ -187,6 +189,39 @@ class UnitTests(unittest.TestCase):
             self.assertEqual(dict(counts["C"]), {65535: 16})
             self.assertNotIn("B", counts)
 
+    def test_overlapping_tiles_do_not_count_padding(self):
+        # CTY tiles have overlapping bounding boxes and 0 padding: real data must win over the padding of the other tile
+        with tempfile.TemporaryDirectory() as d:
+            def tile(name, x0, left, right):
+                arr = np.full((20, 40), right, dtype=np.uint16)
+                arr[:, :20] = left
+                path = Path(d) / name
+                with rasterio.open(path, "w", driver="GTiff", height=20, width=40, count=1, dtype="uint16", crs="EPSG:4326",
+                                   transform=Affine(0.0001, 0, x0, 0, -0.0001, 50.002)) as dst:
+                    dst.write(arr, 1)
+                return path
+            a = tile("a.tif", 17.000, 1110, 1110)    # real data over x 17.000-17.004
+            b = tile("b.tif", 17.002, 0, 1110)       # overlap 17.002-17.004 is padding (0), real data 17.004-17.006
+            gj = Path(d) / "f.geojson"
+            gj.write_text(json.dumps({"type": "FeatureCollection", "features": [
+                {"type": "Feature", "properties": {"field_id": "F"}, "geometry": rect(17.0005, 50.0005, 17.0055, 50.0015)}]}))
+            counts = field_class_counts([a, b], load_fields(gj), log=lambda *_: None)
+            self.assertEqual(dict(counts["F"]), {1110: 500})        # no 0 from the padding
+
+    def test_voiv_slug_maps_names_that_lost_polish_letters(self):
+        self.assertEqual(voiv_slug("Kujawsko-Pomorskie"), "kujawsko_pomorskie")
+        self.assertEqual(voiv_slug("odzkie"), "lodzkie")
+        self.assertEqual(voiv_slug("Maopolskie"), "malopolskie")
+        self.assertEqual(voiv_slug("Łódzkie"), "lodzkie")
+        self.assertEqual(voiv_slug("mazowieckie"), "mazowieckie")
+
+    def test_wkb_to_ewkb_hex_adds_the_srid(self):
+        point = struct.pack("<BIdd", 1, 1, 20.5, 52.0)                 # little-endian WKB point
+        ewkb = bytes.fromhex(T.wkb_to_ewkb_hex(point))
+        self.assertEqual(struct.unpack("<BII", ewkb[:9]), (1, 1 | 0x20000000, 4326))
+        self.assertEqual(struct.unpack("<dd", ewkb[9:]), (20.5, 52.0))
+        self.assertIsNone(T.wkb_to_ewkb_hex(None))
+
 
 class PipelineTests(Base):
     def test_full_load(self):
@@ -225,6 +260,15 @@ class PipelineTests(Base):
         self.assertEqual([v for v in p.report["validation"] if v["status"] == "FAIL"], [])
         # the loader changed no schema
         self.assertEqual(len(self.q("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")), 6)
+
+    def test_duplicate_rows_inside_a_file_are_loaded_once(self):
+        path = self.raw / "weather_hourly" / "year=2024" / "voivodeship=opolskie" / "weather_hourly_2024_Opolskie_part000.parquet"
+        t = pq.read_table(path)
+        pq.write_table(pa.concat_tables([t, t.slice(0, 5), t.slice(60, 3)]), path)     # 8 repeated keys, not adjacent
+        p, code, log = self.run_pipeline()
+        self.assertEqual(code, 0, log)
+        self.assertEqual(self.q("SELECT COUNT(*) FROM weather_hourly")[0][0], 288)
+        self.assertEqual(p.report["datasets"]["weather_hourly"]["stats"]["duplicate_rows_removed"], 8)
 
     def test_resume_skips_loaded_files(self):
         self.run_pipeline()
