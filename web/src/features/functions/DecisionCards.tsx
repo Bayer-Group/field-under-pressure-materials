@@ -73,7 +73,7 @@ function Card({ c, carriers }: { c: DecisionCard; carriers?: Carriers[] }) {
     <article className={`sc-card ${st?.tone ?? 'plain'}`}>
       <header>
         <h4>{c.title}</h4>
-        {st && <span className={`sc-tag ${st.tone}`}><i aria-hidden="true" />{st.label}</span>}
+        {st && <span className={`sc-tag ${st.tone}`}><i aria-hidden="true" />{c.tag ?? st.label}</span>}
       </header>
       <p className="sc-headline">{c.headline}</p>
       {c.flag && <p className="sc-flag">{c.flag}</p>}
@@ -101,6 +101,17 @@ function Card({ c, carriers }: { c: DecisionCard; carriers?: Carriers[] }) {
             <p className="carrier-list">{x.top.length ? <CarrierList top={x.top} /> : 'No known carrier above 0.1% of reads.'}</p>
           </div>
         ))}
+        {(c.confidence_factors ?? []).length > 0 && (
+          <div className="sc-confidence">
+            <span className="sc-label">Why {c.confidence} confidence</span>
+            <ul>
+              {c.confidence_factors.map((f) => (
+                <li key={f.text} className={f.level}><i aria-hidden="true" />{f.text}<span className="sr-only"> ({f.level})</span></li>
+              ))}
+            </ul>
+            <p className="sc-conf-rule">The weakest of these sets the level.</p>
+          </div>
+        )}
         {c.evidence.length > 0 && (
           <details className="sc-evidence">
             <summary>Numbers and rules</summary>

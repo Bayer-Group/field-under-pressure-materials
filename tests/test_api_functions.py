@@ -65,8 +65,8 @@ def test_profile_reads_the_sample_on_its_own(client):
         if isinstance(x, dict):
             return set(x) | set().union(*(keys(v) for v in x.values()))
         return set().union(*(keys(v) for v in x)) if isinstance(x, list) else set()
-    assert not keys(p) & {"percentile", "level", "relative", "reference", "ref_min", "ref_median", "ref_max",
-                          "n2o_ratio_percentile"}                       # nothing compares with other samples
+    assert not keys(p) & {"percentile", "relative", "reference", "ref_min", "ref_median", "ref_max",
+                          "n2o_ratio_percentile"}                       # no ranking without the module tables
     den = next(x for x in p["pathways"] if x["kegg_module"] == "M00529")
     assert den["complete"] and [s["copies"] for s in den["steps"]] == [300, 200, 120, 20]
     fix = next(x for x in p["pathways"] if x["kegg_module"] == "M00175")
@@ -292,7 +292,8 @@ def with_modules(client):
                   T("K14266", "Pseudomonadota", "Pseudomonadaceae", "Pseudomonas", 8, 85.0),
                   T("K07787", "Pseudomonadota", "", "", 30, 70.0)]
                  ).rename(columns={"class_": "class"}).to_parquet(proc / "ko_taxa.parquet")
-    pd.DataFrame([dict(metagenome_key="nmdc:dobj-a", ko="K07787", count=300)]            # 3 per genome here
+    pd.DataFrame([dict(metagenome_key="nmdc:dobj-a", ko=k, count=8) for k in ("K14266", "K19981", "K14257", "K19982")]
+                 + [dict(metagenome_key="nmdc:dobj-a", ko="K07787", count=300)]            # 3 per genome here
                  + [dict(metagenome_key=k, ko="K07787", count=50 + 10 * i) for i, k in enumerate(others)]   # 0.5-1.0
                  ).to_parquet(proc / "ko_counts_all.parquet")
     return client
@@ -331,3 +332,48 @@ def test_copper_is_compared_per_genome(with_modules):
     assert "more than in the other well-sequenced farm soils" in cu["headline"]
     assert cu["context"].startswith("About 3.0 copies per bacterial genome here; 0.5-1.0 in the 6 other")
     assert cu["who"] == ["proteobacteria (100%)"]
+
+
+def test_confidence_is_the_weakest_factor():
+    from cropfit import confidence as conf
+    f = [conf.genes(500), conf.depth(150), conf.reference(9, 1)]
+    assert [x.level for x in f] == ["high", "medium", "medium"] and conf.weakest(f) == "medium"
+    assert conf.weakest(f + [conf.genes(12)]) == "low" and conf.weakest([]) == "low"
+    assert conf.reference(25, 1).level == "medium"                          # one site caps a large reference
+    near = conf.margin(24.0, [25.0, 10.0], conf.NITRATE_MARGIN, "Nitrate", " mg/kg")
+    assert near.level == "low" and near.text == "Nitrate 24 mg/kg is 1 mg/kg from the 25 mg/kg line"
+    assert conf.margin(6.5, [5.5, 6.0, 7.0, 7.5], conf.PH_MARGIN, "pH", relative=False).level == "high"
+    assert conf.days(0).text == "Measured on the day of the DNA sample" and conf.days(5).level == "medium"
+
+
+def test_card_confidence_comes_from_its_data(with_modules):
+    cards = {c["card"]: c for c in with_modules.get("/api/functions/mg-dobj-a").json()["cards"]}
+    now = cards["n_now"]
+    assert [f["level"] for f in now["confidence_factors"]] == ["high", "high", "high"]    # 2 days, 3 cores, 15 vs 10
+    assert now["confidence"] == "high"
+    cu = {f["text"]: f["level"] for f in cards["copper"]["confidence_factors"]}
+    assert cu == {"38 copper-resistance gene copies": "medium",
+                  "Sequenced to about 100 bacterial genomes' worth of DNA": "medium",
+                  "'Who does it': genes match known genomes at about 70% identity": "medium",
+                  "Compared with 6 other well-sequenced soils from 1 site": "low"}
+    assert cards["copper"]["confidence"] == "low"
+    assert "support" not in cards["copper"] and "who_kos" not in cards["copper"]       # internal fields stay internal
+    assert cards["fungi"]["confidence_factors"][0]["text"] == "Fungi from the same soil cores as the genes"
+
+
+def test_gene_cards_are_coloured_only_outside_the_reference_range(with_modules):
+    cards = {c["card"]: c for c in with_modules.get("/api/functions/mg-dobj-a").json()["cards"]}
+    cu = cards["copper"]                                                    # 3 per genome vs 0.5-1.0 elsewhere
+    assert cu["status"] == "watch" and cu["tag"] == "More than usual"
+    assert cu["flag"] == "More copper-resistance genes per genome than any other well-sequenced farm soil"
+    assert cards["p_release"]["status"] == "info" and cards["p_release"]["tag"] is None
+
+
+def test_unusual_headline_needs_more_than_a_trace(with_modules):
+    k = pd.read_parquet(api.PROCESSED / "ko_counts_all.parquet")
+    k.loc[k["ko"] == "K19982", "count"] = 1                                # one step rests on a single gene copy
+    k.to_parquet(api.PROCESSED / "ko_counts_all.parquet")
+    u = next(c for c in with_modules.get("/api/functions/mg-dobj-a").json()["cards"] if c["card"] == "unusual")
+    assert u["headline"] == "A few less common pathways, none with a clear meaning for crops."
+    assert any(f["text"] == "1 gene copy in the weakest step, of pyrrolnitrin biosynthesis" and f["level"] == "low"
+               for f in u["confidence_factors"])

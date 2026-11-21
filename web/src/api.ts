@@ -262,6 +262,13 @@ export interface DecisionCard {
   section: 'measured' | 'microbes' | 'life' // where the card sits on the page
   who: string[] // who carries it, from the genes' closest known relatives
   context: string | null // one line placing the sample among the well-sequenced NEON farm soils
+  tag: string | null // label next to the dot when it is not the status default ("More than usual")
+  confidence_factors: ConfidenceFactor[] // what the confidence is computed from; the weakest sets it
+}
+
+export interface ConfidenceFactor {
+  level: 'high' | 'medium' | 'low'
+  text: string
 }
 
 export interface FunctionProfile {

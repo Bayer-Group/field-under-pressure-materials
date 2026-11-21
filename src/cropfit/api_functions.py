@@ -25,10 +25,11 @@ from typing import Literal
 
 import pandas as pd
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from . import api as core
-from . import microbe_roles
+from . import confidence as conf
+from . import kegg, microbe_roles
 from .api_microbiome import MIN_BACTERIA_READS, _bacteria_taxa
 
 MATCH_DAYS = 7          # a NEON measurement within this many days of the metagenome counts as the same visit
@@ -91,6 +92,7 @@ MODULE_NOTES = {
     "M01039": ("spirilloxanthin", "a pigment of light-harvesting bacteria"),
     "M01044": ("astaxanthin", "a red antioxidant pigment"),
 }
+P_RELEASE = ["K01113", "K01077", "K01093", "K00117", "K06137"]                 # phoD, phoA, appA, gcd, pqqC
 COPPER_RESISTANCE = ["K07233", "K07156", "K07245", "K07787", "K07798", "K07796", "K07810"]   # pco/cop + cus
 
 # function_group in rules/ko_panel.csv -> (title, what it does, theme); used for the gene list
@@ -216,6 +218,10 @@ class Measured(BaseModel):
     total_n_pct: float | None
     cn_ratio: float | None
     soil_moisture: float | None      # g water per g dry soil
+    n_cores: int | None = None       # cores behind nitrate/ammonium
+    n_pairs: int | None = None       # incubation pairs behind net mineralisation
+    chem_date: dt.date | None = None # date of the pH / carbon measurement
+    chem_cores: int | None = None
 
 
 class Implication(BaseModel):
@@ -238,6 +244,13 @@ class DecisionCard(BaseModel):
     section: str = "microbes"        # measured | microbes | life: where the card sits on the page
     who: list[str] = []              # who carries it, from the genes' closest known relatives (gene phylogeny)
     context: str | None = None       # one line placing the sample among the well-sequenced NEON farm soils
+    tag: str | None = None           # short label next to the dot when it is not the status default ("More than usual")
+    confidence_factors: list[conf.Factor] = []   # what the confidence is computed from; the weakest sets it
+    # internal, not sent: inputs for the confidence factors
+    support: int | None = Field(None, exclude=True)          # gene copies behind the statement (weakest step)
+    support_text: str = Field("gene copies behind it", exclude=True)
+    who_kos: list[str] = Field([], exclude=True)             # KOs behind the "who does it" lines
+    uses_reference: bool = Field(False, exclude=True)        # compares with the other well-sequenced soils
 
 
 Agreement = Literal["both", "genes_only", "names_only", "neither", "unknown"]
@@ -319,7 +332,13 @@ def _measured(plot_id: str, date: dt.date) -> Measured | None:
     return Measured(date=when, ammonium_n_mgkg=num(n, "ammonium_n_mgkg"), nitrate_n_mgkg=num(n, "nitrate_n_mgkg"),
                     net_n_min_mgkg_d=num(n, "net_n_min_mgkg_d"), net_nitrif_mgkg_d=num(n, "net_nitrif_mgkg_d"),
                     ph_water=num(c, "ph_water"), organic_c_pct=num(c, "organic_c_pct"),
-                    total_n_pct=num(c, "total_n_pct"), cn_ratio=num(c, "cn_ratio"), soil_moisture=num(c, "soil_moisture"))
+                    total_n_pct=num(c, "total_n_pct"), cn_ratio=num(c, "cn_ratio"), soil_moisture=num(c, "soil_moisture"),
+                    n_cores=_int(n, "n_cores"), n_pairs=_int(n, "n_pairs"), chem_cores=_int(c, "n_cores"),
+                    chem_date=pd.to_datetime(c["collectDate"]).date() if c is not None else None)
+
+
+def _int(s, k: str) -> int | None:
+    return None if s is None or k not in s or pd.isna(s[k]) else int(s[k])
 
 
 def _status(copies: int, deep: bool) -> str:
@@ -533,6 +552,53 @@ def _compare(value: float, others: list[float]) -> str:
     return "about as many as"
 
 
+def _num(v: float) -> str:
+    return f"{v:.0f}" if v >= 10 else f"{v:.2g}"
+
+
+def _ratio_reference(key: str, num: list[str], den: list[str]) -> tuple[float, list[float]] | None:
+    """Ratio of two gene sets (e.g. N2O removers per N2O maker) here and in each other well-sequenced metagenome."""
+    a, b = _per_genome_reference(key, num), _per_genome_reference(key, den)
+    if not a or not b or b[0] <= 0 or min(b[1], default=0) <= 0:
+        return None
+    return a[0] / b[0], [x / y for x, y in zip(a[1], b[1])]
+
+
+def _ref_colour(c: "DecisionCard", value: float, others: list[float], up: str | None, down: str | None, what: str,
+                tag_up: str = "More than usual", tag_down: str = "Less than usual") -> None:
+    """Colour a gene card only when this soil is outside the range of every other well-sequenced soil: `up` / `down`
+    is the status for above / below the range (good, watch or None for no colour)."""
+    c.uses_reference = True
+    c.evidence.append(f"Coloured only when {what} is above or below every one of the {len(others)} other "
+                      "well-sequenced NEON farm soils.")
+    if c.status != "info":                           # a rule on the sample itself already coloured it
+        return
+    cmp = _compare(value, others)
+    st, tag = (up, tag_up) if cmp == "more than" else (down, tag_down) if cmp == "fewer than" else (None, None)
+    if st:
+        c.status, c.tag = st, tag
+        if st == "watch":
+            c.flag = f"{'More' if cmp == 'more than' else 'Less'} {what} than any other well-sequenced farm soil"
+
+
+def _weakest_step(key: str, definition: str) -> int:
+    """Gene copies of the weakest step of a KEGG module here (alternative genes within a step add up)."""
+    if not _has("ko_counts_all"):
+        return 0
+    k = core.table("ko_counts_all")
+    k = k[k["metagenome_key"] == key].groupby("ko")["count"].sum()
+    n = lambda x: int(k.get(x, 0)) + sum(int(k.get(o, 0)) for o in kegg.KO_ALIASES.get(x, ([], ""))[0])  # noqa: E731
+    steps = [re.findall(r"K\d{5}", st) for st in kegg.step_texts(definition)]
+    steps = [st for st in steps if st]
+    return int(min(sum(n(x) for x in st) for st in steps)) if steps else 0
+
+
+def _weakest_of(key: str, modules: list) -> tuple[int, str]:
+    """The least-supported of several KEGG modules (rows with .name and .definition): copies and a text naming it."""
+    n, name = min(((_weakest_step(key, x.definition), x.name) for x in modules), key=lambda t: t[0])
+    return n, f"gene copies in the weakest step, of {_plain(name).lower()}"
+
+
 def _count_range(counts: list[int]) -> str:
     lo, hi = int(min(counts)), int(max(counts))
     return "none" if hi == 0 else str(lo) if lo == hi else f"{lo}-{hi}"
@@ -660,11 +726,32 @@ def _module_cards(cards: list[DecisionCard], key: str, m: Measured | None) -> li
         c.who = [f"N2O made by: {', '.join(_who(key, ['K04561'])[:2]) or 'too few genes'}",
                  f"N2O removed by: {', '.join(_who(key, ['K00376'])[:3]) or 'too few genes'}",
                  f"Ammonium to nitrate: {', '.join(_who(key, ['K10944'])[:2]) or 'too few genes'}"]
+        c.who_kos = ["K04561", "K00376", "K10944"]
+        named = [row(mid) for mid in ("M00528", "M00529", "M00530") if complete(mid)]
+        if named:
+            c.support, c.support_text = _weakest_of(key, named)
         c.context = _ref_line(row("M00529"), n_ref, "full denitrification")
+        c.uses_reference = c.context is not None
+        ratio = _ratio_reference(key, ["K00376"], ["K04561"])
+        if ratio and len(ratio[1]) >= MIN_REFERENCE:
+            v, others = ratio
+            c.implications.append(imp(N, f"About {_num(v)} N2O-removing genes per N2O-making gene; "
+                                         f"{_num(min(others))}-{_num(max(others))} in the other well-sequenced farm soils."))
+            _ref_colour(c, v, others, "good", "watch", "N2O removal per N2O-making gene",
+                        "More N2O removal than usual", "Less N2O removal than usual")
     if "p_release" in by:
-        by["p_release"].who = _who(key, ["K01113", "K01077", "K00117", "K06137"])
+        c = by["p_release"]
+        c.who_kos = P_RELEASE
+        c.who = _who(key, P_RELEASE)
+        ref = _per_genome_reference(key, P_RELEASE)
+        if ref and len(ref[1]) >= MIN_REFERENCE:
+            v, others = ref
+            c.context = (f"About {_num(v)} phosphorus-freeing genes per bacterial genome here; "
+                         f"{_num(min(others))}-{_num(max(others))} in the {len(others)} other well-sequenced NEON farm soils.")
+            _ref_colour(c, v, others, "good", "watch", "phosphorus-freeing genes per genome")
     if "copper" in by:
         c = by["copper"]
+        c.who_kos = COPPER_RESISTANCE
         c.who = _who(key, COPPER_RESISTANCE)
         ref = _per_genome_reference(key, COPPER_RESISTANCE)
         if ref and len(ref[1]) >= MIN_REFERENCE:
@@ -676,8 +763,17 @@ def _module_cards(cards: list[DecisionCard], key: str, m: Measured | None) -> li
             if _compare(value, others) == "more than":
                 c.implications.insert(0, imp(N, "More copper-resistance genes than in the other farm soils can point to "
                                                 "copper building up (copper fungicides, manure), but is not proof of it."))
+            _ref_colour(c, value, others, "watch", None, "copper-resistance genes per genome")
     if "root_health" in by:
-        by["root_health"].who = [f"Stress relief (ACC deaminase): {', '.join(_who(key, ['K01505'])) or 'too few genes'}"]
+        c = by["root_health"]
+        c.who_kos = ["K01505"]
+        c.who = [f"Stress relief (ACC deaminase): {', '.join(_who(key, ['K01505'])) or 'too few genes'}"]
+        ref = _per_genome_reference(key, ["K01505"])
+        if ref and len(ref[1]) >= MIN_REFERENCE:
+            v, others = ref
+            c.context = (f"About {_num(v)} stress-relief genes per bacterial genome here; "
+                         f"{_num(min(others))}-{_num(max(others))} in the {len(others)} other well-sequenced NEON farm soils.")
+            _ref_colour(c, v, others, "good", "watch", "stress-relief (ACC deaminase) genes per genome")
     if not len(mods):
         return []
     out: list[DecisionCard] = []
@@ -702,7 +798,7 @@ def _module_cards(cards: list[DecisionCard], key: str, m: Measured | None) -> li
         partial = xen[(xen["completeness"] >= 0.5) & (xen["completeness"] < 1)]
         if len(partial):
             imps.append(imp(N, "Partly present: " + ", ".join(_plain(x) for x in partial["name"].head(4)) + "."))
-        out.append(DecisionCard(
+        card = DecisionCard(
             card="breakdown", title="Breakdown of aromatic and man-made compounds", status="info", flag=None,
             headline=(f"Microbes here can fully break down {len(done)} kinds of aromatic compound."
                       if len(done) else "No complete breakdown route for aromatic compounds found."),
@@ -711,7 +807,13 @@ def _module_cards(cards: list[DecisionCard], key: str, m: Measured | None) -> li
             context=(f"The other {len(per_other)} well-sequenced NEON farm soils have {int(per_other.median())} "
                      f"(range {int(per_other.min())}-{int(per_other.max())})." if len(per_other) else None),
             evidence=[f"KEGG modules in 'Xenobiotics biodegradation': {len(done)} complete, {len(partial)} at 50% or more, "
-                      f"of {len(xen)}.", "A module counts as complete when every step has at least one gene copy."]))
+                      f"of {len(xen)}.", "A module counts as complete when every step has at least one gene copy."])
+        if len(done):
+            card.support, card.support_text = _weakest_of(key, list(done.itertuples()))
+        if len(per_other) >= MIN_REFERENCE:
+            _ref_colour(card, float(len(done)), [float(x) for x in per_other], "good", None,
+                        "the number of complete breakdown routes")
+        out.append(card)
 
     # ---- gases: methane and sulfur
     meth_module = complete("M00174")
@@ -727,7 +829,7 @@ def _module_cards(cards: list[DecisionCard], key: str, m: Measured | None) -> li
                 imp(N, "A complete methane-making route is present: such microbes work in waterlogged, oxygen-poor spots."))
     if sox:
         imps.append(imp(U, "Microbes can turn reduced sulfur into sulfate, the form crops take up."))
-    out.append(DecisionCard(
+    gases = DecisionCard(
         card="gases", title="Methane and sulfur", status="info", flag=None,
         headline=("Can consume methane" if meth_ox else "No clear methane consumers") + (
             "; can turn sulfur into sulfate" if sox else "") + ".",
@@ -741,7 +843,12 @@ def _module_cards(cards: list[DecisionCard], key: str, m: Measured | None) -> li
         evidence=["KEGG M00174 (methane oxidation), M00567/M00357/M00356/M00563 (methanogenesis), M00595 (SOX).",
                   "Methane eaters are counted only from soluble methane monooxygenase (mmoX-C) or particulate monooxygenase "
                   "genes whose closest relatives are methanotroph families: the same particulate genes also belong to "
-                  "ammonia oxidisers in this annotation."]))
+                  "ammonia oxidisers in this annotation."])
+    sox_row = row("M00595")
+    if sox and sox_row is not None:
+        gases.support = _weakest_step(key, sox_row.definition)
+        gases.support_text = "gene copies in the weakest step of sulfur oxidation"
+    out.append(gases)
 
     # ---- what is unusual compared with the other well-sequenced farm soils
     if n_ref >= MIN_REFERENCE:
@@ -755,7 +862,8 @@ def _module_cards(cards: list[DecisionCard], key: str, m: Measured | None) -> li
         dup = eco["name"].map(_plain).duplicated(keep=False)
         label = lambda r: (r.name if dup.get(r.Index, False) else _plain(r.name)) + (  # noqa: E731
             f" ({MODULE_NOTES[r.module][1]})" if r.module in MODULE_NOTES else "")
-        noted = [r for r in rare.itertuples() if r.module in MODULE_NOTES][:2]
+        noted = [r for r in rare.itertuples() if r.module in MODULE_NOTES
+                 and _weakest_step(key, r.definition) >= MIN_COUNT][:2]          # a headline needs more than a trace
         rest = [r for r in rare.itertuples() if r not in noted]
         if noted:
             headline = ("Microbes here can make " + " and ".join(f"{MODULE_NOTES[r.module][0]} "
@@ -779,7 +887,7 @@ def _module_cards(cards: list[DecisionCard], key: str, m: Measured | None) -> li
         who = [f"{MODULE_NOTES[r.module][0][:1].upper()}{MODULE_NOTES[r.module][0][1:]}: "
                f"{', '.join(_who(key, _module_kos(r.definition))[:2]) or 'too few genes to tell'}" for r in noted]
         shown = noted or list(rare.itertuples())
-        out.append(DecisionCard(
+        unusual = DecisionCard(
             card="unusual", title="Unusual for these soils", status="info", flag=None,
             headline=headline, who=who,
             finding=f"Pathways for energy and nutrient cycling, breakdown of compounds and natural products (antibiotics, "
@@ -792,7 +900,12 @@ def _module_cards(cards: list[DecisionCard], key: str, m: Measured | None) -> li
                       for r in rare.head(8).itertuples()]
                      + [f"{r.module} {r.name}: {r.steps_found}/{r.n_steps} steps here, complete in {r.ref_complete} of "
                         f"{n_ref} others" for r in missing.head(8).itertuples()]
-                     + ["A small reference: differences can also come from sequencing depth or chance."]))
+                     + ["A small reference: differences can also come from sequencing depth or chance."])
+        unusual.uses_reference = True
+        unusual.who_kos = [k for r in noted for k in _module_kos(r.definition)]
+        if shown:
+            unusual.support, unusual.support_text = _weakest_of(key, shown)
+        out.append(unusual)
     return out
 
 
@@ -1082,6 +1195,82 @@ def _gene_cards(copies: dict[str, int], pathways: list[Pathway], fungi: Fungi | 
 CONF_RANK = {"high": 0, "medium": 1, "low": 2}
 
 
+def _identity(key: str, kos: list[str]) -> float | None:
+    """Gene-weighted % identity of these genes to their closest known genome (None with too few genes)."""
+    if not kos or not _has("ko_taxa"):
+        return None
+    t = core.table("ko_taxa")
+    x = t[(t["metagenome_key"] == key) & t["ko"].isin(kos)].dropna(subset=["identity_median"])
+    n = float(x["n_genes"].sum())
+    return float((x["identity_median"] * x["n_genes"]).sum() / n) if n >= MIN_COUNT else None
+
+
+def _panel_support(card: str, copies: dict[str, int], pathways: list[Pathway]) -> tuple[int | None, str]:
+    """Gene copies behind a panel card's statement: its weakest step, or the smaller of two compared sides."""
+    c = lambda *g: sum(copies.get(x, 0) for x in g)  # noqa: E731
+    if card == "nitrogen":
+        named = [p for p in pathways if p.kegg_module in ("M00528", "M00529", "M00530") and p.complete]
+        if named:
+            return min(s.copies for p in named for s in p.steps), "gene copies in the weakest step of the pathways named"
+        return sum(s.copies for p in pathways for s in p.steps), "nitrogen-cycle gene copies"
+    if card == "p_release":
+        return min(c("phoD", "phoA", "appA"), c("gcd", "pqqC")), \
+            "gene copies on the smaller side (organic or mineral phosphorus)"
+    if card == "copper":
+        return c("pcoB/copB", "pcoC/copC", "pcoD/copD", "cusA", "cusB", "cusC", "cusF"), "copper-resistance gene copies"
+    if card == "root_health":
+        return c("acdS"), "stress-relief (acdS) gene copies"
+    return None, ""
+
+
+def _score(cards: list[DecisionCard], r, m: Measured | None, fungi: Fungi | None, copies: dict[str, int],
+           pathways: list[Pathway]) -> list[DecisionCard]:
+    """Confidence of every card from the data behind it (cropfit.confidence): the weakest factor sets the label."""
+    mg = _metagenomes()
+    others = mg[mg["ko_depth_ok"] & (mg["metagenome_key"] != r.metagenome_key)]
+    n_ref, n_sites = len(others), others["site"].nunique()
+    val = lambda name: getattr(r, name, None) if pd.notna(getattr(r, name, None)) else None  # noqa: E731
+    edges = lambda bands: [top for top, *_ in bands[:-1]]  # noqa: E731
+    for c in cards:
+        f: list[conf.Factor | None] = []
+        if c.status == "unknown":
+            f = [conf.no_data()]
+        elif c.basis == "measured" and m is not None:
+            if c.card in ("n_now", "n_release"):
+                f.append(conf.days(abs((m.date - r.date).days)))
+            if c.card == "n_now":
+                f.append(conf.cores(m.n_cores) if m.n_cores else None)
+                if m.nitrate_n_mgkg is not None:
+                    f.append(conf.margin(m.nitrate_n_mgkg, [NITRATE_ENOUGH, NITRATE_LOW], conf.NITRATE_MARGIN,
+                                         "Nitrate", " mg/kg"))
+            if c.card == "n_release":
+                f.append(conf.cores(m.n_pairs, "paired incubations") if m.n_pairs else None)
+            if c.card == "soil":
+                f.append(conf.days(abs((m.chem_date - r.date).days)) if m.chem_date else None)
+                f.append(conf.cores(m.chem_cores) if m.chem_cores else None)
+                if m.ph_water is not None:
+                    f.append(conf.margin(m.ph_water, edges(PH_BANDS), conf.PH_MARGIN, "pH", relative=False))
+                if m.organic_c_pct is not None:
+                    f.append(conf.margin(m.organic_c_pct, edges(OC_BANDS), conf.OC_MARGIN, "Organic carbon", "%"))
+        elif c.basis == "genes":
+            sup, text = (c.support, c.support_text) if c.support is not None else _panel_support(c.card, copies, pathways)
+            f.append(conf.genes(sup, text) if sup is not None else None)
+            f.append(conf.depth(val("marker_mean")) if val("marker_mean") else None)
+            ident = _identity(r.metagenome_key, c.who_kos) if c.who else None
+            f.append(conf.identity(ident) if ident is not None else None)
+            f.append(conf.reference(n_ref, n_sites) if c.uses_reference else None)
+        elif c.basis == "fungi" and fungi is not None:
+            f += [conf.same_cores(fungi.same_cores), conf.fungal_reads(fungi.reads) if fungi.reads else None,
+                  conf.named(fungi.named_pct)]
+        elif c.basis == "names":
+            f.append(conf.bacterial_reads(int(val("kraken_bacteria_reads"))) if val("kraken_bacteria_reads") else None)
+            f.append(conf.classified(100 - val("kraken_unclassified_pct"))
+                     if val("kraken_unclassified_pct") is not None else None)
+        c.confidence_factors = [x for x in f if x is not None]
+        c.confidence = conf.weakest(c.confidence_factors)
+    return cards
+
+
 def _rank(cards: list[DecisionCard]) -> list[DecisionCard]:
     """One list, most trustworthy first: by confidence, cards without data last; rule order within a rank."""
     return sorted(cards, key=lambda c: (c.status == "unknown", CONF_RANK.get(c.confidence, 3)))
@@ -1149,7 +1338,8 @@ def function_profile(sample_id: str):
         notes.append("Who may carry it: genera of this sample's bacteria and archaea known for the role (AI "
                      "annotation, medium or high confidence); shares are of the classified bacterial and archaeal reads.")
     return FunctionProfile(sample_id=r.sample_id, plot_id=r.plotID, date=r.date, n_genes=r.n_ko_genes,
-                           deep_enough=deep, cards=_rank(_cards(copies, pathways, fungi, measured, deep, guilds, ru,
-                                                                bacteria_reads, key=r.metagenome_key)),
+                           deep_enough=deep, cards=_rank(_score(_cards(copies, pathways, fungi, measured, deep, guilds,
+                                                                       ru, bacteria_reads, key=r.metagenome_key),
+                                                                r, measured, fungi, copies, pathways)),
                            pathways=pathways, fungi=fungi, groups=groups, measured=measured, notes=notes,
                            carriers=carriers)

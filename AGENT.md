@@ -511,6 +511,26 @@ For a quick start (or a small laptop), switch light mode on **before** downloadi
   - **Read the lineage as the closest known relative**, not the organism: median identity is ~70 %, so phylum or class is reliable and genus is a hint unless identity is high (e.g. nosZ matched to *Bradyrhizobium* at 97 %).
   - Example (STER_006, 2022): about 75 % of K10944 copies match ammonia-oxidising archaea (*Nitrososphaerota*, ~97 % identity) or *Nitrosomonadaceae*; the rest are actinobacterial monooxygenases (~72 %): mostly true nitrifiers.
 
+### 3.16 Soil characteristics cards: reference colours and computed confidence
+
+- **Reference:** gene cards compare the sample with the *other* well-sequenced metagenomes (`ko_depth_ok`; now 9, all STER). Per-genome values = KO copies / `marker_mean`.
+- **Colour (gene cards):** only when the sample is above or below *every* reference soil (`_ref_colour` in `api_functions.py`): more N2O removers per N2O maker, P-freeing genes, stress-relief genes, breakdown routes -> green "More than usual" (yellow when below, except breakdown); copper-resistance genes above all -> yellow. Inside the range: no colour. The rule is listed in the card's "Numbers and rules".
+- **Confidence** (`src/cropfit/confidence.py`): each card lists factors, each high/medium/low by fixed cut-offs, and takes the **weakest**. Cut-offs (high, medium) chosen from the data ranges:
+
+  | Factor | Cards | High / medium | Data range seen |
+  |---|---|---|---|
+  | Gene copies in the weakest step of the pathways the headline names (KEGG modules, alternatives summed, K10944 counted for K28504) | gene cards | >=100 / >=20 | 1-511 |
+  | Sequencing depth = `marker_mean` (genome equivalents) | gene cards | >=300 / >=100 | 55-843 in deep samples |
+  | Median % identity behind "Who does it" | gene cards with who | >=75 / >=60 | 59-91 |
+  | Reference size (one site caps at medium) | cards using the reference | >=20 / >=8 | 9 |
+  | Days between NEON measurement and DNA sample | measured | <=2 / <=7 | 0-7 |
+  | Cores / incubation pairs | measured | >=3 / >=2 | 1-3 |
+  | Distance from the threshold (nitrate relative, pH units, organic carbon relative) | measured | 0.3 / 0.1; 0.5 / 0.2; 0.3 / 0.1 | |
+  | Same cores; ITS reads; % reads named to a genus | fungi | same; >=20k / >=5k; >=70 / >=40 | 576-790k reads |
+  | Bacterial reads; % reads classified by Kraken2 | bacteria names | >=5M / >=1M; >=50 / >=25 | 7-13 % classified |
+
+  Method limits that do not change between samples (genes show capacity, not activity; guilds per genus) are stated in the card text, not counted as factors. The "unusual" headline names a pathway only if its weakest step has >= `MIN_COUNT` (5) copies.
+
 ## 4. Quick recipes
 
 All snippets assume the repo root as the working directory and the venv. Prepend `import sys; sys.path.insert(0, "src")` if you have not installed the package.
