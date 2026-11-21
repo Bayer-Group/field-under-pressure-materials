@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 import queue
 import threading
+import time
 
 import psycopg
 from fastapi import HTTPException
@@ -32,36 +33,33 @@ class Pool:
         return psycopg.connect(self.dsn, row_factory=dict_row, connect_timeout=5)
 
     def acquire(self):
-        """A working connection (raises HTTP 503 when the database is unreachable or the pool is exhausted for too long)."""
+        """A working connection (HTTP 503 when the database is unreachable or no connection frees up within POOL_WAIT_SECONDS)."""
+        deadline = time.monotonic() + POOL_WAIT_SECONDS
         while True:
             try:
                 con = self._idle.get_nowait()
             except queue.Empty:
-                con = None
-            if con is not None:
-                try:
-                    con.execute("SELECT 1")                    # cheap check that the connection survived (restart, timeout)
-                    con.rollback()
-                    return con
-                except psycopg.Error:
-                    self._drop(con)
-                    continue
-            with self._lock:
-                make = self._created < self.size
+                with self._lock:
+                    make = self._created < self.size
+                    if make:
+                        self._created += 1
                 if make:
-                    self._created += 1
-            if make:
-                try:
-                    return self._connect()
-                except psycopg.OperationalError:
-                    with self._lock:
-                        self._created -= 1
-                    raise HTTPException(status_code=503, detail="database is not reachable")
+                    try:
+                        return self._connect()
+                    except psycopg.OperationalError:
+                        with self._lock:
+                            self._created -= 1
+                        raise HTTPException(status_code=503, detail="database is not reachable")
+                try:                                           # wait once, for all the time that is left
+                    con = self._idle.get(timeout=max(0.0, deadline - time.monotonic()))
+                except queue.Empty:
+                    raise HTTPException(status_code=503, detail="busy, try again in a moment")
             try:
-                con = self._idle.get(timeout=POOL_WAIT_SECONDS)
-            except queue.Empty:
-                raise HTTPException(status_code=503, detail="busy, try again in a moment")
-            self._idle.put(con)                                # go through the check above
+                con.execute("SELECT 1")                        # cheap check that the connection survived (restart, timeout)
+                con.rollback()
+                return con
+            except psycopg.Error:
+                self._drop(con)                                # and try again: a slot is free for a new connection
 
     def release(self, con) -> None:
         try:

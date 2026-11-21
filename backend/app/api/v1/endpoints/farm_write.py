@@ -34,6 +34,7 @@ _sandbox_limit = RateLimiter(SANDBOX_RATE_PER_MIN, 60)   # sandboxes per minute 
 _write_limit = RateLimiter(60, 60)              # writes per minute and owner
 _slots = threading.BoundedSemaphore(MAX_PARALLEL_REFRESH)
 _rules = None
+_COLUMNS: dict[tuple[str, str], list[str]] = {}
 
 
 def rules():
@@ -102,10 +103,12 @@ def _recompute(con, crop_area_id: str, reason: str, what: str = "all") -> None:
 
 def _clone(con, schema: str, table: str, where: str, params: dict, replace: dict[str, str]) -> None:
     """INSERT .. SELECT of the rows matching `where`, with some columns replaced by SQL expressions; generated keys are skipped."""
-    cols = [r["column_name"] for r in con.execute(
-        "SELECT column_name FROM information_schema.columns WHERE table_schema = %s AND table_name = %s "
-        "AND (column_default IS NULL OR column_default NOT LIKE 'nextval%%') ORDER BY ordinal_position",
-        (schema, table)).fetchall()]
+    cols = _COLUMNS.get((schema, table))
+    if cols is None:                                      # the catalog view is slow: read it once per process
+        cols = _COLUMNS[(schema, table)] = [r["column_name"] for r in con.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_schema = %s AND table_name = %s "
+            "AND (column_default IS NULL OR column_default NOT LIKE 'nextval%%') ORDER BY ordinal_position",
+            (schema, table)).fetchall()]
     ident = sql.Identifier(schema, table)
     con.execute(
         sql.SQL("INSERT INTO {t} ({c}) SELECT {e} FROM {t} WHERE ").format(
