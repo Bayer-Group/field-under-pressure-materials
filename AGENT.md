@@ -15,7 +15,7 @@ Related: `docs/nmdc-data-guide.md` (how to interpret the NMDC files and how STER
 ```bash
 uv venv --python 3.12 .venv            # geo wheels are risky on newer system Pythons
 uv pip install --python .venv/bin/python -e .
-.venv/bin/python -m pytest -q          # 37 tests, no network, no data needed
+.venv/bin/python -m pytest -q          # 111 tests, no network, no data needed
 ```
 
 The package is `cropfit` in `src/cropfit/` (the name is historical). Scripts add `src/` to `sys.path` themselves; run them from the repo root: `.venv/bin/python scripts/<name>.py`. `e1_match.py` and `pull_nmdc_cropland.py` use paths relative to the current directory, so run them from the repo root.
@@ -39,8 +39,10 @@ The package is `cropfit` in `src/cropfit/` (the name is historical). Scripts add
 | `link.py` | Temporal operators that attach every dataset to the sampling events (see 3.9). |
 | `assoc.py` | Association scan between microbiome and environmental columns (any shape, within site x year; see 3.10). |
 | `e1.py` | Open-Meteo / NASA POWER climate for EU points, plus modelling helpers used by the LUCAS experiment (needs scikit-learn). |
+| `kb.py` | FungalTraits and USDA Fungus-Host downloads, name normalisation, genus x crop host table (see 3.12). |
+| `risk.py` | Crop risk index per plot-unit x crop (see 3.12). |
 
-Lookup tables in `rules/` (generic, read by the code): `cdl_codes.csv` (all 132 CDL codes to a crop-group vocabulary), `ko_panel.csv` (KEGG KOs of interest with function group and caveat), `lucas_lc1_groups.csv` (LUCAS land-cover codes with `is_cereal`; documentation only, `e1_match.py` hard-codes its own cereal rule B11-B19). Small input tables in `resources/` are listed under each dataset.
+Lookup tables in `rules/` (generic, read by the code): `cdl_codes.csv` (all 132 CDL codes to a crop-group vocabulary), `ko_panel.csv` (KEGG KOs of interest with function group and caveat), `lucas_lc1_groups.csv` (LUCAS land-cover codes with `is_cereal`; documentation only, `e1_match.py` hard-codes its own cereal rule B11-B19), `genus_synonyms.csv` (alias -> canonical genus: Rhizoctonia/Thanatephorus/Ceratobasidium -> Rhizoctonia_complex, Gibberella -> Fusarium) and `crop_host_taxa.csv` (USDA host taxon -> crop_group). Small input tables in `resources/` are listed under each dataset.
 
 ### Where things land (all gitignored except `resources/`, `rules/`, `config/`)
 
@@ -52,7 +54,7 @@ data/raw/lucas/       lucas_harmo_uf.zip and a slimmed CSV (you create it)
 data/cache/<ns>/      http.cached() JSON/text: sda/, daymet/, openmeteo_e1/, power_e1/
 data/raw/satellite/   one small parquet per satellite scene (resumable) + manifest
 data/raw/imagery/     aerial chips (GeoTIFF) and previews (PNG) per source and plot + manifest
-data/raw/kb/<source>/ knowledge-base downloads (suggested, nothing there yet; see 3.11)
+data/raw/kb/           fungaltraits/ and usda_fungus_host/, each with a manifest.json (see 3.12)
 data/processed/       parquet outputs of scripts 01-09
 ```
 
@@ -71,6 +73,8 @@ Pipeline order (what produces what):
 | Aerial photos | `scripts/09_fetch_aerial.py [naip] [aop]` (after 01; `aop` needs token) | `plot_aerial`, chips under `data/raw/imagery/` |
 | Event features | `scripts/07_build_event_features.py` (offline, last) | `event_features`, `event_table` (see 3.9) |
 | Association scan | `scripts/11_association_scan.py` (offline, after 07, under a minute) | `association_scan` (see 3.10) |
+| Knowledge base | `scripts/12_build_kb.py [--refresh]` (downloads ~1 MB + ~179 MB once) | `kb_fungaltraits_genus`, `kb_genus_crop_host`, `kb_usda_species_crop`, `kb_meta.json` |
+| Crop risk | `scripts/13_crop_risk.py --site STER --year 2022` (offline, after 02b and 12) | `crop_risk_<SITE>_<YEAR>_{summary,contributions,skipped}.parquet` + `.json` |
 | Inspector | `scripts/10_inspect_data.py [--standalone]` (offline) | `outputs/inspect/index.html`, a developer page to look at all of the above |
 | Joined table | `scripts/06_build_joined.py` (offline, after 02b and 05) | `joined_metagenomes`, `joined_fungi_genus` (see 3.8) |
 
@@ -82,7 +86,7 @@ Note: `03_build_plots.py` takes its plots from the event registry (the 29 plots 
 
 - **Only one key is needed: the NEON API token.** Put it in a gitignored `.env` as `NEON_API_TOKEN=...` (template: `.env.example`; `NEON_TOKEN` is accepted as a fallback name). Since June 2026 the NEON portal calls in this repo need it. Never paste it in chat, logs or commits. `neon.get_token()` loads it via python-dotenv.
 - **Everything else is keyless:** NMDC, SSURGO/SDA, Daymet, Planetary Computer CDL (anonymous signed URLs via the `planetary-computer` package), CSB and CDL downloads from USDA, NASS, JRC LUCAS, GlobalFungi table, Open-Meteo, NASA POWER.
-- **Knowledge bases (3.11, not used by code yet):** the EPPO API needs a free token, and an NCBI API key is optional (higher rate limit). If you add them, use the same gitignored `.env` (for example `EPPO_API_TOKEN`, `NCBI_API_KEY`).
+- **Knowledge bases (3.11):** FungalTraits and USDA Fungus-Host (3.12) are keyless. The EPPO API needs a free token, and an NCBI API key is optional (higher rate limit). If you add them, use the same gitignored `.env` (for example `EPPO_API_TOKEN`, `NCBI_API_KEY`).
 - **Never commit** `.env`, anything under `data/`, or `data/links.txt`. The latter (if you have it from the hackathon organisers) holds pre-signed S3 URLs with session tokens. `.gitignore` covers `data/`, `.env`, `*.zip`, `.venv/`, `outputs/`, `*.part`.
 - **User-Agent:** NMDC rejects some default client user agents and NEON asks for one. `http.py` sets one for all calls; `pull_nmdc_cropland.py` sets its own. If you write new code, set a UA.
 
@@ -310,9 +314,9 @@ Note: `03_build_plots.py` takes its plots from the event registry (the 29 plots 
 - **Result (measured, 3,532 pairs):** STER 73 pairs with q < 0.1 (38 with q < 0.05), both sites together 38, KONA none. Of the pairs with q < 0.1 that can be checked within plots, half keep their direction there. Soil pH shows no association that survives correction in either site (the pH range inside a site is narrow: KONA about 5.2-6.6, STER 6.2-8.5).
 - **Limits:** observational, 28 plots, two sites: the scan finds candidates, it does not show cause. Events of one plot are not independent, so p-values are optimistic. Fungal shares are relative: one genus rising pushes others down. Several strong STER pairs involve the NEON airborne photo, which has 38 events from two campaigns.
 
-### 3.11 Knowledge bases: what a microbe does to a plant, and when (not downloaded yet)
+### 3.11 Knowledge bases: what a microbe does to a plant, and when (only FungalTraits and USDA Fungus-Host downloaded, see 3.12)
 
-- **Status:** apart from the organisers' risk workbook (inspected on 21 Nov 2026, see below), none of these sources is downloaded or read by code in this repo. The rest of this section was compiled from prior knowledge on 21 Nov 2026 and is **not verified** (URLs, file formats, sizes, licences, rate limits). Check each source before relying on it, and replace this note with measured facts once something is pulled.
+- **Status:** FungalTraits and USDA Fungus-Host are now downloaded and used by code (see 3.12). Apart from the organisers' risk workbook (inspected on 21 Nov 2026, see below), none of these sources is downloaded or read by code in this repo. The rest of this section was compiled from prior knowledge on 21 Nov 2026 and is **not verified** (URLs, file formats, sizes, licences, rate limits). Check each source before relying on it, and replace this note with measured facts once something is pulled.
 - **Why:** the measured tables only say *which* genera are present and in what share. Turning that into crop advice needs two kinds of knowledge:
   1. **What the microbe does:** lifestyle (plant pathogen, mutualist, saprotroph, growth promoter), which crops it affects, which disease it causes. Example: Macrophomina causes charcoal rot on sorghum, soybean, sunflower and corn.
   2. **When it matters:** the conditions under which the effect actually happens (soil or air temperature, moisture, crop stage, previous crop, pH, nitrogen). Example: charcoal rot is favoured by hot soil and drought stress around flowering.
@@ -384,6 +388,44 @@ Note: `03_build_plots.py` takes its plots from the event registry (the 29 plots 
   - **Publication bias.** Pathogens are studied far more than neutral or beneficial organisms. A genus with no records is "unknown", not "harmless".
   - **The knowledge bases cover more than the data can see.** Oomycetes (Pythium, Phytophthora, Aphanomyces) and nematodes are absent from the ITS fungal data and from Kraken2, so entries about them cannot be matched to any sample here.
   - **LLM extraction from papers and guides.** Use a strict schema (taxon as written, normalised taxon and rank, crop, effect, conditions, threshold, evidence type, quoted sentence, DOI or guide title and page, model and version). Check automatically that the quoted sentence appears in the source text and drop the claim if it does not. Use abstracts, open-access full text and the metodyki PDFs only, and do not redistribute full texts.
+
+### 3.12 Crop risk index (FungalTraits + USDA Fungus-Host + NEON ITS)
+
+- **What:** for a site and year, risk(p, c) = Σ_g A(p, g) · H(g, c), summed over genera that pass the FungalTraits filter. p is a plot-unit (plotID, year, ITS product) and c is a crop. Nothing else enters the score: no weather, soil, crop history or evidence weights. It is a relative index, not a probability of disease.
+- **A (abundance rank):** mid-rank percentile (`neon.percentile_rank` / 100) of the unit's genus share among reference units. The share is the mean of per-core shares over the QC-passing horizon-M cores of the plot in that year and product. The reference is the same site, same ITS product, all years, depth-OK for the genus, and includes the unit itself. A reference below 10 units is flagged `small_reference`; below 5, A is not computed (`reference_too_small`).
+- **Depth:** a unit needs 2000 fungal reads, otherwise `status = insufficient_depth`. A genus with 0 reads is skipped as `insufficient_depth` when total_reads × s_typ < 3 (s_typ = the genus's median non-zero share at that site and product). That misses a typical genus about 5% of the time. Otherwise a zero is `not_detected` and gets its mid-rank percentile. Genera never detected in the reference (for example Macrophomina at STER) are `not_detected_in_reference` and are not summed.
+- **Filter:** FungalTraits primary or secondary lifestyle == `plant_pathogen`. `Plant_pathogenic_capacity_template` is reported but does not admit a genus: it would admit 77 more genera, for example Trichoderma. Non-fungal phyla (Oomycota and 4 other protist phyla) and the oomycete genera Pythium, Phytophthora, Aphanomyces, Globisporangium and Phytopythium are excluded, because ITS fungal primers miss them.
+- **H (host share):** species of the genus with at least one USDA record on a host taxon of the crop ÷ species of the genus with any USDA record (all countries). var., f. sp. and subsp. collapse to the species. Fungus records given only to genus are not counted (reported as `n_genus_only_records_on_crop`). Host records given only to genus count only for Zea, Glycine, Triticum, Hordeum and Avena (`rules/crop_host_taxa.csv`). Bread-wheat taxa map to both winter_wheat and spring_wheat; durum (*Triticum durum*, *T. turgidum*) maps to spring_wheat only, so the two wheat scores differ slightly (up to 0.03, measured). Infraspecific forms match their species, so a few wild forms count too (teosinte subspecies of *Zea mays*, *Andropogon sorghum* var. *halepensis* = Johnson grass); measured impact: one fungus species. `metadata.same_host_taxa_as` lists crops whose host evidence is identical (none with the current table).
+- **Crops scored:** corn, soybean, winter_wheat, spring_wheat, sorghum, sunflower, alfalfa, millet, dry_bean, barley_oats. `double_wheat_soy` is a rotation and the other groups are not single crops, so they are not scored. A crop with no host record among the scored genera gets `status = no_knowledge` (NaN, never 0).
+- **Sources (measured):**
+  - FungalTraits = Põlme et al. 2020 Table S1, official Springer ESM xlsx (990,658 bytes), 10,771 rows → 10,765 genera, 1,758 pass the filter. The article licence is not verified, so the raw file stays local.
+  - USDA Fungus-Host = Ag Data Commons snapshot `Fungus-Host-Data_20211105.csv`, DOI 10.15482/USDA.ADC/1524414, U.S. Public Domain, 187,658,073 bytes, 827,645 rows, 0 bad lines, data current to 5 Nov 2021. The live fungi.ars.usda.gov API needs a site-internal key and is not used.
+  - Each raw folder has a `manifest.json` (url, retrieved_utc, bytes, sha256, source_version). `kb_meta.json` copies them and is included in every result's `metadata.kb`. Refresh: `scripts/12_build_kb.py --refresh`.
+- **Built KB (measured):** `kb_genus_crop_host` has 74,240 rows (7,424 genera × 10 crops) and documents 90,873 species. Examples: Fusarium has 443 species (Gibberella merged), H = 0.19 for winter wheat, 0.17 for corn, 0.13 for soybean. Macrophomina has 8 species, H = 0.25 on corn, soybean, sorghum and sunflower.
+- **Output:** `compute_crop_risk(site, year, ...)` returns a `CropRiskResult` with `summary`, `contributions` and `skipped` DataFrames, plus `metadata`. `to_dict()` gives JSON with `schema_version` "crop_risk/1" and a `columns` block with the fixed column orders. The exact column lists are in `src/cropfit/risk.py` (`SUMMARY_COLUMNS`, `CONTRIBUTION_COLUMNS`, `SKIPPED_COLUMNS`):
+  - summary: one row per unit × crop, with status `ok`, `no_knowledge`, `insufficient_depth` or `no_scored_genera`. `risk_from_detected` + `risk_from_not_detected` = `risk_index`.
+  - contributions: one row per unit × crop × scored genus, with A, H and their inputs.
+  - skipped: one row per unit × genus that could not be scored, with `reason`.
+- A site-year without ITS data returns an empty result with `metadata.reason` (no exception).
+- **Measured results (21 Nov 2026, default parameters):**
+
+  | Site-year | Units | Product | Scored genera (max) | Units below floor | Smallest reference | Share of total from not-detected genera |
+  |---|---|---|---|---|---|---|
+  | KONA 2017 | 9 | .001 | 34 | 0 | 6 (all flagged small) | 31% |
+  | KONA 2019 | 10 | .002 | 131 | 0 | 11 | 30% |
+  | KONA 2024 | 10 | .002 | 165 | 0 | 10 | 17% |
+  | STER 2016 | 22 (both products) | .001 + .002 | 89 | 3 | 11 | 39% |
+  | STER 2017 | 10 | .001 | 28 | 0 | 13 | 29% |
+  | STER 2022 | 10 | .002 | 136 | 0 | 9 (most flagged small) | 27% |
+
+- **QC-passing cores after the .002 download and the 02b re-run (21 Nov 2026):** KONA 2017 28, KONA 2019 66, KONA 2024 89, STER 2016 27 (.001) / 10 (.002), STER 2017 42, STER 2022 86. These are slightly below the 3.2 table for STER 2016 and 2017; not investigated.
+- **Pitfalls:**
+  - Not-detected genera contribute their mid-rank percentile. With many genera tied at zero this is about 0.4 to 0.5 each, so a genus detected in one plot can still be a top contributor in the others. Example: Chalastospora at STER 2022 is detected in 1 of 10 units, with H = 2/3 from only 3 documented species. Read `risk_from_not_detected` next to `risk_from_detected`.
+  - H from genera with few documented species is coarse (1/3, 2/3).
+  - Totals are comparable only within one site and ITS product, because the set of scored genera differs.
+  - No species synonymy. Fusarium's denominator includes old names (moniliforme, nivale), and dual names (Gibberella zeae = F. graminearum) count as two species.
+  - JSON output is large (3.5 to 19 MB per site-year, mostly contributions, including H = 0 rows and `excluded_by_filter` rows). Use the parquet tables when you can.
+  - The caveats in section 5 apply: relative abundance, genus level, and a host record means the fungus can infect the crop, not that it does in this field. Fungi only, no bacteria.
 
 ## 4. Quick recipes
 
