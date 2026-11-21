@@ -1,0 +1,187 @@
+{
+  "type": "FeatureCollection",
+  "data_status": "mock",
+  "note": "MOCK fixture in the shape of docs/serve_read_contract.md section 3; not real data",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              20.75,
+              52.17
+            ],
+            [
+              20.755,
+              52.17
+            ],
+            [
+              20.755,
+              52.18
+            ],
+            [
+              20.75,
+              52.18
+            ],
+            [
+              20.75,
+              52.17
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "crop_area_id": "area-demo-1",
+        "field_name": "Demo field 1",
+        "farmer_crop_id": "wheat",
+        "date": "2026-11-21",
+        "risk_class": "high",
+        "status": "ok",
+        "conditions_met": true,
+        "h_hours": 26,
+        "h_low": 26,
+        "h_high": 26,
+        "coverage": 1.0,
+        "growth_stage_zone": "B",
+        "protected_until": null
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              20.755,
+              52.17
+            ],
+            [
+              20.76,
+              52.17
+            ],
+            [
+              20.76,
+              52.18
+            ],
+            [
+              20.755,
+              52.18
+            ],
+            [
+              20.755,
+              52.17
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "crop_area_id": "area-demo-1b",
+        "field_name": "Demo field 1",
+        "farmer_crop_id": "wheat",
+        "date": "2026-11-21",
+        "risk_class": "medium",
+        "status": "uncertain",
+        "conditions_met": false,
+        "h_hours": null,
+        "h_low": 17,
+        "h_high": 20,
+        "coverage": 0.94,
+        "growth_stage_zone": "B",
+        "protected_until": null
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              20.76,
+              52.17
+            ],
+            [
+              20.77,
+              52.17
+            ],
+            [
+              20.77,
+              52.18
+            ],
+            [
+              20.76,
+              52.18
+            ],
+            [
+              20.76,
+              52.17
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "crop_area_id": "area-demo-2",
+        "field_name": "Demo field 2",
+        "farmer_crop_id": "soy",
+        "date": "2026-11-21",
+        "risk_class": null,
+        "status": "out_of_window",
+        "conditions_met": false,
+        "h_hours": null,
+        "h_low": null,
+        "h_high": null,
+        "coverage": 1.0,
+        "growth_stage_zone": "A",
+        "protected_until": null
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              20.77,
+              52.17
+            ],
+            [
+              20.78,
+              52.17
+            ],
+            [
+              20.78,
+              52.18
+            ],
+            [
+              20.77,
+              52.18
+            ],
+            [
+              20.77,
+              52.17
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "crop_area_id": "area-demo-3",
+        "field_name": "Demo field 3",
+        "farmer_crop_id": "wheat",
+        "date": "2026-11-21",
+        "risk_class": "low",
+        "status": "protected",
+        "conditions_met": false,
+        "h_hours": 6,
+        "h_low": 6,
+        "h_high": 6,
+        "coverage": 1.0,
+        "growth_stage_zone": "C",
+        "protected_until": "2026-11-28"
+      }
+    }
+  ]
+}

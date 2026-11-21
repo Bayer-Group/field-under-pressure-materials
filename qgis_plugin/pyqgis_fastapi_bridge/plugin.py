@@ -21,7 +21,7 @@ class PyQgisFastApiBridgePlugin:
         icon = QIcon(icon_path)
 
         self.action = QAction(icon, "PyQGIS FastAPI Bridge", self.iface.mainWindow())
-        self.action.setStatusTip("Otwórz panel asynchronicznej komunikacji z FastAPI")
+        self.action.setStatusTip("Open the Field Under Pressure panel")
         self.action.triggered.connect(self.run)
 
         self.iface.addToolBarIcon(self.action)
