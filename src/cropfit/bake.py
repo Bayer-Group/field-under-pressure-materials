@@ -188,6 +188,7 @@ def bake(client, out_dir: Path, workers: int = 8, log=print) -> dict:
         for c in crops:
             fetch(f"{base}/{enc(c)}", "crop_contributions")
             fetch(f"{base}/{enc(c)}/tests", "crop_tests")
+            fetch(f"{base}/{enc(c)}/products", "crop_products")
 
     pmap(risk_unit, [(pid, u["unit"]) for pid in plot_ids for u in per[pid]["crop-risk"] or []])
     log("crop risk done")

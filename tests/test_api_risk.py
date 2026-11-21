@@ -296,3 +296,12 @@ def test_products_use_soil_measurements_history_and_site(client):
     assert any("NEON, 3 Jul 2022" in s for s in d["sources"]) and any("2020 to 2021" in s for s in d["sources"])
     wheat = client.get("/api/plots/STER_001/crop-risk/2022-002/winter_wheat/products").json()
     assert "rhizobial_inoculant" not in {x["product_id"] for x in wheat["recommendations"]}
+
+
+def test_static_bake_includes_tests_and_products(client, tmp_path):
+    from cropfit import bake
+    out = tmp_path / "static"                       # not tmp_path itself: bake clears <out>/data
+    m = bake.bake(client, out, workers=2, log=lambda *_: None)
+    assert m["counts"]["crop_products"] == m["counts"]["crop_tests"] == m["counts"]["crop_contributions"] > 0
+    key = bake.path_to_key("/plots/STER_001/crop-risk/2022-002/winter_wheat/products")
+    assert "fus_seed" in (out / "data" / f"{key}.js").read_text()
