@@ -64,8 +64,9 @@ def _chip(ds, x: float, y: float, half_m: float, context_m: float, max_px: int, 
 
 
 # ---------------------------------------------------------------- NAIP
-def fetch_naip(geom: pd.DataFrame, workers: int = 8, context_m: float = 120.0, max_px: int = 480):
-    """One row per plot and NAIP flight (all years on Planetary Computer). Returns (rows, failures)."""
+def fetch_naip(geom: pd.DataFrame, workers: int = 8, context_m: float = 500.0, max_px: int = 1600):
+    """One row per plot and NAIP flight (all years on Planetary Computer). Returns (rows, failures).
+    The chip covers 1 km around the plot (as the greenness maps do), at up to 1600 px (0.6 m or coarser)."""
     import rasterio
     jobs = []
     for p in geom.to_dict("records"):
