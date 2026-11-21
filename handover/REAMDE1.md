@@ -12,9 +12,9 @@ Działa już mapa pól w Lizmapie, kalendarz 7 dni dla 108 pól >= 3ha (tryb his
 
 Największe ryzyka to brak danych satelitarnych dla naszego obszaru - kagel 33UXR vs pola 34U...), domyślny profil gleby i nieużywane dane Bayera. Na prezentację pokazujemy jedno pole i jedną historię z wynikiem w pln-ach.
 
-===============================
-AUDYT CO BYŁO ZŁE I CO Z TYM ROBIMY
-======================================
+
+## AUDYT CO BYŁO ZŁE I CO Z TYM ROBIMY
+
 Główny błąd koncepcji: ocena opiera się na jednej średniej dla całego pola, a temat hackathonu to MAPA RYZYKA!!!!!!!!. Pole 12ha ma miejsca mokre, piaszczyste i słabsze, a średnia to ukrywa.
 
 Założenia koncepcji
@@ -60,10 +60,3 @@ Ryzyka chorób są w ryzyka_zebrane.xlsx
 
 
 # Opis modułów które bym wdrożył są w drugim readme
-
-
-
-
-
-
-satelite_img_downloader.ipynb
