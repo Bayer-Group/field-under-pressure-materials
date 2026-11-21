@@ -119,7 +119,6 @@ def download_clip_sentinel_ndvi(
             )
             continue
 
-        # 5. Zapis zaakceptowanej sceny
         out_file = out_dir / f"ndvi_{scene_date}_{scene.id}.tif"
         with rasterio.open(out_file, "w", **out_meta) as dest:
             dest.write(ndvi, 1)
@@ -134,6 +133,9 @@ def download_clip_sentinel_ndvi(
     return saved_paths
 
 
+
+
 if __name__ == "__main__":
     boundary_file = Path("test/fields.geojson")
     download_clip_sentinel_ndvi(boundary_file=boundary_file, start_date="2022-03-01", end_date="2022-06-30", out_dir="test/ndvi", n_scenes=8)
+
