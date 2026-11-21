@@ -16,7 +16,7 @@ from pydantic import BaseModel
 
 from . import api as core
 from . import kb as kbmod
-from . import config, neon, risk
+from . import config, followup, neon, risk
 
 MIN_UNIT_READS = 2000           # risk.compute_crop_risk default; below this a unit is not scored
 CURRENT_PRODUCT = ".002"
@@ -40,6 +40,12 @@ REASON_LABELS = {
 KB_NAMES = {"fungaltraits": "FungalTraits", "usda_fungus_host": "USDA Fungus-Host"}
 METHOD_LABELS = {"current": "current ITS method (.002)",
                  "older": "older ITS method (.001), not comparable with .002"}
+
+TRIGGER_LABELS = {"resolve_species": "Identify the species", "confirm_detection": "Confirm a weak detection",
+                  "blind_spot": "Not measured here", "sampling": "Better sample"}
+FOLLOWUP_NOTE = ("Suggestions are prompts for what to ask a diagnostic lab. The list of tests was written from "
+                 "general knowledge and is not verified; no result thresholds are given. A test is suggested "
+                 "because of a gap in this assessment, not because disease is expected.")
 
 _lock = threading.Lock()
 
@@ -144,6 +150,33 @@ class CropContributions(BaseModel):
     row: CropRiskRow
     contributions: list[Contribution]
     n_scored_zero_h: int
+
+
+class TestSuggestion(BaseModel):
+    test_id: str
+    kind: str
+    trigger: str
+    trigger_label: str
+    priority: float
+    genus: str | None
+    target: str | None
+    disease: str | None
+    method: str
+    sample: str | None
+    tells_you: str | None
+    reason: str
+    inoculum: str | None
+    source: str | None
+    verified: bool
+
+
+class FollowupTests(BaseModel):
+    plot_id: str
+    unit: str
+    crop: str
+    label: str
+    suggestions: list[TestSuggestion]
+    note: str
 
 
 # ---------------------------------------------------------------- helpers
@@ -379,3 +412,29 @@ def crop_contributions(plot_id: str, unit: str, crop: str):
     return CropContributions(plot_id=plot_id, unit=unit, crop=crop, label=CROP_LABELS.get(crop, crop),
                              row=_crop_row(res, crop, uid, u.product), contributions=items,
                              n_scored_zero_h=int((c["h"] == 0).sum()))
+
+
+def _site_context(plot_id: str) -> dict:
+    """Wet-spring, hot-dry-summer and drainage values of the plot from plots.parquet; empty when unavailable."""
+    f = core.PROCESSED / "plots.parquet"
+    if not f.exists():
+        return {}
+    p = core.table("plots")
+    p = p[p["unit_id"] == plot_id] if "unit_id" in p.columns else p.iloc[0:0]
+    if p.empty:
+        return {}
+    r = p.iloc[0]
+    return {k: r[k] for k in ("p_wet_may", "p_hot_dry_jul_aug", "drainage_class") if k in p.columns}
+
+
+@router.get("/plots/{plot_id}/crop-risk/{unit}/{crop}/tests", response_model=FollowupTests)
+def crop_followup_tests(plot_id: str, unit: str, crop: str):
+    """Follow-up tests that would close gaps in one crop's assessment for one unit, most useful first."""
+    if crop not in kbmod.SCORED_CROPS:
+        raise HTTPException(404, f"unknown crop {crop}")
+    site, u, res, uid = _scored(plot_id, unit)
+    if res.summary.empty:
+        raise HTTPException(404, f"unknown crop-risk unit {unit} for plot {plot_id}")
+    items = followup.suggest(res.contributions, res.summary, uid, crop, context=_site_context(plot_id))
+    return FollowupTests(plot_id=plot_id, unit=unit, crop=crop, label=CROP_LABELS.get(crop, crop), note=FOLLOWUP_NOTE,
+                         suggestions=[TestSuggestion(**i, trigger_label=TRIGGER_LABELS[i["trigger"]]) for i in items])
