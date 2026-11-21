@@ -117,6 +117,21 @@ Computed from the 10 m CTY raster (e.g. zonal statistics) at load time.
 | `pixel_count` | bigint | |
 | `share` | real | 0–1 (constraint in the database) |
 
+### Farmer input (schema `app`)
+From [`FARMER_INPUT_CONTRACT.md`](../FARMER_INPUT_CONTRACT.md); DDL in [`initdb/04_app_farmer_input.sql`](initdb/04_app_farmer_input.sql)
+(migration [`migrations/002_app_farmer_input.sql`](migrations/002_app_farmer_input.sql)).
+
+| Table | One row = | Key | Notes |
+| --- | --- | --- | --- |
+| `app.field` | a working plot | `field_id` | `owner_id` (isolation: open), `data_status` (`mock` / `replay` / `live`), `created_at`, `updated_at`; `geom` is an optional outline |
+| `app.parcel` | a cadastral parcel from the lookup | `parcel_id` | `parcel_number`, `source`, `geom` (polygon, EPSG:4326) |
+| `app.field_parcel` | a parcel selected for a field | `(field_id, parcel_id)` | a working association, not proof of ownership |
+| `app.crop_area` | an area drawn over the parcels | `crop_area_id` | `farmer_crop_id` and `sowing_date` are required; `geom` is a polygon; optional `bbch_override` (31, 37, 39, 51, 59; not in the farmer contract yet) |
+| `app.spray` | a past spray of a crop area | `spray_id` | `spray_date` and `protection_duration_days` (> 0); no rows = no sprays |
+
+The crop reported by the crop map is **not** stored here: it is derived into the curated layer, so the farmer's value is never
+overwritten. `app.field_crop_share` (one polygon per field) is the older table used by the loader's `--fields` demo option.
+
 ### `raw.ingest_log`: data provenance
 One row per loaded dataset/file: `dataset`, `source_file`, `source_year`, `row_count`, `time_shift`, `note`
 (`id` and `loaded_at` are filled automatically).
