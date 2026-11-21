@@ -440,7 +440,7 @@ def evaluate_field_calendar(
 if __name__ == "__main__":
     # 1. ETAP 1: Przelicz wszystkie pola z GeoJSON na bazie wszystkich województw
     df_profiles = prepare_all_soil_profiles(
-        geojson_path="kw/fields.geojson",
+        geojson_path="fields.geojson",
         soil_dir="soil_data",
         output_parquet="fields_soil_profiles.parquet",
         output_json="fields_soil_profiles.json",
