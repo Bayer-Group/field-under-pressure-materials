@@ -25,7 +25,7 @@
     .search input::placeholder { color: #69786d; opacity: 1; }
     .locate { width: 52px; height: 52px; display: grid; place-items: center; flex: none; border: 1px solid rgba(255,255,255,.8); border-radius: 17px; background: var(--paper); color: var(--ink); box-shadow: 0 5px 22px rgba(24,50,35,.12); backdrop-filter: blur(18px); }
     .locate:active, .option:active { transform: scale(.985); }
-    .sheet { position: absolute; z-index: 2; left: 0; right: 0; bottom: 0; padding: 10px 20px max(20px, env(safe-area-inset-bottom)); border: 1px solid rgba(255,255,255,.85); border-bottom: 0; border-radius: 28px 28px 0 0; background: rgba(235,246,238,.94); box-shadow: 0 -10px 40px rgba(20,50,33,.14); backdrop-filter: blur(25px); max-height: min(68dvh, 570px); overflow-y: auto; }
+    .sheet { position: absolute; z-index: 2; left: 0; right: 0; bottom: max(14px, env(safe-area-inset-bottom)); padding: 10px 20px max(20px, env(safe-area-inset-bottom)); border: 1px solid rgba(255,255,255,.85); border-radius: 28px; background: rgba(235,246,238,.94); box-shadow: 0 -10px 40px rgba(20,50,33,.14); backdrop-filter: blur(25px); max-height: min(68dvh, 570px); overflow-y: auto; transition: padding 220ms ease, max-height 220ms ease; }
     .handle { width: 36px; height: 4px; border-radius: 4px; background: #a9bdb0; margin: 1px auto 20px; }
     .eyebrow { color: var(--green); font-size: 11px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; margin: 0 0 8px; }
     h1 { font-size: clamp(25px, 7vw, 30px); letter-spacing: -.045em; line-height: 1.1; margin: 0; }
@@ -46,12 +46,13 @@
     .status { position: absolute; z-index: 3; top: calc(max(16px, env(safe-area-inset-top)) + 61px); left: 16px; right: 16px; margin: 0; padding: 10px 13px; border-radius: 12px; background: #fff; box-shadow: 0 5px 20px rgba(24,50,35,.12); font-size: 13px; line-height: 1.4; }
     .status:empty { display: none; }
     .status { background: rgba(239,247,240,.84); border: 1px solid rgba(255,255,255,.7); backdrop-filter: blur(18px); color: #294c36; }
-    .sheet.collapsed { max-height: 53px; overflow: hidden; padding-bottom: 0; }
+    .sheet.collapsed { max-height: 61px; overflow: hidden; padding-bottom: 8px; }
+    .drawer-content { max-height: 520px; opacity: 1; overflow-y: auto; transition: max-height 220ms ease, opacity 150ms ease; }
+    .sheet.collapsed .drawer-content { max-height: 0; opacity: 0; overflow: hidden; pointer-events: none; }
     .drawer-toggle { display: block; width: 100%; border: 0; background: transparent; padding: 1px 0 10px; cursor: pointer; }
     .drawer-toggle .handle { display: block; margin: 1px auto 4px; }
-    .drawer-toggle span:last-child { display: none; color: var(--green); font-size: 12px; font-weight: 700; }
+    .drawer-toggle span:last-child { display: none; color: var(--green); font-size: 11px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
     .sheet.collapsed .drawer-toggle span:last-child { display: block; }
-    .sheet.collapsed > :not(.drawer-toggle) { display: none; }
     .top.searching { position: absolute; z-index: 6; top: 35%; left: 50%; right: auto; width: min(90vw, 440px); transform: translate(-50%, -50%); }
     .top.searching .locate { display: none; }
     .top.searching .search { height: 60px; box-shadow: 0 12px 40px rgba(24,50,35,.24); }
@@ -62,11 +63,18 @@
     dialog::backdrop { background: rgba(16,35,24,.32); }
     dialog h2 { font-size: 22px; letter-spacing: -.035em; margin: 0 0 8px; }
     dialog p { color: var(--muted); font-size: 14px; line-height: 1.45; }
-    dialog input { max-width: 100%; margin: 14px 0; font-size: 14px; }
+    .upload-zone { display: flex; align-items: center; justify-content: center; flex-direction: column; min-height: 172px; padding: 20px; margin: 18px 0 10px; text-align: center; border: 1.5px dashed #9bb6a3; border-radius: 16px; background: rgba(255,255,255,.62); cursor: pointer; }
+    .upload-zone svg { width: 31px; height: 31px; color: var(--green); margin-bottom: 13px; }
+    .upload-zone strong { font-size: 14px; }
+    .upload-zone small { color: var(--muted); margin-top: 6px; font-size: 12px; line-height: 1.4; }
+    .upload-zone:focus-within { outline: 3px solid #2d815d; outline-offset: 3px; }
+    .upload-zone input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+    .selection-rectangle { display: none; position: absolute; z-index: 1; pointer-events: none; border: 1.5px solid var(--green); background: rgba(23,101,68,.16); }
+    .selection-rectangle.visible { display: block; }
     dialog .close-dialog { border: 0; padding: 10px 16px; border-radius: 12px; background: #14221a; color: #fff; }
-    .maplibregl-ctrl-top-right { top: max(130px, calc(env(safe-area-inset-top) + 124px)); right: 16px; }
-    .maplibregl-ctrl-group { border-radius: 15px !important; overflow: hidden; box-shadow: 0 5px 22px rgba(24,50,35,.12) !important; }
-    .maplibregl-ctrl-group button { width: 46px !important; height: 46px !important; background: rgba(248,251,247,.94) !important; }
+    .maplibregl-ctrl-top-right { top: auto; bottom: calc(var(--drawer-height, 370px) + max(26px, env(safe-area-inset-bottom) + 12px)); right: 16px; transition: bottom 220ms ease; }
+    .maplibregl-ctrl-group { border-radius: 17px !important; overflow: hidden; box-shadow: 0 5px 22px rgba(24,50,35,.12) !important; }
+    .maplibregl-ctrl-group button { width: 52px !important; height: 52px !important; background: rgba(248,251,247,.94) !important; }
 
     .results { display: none; position: absolute; z-index: 3; top: calc(max(16px, env(safe-area-inset-top)) + 58px); left: 16px; right: 76px; padding: 6px; border-radius: 14px; background: #fff; box-shadow: 0 5px 20px rgba(24,50,35,.15); }
     .results.visible { display: grid; }
@@ -81,6 +89,7 @@
 <body>
   <main class="app">
     <div id="map" aria-label="Mapa działek"></div>
+    <div id="selection-rectangle" class="selection-rectangle" aria-hidden="true"></div>
     <div id="search-backdrop" class="search-backdrop"></div>
     <div class="top" id="top-controls">
       <form class="search" id="search-form" role="search">
@@ -92,8 +101,9 @@
     <div id="results" class="results" aria-label="Wyniki wyszukiwania"></div>
     <p id="status" class="status" role="status" aria-live="polite"></p>
     <section class="sheet" aria-labelledby="heading">
-      <button id="drawer-toggle" class="drawer-toggle" type="button" aria-label="Zwiń panel" aria-expanded="true"><span class="handle" aria-hidden="true"></span><span>Twoje działki</span></button>
-      <p class="eyebrow">Twoje pola · 1 z 3</p>
+      <button id="drawer-toggle" class="drawer-toggle" type="button" aria-label="Zwiń panel" aria-expanded="true"><span class="handle" aria-hidden="true"></span><span>Twoje pola</span></button>
+      <div id="drawer-content" class="drawer-content">
+      <p class="eyebrow">Twoje pola</p>
       <h1 id="heading">Wybierz działkę</h1>
       <p class="subtitle">Znajdź swoje pole na mapie lub dodaj je z pliku.</p>
       <div id="selected" class="selected"><div class="selected-head"><span class="dot"></span><span id="selected-count"></span></div><div id="selected-list" class="selected-list"></div></div>
@@ -103,11 +113,16 @@
         <button class="option" id="import-option" type="button"><span class="icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3m-4 4 4-4 4 4M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg></span><span>Importuj plik</span><svg class="chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>
       </div>
       <button id="continue" class="primary" disabled type="button">Dalej</button>
+      </div>
     </section>
     <dialog id="import-dialog" aria-labelledby="import-title">
       <h2 id="import-title">Importuj plik</h2>
       <p>Wybierz plik GeoJSON lub spakowany Shapefile (.zip).</p>
-      <input id="import-file" type="file" accept=".geojson,.json,.zip,application/geo+json,application/zip" aria-label="Wybierz plik GeoJSON lub ZIP" />
+      <label class="upload-zone" for="import-file">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3m-4 4 4-4 4 4M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg>
+        <strong>Wybierz plik</strong><small>GeoJSON lub Shapefile w pliku ZIP</small>
+        <input id="import-file" type="file" accept=".geojson,.json,.zip,application/geo+json,application/zip" aria-label="Wybierz plik GeoJSON lub ZIP" />
+      </label>
       <p id="import-note">Import i odczyt pliku będą dostępne w kolejnym etapie.</p>
       <button class="close-dialog" id="close-import" type="button">Zamknij</button>
     </dialog>
@@ -128,6 +143,7 @@
     /** Expand or collapse the selection panel. */
     function setDrawer(open) {
       sheet.classList.toggle('collapsed', !open);
+      document.getElementById('drawer-content').inert = !open;
       drawerToggle.setAttribute('aria-expanded', String(open));
       drawerToggle.setAttribute('aria-label', open ? 'Zwiń panel' : 'Otwórz panel');
     }
@@ -188,6 +204,7 @@
       parcels.forEach(parcel => { const button = document.createElement('button'); button.type = 'button'; button.textContent = parcel.parcel_number; button.addEventListener('click', () => { setSearch(false); selectParcel(parcel, options); }); results.appendChild(button); });
       results.classList.add('visible');
     }
+    new ResizeObserver(() => document.documentElement.style.setProperty('--drawer-height', `${sheet.offsetHeight}px`)).observe(sheet);
     map.addControl(new maplibregl.NavigationControl({ showZoom: false, showCompass: true }), 'top-right');
     map.on('load', async () => {
       const selectionColor = getComputedStyle(document.documentElement).getPropertyValue('--green').trim();
@@ -202,27 +219,68 @@
       } catch (_) { status.textContent = 'Nie można pobrać działek. Spróbuj ponownie.'; }
     });
     let suppressMapClick = false;
-    // Hold still briefly, then trace across parcels to add them without a selection limit.
+    // Hold, then draw a marquee; sample the existing point-lookup mock inside it.
     const canvas = map.getCanvas();
-    let holdTimer = null, drawing = false, startPoint = null, lastPoint = null, pointerId = null;
-    /** Add every mock parcel under one screen point during a selection drag. */
-    async function selectAt(point) {
-      const position = map.unproject(point);
+    const selectionBox = document.getElementById('selection-rectangle');
+    let holdTimer = null, drawing = false, startPoint = null, pointerId = null;
+    let anchor = null, cursor = null, panFrame = null, lastFrame = null;
+    let rectangleVersion = 0, preview = new Map(), pendingScan = Promise.resolve();
+    /** Show the current selection rectangle and return its screen bounds. */
+    function updateRectangle() {
+      const origin = map.project(anchor);
+      const left = Math.min(origin.x, cursor[0]), top = Math.min(origin.y, cursor[1]);
+      const right = Math.max(origin.x, cursor[0]), bottom = Math.max(origin.y, cursor[1]);
+      Object.assign(selectionBox.style, { left: `${left}px`, top: `${top}px`, width: `${right - left}px`, height: `${bottom - top}px` });
+      return { left, top, right, bottom };
+    }
+    /** Query mock parcel points inside the marquee without silently selecting outside it. */
+    async function scanRectangle(bounds, version) {
+      const found = new Map();
+      const width = bounds.right - bounds.left, height = bounds.bottom - bounds.top;
+      const columns = Math.max(1, Math.ceil(width / 24)), rows = Math.max(1, Math.ceil(height / 24));
       try {
-        const found = await provider.findParcels({ lon: position.lng, lat: position.lat });
-        found.parcels.forEach(parcel => { if (!selected.has(parcel.parcel_id)) selectParcel(parcel); });
+        for (let row = 0; row <= rows; row++) {
+          if (version !== rectangleVersion) return;
+          const queries = [];
+          for (let col = 0; col <= columns; col++) {
+            const position = map.unproject([bounds.left + width * col / columns, bounds.top + height * row / rows]);
+            queries.push(provider.findParcels({ lon: position.lng, lat: position.lat }));
+          }
+          const results = await Promise.all(queries);
+          results.forEach(result => result.parcels.forEach(parcel => found.set(parcel.parcel_id, parcel)));
+        }
+        if (version === rectangleVersion) preview = found;
       } catch (_) { status.textContent = 'Nie można pobrać działek. Spróbuj ponownie.'; }
+    }
+    /** Refresh the pending selection when the rectangle changes. */
+    function queueScan() {
+      const bounds = updateRectangle();
+      const version = ++rectangleVersion;
+      pendingScan = scanRectangle(bounds, version);
+    }
+    /** Move gently near screen edges while the pointer is held, with no inertia. */
+    function panNearEdge(now) {
+      if (!drawing) return;
+      const elapsed = lastFrame === null ? 0 : Math.min((now - lastFrame) / 1000, .05);
+      lastFrame = now;
+      const rect = canvas.getBoundingClientRect();
+      const margin = 44, speed = 28;
+      const dx = cursor[0] < margin ? -speed : cursor[0] > rect.width - margin ? speed : 0;
+      const dy = cursor[1] < margin ? -speed : cursor[1] > rect.height - margin ? speed : 0;
+      if (dx || dy) { map.panBy([dx * elapsed, dy * elapsed], { duration: 0 }); updateRectangle(); }
+      panFrame = requestAnimationFrame(panNearEdge);
     }
     canvas.addEventListener('pointerdown', event => {
       if (event.button !== 0 || pointerId !== null) return;
       pointerId = event.pointerId;
       const rect = canvas.getBoundingClientRect();
       startPoint = [event.clientX - rect.left, event.clientY - rect.top];
-      lastPoint = startPoint;
+      cursor = startPoint;
       holdTimer = setTimeout(() => {
         drawing = true; suppressMapClick = true; map.dragPan.disable();
-        canvas.setPointerCapture(pointerId); status.textContent = 'Przeciągnij po działkach, aby je dodać.';
-        selectAt(startPoint);
+        canvas.setPointerCapture(pointerId); anchor = map.unproject(startPoint); preview = new Map();
+        selectionBox.classList.add('visible'); status.textContent = 'Przeciągnij prostokąt nad działkami.';
+        updateRectangle(); lastFrame = null; panFrame = requestAnimationFrame(panNearEdge);
       }, 450);
     });
     canvas.addEventListener('pointermove', event => {
@@ -231,18 +289,24 @@
       const point = [event.clientX - rect.left, event.clientY - rect.top];
       if (!drawing && Math.hypot(point[0] - startPoint[0], point[1] - startPoint[1]) > 10) { clearTimeout(holdTimer); holdTimer = null; return; }
       if (!drawing) return;
-      event.preventDefault();
-      const distance = Math.hypot(point[0] - lastPoint[0], point[1] - lastPoint[1]);
-      const steps = Math.min(40, Math.max(1, Math.ceil(distance / 12)));
-      for (let i = 1; i <= steps; i++) selectAt([lastPoint[0] + (point[0] - lastPoint[0]) * i / steps, lastPoint[1] + (point[1] - lastPoint[1]) * i / steps]);
-      lastPoint = point;
+      event.preventDefault(); cursor = point; updateRectangle();
     });
-    /** Restore normal panning after a hold or selection drag. */
-    function endSelectionDrag(event) {
+    /** Finish selection using the current rectangle and restore normal map panning. */
+    async function endSelectionDrag(event) {
       if (event.pointerId !== pointerId) return;
       clearTimeout(holdTimer); holdTimer = null;
-      if (drawing) { drawing = false; map.dragPan.enable(); setTimeout(() => { suppressMapClick = false; }, 350); }
-      pointerId = null; startPoint = null; lastPoint = null;
+      const completed = drawing;
+      if (completed) {
+        cancelAnimationFrame(panFrame); queueScan(); drawing = false; map.dragPan.enable();
+        selectionBox.classList.remove('visible'); setTimeout(() => { suppressMapClick = false; }, 350);
+      }
+      pointerId = null; startPoint = null; lastFrame = null;
+      if (completed && event.type !== 'pointercancel') {
+        await pendingScan;
+        preview.forEach(parcel => selected.set(parcel.parcel_id, parcel));
+        renderSelection();
+        status.textContent = preview.size ? `Zaznaczono działki: ${preview.size}.` : 'Nie znaleziono działek w zaznaczonym obszarze.';
+      } else if (completed) { rectangleVersion++; preview.clear(); }
     }
     canvas.addEventListener('pointerup', endSelectionDrag);
     canvas.addEventListener('pointercancel', endSelectionDrag);
