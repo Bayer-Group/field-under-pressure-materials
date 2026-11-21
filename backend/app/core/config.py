@@ -27,6 +27,8 @@ MAX_AREAS_SANDBOX = int(os.environ.get("MAX_AREAS_SANDBOX", "10"))           # p
 MAX_AREAS_OTHER = int(os.environ.get("MAX_AREAS_OTHER", "50"))               # pól na zwykłego rolnika demo
 MAX_AREA_HA = float(os.environ.get("MAX_AREA_HA", "150"))                    # maks. powierzchnia jednego pola
 MAX_PARALLEL_REFRESH = int(os.environ.get("MAX_PARALLEL_REFRESH", "4"))      # równoległe przeliczenia pól
+# Nowych sandboxów na minutę z jednego adresu IP. Wysoko, bo cała sala na jednym Wi-Fi wychodzi zwykle przez jeden publiczny adres (NAT).
+SANDBOX_RATE_PER_MIN = int(os.environ.get("SANDBOX_RATE_PER_MIN", "150"))
 
 # Dozwolone originy CORS
 CORS_ORIGINS = ["*"]

@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 
 from backend.app.api.v1.endpoints.farm import _require_area, current_user
 from backend.app.core.config import (AUTH_SECRET, DEMO_READONLY, MAX_AREA_HA, MAX_AREAS_OTHER, MAX_AREAS_SANDBOX,
-                                     MAX_PARALLEL_REFRESH, SANDBOX_MAX_OWNERS, SANDBOX_TTL_HOURS)
+                                     MAX_PARALLEL_REFRESH, SANDBOX_MAX_OWNERS, SANDBOX_RATE_PER_MIN, SANDBOX_TTL_HOURS)
 from backend.app.core.db import get_db, get_db_rw
 from backend.app.core.limits import RateLimiter, client_ip, enforce
 from backend.app.core.security import make_token
@@ -30,7 +30,7 @@ from backend.app.services.crop_area_refresh import load_rules, refresh
 
 router = APIRouter()
 
-_sandbox_limit = RateLimiter(10, 60)            # sandboxes per minute and address
+_sandbox_limit = RateLimiter(SANDBOX_RATE_PER_MIN, 60)   # sandboxes per minute and address (a room behind one NAT shares it)
 _write_limit = RateLimiter(60, 60)              # writes per minute and owner
 _slots = threading.BoundedSemaphore(MAX_PARALLEL_REFRESH)
 _rules = None
