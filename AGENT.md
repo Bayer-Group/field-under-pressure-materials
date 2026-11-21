@@ -52,6 +52,7 @@ data/raw/lucas/       lucas_harmo_uf.zip and a slimmed CSV (you create it)
 data/cache/<ns>/      http.cached() JSON/text: sda/, daymet/, openmeteo_e1/, power_e1/
 data/raw/satellite/   one small parquet per satellite scene (resumable) + manifest
 data/raw/imagery/     aerial chips (GeoTIFF) and previews (PNG) per source and plot + manifest
+data/raw/kb/<source>/ knowledge-base downloads (suggested, nothing there yet; see 3.11)
 data/processed/       parquet outputs of scripts 01-09
 ```
 
@@ -82,6 +83,7 @@ Note: `03_build_plots.py` takes its plots from the event registry (the 29 plots 
 
 - **Only one key is needed: the NEON API token.** Put it in a gitignored `.env` as `NEON_API_TOKEN=...` (template: `.env.example`; `NEON_TOKEN` is accepted as a fallback name). Since June 2026 the NEON portal calls in this repo need it. Never paste it in chat, logs or commits. `neon.get_token()` loads it via python-dotenv.
 - **Everything else is keyless:** NMDC, SSURGO/SDA, Daymet, Planetary Computer CDL (anonymous signed URLs via the `planetary-computer` package), CSB and CDL downloads from USDA, NASS, JRC LUCAS, GlobalFungi table, Open-Meteo, NASA POWER.
+- **Knowledge bases (3.11, not used by code yet):** the EPPO API needs a free token, and an NCBI API key is optional (higher rate limit). If you add them, use the same gitignored `.env` (for example `EPPO_API_TOKEN`, `NCBI_API_KEY`).
 - **Never commit** `.env`, anything under `data/`, or `data/links.txt`. The latter (if you have it from the hackathon organisers) holds pre-signed S3 URLs with session tokens. `.gitignore` covers `data/`, `.env`, `*.zip`, `.venv/`, `outputs/`, `*.part`.
 - **User-Agent:** NMDC rejects some default client user agents and NEON asks for one. `http.py` sets one for all calls; `pull_nmdc_cropland.py` sets its own. If you write new code, set a UA.
 
@@ -308,6 +310,81 @@ Note: `03_build_plots.py` takes its plots from the event registry (the 29 plots 
   - `timing`: `before` / `at sampling` / `around (may be after)` / `constant`, from the time window.
 - **Result (measured, 3,532 pairs):** STER 73 pairs with q < 0.1 (38 with q < 0.05), both sites together 38, KONA none. Of the pairs with q < 0.1 that can be checked within plots, half keep their direction there. Soil pH shows no association that survives correction in either site (the pH range inside a site is narrow: KONA about 5.2-6.6, STER 6.2-8.5).
 - **Limits:** observational, 28 plots, two sites: the scan finds candidates, it does not show cause. Events of one plot are not independent, so p-values are optimistic. Fungal shares are relative: one genus rising pushes others down. Several strong STER pairs involve the NEON airborne photo, which has 38 events from two campaigns.
+
+### 3.11 Knowledge bases: what a microbe does to a plant, and when (not downloaded yet)
+
+- **Status:** apart from the organisers' risk workbook (inspected on 21 Nov 2026, see below), none of these sources is downloaded or read by code in this repo. The rest of this section was compiled from prior knowledge on 21 Nov 2026 and is **not verified** (URLs, file formats, sizes, licences, rate limits). Check each source before relying on it, and replace this note with measured facts once something is pulled.
+- **Why:** the measured tables only say *which* genera are present and in what share. Turning that into crop advice needs two kinds of knowledge:
+  1. **What the microbe does:** lifestyle (plant pathogen, mutualist, saprotroph, growth promoter), which crops it affects, which disease it causes. Example: Macrophomina causes charcoal rot on sorghum, soybean, sunflower and corn.
+  2. **When it matters:** the conditions under which the effect actually happens (soil or air temperature, moisture, crop stage, previous crop, pH, nitrogen). Example: charcoal rot is favoured by hot soil and drought stress around flowering.
+- **The curated databases below fill the first kind reasonably well. The second kind has to be built by hand or mined from papers.** That is where an LLM extracting from papers helps most, because this knowledge exists mainly as sentences in papers and extension guides, not as database fields. The databases record lifestyle and host lists; they do not model an organism's environmental needs.
+- **Kind 1 comes at two levels of detail, and only one says which crop is affected:**
+  - **Genus labels** (FungalTraits, FUNGuild): "Fusarium: plant pathogen". Good as a **filter** (is this genus worth looking at?), but they say nothing about which crops.
+  - **Species × host records** (USDA Fungus-Host, APS, EPPO, CABI; PHI-base for lab-studied pathogens): "*F. graminearum* recorded on *Triticum aestivum*". Only these let you say which share of a genus's documented species are recorded on a given crop.
+- **What no database gives:** whether the evidence for an effect comes from the field, a greenhouse or a lab, i.e. the evidence type. USDA records each cite a reference, so their count is a rough proxy for the number of studies; the evidence type has to come from papers or extension guides. Bacteria are covered only by PLaBAse, and only for beneficial traits.
+- **First to pull (planned, access not verified yet):** FungalTraits as the genus filter and USDA Fungus-Host for species × crop host records.
+
+**Kind 1, what the microbe does: curated databases (start here, before mining literature):**
+
+| Source | What it gives | Resolution | Access (not verified) | Environmental needs? |
+|---|---|---|---|---|
+| **FungalTraits** (Põlme et al. 2020, *Fungal Diversity*, doi:10.1007/s13225-020-00466-2) | Primary and secondary lifestyle for about 10k fungal genera (e.g. plant pathogen, root endophyte, arbuscular mycorrhizal, saprotroph), plant-pathogenic capacity | Genus (plus a species-hypothesis table) | Supplementary table of the paper; keyless | No. Same resolution as NEON ITS: the best first match for the ITS genus columns |
+| **FUNGuild** (Nguyen et al. 2016, *Fungal Ecology*, doi:10.1016/j.funeco.2015.06.006) | Trophic mode, guild, confidence ranking (Possible / Probable / Highly Probable) | Genus, some species | Online database (JSON) and the FUNGuild script on GitHub; keyless | No. Many genera get several guilds; keep the confidence ranking |
+| **USDA ARS Fungal Databases**, Fungus-Host Distributions (Farr & Rossman) | Recorded fungus-host plant pairs with literature references | Species × host plant | Web query at `fungi.ars.usda.gov`; keyless; bulk export unclear | No. Where it was found, not under what conditions; a record is one observation, not a measure of disease importance |
+| **APS Common Names of Plant Diseases** (American Phytopathological Society) | Disease name → causal organism, per crop | Species × crop | Free web pages; scraping terms not checked | No. Good for listing the known pathogens of the crops in `rules/cdl_codes.csv` |
+| **PHI-base** (Urban et al., *Nucleic Acids Research*) | Pathogen-host interactions: pathogen species, host, gene, mutant phenotype, PubMed ID | Species and gene | Downloads (CSV) at `phi-base.org`; keyless; CC BY 4.0 | No. Lab conditions only; useful for linking genes later, not for field risk |
+| **EPPO Global Database** | Host plants, distribution and regulatory status of pests and pathogens | Species | `gd.eppo.int`; the REST API needs a free token from a registered account | Distribution only. Focused on regulated and quarantine organisms, not common soil fungi |
+| **CABI Compendium** (Crop Protection) | Host ranges, impact, management; datasheets have a free-text climate / environment section | Species | Subscription, partly open | Partly, as free text (e.g. "favoured by high temperatures and drought stress"). Do not bulk-scrape; use for manual checks |
+| **PLaBAse / PGPT ontology** (Patz et al.) | Plant-growth-promoting traits of bacteria, gene-based annotation of plant-associated bacteria | Bacterial genes and genomes | Web tool at the University of Tübingen; keyless | No. The bacterial side: Kraken2 genera and the KO table |
+
+**Kind 2, when it matters: sources of environmental conditions:**
+
+| Source | What it gives | Limits |
+|---|---|---|
+| **Organisers' risk workbook** `metodyki/ryzyka_zebrane.xlsx` in the organisers' hackathon repo (their docs call it `zboza_ryzyka.xlsx`; inspected 21 Nov 2026) | Condensed extract of the official Polish integrated crop protection guides (*metodyki integrowanej ochrony*). 5 sheets: sugar beet, corn, wheat, sunflower, potato. Per disease or pest: temperature, moisture, other risk factors (previous crop, monoculture, pH, excess N, heavy soil). 4 embedded images: corn water needs by stage, winter-wheat stage durations by sowing date, wheat pest and sunflower disease timing by BBCH stage. Example row: *Macrophomina phaseolina* (charcoal rot of sunflower), about 30 °C, low humidity | Diseases named in Polish, Latin names only for sunflower and some potato rows, so a disease → pathogen → genus mapping is needed. Mixed formats (`15-25`, "warm summers", "not stated"), air vs soil temperature often unclear. Most rows are leaf diseases and insects that a soil sample cannot see. No soybean or sorghum; barley, oat, rye, triticale only in the PDFs. Polish context: pathogen temperature ranges transfer, sowing dates do not |
+| **The metodyki PDFs** (same folder, 14 files: wheat, triticale, rye, barley, oat, corn, sugar beet, potato, sunflower, GIORiN cereals guide) | The authoritative text behind the workbook | Polish; already curated, so a much better corpus for LLM extraction than random papers; cite the guide by title |
+| **Disease forecasting models** | Weather-driven risk for single diseases; the best-known US example is the Fusarium head blight risk tool for wheat (temperature and humidity around flowering) | Exist for a few diseases only; charcoal rot has thresholds in the literature but no widely used operational model |
+| **GlobalFungi** (occurrence records with climate, pH and land use per sample; the LUCAS table in `resources/` is of this kind) | Empirical niche: where a genus's share tends to be high (warmer, drier, given pH) | Correlation, not proof; mixed studies and barcoding regions |
+| **BacDive** (bacteria), culture studies (fungi) | Lab growth temperature and pH ranges and optima | Lab, not field soil: use as plausibility limits, not as risk predictions |
+| **CLIMEX-type and crop-disease models** | Mechanistic response to temperature and moisture | Only for well-studied pests; mostly commercial or research-grade |
+| **Papers via LLM extraction** | Crop- and context-specific conditions that no database holds | See the extraction rules in the pitfalls below |
+
+**Literature search, name normalisation and gene annotation:**
+
+| Source | Use | Access (not verified) |
+|---|---|---|
+| Europe PMC REST (`https://www.ebi.ac.uk/europepmc/webservices/rest/search`) | Search, abstracts, full-text XML for open-access papers | Keyless |
+| NCBI E-utilities (PubMed) | Search and abstracts | Keyless up to about 3 requests/s; an optional NCBI API key raises the limit. Set the `tool` parameter; do not put a personal email in requests |
+| OpenAlex (`https://api.openalex.org`) | Paper metadata, citation counts, open-access links | Check the current access terms |
+| GBIF species match (`https://api.gbif.org/v1/species/match?name=Fusarium`), NCBI Taxonomy | Map genus names and synonyms to stable IDs | Keyless |
+| KEGG REST (`https://rest.kegg.jp`) | KO definitions and pathways behind `rules/ko_panel.csv` | Keyless for academic use; not for commercial redistribution |
+
+- **Soil-borne rows of the workbook that match ITS genera** (pathogen names added from general knowledge, not from the workbook, except where it gives them):
+
+  | Crop | Disease (workbook name) | Pathogen → ITS genus | Conditions in the workbook |
+  |---|---|---|---|
+  | Sunflower | Czarny uwiąd (charcoal rot) | *Macrophomina phaseolina* → Macrophomina | about 30 °C, low humidity |
+  | Sunflower | Zgnilizna twardzikowa (white mould) | *Sclerotinia sclerotiorum* → Sclerotinia | 15-25 °C (optimum 19-20), high; risk after rapeseed |
+  | Sunflower | Zgorzel siewek (damping-off) | Fusarium, Alternaria (Pythium too, not in ITS) | 8-18 °C, high; sowing into cold soil |
+  | Wheat | Fuzaryjna zgorzel podstawy (Fusarium foot rot) | Fusarium | 5-25 °C, wet or overly dry soil |
+  | Wheat | Fuzarioza kłosów (head blight) | Fusarium | 15-25 °C, humid; corn residue |
+  | Wheat | Zgorzel podstawy źdźbła (take-all) | Gaeumannomyces | 12-20 °C, wet air and soil |
+  | Wheat | Ostra plamistość oczkowa (sharp eyespot) | *Rhizoctonia cerealis* → Ceratobasidium (`Rhizoctonia_complex`) | 15-25 °C, warm, dry soil |
+  | Wheat | Łamliwość źdźbła (eyespot) | Oculimacula | 5-15 °C, wet |
+  | Sugar beet | Zgnilizna brunatna korzenia (root rot) | *Rhizoctonia solani* → `Rhizoctonia_complex` | 25-30 °C, wet; risk rises after corn |
+  | Corn | Zgorzel siewek, fuzariozy łodyg i kolb (damping-off, stalk and ear rot) | Fusarium | cold and wet at emergence; drought stress for stalk rot |
+  | Potato | Rizoktonioza (black scurf) | *Rhizoctonia solani* → `Rhizoctonia_complex` | wet periods, heavy soils, early planting |
+
+- **Join keys to the repo data:** the genus name: `its_genus.genus`, `its_core_genus.genus`, `joined_fungi_genus.genus`, `taxa_genus.genus`, the `fun_share_<Genus>` / `bac_share_<Genus>` columns of `joined_metagenomes` and `its_share_<Genus>` of `event_table`. Normalise both sides (case, whitespace, suffixes such as `_sp`; drop `unclassified_Fungi`), ideally to a GBIF or NCBI taxon ID. Map crop names to the crop-group vocabulary of `rules/cdl_codes.csv` (and the species in `neon_crop_reported`) so effects can be matched to crop history. Host databases name plants in Latin, so a host-taxon → `crop_group` mapping is needed: *Zea mays* → corn, *Triticum aestivum* → winter/spring wheat, *Glycine max* → soybean, *Sorghum bicolor* → sorghum, *Helianthus annuus* → sunflower, *Panicum miliaceum* → millet, *Phaseolus vulgaris* → dry_bean, *Medicago sativa* → alfalfa, *Hordeum vulgare* and *Avena sativa* → barley_oats. Records given only to host genus (e.g. "*Triticum* sp.") need an explicit rule. Kind-2 conditions map to weather features: `daymet.climate_features` (e.g. `p_hot_dry_jul_aug`: share of years with at least 15 Jul-Aug days at tmax ≥ 35 °C and Jul-Aug rain below the pixel's 25th percentile, see `docs/feature_contract.md`) or the event windows of 3.9. Note these are air temperature and rain; most conditions in the sources refer to soil temperature and soil moisture.
+- **Cross-check:** the association scan (3.10) can show whether a genus's share moves with the conditions a source claims (e.g. Macrophomina against hot, dry weather). With 28 plots that is a sanity check, not a validation.
+- **Suggested layout:** raw downloads under `data/raw/kb/<source>/` (gitignored like the rest of `data/`). Small curated outputs (a genus → guild table, a genus × crop effect table, a disease-conditions table from the workbook) belong in `resources/` or `rules/`, with `source`, `source_version` and, for conditions, `temp_type` (air or soil) columns.
+- **Pitfalls:**
+  - **Resolution mismatch.** Effects are reported for species, strains or *formae speciales*; the data here is genus level. For each genus × crop, store which share of the documented species are pathogens or mutualists, and label the genus "mixed" when it is (Fusarium, Rhizoctonia, Pseudomonas, Bacillus). Macrophomina is an exception: it is practically one species, *M. phaseolina*, with a broad host range.
+  - **Synonyms and dual names.** The ITS reference (UNITE) and older papers can use different names for the same fungus: Thanatephorus is the sexual stage of *Rhizoctonia solani* (the repo already merges a `Rhizoctonia_complex`), Gibberella of several Fusarium species, Cochliobolus of Bipolaris. Normalise names to IDs before joining.
+  - **A record is not a risk.** A fungus-host record or a lab inoculation does not mean disease in the field; disease needs a susceptible host, the pathogen and the right environment together. Keep the evidence type (field, greenhouse, in vitro) and the number of independent studies. Inoculum thresholds in papers are per gram of soil (CFU, microsclerotia), so they cannot be compared with relative ITS shares.
+  - **Publication bias.** Pathogens are studied far more than neutral or beneficial organisms. A genus with no records is "unknown", not "harmless".
+  - **The knowledge bases cover more than the data can see.** Oomycetes (Pythium, Phytophthora, Aphanomyces) and nematodes are absent from the ITS fungal data and from Kraken2, so entries about them cannot be matched to any sample here.
+  - **LLM extraction from papers and guides.** Use a strict schema (taxon as written, normalised taxon and rank, crop, effect, conditions, threshold, evidence type, quoted sentence, DOI or guide title and page, model and version). Check automatically that the quoted sentence appears in the source text and drop the claim if it does not. Use abstracts, open-access full text and the metodyki PDFs only, and do not redistribute full texts.
 
 ## 4. Quick recipes
 
