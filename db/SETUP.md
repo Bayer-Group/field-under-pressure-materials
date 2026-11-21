@@ -4,7 +4,7 @@ Reprodukowalny obraz Docker z bazą danych MongoDB odtwarzaną automatycznie z n
 
 ## Lokalna baza i API pogody
 
-Po pobraniu gałęzi `backend` uruchom panel z katalogu głównego repozytorium. Potrzebujesz Pythona 3.10+, MongoDB 8.0 z MongoDB Database Tools oraz Node.js z npm lub pnpm.
+Po pobraniu gałęzi `main` uruchom panel z katalogu głównego repozytorium. Potrzebujesz Pythona 3.12+, MongoDB 8.0 z MongoDB Database Tools oraz Node.js z npm lub pnpm.
 
 ```powershell
 python -m pip install -r backend/requirements.txt
@@ -15,7 +15,7 @@ Panel otworzysz pod `http://127.0.0.1:5173`. Skrypt przy pierwszym starcie pobie
 
 ### Sam backend
 
-Potrzebujesz Pythona 3.10+, MongoDB 8.0 i MongoDB Database Tools. Z katalogu głównego repozytorium uruchom:
+Potrzebujesz Pythona 3.12+, MongoDB 8.0 i MongoDB Database Tools. Z katalogu głównego repozytorium uruchom:
 
 ```powershell
 python -m pip install -r backend/requirements.txt
@@ -103,7 +103,7 @@ Wygenerowane archiwum można scommitować do repozytorium lub przekazać bezpoś
 ./db/scripts/restore.sh --no-drop
 ```
 
-Oba skrypty działają również z zewnętrzną instancją MongoDB po ustawieniu `MONGO_URI` (wymagają wtedy lokalnego `mongodump`/`mongorestore`):
+Oba skrypty działają również z zewnętrzną instancją MongoDB po ustawieniu `MONGO_URI` (wymagają wtedy lokalnego `mongodump`/`mongorestore`; pełny reset używa `mongosh`, a przy jego braku Pythona z PyMongo z aktywnego środowiska backendu):
 
 ```bash
 MONGO_URI="mongodb://admin:admin123@localhost:27017/?authSource=admin" ./db/scripts/backup.sh

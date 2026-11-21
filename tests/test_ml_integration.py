@@ -8,6 +8,7 @@ import os
 import shutil
 import socket
 import subprocess
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -234,3 +235,54 @@ def test_real_checkpoint_layers_without_google(database):
                                 else row["layers"]["ndvi"]["value"] if kind == "ndvi"
                                 else row["layers"]["soil_parameters"][kind]["value"])
                     assert np.isclose(value, expected)
+
+
+@pytest.mark.parametrize("database", ["field_under_pressure_20261121_230119.archive.gz"], indirect=True)
+def test_backup_restore_and_container_init_scripts(database, tmp_path):
+    """Run setup scripts only against the disposable database owned by the fixture."""
+    bash = shutil.which("bash")
+    if not bash:
+        pytest.skip("Install Bash or Git Bash to verify the shell setup scripts")
+    tools = Path(os.environ.get("SAGE_TEST_MONGO_BIN") or shutil.which("mongod")).parent
+    port = database.client.address[1]
+    environment = {
+        **os.environ,
+        "MONGO_URI": f"mongodb://127.0.0.1:{port}/",
+        "MONGO_DB": database.name,
+        "PATH": os.pathsep.join([str(Path(sys.executable).parent), str(tools), os.environ["PATH"]]),
+        "MONGO_INITDB_DATABASE": database.name,
+        "MONGO_INITDB_BACKUP_DIR": tmp_path.as_posix(),
+        "MONGO_INITDB_PORT": str(port),
+    }
+    for key in ("MONGO_INITDB_ROOT_USERNAME", "MONGO_INITDB_ROOT_PASSWORD"):
+        environment.pop(key, None)
+    database.create_collection("SetupValidation", validator={"value": {"$type": "int"}})
+    database.SetupValidation.insert_one({"value": 1})
+    expected = {
+        name: list(database[name].find().sort("_id", 1))
+        for name in database.list_collection_names()
+    }
+    indexes = database.weather_daily.index_information()
+    archive = tmp_path / "field_under_pressure_20990101_000000.archive.gz"
+
+    def run(script, *arguments):
+        return subprocess.run([bash, str(ROOT / "db/scripts" / script), *arguments],
+                              cwd=ROOT, env=environment, check=True, capture_output=True, timeout=60)
+
+    run("backup.sh", archive.as_posix())
+    assert archive.read_bytes()[:2] == b"\x1f\x8b"
+    database.SetupLeftover.insert_one({"mustDisappear": True})
+    run("restore.sh", archive.as_posix())
+    assert "SetupLeftover" not in database.list_collection_names()
+    assert {name: list(database[name].find().sort("_id", 1))
+            for name in database.list_collection_names()} == expected
+    assert database.weather_daily.index_information() == indexes
+    assert database.SetupValidation.options()["validator"] == {"value": {"$type": "int"}}
+    database.client.drop_database(database.name)
+    shutil.copyfile(ROOT / "db/backups/field_under_pressure_20261121_230119.archive.gz",
+                    tmp_path / "field_under_pressure_20000101_000000.archive.gz")
+    run("init-restore.sh")
+    assert {name: list(database[name].find().sort("_id", 1))
+            for name in database.list_collection_names()} == expected
+    assert database.weather_daily.index_information() == indexes
+    assert database.SetupValidation.options()["validator"] == {"value": {"$type": "int"}}

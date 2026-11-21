@@ -1,108 +1,38 @@
-# S.A.G.E. — Smart Agricultural Guidance Engine (UI)
+# Panel S.A.G.E.
 
-Web dashboard for orchard monitoring, microclimate analytics, tree health diagnostics, and 3D point-cloud + individual tree visualization.
+Dashboard pobiera pogodę, kondycję sadu, lokalizacje drzew i chmurę LAS z backendu oraz MongoDB. Analityka udostępnia mapę wilgotności, NDVI, pH, teksturę gleby, ocenę drzew, prognozy i zadania Earth Engine. Zakładka Layers & Scans pozostaje pusta.
 
-## Running locally
+## Start całej aplikacji
 
-To start the dashboard with MongoDB and the API from the repository root, follow the [database setup](../db/SETUP.md).
+Z głównego katalogu repozytorium, w aktywnym środowisku Python 3.12+ z zależnościami backendu:
 
-To start Vite with an existing API:
-
-```bash
-cd ui
-npm ci
-npm run dev
+```powershell
+python -m pip install -r backend/requirements.txt
+python db/scripts/start_weather.py --with-ui
 ```
 
-Build & type-check:
+Potrzebujesz MongoDB Server i MongoDB Database Tools w PATH albo parametrów `--mongo-bin` i `--tools-bin`. Launcher instaluje UI z lockfile, odtwarza pustą bazę z dołączonego checkpointu i uruchamia API oraz Vite. Podaje adres `http://127.0.0.1:5173`. Opcja `--check` wykonuje test startu i zamyka usługi.
 
-```bash
-npm run typecheck
-npm run build
-```
+## Praca nad samym frontendem
 
-## API Endpoints & Placeholder Architecture
-
-Pełna specyfikacja wszystkich endpointów, parametrów, schematów MongoDB oraz podkładu satelitarnego znajduje się w [`API_SPEC.md`](./API_SPEC.md).
-
-All backend transfer contracts live in:
-- `src/config/apiConfig.ts` — base URL, `VITE_USE_PLACEHOLDERS` toggle, and endpoint paths
-- `src/types/orchard.ts` — request & response TypeScript models
-- `src/api/httpClient.ts` — typed HTTP transport (`GET`, `POST`, `PATCH`, `DELETE`)
-- `src/api/orchardApi.ts` — endpoint functions consumed by UI components
-
-Prepared endpoints:
-- `GET /api/v1/weather/temperature?orchardId=...&range=24h|7d|30d|90d|1y`
-- `GET /api/v1/orchard/health?orchardId=...`
-- `GET /api/v1/orchard/scene?orchardId=...`
-- `GET /api/v1/orchard/point-cloud?orchardId=...`
-- `GET /api/v1/orchard/trees?orchardId=...`
-- `GET /api/v1/orchard/row-lines?orchardId=...`
-- `GET /api/v1/crop-prefs` (`CropPref` collection — tree species catalog)
-- `GET /api/v1/orchards/:orchardId` (`Orchard` collection — field polygon geometry & rows)
-- `POST /api/v1/orchards/:orchardId/layout` (saves `Orchard.rows` with start/end + ordered `treeIds` and inserts calculated `Tree` docs with `coordinates`, `healthIndex: null`, `species: ObjectId`)
-- `PATCH /api/v1/orchard/trees/:treeId`
-
-### Removing placeholders once the backend is live
-
-All temporary placeholder generators are strictly isolated in `src/placeholders/`.
-To switch cleanly to the real backend:
-1. Copy `.env.example` to `.env` and set `VITE_USE_PLACEHOLDERS=false` and `VITE_API_BASE_URL=<backend_url>`.
-2. Delete `src/placeholders/` and remove the single placeholder import/fallback in `src/api/orchardApi.ts`.
-
-## Moduły analityczne i Earth Engine
-
-# Frontend Field Under Pressure
-
-Dashboard pokazuje mapę wilgotności gleby, stan eksportów GEE i prognozy do kolejnego przelotu. Temperatury, zdrowie sadu i widok 3D w trybie demonstracyjnym korzystają z danych przykładowych.
-
-## Uruchamianie
-
-Pełny stos znajdziesz w [README projektu](../README.md#uruchomienie-z-docker-compose). Przy pracy nad samym frontendem uruchom w katalogu `ui`:
+Uruchom backend na porcie 8000, a w katalogu `ui` wykonaj:
 
 ```powershell
 npm ci
 npm run dev
 ```
 
-Build & type-check:
+Vite przekazuje `/api` do `http://127.0.0.1:8000`. Inny adres backendu ustawia `ORCHARD_API_URL`. Przy użyciu launchera konfiguracja jest automatyczna. Aplikacja korzysta z danych API. Brak danych daje pusty stan lub komunikat błędu.
 
-```bash
+```powershell
 npm run typecheck
 npm run build
 ```
 
-## Analityka pól
+## Analityka
 
-W zakładce **Analityka** wybierz pole z kolekcji `Orchard` i kliknij **Pobierz dane pola**. Backend uruchomi eksporty wilgotności, NDVI, pH i tekstury. Gdy pojawi się GeoTIFF, backend odczyta wartości pola i drzew, a panel pokaże je i przełączy mapę na nową warstwę. Ukończone warstwy można przeglądać po odświeżeniu strony i po błędzie innego eksportu. Wybierz drzewo na mapie lub w tabeli, aby sprawdzić przypisany piksel Sentinel‑1 i dostępne odczyty. Po zapisaniu rastrów backend uzupełni pogodę, nasłonecznienie i dostępną prognozę. Pola DEMO od razu pokazują dane przykładowe.
+Sad wybiera się w górnym pasku. Przycisk pobierania danych pola rozpoczyna eksporty i analizę w tle. Wybór daty pozwala odczytać prognozę na dzisiaj i trzy kolejne dni. Mapa pokazuje warstwy i drzewa, a tabela ich oceny. Rozwijany panel Earth Engine zawiera ręczny wybór dat treningu i testu oraz prognozę do kolejnego szacowanego przelotu.
 
-Jeśli chcesz samodzielnie wybrać daty eksportu, możesz wykonać [analizę pola w CLI](../db/SETUP.md#podsumowanie-pola-w-orchard). Panel pobiera zapisane GeoTIFF-y z Google Drive według nazw w `Orchard.analysis`. Gdy plik jest niedostępny lub nazwa jest powielona na Dysku, można wczytać lokalny GeoTIFF do podglądu.
+Zapisane rastry są odczytywane z MongoDB. Nowa analiza wymaga konfiguracji i logowania Google na backendzie. Wynik kondycji oznaczony jako ML estimate jest szacunkiem wymagającym kalibracji terenowej. Szczegóły opisuje [integracja ML](../docs/ML_INTEGRATION.md).
 
-## API Endpoints & Placeholder Architecture
-
-Pełna specyfikacja wszystkich endpointów, parametrów, schematów MongoDB oraz podkładu satelitarnego znajduje się w [`API_SPEC.md`](./API_SPEC.md).
-
-All backend transfer contracts live in:
-- `src/config/apiConfig.ts` — base URL, `VITE_USE_PLACEHOLDERS` toggle, and endpoint paths
-- `src/types/orchard.ts` — request & response TypeScript models
-- `src/api/httpClient.ts` — typed HTTP transport (`GET`, `POST`, `PATCH`, `DELETE`)
-- `src/api/orchardApi.ts` — endpoint functions consumed by UI components
-
-Prepared endpoints:
-- `GET /api/v1/weather/temperature?orchardId=...&range=24h|7d|30d|90d|1y`
-- `GET /api/v1/orchard/health?orchardId=...`
-- `GET /api/v1/orchard/scene?orchardId=...`
-- `GET /api/v1/orchard/point-cloud?orchardId=...`
-- `GET /api/v1/orchard/trees?orchardId=...`
-- `GET /api/v1/orchard/row-lines?orchardId=...`
-- `GET /api/v1/crop-prefs` (`CropPref` collection — tree species catalog)
-- `GET /api/v1/orchards/:orchardId` (`Orchard` collection — field polygon geometry & rows)
-- `POST /api/v1/orchards/:orchardId/layout` (saves `Orchard.rows` with start/end + ordered `treeIds` and inserts calculated `Tree` docs with `coordinates`, `healthIndex: null`, `species: ObjectId`)
-- `PATCH /api/v1/orchard/trees/:treeId`
-
-### Removing placeholders once the backend is live
-
-All temporary placeholder generators are strictly isolated in `src/placeholders/`.
-To switch cleanly to the real backend:
-1. Copy `.env.example` to `.env` and set `VITE_USE_PLACEHOLDERS=false` and `VITE_API_BASE_URL=<backend_url>`.
-2. Delete `src/placeholders/` and remove the single placeholder import/fallback in `src/api/orchardApi.ts`.
+Kontrakty frontendu znajdują się w [API_SPEC.md](API_SPEC.md), `src/types/orchard.ts`, `src/api/analyticsApi.ts` i `src/api/orchardApi.ts`. Instrukcje bazy znajdują się w [db/SETUP.md](../db/SETUP.md).

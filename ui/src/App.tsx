@@ -4,16 +4,13 @@ import { TopBar } from './components/layout/TopBar';
 import { DashboardPage } from './components/pages/DashboardPage';
 import { PlaceholderSectionPage } from './components/pages/PlaceholderSectionPage';
 import { RowLineEditorPage } from './components/pages/RowLineEditorPage';
-import { SoilMoisturePage } from './components/pages/SoilMoisturePage';
 import { AnalyticsPage } from './components/pages/AnalyticsPage';
 import { LanguageProvider } from './contexts/LanguageContext';
-import { useOrchard } from './contexts/OrchardContext';
 import { OrchardProvider } from './contexts/OrchardContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { UserPreferencesSync } from './contexts/UserPreferencesSync';
 
 function AppShell() {
-  const { selectedOrchardId } = useOrchard();
   const [activeSection, setActiveSection] = useState<NavSectionId>('dashboard');
 
   return (
@@ -26,9 +23,7 @@ function AppShell() {
             <DashboardPage />
           ) : activeSection === 'row-editor' ? (
             <RowLineEditorPage />
-          ) : activeSection === 'layers' ? (
-            <SoilMoisturePage key={selectedOrchardId} />
-          ) : activeSection !== 'analytics' ? (
+          ) : activeSection !== 'analytics' && activeSection !== 'layers' ? (
             <PlaceholderSectionPage
               section={activeSection}
               onBackToDashboard={() => setActiveSection('dashboard')}
