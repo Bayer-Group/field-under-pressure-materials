@@ -38,11 +38,17 @@
     .selected.visible { display: block; }
     .selected-head { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; }
     .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
-    .selected-list { margin: 7px 0 0; display: flex; flex-wrap: wrap; gap: 6px; }
-    .parcel-chip { display: inline-flex; align-items: center; gap: 7px; border: 0; border-radius: 9px; padding: 5px 8px; background: #e7f1e9; color: #28573d; font-size: 12px; }
-    .parcel-chip svg { width: 13px; height: 13px; }
-    .field-name { display: grid; gap: 7px; margin-top: 12px; color: #42564a; font-size: 12px; font-weight: 700; }
-    .field-name input { width: 100%; min-height: 44px; padding: 0 12px; border: 1px solid rgba(32,62,45,.14); border-radius: 11px; color: var(--ink); background: rgba(255,255,255,.86); font-size: 14px; font-weight: 500; }
+    .selected-area { margin: 6px 0 0 16px; color: #53685a; font-size: 12px; }
+    .selected-list { margin: 9px 0 0; display: grid; gap: 6px; }
+    .parcel-row { display: flex; align-items: center; gap: 4px; border-radius: 10px; background: #e7f1e9; }
+    .parcel-details-button { flex: 1; min-width: 0; display: grid; gap: 3px; padding: 9px 10px; text-align: left; border: 0; background: transparent; color: #28573d; }
+    .parcel-details-button strong { font-size: 12px; }
+    .parcel-details-button small { overflow-wrap: anywhere; font-size: 11px; color: #61766a; }
+    .parcel-remove { width: 42px; min-height: 42px; border: 0; background: transparent; color: #53685a; font-size: 20px; }
+    .parcel-detail-list { margin: 18px 0; display: grid; gap: 12px; }
+    .parcel-detail-list div { display: flex; justify-content: space-between; gap: 16px; font-size: 13px; }
+    .parcel-detail-list dt { color: var(--muted); }
+    .parcel-detail-list dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
     .primary { width: 100%; min-height: 52px; margin-top: 12px; border: 0; border-radius: 15px; background: #14221a; color: #fff; font-size: 14px; font-weight: 700; }
     .primary:disabled { opacity: .38; cursor: not-allowed; }
     .status { position: static; margin: 0 0 12px; padding: 10px 13px; border-radius: 12px; font-size: 13px; line-height: 1.4; }
@@ -149,8 +155,8 @@
       <div id="drawer-content" class="drawer-content">
       <p class="eyebrow">Twoje pola</p>
       <h1 id="heading">Wybierz działkę</h1>
-      <p class="subtitle">Połącz kilka działek w jedno pole. Możesz też wskazać je na mapie lub dodać z pliku.</p>
-      <div id="selected" class="selected"><div class="selected-head"><span class="dot"></span><span id="selected-count"></span></div><div id="selected-list" class="selected-list"></div><label class="field-name" for="field-name-input">Nazwa pola<input id="field-name-input" maxlength="48" placeholder="np. Za stodołą" autocomplete="off" /></label></div>
+      <p class="subtitle">Znajdź działki na mapie, wyszukaj je lub dodaj z pliku.</p>
+      <div id="selected" class="selected"><div class="selected-head"><span class="dot"></span><span id="selected-count"></span></div><p id="selected-area" class="selected-area"></p><div id="selected-list" class="selected-list"></div></div>
       <div class="options">
         <button class="option" id="search-option" type="button"><span class="icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3 7 21M17 3l-2 18M4 9h16M3 15h16"/></svg></span><span>Numer działki</span><svg class="chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>
         <button class="option" id="map-option" type="button"><span class="icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 3 14 10-7 1-3 6L5 3Z"/></svg></span><span>Wybierz na mapie</span><svg class="chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>
@@ -170,6 +176,11 @@
       <p id="import-note">Import i odczyt pliku będą dostępne w kolejnym etapie.</p>
       <button class="close-dialog" id="close-import" type="button">Zamknij</button>
     </dialog>
+    <dialog id="parcel-dialog" aria-labelledby="parcel-detail-title">
+      <h2 id="parcel-detail-title"></h2>
+      <dl id="parcel-detail-list" class="parcel-detail-list"></dl>
+      <button class="close-dialog" id="close-parcel" type="button">Zamknij</button>
+    </dialog>
   </main>
   <script>
     'use strict';
@@ -187,7 +198,7 @@
     const topControls = document.getElementById('top-controls');
     const searchBackdrop = document.getElementById('search-backdrop');
     const importDialog = document.getElementById('import-dialog');
-    const fieldNameInput = document.getElementById('field-name-input');
+    const parcelDialog = document.getElementById('parcel-dialog');
     const mapGuide = document.getElementById('map-guide');
     let drawerBeforeSearch = true;
     let searchLocality = null;
@@ -236,21 +247,34 @@
       if (source) source.setData({ type: 'FeatureCollection', features: items.map(parcel => ({ type: 'Feature', geometry: parcel.geometry, properties: { id: parcel.parcel_id } })) });
       const panel = document.getElementById('selected');
       panel.classList.toggle('visible', items.length > 0);
-      document.getElementById('selected-count').textContent = `Jedno pole · ${count} ${parcelWord}`;
+      document.getElementById('selected-count').textContent = `Wybrano: ${count} ${parcelWord}`;
+      const knownAreas = items.filter(parcel => Number.isFinite(parcel.area_ha) && parcel.area_ha >= 0);
+      const totalArea = knownAreas.reduce((sum, parcel) => sum + parcel.area_ha, 0);
+      document.getElementById('selected-area').textContent = knownAreas.length === count ? `Łączna powierzchnia: ${totalArea.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ha` : 'Łączna powierzchnia: brak danych dla części działek';
       const list = document.getElementById('selected-list');
       list.replaceChildren();
       items.forEach(parcel => {
-        const button = document.createElement('button');
-        button.type = 'button'; button.className = 'parcel-chip';
-        button.textContent = `${parcel.parcel_number} · ${parcel.locality || 'działka'} ×`;
-        button.setAttribute('aria-label', `Usuń działkę ${parcel.parcel_number}, ${parcel.locality || ''}`);
-        button.addEventListener('click', () => { selected.delete(parcel.parcel_id); renderSelection(); });
-        list.appendChild(button);
+        const row = document.createElement('div'); row.className = 'parcel-row';
+        const button = document.createElement('button'); button.type = 'button'; button.className = 'parcel-details-button';
+        const name = document.createElement('strong'); name.textContent = `Działka ${parcel.parcel_number} · ${parcel.locality || 'brak obrębu'}`;
+        const id = document.createElement('small'); id.textContent = parcel.cadastral_id || 'Brak identyfikatora GUGiK';
+        button.append(name, id); button.addEventListener('click', () => showParcelDetails(parcel));
+        const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'parcel-remove'; remove.textContent = '×';
+        remove.setAttribute('aria-label', `Usuń działkę ${parcel.parcel_number}, ${parcel.locality || ''}`);
+        remove.addEventListener('click', () => { selected.delete(parcel.parcel_id); renderSelection(); });
+        row.append(button, remove); list.appendChild(row);
       });
-      fieldNameInput.disabled = items.length === 0;
-      next.disabled = items.length === 0 || !fieldNameInput.value.trim();
+      next.disabled = items.length === 0;
     }
-    fieldNameInput.addEventListener('input', renderSelection);
+    /** Show the parcel details provided by the data source. */
+    function showParcelDetails(parcel) {
+      document.getElementById('parcel-detail-title').textContent = `Działka ${parcel.parcel_number}`;
+      const details = document.getElementById('parcel-detail-list'); details.replaceChildren();
+      const values = [['Obręb', parcel.locality], ['Gmina', parcel.commune], ['Powierzchnia', Number.isFinite(parcel.area_ha) ? `${parcel.area_ha.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ha` : null], ['Identyfikator GUGiK', parcel.cadastral_id]];
+      values.forEach(([label, value]) => { const row = document.createElement('div'); const term = document.createElement('dt'); const description = document.createElement('dd'); term.textContent = label; description.textContent = value || 'Brak danych'; row.append(term, description); details.appendChild(row); });
+      if (!parcelDialog.open) parcelDialog.showModal();
+    }
+    document.getElementById('close-parcel').addEventListener('click', () => parcelDialog.close());
     /** Add a selected result without claiming ownership. */
     function selectParcel(parcel, options = {}) {
       if (options.toggle && selected.has(parcel.parcel_id)) {
@@ -359,7 +383,7 @@
     // Hold, then draw a marquee; sample the existing point-lookup mock inside it.
     const canvas = map.getCanvas();
     const selectionBox = document.getElementById('selection-rectangle');
-    let holdTimer = null, drawing = false, startPoint = null, pointerId = null;
+    let holdTimer = null, detailsTimer = null, drawing = false, startPoint = null, pointerId = null;
     let anchor = null, cursor = null, panFrame = null, lastFrame = null;
     let rectangleVersion = 0, preview = new Map(), pendingScan = Promise.resolve();
     /** Show the current selection rectangle and return its screen bounds. */
@@ -419,11 +443,22 @@
         selectionBox.classList.add('visible'); status.textContent = 'Przeciągnij prostokąt nad działkami.';
         updateRectangle(); lastFrame = null; panFrame = requestAnimationFrame(panNearEdge);
       }, 450);
+      detailsTimer = setTimeout(() => {
+        if (!drawing || !startPoint || Math.hypot(cursor[0] - startPoint[0], cursor[1] - startPoint[1]) > 10 || !map.getLayer('selected-fill')) return;
+        const feature = map.queryRenderedFeatures(startPoint, { layers: ['selected-fill'] }).find(item => selected.has(item.properties.id));
+        if (!feature) return;
+        const parcel = selected.get(feature.properties.id);
+        cancelAnimationFrame(panFrame); drawing = false; map.dragPan.enable(); selectionBox.classList.remove('visible');
+        pointerId = null; startPoint = null; lastFrame = null; status.textContent = ''; hideMapGuide();
+        setTimeout(() => { suppressMapClick = false; }, 350);
+        showParcelDetails(parcel);
+      }, 1000);
     });
     canvas.addEventListener('pointermove', event => {
       if (event.pointerId !== pointerId || !startPoint) return;
       const rect = canvas.getBoundingClientRect();
       const point = [event.clientX - rect.left, event.clientY - rect.top];
+      if (Math.hypot(point[0] - startPoint[0], point[1] - startPoint[1]) > 10) clearTimeout(detailsTimer);
       if (!drawing && Math.hypot(point[0] - startPoint[0], point[1] - startPoint[1]) > 10) { clearTimeout(holdTimer); holdTimer = null; return; }
       if (!drawing) return;
       event.preventDefault(); cursor = point; updateRectangle();
@@ -431,7 +466,7 @@
     /** Finish selection using the current rectangle and restore normal map panning. */
     async function endSelectionDrag(event) {
       if (event.pointerId !== pointerId) return;
-      clearTimeout(holdTimer); holdTimer = null;
+      clearTimeout(holdTimer); clearTimeout(detailsTimer); holdTimer = null; detailsTimer = null;
       const completed = drawing;
       if (completed) {
         cancelAnimationFrame(panFrame); queueScan(); drawing = false; map.dragPan.enable();
@@ -491,7 +526,7 @@
     next.addEventListener('click', () => {
       const count = selected.size;
       const parcelWord = count === 1 ? 'działkę' : count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 12 || count % 100 > 14) ? 'działki' : 'działek';
-      status.textContent = `Pole „${fieldNameInput.value.trim()}” obejmuje ${count} ${parcelWord}. Konfigurację upraw dodamy w kolejnym etapie.`;
+      status.textContent = `Wybrano ${count} ${parcelWord}. Konfigurację upraw dodamy w kolejnym etapie.`;
       setDrawer(false);
     });
   </script>
