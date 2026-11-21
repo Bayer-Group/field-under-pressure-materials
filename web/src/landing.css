@@ -29,20 +29,9 @@
 @keyframes landing-dots { to { transform: translate(-44px, -22px); } }
 .landing-vignette { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, .55) 100%); }
 
-/* ---------- the ground: soil with glowing microbes, grass on top; rises in like the video prologue ---------- */
-.landing-ground {
-  position: absolute; left: 0; bottom: 0; width: 100%; height: clamp(150px, 26vh, 300px);
-  animation: landing-rise 1.1s var(--ease-outexpo) both;
-}
-@keyframes landing-rise { from { transform: translateY(100%); } }
-.landing-blade { transform-box: fill-box; transform-origin: 50% 100%; animation: landing-sway 3s ease-in-out infinite alternate; }
-@keyframes landing-sway { from { transform: rotate(-5deg); } to { transform: rotate(5deg); } }
-.landing-microbe { animation: landing-twinkle 3s ease-in-out infinite alternate; }
-@keyframes landing-twinkle { from { opacity: .2; } to { opacity: .9; } }
-
 /* ---------- foreground ---------- */
 .landing-content {
-  position: absolute; inset: 0; bottom: clamp(110px, 20vh, 240px);
+  position: absolute; inset: 0;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   padding: 0 16px; text-align: center;
 }
@@ -69,29 +58,17 @@
 .landing-mask > .hl { color: var(--l-lime); font-weight: 700; }
 @keyframes landing-word { from { transform: translateY(110%); } }
 
-/* Feature tags pop in on the beat. */
-.landing-tags {
-  list-style: none; margin: clamp(20px, 4vh, 40px) 0 0; padding: 0; max-width: 1100px;
-  display: flex; flex-wrap: wrap; justify-content: center; gap: 12px;
-}
-.landing-tags li {
-  display: inline-flex; align-items: center; gap: 10px; padding: 9px 18px; border-radius: 999px; white-space: nowrap;
-  font-size: clamp(14px, 1.3vw, 18px); font-weight: 600;
-  background: rgba(255, 255, 255, .07); border: 1px solid rgba(255, 255, 255, .16); backdrop-filter: blur(6px);
-  animation: landing-pop .45s var(--ease-outback) both;
-}
-.landing-dot { width: 12px; height: 12px; border-radius: 50%; flex: none; }
 @keyframes landing-pop { from { opacity: 0; transform: translateY(24px) scale(.7); } }
 
 .landing-cta {
-  margin-top: clamp(24px, 5vh, 48px); display: flex; flex-direction: column; align-items: center; gap: 10px;
-  animation: landing-pop .5s var(--ease-outback) 2.3s both;
+  margin-top: clamp(32px, 6vh, 56px); display: flex; flex-direction: column; align-items: center; gap: 10px;
+  animation: landing-pop .5s var(--ease-outback) 1.75s both;
 }
 .landing-cta button {
   padding: 14px 30px; border: 0; border-radius: 999px; cursor: pointer;
   background: var(--l-lime); color: var(--l-ink); font-size: 18px; font-weight: 800; letter-spacing: .01em;
   box-shadow: 0 0 0 0 rgba(181, 242, 107, .55), 0 14px 40px rgba(0, 0, 0, .4);
-  animation: landing-pulse 2s ease-out 3s infinite;
+  animation: landing-pulse 2s ease-out 2.5s infinite;
   transition: transform .15s ease, background .15s ease;
 }
 .landing-cta button span { display: inline-block; transition: transform .15s ease; }
@@ -115,13 +92,6 @@
   to { transform: translateX(calc(100vw + 40vh)) skewX(-14deg); }
 }
 
-@media (max-width: 480px) {
-  .landing-tags { gap: 8px; }
-  .landing-tags li { padding: 6px 12px; gap: 8px; font-size: 13px; }
-}
-@media (max-height: 560px) {
-  .landing-tags { display: none; }
-}
 @media (prefers-reduced-motion: reduce) {
   .landing *, .landing *::before, .landing *::after {
     animation-duration: 1ms !important; animation-delay: 0s !important; animation-iteration-count: 1 !important;

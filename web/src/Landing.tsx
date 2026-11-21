@@ -13,32 +13,6 @@ const TURNS = ROLL / (Math.PI * LOGO.d)
 
 /** The video's tagline, word by word; the second half is highlighted. */
 const TAGLINE: [string, boolean][] = [['Your', false], ['fields,', false], ['from', true], ['orbit', true], ['to', true], ['the', true], ['microbe.', true]]
-const FEATURES: [string, string][] = [
-  ['#3fae6a', 'Satellite greenness'], ['#60a5fa', 'Aerial photos'], ['#fbbf24', 'Soil microbes'],
-  ['#b5f26b', 'Soil characteristics'], ['#f87171', 'Crop disease risk'], ['#ea580c', 'Treatment plan'],
-]
-
-/** Deterministic pseudo-random numbers, so the grass and soil look the same on every load. */
-function rng(seed: number) { return () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296) }
-
-const GROUND = (() => {
-  const r = rng(7), GY = 70
-  const blades = Array.from({ length: 200 }, (_, i) => {
-    const x = i * 9.8 - 10 + r() * 8, h = 22 + r() * 40, lean = (r() - 0.5) * 18
-    return { d: `M ${x.toFixed(1)} ${GY + 2} q ${(lean * 0.4).toFixed(1)} ${(-h * 0.6).toFixed(1)} ${lean.toFixed(1)} ${(-h).toFixed(1)}`,
-      color: r() < 0.5 ? '#2f9e5a' : '#5cc97f', delay: -(r() * 3).toFixed(2) }
-  })
-  const strata = Array.from({ length: 3 }, (_, i) => {
-    const y = GY + 60 + i * 60
-    let d = `M -20 ${y}`
-    for (let x = -20; x < 1940; x += 160) d += ` Q ${x + 80} ${(y + (r() - 0.5) * 30).toFixed(0)} ${x + 160} ${y}`
-    return d
-  })
-  const pebbles = Array.from({ length: 60 }, () => ({ cx: r() * 1920, cy: GY + 25 + r() * 220, rx: 4 + r() * 12, ry: 3 + r() * 8, fill: r() < 0.5 ? '#7d5c40' : '#5a4130' }))
-  const microbes = Array.from({ length: 70 }, () => ({ cx: r() * 1920, cy: GY + 30 + r() * 220, r: 2 + r() * 3.5,
-    fill: ['#b5f26b', '#fbbf24', '#7dd3fc'][Math.floor(r() * 3)], delay: -(r() * 4).toFixed(2), dur: (2.5 + r() * 2.5).toFixed(2) }))
-  return { GY, blades, strata, pebbles, microbes }
-})()
 
 const reducedMotion = () => typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
@@ -94,24 +68,6 @@ export function Landing({ onDone }: { onDone: () => void }) {
             <div className="landing-blob b" />
             <div className="landing-dots" />
           </div>
-          <svg className="landing-ground" viewBox="0 0 1920 330" preserveAspectRatio="xMidYMin slice" aria-hidden="true">
-            <defs>
-              <linearGradient id="landing-soil" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0" stopColor="#6b4528" /><stop offset=".45" stopColor="#4a2f1b" /><stop offset="1" stopColor="#1e1209" />
-              </linearGradient>
-            </defs>
-            <rect x="-20" y={GROUND.GY} width="1960" height="300" fill="url(#landing-soil)" />
-            {GROUND.strata.map((d, i) => <path key={i} d={d} fill="none" stroke="rgba(0,0,0,.28)" strokeWidth="3" />)}
-            {GROUND.pebbles.map((p, i) => <ellipse key={i} {...p} />)}
-            {GROUND.microbes.map((m, i) => (
-              <circle key={i} className="landing-microbe" cx={m.cx} cy={m.cy} r={m.r} fill={m.fill}
-                style={{ animationDelay: `${m.delay}s`, animationDuration: `${m.dur}s` }} />
-            ))}
-            {GROUND.blades.map((b, i) => (
-              <path key={i} className="landing-blade" d={b.d} stroke={b.color} strokeWidth="4" strokeLinecap="round" fill="none"
-                style={{ animationDelay: `${b.delay}s` }} />
-            ))}
-          </svg>
           <div className="landing-vignette" aria-hidden="true" />
 
           <div className="landing-content">
@@ -126,13 +82,6 @@ export function Landing({ onDone }: { onDone: () => void }) {
                 </span>
               ))}
             </p>
-            <ul className="landing-tags" aria-label="What you can explore">
-              {FEATURES.map(([c, label], i) => (
-                <li key={label} style={{ animationDelay: `${1.55 + i * 0.1}s` }}>
-                  <span className="landing-dot" style={{ background: c, boxShadow: `0 0 12px ${c}` }} />{label}
-                </li>
-              ))}
-            </ul>
             <div className="landing-cta">
               <button type="button" onClick={dismiss}>Explore the plots <span aria-hidden="true">→</span></button>
               <span className="landing-hint">or press Enter</span>
