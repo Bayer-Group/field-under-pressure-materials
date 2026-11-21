@@ -1,4 +1,4 @@
-# Specyfikacja API i Podkładu Satelitarnego dla UI (`Field Under Pressure`)
+# Specyfikacja API i Podkładu Satelitarnego dla UI (`S.A.G.E. — Smart Agricultural Guidance Engine`)
 
 Dokumentacja opisuje:
 1. **Źródło i dokładne parametry podkładu satelitarnego**, który idealnie zgrywa się z geometrią wektorową sadu (`EPSG:4326`).

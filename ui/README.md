@@ -1,4 +1,4 @@
-# Field Under Pressure — UI (TypeScript Web App)
+# S.A.G.E. — Smart Agricultural Guidance Engine (UI)
 
 Web dashboard for orchard monitoring, microclimate analytics, tree health diagnostics, and 3D point-cloud + individual tree visualization.
 

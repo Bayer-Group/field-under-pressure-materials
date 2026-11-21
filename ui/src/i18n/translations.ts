@@ -161,8 +161,8 @@ export interface Translations {
 export const TRANSLATIONS: Record<Language, Translations> = {
   pl: {
     app: {
-      name: 'Field Under Pressure',
-      subtitle: 'Monitoring Sadu 3D',
+      name: 'S.A.G.E.',
+      subtitle: 'Smart Agricultural Guidance Engine',
       placeholderBadge: 'Tryb Placeholderów',
       placeholderTooltip: 'Brak aktywnego backendu — wyświetlane są dane testowe z src/placeholders/.',
     },
@@ -320,8 +320,8 @@ export const TRANSLATIONS: Record<Language, Translations> = {
   },
   en: {
     app: {
-      name: 'Field Under Pressure',
-      subtitle: '3D Orchard Intelligence',
+      name: 'S.A.G.E.',
+      subtitle: 'Smart Agricultural Guidance Engine',
       placeholderBadge: 'Placeholder Mode',
       placeholderTooltip: 'No live backend connected yet — rendering placeholder data from src/placeholders/.',
     },

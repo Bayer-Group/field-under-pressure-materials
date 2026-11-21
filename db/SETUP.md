@@ -1,4 +1,4 @@
-# MongoDB — Field Under Pressure (Hackathon GEO · Crop Science)
+# MongoDB — S.A.G.E. (Smart Agricultural Guidance Engine)
 
 Reprodukowalny obraz Docker z bazą danych MongoDB odtwarzaną automatycznie z najnowszego dumpa (`.archive.gz`) — wraz ze wszystkimi kolekcjami, dokumentami, indeksami i walidatorami `$jsonSchema` (`_id: ObjectId`).
 

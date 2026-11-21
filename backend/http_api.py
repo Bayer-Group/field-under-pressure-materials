@@ -69,7 +69,7 @@ def create_app(db: Database, *, lifespan=None) -> FastAPI:
     except ZoneInfoNotFoundError:
         label_timezone = _UTC
 
-    app = FastAPI(title="Orchard API", lifespan=lifespan)
+    app = FastAPI(title="S.A.G.E. API — Smart Agricultural Guidance Engine", lifespan=lifespan)
     origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
     ui_port = os.environ.get("ORCHARD_UI_PORT", "")
     if ui_port.isdecimal() and 1 <= int(ui_port) <= 65535:
