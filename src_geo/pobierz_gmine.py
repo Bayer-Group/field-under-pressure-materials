@@ -231,7 +231,7 @@ def build_gmina_dataset(
             w_trans = src.window_transform(win)
             valid = np.isin(arr, list(CROP_NAMES.keys()))
             for geom_dict, val in shapes(arr, mask=valid, transform=w_trans):
-                poly = shape(geom_dict).simplify(0.00012, preserve_topology=True)
+                poly = shape(geom_dict).buffer(0.00009, join_style=2).buffer(-0.00009, join_style=2).simplify(0.00007, preserve_topology=True)
                 if not poly.is_empty and poly.geom_type == "Polygon":
                     poly_records.append({"crop_code": int(val), "geometry": poly})
 
@@ -323,6 +323,7 @@ def build_gmina_dataset(
     ]
 
     out_fields = pd.DataFrame({
+        "field_uid": [f"{h3}_{i+1:03d}" for i, h3 in enumerate(fields_gdf["h3_index_10"].astype(str))],
         "h3_index": fields_gdf["h3_index_10"].astype(str),
         "lat": fields_gdf["lat"].round(5).astype("float32"),
         "lon": fields_gdf["lon"].round(5).astype("float32"),

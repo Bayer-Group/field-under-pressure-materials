@@ -62,20 +62,75 @@ def load_static_fields() -> pd.DataFrame:
 
 
 def load_weather_timeseries() -> pd.DataFrame:
-    df = pd.read_parquet(DATA_DIR / "weather_timeseries_33uxr.parquet")
+    w_path = DATA_DIR / "weather_timeseries_33uxr.parquet"
+    f_path = DATA_DIR / "fields_static_33uxr.parquet"
+    df = pd.read_parquet(w_path)
     df["timestamp"] = pd.to_datetime(df["timestamp"])
+
+    # Automatyczne odświeżenie pogody LIVE z Open-Meteo, jeśli dane nie obejmują bieżącej godziny
+    now_pl = pd.Timestamp.now(tz="Europe/Warsaw").tz_localize(None)
+    if df.empty or df["timestamp"].max() < now_pl + pd.Timedelta(hours=12) or df["timestamp"].min() > now_pl:
+        try:
+            import json
+            import ssl
+            import urllib.request
+            import numpy as np
+
+            fields_df = pd.read_parquet(f_path)
+            c_lat, c_lon = float(fields_df["lat"].mean()), float(fields_df["lon"].mean())
+            url = (
+                f"https://api.open-meteo.com/v1/forecast?latitude={c_lat:.4f}&longitude={c_lon:.4f}"
+                "&past_days=5&forecast_days=5"
+                "&hourly=temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,soil_moisture_0_to_7cm"
+                "&wind_speed_unit=ms&timezone=Europe%2FWarsaw"
+            )
+            ctx = ssl._create_unverified_context()
+            with urllib.request.urlopen(url, context=ctx, timeout=12) as resp:
+                h = json.loads(resp.read().decode("utf-8"))["hourly"]
+            w_base = pd.DataFrame({
+                "timestamp": pd.to_datetime(h["time"]),
+                "temp_c": pd.Series(h["temperature_2m"]).ffill().bfill().round(1).astype("float32"),
+                "humidity_pct": pd.Series(h["relative_humidity_2m"]).ffill().bfill().round(1).astype("float32"),
+                "wind_ms": pd.Series(h["wind_speed_10m"]).ffill().bfill().round(1).astype("float32"),
+                "precip_1h": pd.Series(h["precipitation"]).fillna(0.0).clip(lower=0.0),
+                "soil_moisture": pd.Series(h["soil_moisture_0_to_7cm"]).ffill().bfill().fillna(0.25).round(3).astype("float32"),
+            })
+            w_base["precip_24h_mm"] = w_base["precip_1h"].rolling(24, min_periods=1).sum().round(1).astype("float32")
+            w_base = w_base[w_base["timestamp"] >= w_base["timestamp"].min() + pd.Timedelta(hours=24)].copy()
+            out = []
+            for gid in fields_df["grid_id"].unique():
+                sub = w_base[["timestamp", "temp_c", "humidity_pct", "wind_ms", "precip_24h_mm", "soil_moisture"]].copy()
+                sub.insert(0, "grid_id", np.int32(gid))
+                out.append(sub)
+            df = pd.concat(out, ignore_index=True)
+            df.to_parquet(w_path, index=False)
+        except Exception:
+            pass
     return df
 
 
 def load_admin_hierarchy() -> dict[str, dict[str, list[dict]]]:
-    gminy_path = DATA_DIR / "gminy_polska.parquet"
-    if gminy_path.exists():
+    base_dir = Path(__file__).parent
+    candidates = [
+        DATA_DIR / "gminy_polska.parquet",
+        base_dir / "data_app" / "gminy_polska.parquet",
+        base_dir / "data" / "gminy_polska.parquet",
+    ]
+    gminy_path = next((p for p in candidates if p.exists()), None)
+
+    hierarchy: dict[str, dict[str, list[dict]]] = {
+        "Małopolskie": {
+            "proszowicki": [
+                {"gmina": "Wszystkie gminy (33UXR)", "bbox": [20.10, 50.00, 20.60, 50.36]},
+            ]
+        }
+    }
+    if gminy_path is not None:
         gdf = pd.read_parquet(gminy_path)
-        hierarchy: dict[str, dict[str, list[dict]]] = {}
         for r in gdf.itertuples(index=False):
-            woj = str(getattr(r, "wojewodztwo", "Małopolskie"))
-            powiat = str(getattr(r, "powiat", "proszowicki"))
-            gmina = str(getattr(r, "gmina", "Proszowice"))
+            woj = str(getattr(r, "wojewodztwo", "Małopolskie")).strip()
+            powiat = str(getattr(r, "powiat", "proszowicki")).strip()
+            gmina = str(getattr(r, "gmina", "Proszowice")).strip()
             bbox = [
                 float(getattr(r, "min_lon", 20.15)),
                 float(getattr(r, "min_lat", 50.05)),
@@ -85,29 +140,7 @@ def load_admin_hierarchy() -> dict[str, dict[str, list[dict]]]:
             hierarchy.setdefault(woj, {}).setdefault(powiat, []).append(
                 {"gmina": gmina, "bbox": bbox}
             )
-        return hierarchy
-
-    return {
-        "Małopolskie": {
-            "proszowicki": [
-                {"gmina": "Wszystkie gminy (33UXR)", "bbox": [20.10, 50.00, 20.60, 50.36]},
-                {"gmina": "Proszowice", "bbox": [20.22, 50.14, 20.38, 50.25]},
-                {"gmina": "Koniusza", "bbox": [20.15, 50.10, 20.30, 50.20]},
-                {"gmina": "Nowe Brzesko", "bbox": [20.32, 50.10, 20.46, 50.18]},
-                {"gmina": "Radziemice", "bbox": [20.20, 50.22, 20.35, 50.31]},
-            ],
-            "brzeski": [
-                {"gmina": "Brzesko", "bbox": [20.48, 49.94, 20.70, 50.06]},
-                {"gmina": "Szczurowa", "bbox": [20.45, 50.05, 20.62, 50.15]},
-            ],
-        },
-        "Świętokrzyskie": {
-            "kazimierski": [
-                {"gmina": "Kazimierza Wielka", "bbox": [20.42, 50.22, 20.58, 50.34]},
-                {"gmina": "Skalbmierz", "bbox": [20.34, 50.26, 20.48, 50.36]},
-            ],
-        },
-    }
+    return hierarchy
 
 
 def load_farm_profile() -> dict:
@@ -281,29 +314,73 @@ def recommend_crop_by_soil(
 ) -> tuple[str, str]:
     texture = str(soil_texture).strip().lower()
 
-    if crop_dict_df is not None and not crop_dict_df.empty and pd.notna(soil_ph) and pd.notna(soil_soc):
-        for r in crop_dict_df.itertuples(index=False):
-            ph_ok = (pd.isna(r.ph_min) or soil_ph >= r.ph_min) and (pd.isna(r.ph_max) or soil_ph <= r.ph_max)
-            soc_ok = pd.isna(r.soc_min_g_kg) or soil_soc >= r.soc_min_g_kg
-            pref_tex = str(getattr(r, "preferowana_tekstura", "")).strip().lower()
-            tex_ok = (not pref_tex) or (pref_tex in texture) or (texture in pref_tex)
-            if ph_ok and soc_ok and tex_ok:
-                reason = str(getattr(r, "uzasadnienie", f"Dopasowanie do pH {soil_ph:.1f}, SOC {soil_soc:.1f} g/kg"))
-                return str(r.uprawa), reason
-
     if pd.isna(soil_ph) or pd.isna(soil_soc):
         return "Jęczmień jary", "Uniwersalny wybór przy niepełnych danych glebowych"
 
-    if soil_ph >= 6.3 and soil_soc >= 16.0 and texture in {"loam", "silt loam", "clay loam", "silty clay loam"}:
-        return "Rzepak ozimy", f"Wysokie pH ({soil_ph:.1f}), wysoki SOC ({soil_soc:.1f} g/kg) i zwięzła gleba ({soil_texture})"
+    if soil_ph >= 6.6 and soil_soc >= 19.0 and ("clay" in texture or "silt" in texture or texture == "loam"):
+        return (
+            "Burak cukrowy",
+            f"Bardzo żyzne stanowisko (pH {soil_ph:.1f}, próchnica {soil_soc:.1f} g/kg, {soil_texture}) — wysoki potencjał okopowych",
+        )
 
-    if soil_ph >= 6.0 and soil_soc >= 13.0 and "sand" not in texture:
-        return "Pszenica ozima", f"Dobre pH ({soil_ph:.1f}) i zasobność w węgiel organiczny ({soil_soc:.1f} g/kg)"
+    if soil_ph >= 6.3 and soil_soc >= 16.5 and "sand" not in texture:
+        return (
+            "Rzepak ozimy",
+            f"Wysokie pH ({soil_ph:.1f}) i zasobność organiczna ({soil_soc:.1f} g/kg) na zwięzłej glebie ({soil_texture})",
+        )
 
-    if 5.5 <= soil_ph < 6.2 and ("sandy" in texture or soil_soc >= 11.0):
-        return "Kukurydza", f"Dobra tolerancja dla pH {soil_ph:.1f} i uziarnienia {soil_texture}"
+    if soil_ph >= 6.0 and soil_soc >= 14.0 and texture in {"loam", "silt loam", "clay loam", "silty clay loam", "silt"}:
+        return (
+            "Pszenica ozima",
+            f"Uregulowany odczyn (pH {soil_ph:.1f}) i dobra zawartość próchnicy ({soil_soc:.1f} g/kg) sprzyjają pszenicy",
+        )
 
-    return "Jęczmień jary", f"Bezpieczny wybór dla stanowiska o pH {soil_ph:.1f} ({soil_texture})"
+    if soil_ph >= 6.0 and soil_soc < 14.0 and "sand" not in texture:
+        return (
+            "Soja / Bobik (strączkowe)",
+            f"Dobre pH ({soil_ph:.1f}) przy niższym SOC ({soil_soc:.1f} g/kg) — rośliny motylkowe wzbogacą glebę w azot",
+        )
+
+    if 5.6 <= soil_ph < 6.4 and ("sandy loam" in texture or "loam" in texture) and soil_soc >= 12.5:
+        return (
+            "Kukurydza na ziarno",
+            f"Dobra tolerancja dla odczynu pH {soil_ph:.1f} i przepuszczalnej struktury ({soil_texture})",
+        )
+
+    if 5.2 <= soil_ph < 5.9 and ("sandy" in texture or "loam" in texture) and soil_soc >= 12.5:
+        return (
+            "Ziemniak jadalny",
+            f"Lekko kwaśny odczyn (pH {soil_ph:.1f}) i lżejsze uziarnienie ({soil_texture}) ułatwiają zbiór i ograniczają parcha",
+        )
+
+    if 5.8 <= soil_ph < 6.3 and soil_soc >= 11.5:
+        return (
+            "Jęczmień jary",
+            f"Stabilne plonowanie przy pH {soil_ph:.1f} i zasobności SOC {soil_soc:.1f} g/kg ({soil_texture})",
+        )
+
+    if 5.4 <= soil_ph < 6.0 and soil_soc < 12.5:
+        return (
+            "Pszenżyto ozime",
+            f"Mniejsze wymagania glebowe niż pszenica — optymalne dla pH {soil_ph:.1f} i SOC {soil_soc:.1f} g/kg",
+        )
+
+    if 5.0 <= soil_ph < 5.6 and soil_soc >= 11.0:
+        return (
+            "Owies zwyczajny",
+            f"Wysoka odporność na zakwaszenie (pH {soil_ph:.1f}) i efektywne wykorzystanie wilgoci ({soil_texture})",
+        )
+
+    if soil_ph < 5.3 and ("sand" in texture or soil_soc < 11.0):
+        return (
+            "Łubin wąskolistny (EKO)",
+            f"Stanowisko kwaśne i lekkie (pH {soil_ph:.1f}, {soil_texture}) — łubin poprawi strukturę i zwiąże azot",
+        )
+
+    return (
+        "Żyto ozime",
+        f"Niezawodny gatunek na słabsze i kwaśniejsze stanowiska (pH {soil_ph:.1f}, {soil_texture})",
+    )
 
 
 def recommend_fertilization(

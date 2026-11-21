@@ -1,6 +1,9 @@
+from pathlib import Path
 import json
 import pandas as pd
+import numpy as np
 import plotly.express as px
+import plotly.graph_objects as go
 import pydeck as pdk
 import streamlit as st
 
@@ -348,7 +351,7 @@ st.markdown(
         </div>
         <div class="farm-sub" style="text-align:right;">
             <strong>{farm_label}</strong> ({my_fields_count} działek &middot; EKO: {eco_fields_count}) &middot; <strong>{mode_badge}</strong><br/>
-            <span>{loc_summary}</span>
+            <span>{loc_summary} &middot; 🟢 LIVE: {pd.Timestamp.now(tz='Europe/Warsaw').strftime('%d.%m.%Y, %H:%M')}</span>
         </div>
     </div>
     """,
@@ -374,7 +377,10 @@ with tab_pola:
         selected_ts = st.select_slider(
             "Wybierz godzinę:",
             options=timestamps,
-            value=timestamps[min(7, len(timestamps) - 1)],
+            value=min(
+                timestamps,
+                key=lambda ts: abs(pd.to_datetime(ts) - pd.Timestamp.now(tz="Europe/Warsaw").tz_localize(None)),
+            ),
             format_func=lambda x: pd.to_datetime(x).strftime("%d.%m.%Y, %H:%M"),
         )
     with c_sim:
@@ -588,8 +594,10 @@ with tab_pola:
             },
         )
         st.pydeck_chart(deck, use_container_width=True)
+        s_info = str(result_df["sentinel_date"].iloc[0]) if ("sentinel_date" in result_df.columns and not result_df.empty) else "najświeższy (<20% chmur)"
         st.caption(
-            "Kolory na mapie: zielony — można pryskać | fioletowy — nawozić | "
+            f"Satelita Sentinel-2 L2A: {s_info} | "
+            "Kolory: zielony — pryskać | fioletowy — nawozić | "
             "niebiesko-zielony — siać | niebieski — zbierać | żółty — obserwować | czerwony — poczekać."
         )
 
@@ -632,6 +640,87 @@ with tab_pola:
             ),
         )
         st.plotly_chart(fig_w, use_container_width=True)
+
+    st.write("")
+    st.markdown(
+        """
+        <div class="soft-card" style="margin-bottom:10px; padding-bottom:12px;">
+            <div class="soft-card-title">Temperatura LIVE, prognoza godzinowa i linia trendu</div>
+            <div class="soft-card-sub" style="margin-bottom:0;">Zestawienie rzeczywistych pomiarów, prognozy na kolejne dni oraz kierunku zmian temperatury</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    temp_ts_df = (
+        weather_df.groupby("timestamp", as_index=False)["temp_c"]
+        .mean()
+        .sort_values("timestamp")
+        .reset_index(drop=True)
+    )
+    now_pl = pd.Timestamp.now(tz="Europe/Warsaw").tz_localize(None)
+    hist_df = temp_ts_df[temp_ts_df["timestamp"] <= now_pl]
+    fcst_df = temp_ts_df[temp_ts_df["timestamp"] >= now_pl]
+
+    fig_temp = go.Figure()
+    if not hist_df.empty:
+        fig_temp.add_trace(
+            go.Scatter(
+                x=hist_df["timestamp"],
+                y=hist_df["temp_c"],
+                mode="lines",
+                name="Pomiar LIVE (historia)",
+                line=dict(color="#2E6F40", width=2.8),
+            )
+        )
+    if not fcst_df.empty:
+        fig_temp.add_trace(
+            go.Scatter(
+                x=fcst_df["timestamp"],
+                y=fcst_df["temp_c"],
+                mode="lines",
+                name="Prognoza temperatury",
+                line=dict(color="#D97706", width=2.8, dash="dash"),
+            )
+        )
+
+    if len(temp_ts_df) >= 2:
+        x_hours = (temp_ts_df["timestamp"] - temp_ts_df["timestamp"].min()).dt.total_seconds() / 3600.0
+        slope, intercept = np.polyfit(x_hours, temp_ts_df["temp_c"].astype(float), 1)
+        trend_y = intercept + slope * x_hours
+        trend_24h = slope * 24.0
+        fig_temp.add_trace(
+            go.Scatter(
+                x=temp_ts_df["timestamp"],
+                y=trend_y,
+                mode="lines",
+                name=f"Linia trendu ({trend_24h:+.2f} °C / 24h)",
+                line=dict(color="#6B7280", width=2.0, dash="dot"),
+            )
+        )
+
+    sel_dt = pd.to_datetime(selected_ts)
+    sel_match = temp_ts_df[temp_ts_df["timestamp"] == sel_dt]
+    if not sel_match.empty:
+        fig_temp.add_trace(
+            go.Scatter(
+                x=[sel_dt],
+                y=[float(sel_match["temp_c"].iloc[0])],
+                mode="markers",
+                name="Wybrana godzina",
+                marker=dict(color="#B91C1C", size=10),
+            )
+        )
+
+    fig_temp.update_layout(
+        height=310,
+        margin=dict(t=20, b=20, l=10, r=10),
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+        yaxis=dict(title="Temperatura (°C)", gridcolor="#EFECE6"),
+        xaxis=dict(gridcolor="#EFECE6"),
+    )
+    st.plotly_chart(fig_temp, use_container_width=True)
 
     st.write("")
     st.markdown(
@@ -751,6 +840,22 @@ with tab_gosp:
         sel_gmina = st.selectbox("Gmina:", gmina_names, index=gmina_names.index(default_gmina))
 
     active_bbox = next(g["bbox"] for g in gmina_entries if g["gmina"] == sel_gmina)
+    if st.button("Pobierz świeże pola i pogodę LIVE dla wybranej gminy", key="btn_fetch_gmina_live"):
+        with st.spinner(f"Pobieranie danych satelitarnych i pogodowych dla gminy {sel_gmina}..."):
+            try:
+                import sys
+                sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+                from src_geo.pobierz_gmine import build_gmina_dataset
+                g_fields, g_weather = build_gmina_dataset(sel_woj, sel_pow, sel_gmina, max_fields=120)
+                if not g_fields.empty:
+                    g_fields.to_parquet(Path(__file__).parent / "data_app" / "fields_static_33uxr.parquet", index=False)
+                if not g_weather.empty:
+                    g_weather.to_parquet(Path(__file__).parent / "data_app" / "weather_timeseries_33uxr.parquet", index=False)
+                st.cache_data.clear()
+                st.success(f"Wczytano {len(g_fields)} pól i aktualną pogodę dla gminy {sel_gmina}!")
+                st.rerun()
+            except Exception as exc:
+                st.error(f"Nie udało się pobrać danych gminy: {exc}")
 
     candidates_df = raw_fields_df[
         (raw_fields_df["lon"] >= active_bbox[0])
@@ -1116,3 +1221,64 @@ with tab_eko_doc:
         selected_timestamp=selected_ts,
         location_label=f"{sel_woj}, pow. {sel_pow}, gm. {sel_gmina}",
     )
+
+    st.write("")
+    with st.expander("➕ Dodaj własną regułę zabiegową", expanded=False):
+        st.caption("Nowa reguła zostanie zapisana w pliku reguly_agronomiczne.csv i od razu uwzględniona przez silnik decyzji.")
+        with st.form("form_add_custom_rule", clear_on_submit=True):
+            rc1, rc2, rc3 = st.columns(3)
+            r_uprawa = rc1.selectbox("Uprawa:", ["WSZYSTKIE"] + [c for c in KNOWN_CROPS if c != FALLOW_LABEL])
+            r_zagrozenie = rc2.text_input("Zagrożenie / Cel zabiegu:", value="Presja chorób / Dokarmianie")
+            r_decyzja = rc3.selectbox("Decyzja:", ["PRYSKAJ TERAZ", "NAWOŹ", "ZASIEJ", "ZBIERAJ", "CZEKAJ", "MONITORUJ"])
+
+            rc4, rc5, rc6, rc7 = st.columns(4)
+            r_tmin = rc4.number_input("Temp. min (°C):", value=8.0, step=0.5)
+            r_tmax = rc5.number_input("Temp. max (°C):", value=25.0, step=0.5)
+            r_wiatr = rc6.number_input("Wiatr max (m/s):", value=4.0, step=0.5)
+            r_ndvi = rc7.number_input("Próg NDVI:", value=0.45, min_value=0.0, max_value=1.0, step=0.05)
+
+            rc8, rc9 = st.columns([1, 2])
+            r_ryzyko = rc8.selectbox("Poziom ryzyka:", ["NISKI", "ŚREDNI", "WYSOKI", "KRYTYCZNY"], index=1)
+            r_komunikat = rc9.text_input("Komunikat dla rolnika:", value="Własna reguła gospodarstwa: wykonaj zabieg w oknie pogodowym")
+
+            rc10, rc11 = st.columns(2)
+            r_nawoz = rc10.text_input("Zalecany środek / nawóz (opcjonalnie):", value="")
+            r_eko = rc11.text_input("Status EKO (opcjonalnie):", value="TAK (EKO — wykaz IUNG)")
+
+            submitted_rule = st.form_submit_button("Zapisz nową regułę", type="primary")
+            if submitted_rule:
+                rules_csv = Path(__file__).parent / "data_app" / "reguly_agronomiczne.csv"
+                sep = ";"
+                if rules_csv.exists():
+                    header_line = rules_csv.read_text(encoding="utf-8-sig").splitlines()[0]
+                    sep = ";" if ";" in header_line else ","
+                    existing_df = pd.read_csv(rules_csv, sep=sep, encoding="utf-8-sig")
+                else:
+                    existing_df = rules_df.drop(columns=["decyzja_norm"], errors="ignore").copy()
+
+                new_row = {
+                    "rule_id": f"USR-{len(existing_df)+1:03d}",
+                    "uprawa": r_uprawa,
+                    "zagrozenie": r_zagrozenie.strip(),
+                    "temp_min_c": r_tmin,
+                    "temp_max_c": r_tmax,
+                    "wilgotnosc_min_pct": 40.0,
+                    "opad_24h_min_mm": 0.0,
+                    "wiatr_max_ms": r_wiatr,
+                    "ndvi_prog": r_ndvi,
+                    "decyzja": r_decyzja,
+                    "poziom_ryzyka": r_ryzyko,
+                    "komunikat": r_komunikat.strip(),
+                    "ph_min": "",
+                    "ph_max": "",
+                    "soc_max_g_kg": "",
+                    "zalecany_nawoz": r_nawoz.strip(),
+                    "nawozy_eko": r_eko.strip(),
+                }
+                for col in existing_df.columns:
+                    new_row.setdefault(col, "")
+                updated_rules = pd.concat([existing_df, pd.DataFrame([new_row])[existing_df.columns]], ignore_index=True)
+                updated_rules.to_csv(rules_csv, sep=sep, index=False, encoding="utf-8-sig")
+                st.cache_data.clear()
+                st.success(f"Dodano regułę {new_row['rule_id']} ({r_uprawa} -> {r_decyzja})!")
+                st.rerun()

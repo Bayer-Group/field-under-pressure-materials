@@ -1,0 +1,20 @@
+{
+  "farm_name": "Kurwidolek",
+  "wojewodztwo": "Świętokrzyskie",
+  "powiat": "kazimierski",
+  "gmina": "Skalbmierz",
+  "only_my_farm": false,
+  "eco_mode": false,
+  "fields": {
+    "P-033": {
+      "crop_name": "Buraki cukrowe",
+      "area_ha": 26.51,
+      "is_eco": false
+    },
+    "P-038": {
+      "crop_name": "Owies",
+      "area_ha": 25.45,
+      "is_eco": false
+    }
+  }
+}
