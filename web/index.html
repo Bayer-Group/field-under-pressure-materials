@@ -49,6 +49,7 @@
     .parcel-details-button small { overflow-wrap: anywhere; font-size: 11px; color: #61766a; }
     .parcel-remove { width: 44px; min-height: 44px; border: 0; background: transparent; color: #53685a; font-size: 20px; }
     .selected, .parcel-detail-list, .results { font-variant-numeric: tabular-nums; }
+    .parcel-popup { z-index: 3; }
     .parcel-popup .maplibregl-popup-content { min-width: 235px; max-width: min(80vw, 310px); padding: 16px; border: 1px solid rgba(255,255,255,.85); border-radius: 16px; background: rgba(248,251,247,.96); box-shadow: 0 8px 28px rgba(24,50,35,.2); color: var(--ink); }
     .parcel-popup .maplibregl-popup-close-button { width: 36px; height: 36px; font-size: 22px; color: #61766a; border-radius: 0 16px 0 10px; }
     .parcel-popup h2 { padding-right: 22px; margin: 0; font-size: 16px; letter-spacing: -.02em; }
@@ -71,6 +72,8 @@
     .map-guide-copy { display: grid; gap: 2px; padding: 0 8px; color: #17251c; text-shadow: 0 1px 7px rgba(255,255,255,.95), 0 0 2px rgba(255,255,255,.95); }
     .map-guide-copy strong { font-size: 13px; }
     .map-guide-copy span { color: #3d5144; font-size: 11px; line-height: 1.35; }
+    .guide-touch { display: none; }
+    @media (hover: none) { .guide-touch { display: inline; } .guide-mouse { display: none; } }
     @keyframes guide-enter { from { opacity: 0; transform: translate(-50%, calc(-50% + 8px)); } to { opacity: 1; transform: translate(-50%, -50%); } }
     @keyframes select-area { 0%,20% { opacity: 0; transform: scale(.01); } 21% { opacity: 1; transform: scale(.01); } 54%,66% { opacity: 1; transform: scale(1); } 78%,100% { opacity: 0; transform: scale(1); } }
     @keyframes drag-pointer { 0%,12% { opacity: 0; transform: translate(18px, 22px); } 20% { opacity: 1; transform: translate(18px, 22px); } 54%,66% { opacity: 1; transform: translate(157px, 94px); } 78%,100% { opacity: 0; transform: translate(157px, 94px); } }
@@ -139,7 +142,7 @@
         <rect class="demo-marquee" x="18" y="22" width="139" height="72" rx="4" />
         <path class="demo-pointer" d="M0 0a3 3 0 0 1 3 3v12l2-1a3 3 0 0 1 4 1l2-1a3 3 0 0 1 4 2l1 1a3 3 0 0 1 4 3v7c0 7-4 12-11 12H7c-4 0-7-2-9-5l-6-9a3 3 0 0 1 5-4l3 4V3a3 3 0 0 1 3-3Z" />
       </svg>
-      <div class="map-guide-copy"><strong>Przytrzymaj i przeciągnij</strong><span>Zaznacz kilka działek ramką. Stuknij pojedynczą działkę, aby ją dodać lub odznaczyć.</span></div>
+      <div class="map-guide-copy"><strong>Przytrzymaj i przeciągnij</strong><span>Zaznacz kilka działek ramką. Kliknij działkę, aby ją dodać lub odznaczyć.</span><span class="guide-touch">Przytrzymaj działkę i puść, aby zobaczyć szczegóły.</span><span class="guide-mouse">Kliknij działkę prawym przyciskiem, aby zobaczyć szczegóły.</span></div>
     </aside>
     <div class="top" id="top-controls">
       <form class="search" id="search-form" role="search">
@@ -349,6 +352,21 @@
       if (options.focus) {
         previewParcel = parcel;
         fitParcelPreview(parcel);
+      } else {
+        const popup = parcelPopup;
+        requestAnimationFrame(() => {
+          if (parcelPopup !== popup || !popup.isOpen()) return;
+          const rect = popup.getElement().getBoundingClientRect();
+          const mapRect = map.getContainer().getBoundingClientRect();
+          const drawerRect = sheet.getBoundingClientRect();
+          let dx = rect.right > mapRect.right - 12 ? rect.right - (mapRect.right - 12) : rect.left < mapRect.left + 12 ? rect.left - (mapRect.left + 12) : 0;
+          let dy = rect.top < mapRect.top + 80 ? rect.top - (mapRect.top + 80) : 0;
+          if (rect.right > drawerRect.left && rect.left < drawerRect.right && rect.bottom > drawerRect.top && rect.top < drawerRect.bottom) {
+            if (window.matchMedia('(max-width: 719px)').matches) dy = Math.max(dy, rect.bottom - drawerRect.top + 12);
+            else dx = Math.min(dx, rect.left - drawerRect.right - 12);
+          }
+          if (dx || dy) map.panBy([dx, dy], { duration: 300 });
+        });
       }
     }
     /** Add a selected result without claiming ownership. */
@@ -472,11 +490,11 @@
         map.addLayer({ id: 'sample-outline', type: 'line', source: 'sample-parcels', paint: { 'line-color': '#617b68', 'line-width': 1.1, 'line-opacity': .65 } }, 'selected-fill');
       } catch (_) { status.textContent = 'Nie można pobrać działek. Spróbuj ponownie.'; }
     });
-    let suppressMapClick = false;
+    let suppressMapClick = false, suppressClickTimer = null;
     // Hold, then draw a marquee; sample the existing point-lookup mock inside it.
     const canvas = map.getCanvas();
     const selectionBox = document.getElementById('selection-rectangle');
-    let holdTimer = null, detailsTimer = null, drawing = false, startPoint = null, pointerId = null;
+    let holdTimer = null, drawing = false, startPoint = null, pointerId = null, pointerType = null, selectionMoved = false;
     let anchor = null, cursor = null, panFrame = null, lastFrame = null;
     let rectangleVersion = 0, preview = new Map(), pendingScan = Promise.resolve();
     /** Show the current selection rectangle and return its screen bounds. */
@@ -526,7 +544,10 @@
     }
     canvas.addEventListener('pointerdown', event => {
       if (event.button !== 0 || pointerId !== null) return;
+      clearTimeout(suppressClickTimer); suppressMapClick = false;
       pointerId = event.pointerId;
+      pointerType = event.pointerType;
+      selectionMoved = false;
       const rect = canvas.getBoundingClientRect();
       startPoint = [event.clientX - rect.left, event.clientY - rect.top];
       cursor = startPoint;
@@ -536,22 +557,12 @@
         selectionBox.classList.add('visible'); status.textContent = 'Przeciągnij prostokąt nad działkami.';
         updateRectangle(); lastFrame = null; panFrame = requestAnimationFrame(panNearEdge);
       }, 450);
-      detailsTimer = setTimeout(() => {
-        if (!drawing || !startPoint || Math.hypot(cursor[0] - startPoint[0], cursor[1] - startPoint[1]) > 10 || !map.getLayer('selected-fill')) return;
-        const feature = map.queryRenderedFeatures(startPoint, { layers: ['selected-fill'] }).find(item => selected.has(item.properties.id));
-        if (!feature) return;
-        const parcel = selected.get(feature.properties.id);
-        cancelAnimationFrame(panFrame); drawing = false; map.dragPan.enable(); selectionBox.classList.remove('visible');
-        pointerId = null; startPoint = null; lastFrame = null; status.textContent = ''; hideMapGuide();
-        setTimeout(() => { suppressMapClick = false; }, 350);
-        showParcelDetails(parcel);
-      }, 1000);
     });
     canvas.addEventListener('pointermove', event => {
       if (event.pointerId !== pointerId || !startPoint) return;
       const rect = canvas.getBoundingClientRect();
       const point = [event.clientX - rect.left, event.clientY - rect.top];
-      if (Math.hypot(point[0] - startPoint[0], point[1] - startPoint[1]) > 10) clearTimeout(detailsTimer);
+      if (Math.hypot(point[0] - startPoint[0], point[1] - startPoint[1]) > 10) selectionMoved = true;
       if (!drawing && Math.hypot(point[0] - startPoint[0], point[1] - startPoint[1]) > 10) { clearTimeout(holdTimer); holdTimer = null; return; }
       if (!drawing) return;
       event.preventDefault(); cursor = point; updateRectangle();
@@ -559,13 +570,18 @@
     /** Finish selection using the current rectangle and restore normal map panning. */
     async function endSelectionDrag(event) {
       if (event.pointerId !== pointerId) return;
-      clearTimeout(holdTimer); clearTimeout(detailsTimer); holdTimer = null; detailsTimer = null;
+      clearTimeout(holdTimer); holdTimer = null;
       const completed = drawing;
+      const isTouchHold = completed && pointerType === 'touch' && !selectionMoved;
+      const heldPosition = isTouchHold ? map.unproject(startPoint) : null;
       if (completed) {
-        cancelAnimationFrame(panFrame); queueScan(); drawing = false; map.dragPan.enable();
-        selectionBox.classList.remove('visible'); setTimeout(() => { suppressMapClick = false; }, 350);
+        cancelAnimationFrame(panFrame); if (selectionMoved && event.type !== 'pointercancel') queueScan(); drawing = false; map.dragPan.enable();
+        selectionBox.classList.remove('visible');
+        suppressMapClick = true; clearTimeout(suppressClickTimer); suppressClickTimer = setTimeout(() => { suppressMapClick = false; }, 800);
       }
-      pointerId = null; startPoint = null; lastFrame = null;
+      pointerId = null; pointerType = null; startPoint = null; lastFrame = null;
+      if (isTouchHold && event.type !== 'pointercancel') { status.textContent = ''; hideMapGuide(); await showDetailsAt(heldPosition); return; }
+      if (completed && !selectionMoved) { status.textContent = ''; return; }
       if (completed && event.type !== 'pointercancel') {
         hideMapGuide();
         await pendingScan;
@@ -576,6 +592,28 @@
     }
     canvas.addEventListener('pointerup', endSelectionDrag);
     canvas.addEventListener('pointercancel', endSelectionDrag);
+    /** Look up a parcel for inspection without changing the selection. */
+    async function showDetailsAt(position) {
+      try {
+        const { parcels } = await provider.findParcels({ lon: position.lng, lat: position.lat });
+        if (!parcels.length) { status.textContent = 'Nie znaleziono działki w tym miejscu.'; return; }
+        if (parcels.length === 1) { showParcelDetails(parcels[0]); return; }
+        results.replaceChildren();
+        const hint = document.createElement('div'); hint.className = 'results-hint'; hint.textContent = 'Wybierz działkę, której szczegóły chcesz zobaczyć.'; results.appendChild(hint);
+        parcels.forEach(parcel => {
+          const button = document.createElement('button'); button.type = 'button';
+          const title = document.createElement('span'); title.className = 'result-title'; title.textContent = `Działka ${parcel.parcel_number} · ${parcel.locality || 'brak obrębu'}`;
+          const id = document.createElement('span'); id.className = 'result-id'; id.textContent = parcel.cadastral_id || 'Brak identyfikatora GUGiK';
+          button.append(title, id); button.addEventListener('click', () => { results.classList.remove('visible'); showParcelDetails(parcel); }); results.appendChild(button);
+        });
+        results.classList.add('visible');
+      } catch (_) { status.textContent = 'Nie można pobrać szczegółów działki. Spróbuj ponownie.'; }
+    }
+    map.on('contextmenu', event => {
+      event.originalEvent.preventDefault();
+      if (pointerType === 'touch' || event.originalEvent.pointerType === 'touch') return;
+      hideMapGuide(); showDetailsAt(event.lngLat);
+    });
     map.on('click', async event => {
       if (suppressMapClick) return;
       hideMapGuide();
