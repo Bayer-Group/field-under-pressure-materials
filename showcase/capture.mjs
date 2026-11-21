@@ -6,7 +6,7 @@ import { launch, sleep } from './cdp.mjs'
 const BASE = process.argv[2] ?? 'http://127.0.0.1:8000'
 const OUT = new URL('./shots/', import.meta.url).pathname
 const PLOT = 'KONA_001'        // rich aerial + greenness history
-const FN_PLOT = 'STER_010'     // a deeply sequenced metagenome, so soil functions are ranked
+const FN_PLOT = 'STER_010'     // a deeply sequenced metagenome, so the soil characteristics tab has gene data
 mkdirSync(OUT, { recursive: true })
 
 const page = await launch({ width: 1600, height: 900, scale: 1.5 })

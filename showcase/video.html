@@ -420,10 +420,10 @@ scene(14, 18, (root) => {
 })
 
 // =====================================================================================
-// 18-21 s  Soil functions: decision cards
+// 18-21 s  Soil characteristics: decision cards
 // =====================================================================================
 scene(18, 21, (root) => {
-  const kick = words(root, '<b>05</b>Soil functions', 'kicker', 0, 62)
+  const kick = words(root, '<b>05</b>Soil characteristics', 'kicker', 0, 62)
   const head = words(root, 'What can your soil <span class="hl">do for you?</span>', 'heading', 0, 96)
   const sub = words(root, 'Plain-language cards · what it means · what you can do · how sure we are', 'sub', 0, 190)
   for (const x of [kick, head, sub]) css(x.box, { width: '1920px', textAlign: 'center' })
@@ -519,7 +519,7 @@ scene(26, 30, (root) => {
   const tag = el('div', 'sub abs', root, 'Your fields, <b style="color:#b5f26b;font-weight:700">from orbit to the microbe.</b>')
   css(tag, { width: '1920px', textAlign: 'center', fontSize: '40px' })
   const feats = [
-    ['#3fae6a', 'Satellite greenness'], ['#60a5fa', 'Aerial photos'], ['#fbbf24', 'Soil microbes'], ['#b5f26b', 'Soil functions'], ['#ea580c', 'Sampling visits'],
+    ['#3fae6a', 'Satellite greenness'], ['#60a5fa', 'Aerial photos'], ['#fbbf24', 'Soil microbes'], ['#b5f26b', 'Soil characteristics'], ['#ea580c', 'Sampling visits'],
   ].map(([c, l]) => el('div', 'tag', root, `<span class="dot" style="background:${c}"></span>${l}`))
   const facts = el('div', 'abs', root, '29 plots &nbsp;·&nbsp; 2 NEON sites &nbsp;·&nbsp; 2013 – 2026 &nbsp;·&nbsp; one map')
   css(facts, { width: '1920px', textAlign: 'center', fontSize: '26px', letterSpacing: '.12em', textTransform: 'uppercase', color: '#8fb09c', fontWeight: 500 })

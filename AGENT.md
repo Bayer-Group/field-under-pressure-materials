@@ -81,7 +81,7 @@ Pipeline order (what produces what):
 | Crop risk | `scripts/15_crop_risk.py --site STER --year 2022` (offline, after 02b and 14) | `crop_risk_<SITE>_<YEAR>_{summary,contributions,skipped}.parquet` + `.json` |
 | Inspector | `scripts/10_inspect_data.py [--standalone]` (offline) | `outputs/inspect/index.html`, a developer page to look at all of the above |
 | Joined table | `scripts/06_build_joined.py` (offline, after 02b and 05) | `joined_metagenomes`, `joined_fungi_genus` (see 3.8) |
-| Fungal guilds (for the GUI's soil functions) | `scripts/16_fetch_funguild.py` (network once, ~7.5 MB, keyless; cached under `data/raw/kb/funguild/`) | `fungal_guilds` (FUNGuild role per fungal genus: primary guild, category, can be plant pathogen, can parasitise fungi, confidence) |
+| Fungal guilds (for the GUI's soil characteristics tab) | `scripts/16_fetch_funguild.py` (network once, ~7.5 MB, keyless; cached under `data/raw/kb/funguild/`) | `fungal_guilds` (FUNGuild role per fungal genus: primary guild, category, can be plant pathogen, can parasitise fungi, confidence) |
 
 Note: `03_build_plots.py` takes its plots from the event registry (the 29 plots that were actually sampled). `04_build_fields.py` still carries the two windows of `config/regions.yaml`. The site list is defined once, as the keys of `windows` in `config/regions.yaml` (`config.sites()`); only the standalone NMDC pull script has its own `--sites` default.
 

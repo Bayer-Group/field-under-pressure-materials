@@ -16,7 +16,7 @@ const CONTEXT_M: Record<MapLayer, number> = { photo: 130, greenness: 1050, none:
 
 /** Map of all plots beside a panel. With no plot chosen the panel lists the plots by site; once one is chosen
  *  it has one tab per kind of plot data: the timeline (greenness, visits, aerial photos; the image chosen on it
- *  is laid over the map), the soil microbiome, the soil functions and the crop disease risk. Panels for future backend results become further tabs. */
+ *  is laid over the map), the soil microbiome, the soil characteristics and the crop disease risk. Panels for future backend results become further tabs. */
 const tabHref = (tab: PlotTab, id: string) => (tab === 'microbes' ? microbesHref(id) : tab === 'risk' ? riskHref(id) : tab === 'functions' ? functionsHref(id) : plotHref(id))
 
 export function Explorer({ plotId, tab, sampleId, unit, crop }: {
@@ -178,7 +178,7 @@ function PlotHead({ plot, plots, tab, onOpen }: { plot: Plot; plots: Plot[]; tab
       <nav className="tabs" aria-label="What to show for this plot">
         <a href={plotHref(plot.plot_id)} aria-current={tab === 'greenness' ? 'page' : undefined}>Greenness over time</a>
         <a href={microbesHref(plot.plot_id)} aria-current={tab === 'microbes' ? 'page' : undefined}>Soil microbes</a>
-        <a href={functionsHref(plot.plot_id)} aria-current={tab === 'functions' ? 'page' : undefined}>Soil functions</a>
+        <a href={functionsHref(plot.plot_id)} aria-current={tab === 'functions' ? 'page' : undefined}>Soil characteristics</a>
         <a href={riskHref(plot.plot_id)} aria-current={tab === 'risk' ? 'page' : undefined}>Crop disease risk</a>
       </nav>
     </div>
