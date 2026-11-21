@@ -84,6 +84,10 @@ def predict_field_7days(
     else:
         ref_d = date.fromisoformat(str(reference_date).strip())
 
+    # Odfiltruj ewentualne obserwacje z przyszłości względem reference_date (spójność i brak przecieku przy backtestingu)
+    if not s_sub.empty and "date" in s_sub.columns:
+        s_sub = s_sub[pd.to_datetime(s_sub["date"]).dt.date <= ref_d].copy()
+
     hist_start = ref_d - timedelta(days=model_cfg.history_days - 1)
     fut_end = ref_d + timedelta(days=model_cfg.forecast_days)
 
@@ -115,7 +119,7 @@ def predict_field_7days(
     x_future = scaler.transform_future(series["future_matrix"][h : h + f])
     x_static = scaler.transform_static(series["static_vec"])
     last_targets = np.asarray(
-        [series["ndvi_filled"][h - 1], series["ndmi_filled"][h - 1]],
+        [series["ndvi_causal"][h - 1], series["ndmi_causal"][h - 1]],
         dtype=np.float32,
     )
 

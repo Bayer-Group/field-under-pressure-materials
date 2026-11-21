@@ -198,8 +198,13 @@ def build_field_daily_series(
             exact_prev[i] = float(i - prev_i)
     nearest_gap = np.minimum(exact_prev, days_until)
 
-    ndvi_filled = pd.Series(ndvi_obs).interpolate(method="linear").ffill().bfill().to_numpy(dtype=np.float32)
-    ndmi_filled = pd.Series(ndmi_obs).interpolate(method="linear").ffill().bfill().to_numpy(dtype=np.float32)
+    # Przyczynowe wypełnianie dla wejść modelu (x_hist, last_targets) — zero przecieku z przyszłości
+    ndvi_causal = pd.Series(ndvi_obs).ffill().bfill().to_numpy(dtype=np.float32)
+    ndmi_causal = pd.Series(ndmi_obs).ffill().bfill().to_numpy(dtype=np.float32)
+
+    # Interpolacja liniowa używana WYŁĄCZNIE jako cel (y_target) w trybie target_mode='interpolated'
+    ndvi_interp = pd.Series(ndvi_obs).interpolate(method="linear").ffill().bfill().to_numpy(dtype=np.float32)
+    ndmi_interp = pd.Series(ndmi_obs).interpolate(method="linear").ffill().bfill().to_numpy(dtype=np.float32)
 
     # 3. Sklejanie macierzy cech
     weather_mat = w_merged[list(WEATHER_COLS)].to_numpy(dtype=np.float32)
@@ -212,8 +217,8 @@ def build_field_daily_series(
 
     hist_matrix = np.column_stack(
         [
-            ndvi_filled,
-            ndmi_filled,
+            ndvi_causal,
+            ndmi_causal,
             obs_mask,
             days_since_norm,
             weather_mat,
@@ -237,8 +242,12 @@ def build_field_daily_series(
         "hist_matrix": hist_matrix,
         "future_matrix": future_matrix,
         "static_vec": static_vec,
-        "ndvi_filled": ndvi_filled,
-        "ndmi_filled": ndmi_filled,
+        "ndvi_causal": ndvi_causal,
+        "ndmi_causal": ndmi_causal,
+        "ndvi_interp": ndvi_interp,
+        "ndmi_interp": ndmi_interp,
+        "ndvi_filled": ndvi_causal,
+        "ndmi_filled": ndmi_causal,
         "ndvi_obs": ndvi_obs,
         "ndmi_obs": ndmi_obs,
         "obs_mask": obs_mask,
@@ -305,13 +314,14 @@ class FieldTimeSeriesDataset(Dataset):
             if n < history_days + forecast_days:
                 continue
 
+            eff_min_hist_obs = max(1, int(min_hist_obs))
             for anchor in range(history_days - 1, n - forecast_days):
                 h_start = anchor - history_days + 1
                 h_end = anchor + 1
                 f_start = anchor + 1
                 f_end = anchor + 1 + forecast_days
 
-                if int(series["obs_mask"][h_start:h_end].sum()) < min_hist_obs:
+                if int(series["obs_mask"][h_start:h_end].sum()) < eff_min_hist_obs:
                     continue
 
                 if target_mode == "observed":
@@ -319,8 +329,8 @@ class FieldTimeSeriesDataset(Dataset):
                     y_ndmi = series["ndmi_obs"][f_start:f_end]
                     mask_1d = series["obs_mask"][f_start:f_end]
                 elif target_mode == "interpolated":
-                    y_ndvi = series["ndvi_filled"][f_start:f_end]
-                    y_ndmi = series["ndmi_filled"][f_start:f_end]
+                    y_ndvi = series["ndvi_interp"][f_start:f_end]
+                    y_ndmi = series["ndmi_interp"][f_start:f_end]
                     mask_1d = series["interp_mask"][f_start:f_end]
                 else:
                     raise ValueError(f"Nieznany target_mode: {target_mode!r}")
@@ -337,7 +347,7 @@ class FieldTimeSeriesDataset(Dataset):
                 ).astype(np.float32)
                 y_mask = np.stack([mask_1d, mask_1d], axis=-1).astype(np.float32)
                 last_targets = np.asarray(
-                    [series["ndvi_filled"][anchor], series["ndmi_filled"][anchor]],
+                    [series["ndvi_causal"][anchor], series["ndmi_causal"][anchor]],
                     dtype=np.float32,
                 )
 
