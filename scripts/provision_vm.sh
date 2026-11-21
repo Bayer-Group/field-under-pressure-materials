@@ -7,7 +7,7 @@
 #   scripts/provision_vm.sh tunnel        # SSH tunnel to the database: localhost:$LOCAL_PORT -> VM:5432
 #   scripts/provision_vm.sh deploy        # update the code on the VM and (re)start the backend API container
 #   scripts/provision_vm.sh api-tunnel    # SSH tunnel to the API: localhost:$API_PORT -> VM:$API_PORT
-#   API_SOURCE_RANGES=<cidr,...> scripts/provision_vm.sh firewall   # open the API port for the given addresses only
+#   API_SOURCE_RANGES=<cidr,...> scripts/provision_vm.sh firewall   # open TCP 80/443 (HTTPS in front of the API) for the given addresses only
 #   scripts/provision_vm.sh status|start|stop
 #
 # Configuration via environment variables (defaults in parentheses):
@@ -174,28 +174,39 @@ if ! grep -q '^AUTH_SECRET=.\+' .env; then
   echo "Added AUTH_SECRET to .env (not printed)."
 fi
 grep -q '^BACKEND_PORT=' .env || echo "BACKEND_PORT=$API_PORT" >> .env
-sudo docker compose --env-file .env -f docker/docker-compose.yml up -d --build backend
+# Public host name for HTTPS: <external-ip-with-dashes>.nip.io, unless a custom domain is already set in .env
+CUR="$(grep '^PUBLIC_HOST=' .env | cut -d= -f2- || true)"
+case "$CUR" in
+  ""|*.nip.io)
+    IP="$(curl -fsS -H 'Metadata-Flavor: Google' http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip)"
+    sed -i '/^PUBLIC_HOST=/d' .env
+    echo "PUBLIC_HOST=$(echo "$IP" | tr . -).nip.io" >> .env ;;
+esac
+sudo docker compose --env-file .env -f docker/docker-compose.yml up -d --build backend caddy
 for _ in $(seq 1 30); do
-  curl -fsS "http://127.0.0.1:${API_PORT}/health" && echo && exit 0
+  if curl -fsS "http://127.0.0.1:${API_PORT}/health"; then
+    echo; echo "API (HTTPS, needs the firewall rule): https://$(grep '^PUBLIC_HOST=' .env | cut -d= -f2-)/api/v1"
+    exit 0
+  fi
   sleep 2
 done
 echo "ERROR: the backend did not answer on port ${API_PORT}; see: sudo docker logs spatial_backend" >&2
 exit 1
 REMOTE
-  echo "Done. Locally: scripts/provision_vm.sh api-tunnel  (or open the port with: API_SOURCE_RANGES=... scripts/provision_vm.sh firewall)"
+  echo "Done. From outside the API needs the firewall rule: API_SOURCE_RANGES=0.0.0.0/0 scripts/provision_vm.sh firewall (or use api-tunnel)"
 }
 
 cmd_firewall() {
-  [ -n "${API_SOURCE_RANGES:-}" ] || die "set API_SOURCE_RANGES (comma-separated CIDR ranges allowed to reach the API, e.g. 203.0.113.7/32); there is no default on purpose"
-  if gcloud compute firewall-rules describe fup-allow-api >/dev/null 2>&1; then
-    echo "Firewall rule fup-allow-api already exists; left unchanged:"
-    gcloud compute firewall-rules describe fup-allow-api --format='value(sourceRanges.list(),allowed[].map().firewall_rule().list())'
+  [ -n "${API_SOURCE_RANGES:-}" ] || die "set API_SOURCE_RANGES (comma-separated CIDR ranges allowed to reach the API; 0.0.0.0/0 for everybody); there is no default on purpose"
+  if gcloud compute firewall-rules describe fup-allow-web >/dev/null 2>&1; then
+    echo "Firewall rule fup-allow-web already exists; left unchanged:"
+    gcloud compute firewall-rules describe fup-allow-web --format='value(sourceRanges.list(),allowed[].map().firewall_rule().list())'
     return 0
   fi
-  echo "Opening TCP $API_PORT of VMs tagged 'fup' to: $API_SOURCE_RANGES (the database port 5432 stays closed)"
-  run gcloud compute firewall-rules create fup-allow-api --direction=INGRESS --action=allow \
-    --rules="tcp:${API_PORT}" --source-ranges="$API_SOURCE_RANGES" --target-tags=fup \
-    --description="Backend API of field-under-pressure (demo)"
+  echo "Opening TCP 80 and 443 (HTTPS in front of the API) of VMs tagged 'fup' to: $API_SOURCE_RANGES (the database port 5432 stays closed)"
+  run gcloud compute firewall-rules create fup-allow-web --direction=INGRESS --action=allow \
+    --rules="tcp:80,tcp:443" --source-ranges="$API_SOURCE_RANGES" --target-tags=fup \
+    --description="HTTPS in front of the backend API of field-under-pressure (demo)"
 }
 
 cmd_api_tunnel() {

@@ -15,7 +15,7 @@ Needs the curated weather features and `curated.septoria_cell_day` (scripts/buil
    they never overlap and the crop map inside must be dominated by the crop expected there.
 3. Sprays relative to the demo day: some just sprayed (still protected), some expired (red again), some in April.
 4. Every crop area is refreshed (crop map, field context, risk assessment) and the logins are written (`analyst` and
-   farmer001, farmer002, ... all with the given password; demo only).
+   farmer001, farmer002, ... with the given password, demo only; the analyst gets a random password unless --analyst-password).
 
 Dates are written in the time of the data; the serve views shift them. Repeatable: only rows with data_status = 'mock' and the demo
 users are replaced; real input is never touched.
@@ -25,6 +25,7 @@ from __future__ import annotations
 import argparse
 import os
 import random
+import secrets
 import sys
 import tomllib
 from datetime import date, timedelta
@@ -87,7 +88,8 @@ def points_near(cur, lon, lat, radius, crop, want) -> list[tuple[float, float]]:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--farmers", type=int, default=60)
-    ap.add_argument("--password", default="demo", help="password of every demo user (demo only)")
+    ap.add_argument("--password", default="demo", help="password of every farmer demo user (demo only)")
+    ap.add_argument("--analyst-password", help="password of the analyst (default: random, printed once)")
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--day", type=date.fromisoformat, help="demo day in the time of the data (default: the day with most 'high' cells)")
     ap.add_argument("--no-pin", action="store_true", help="do not pin the demo clock to the demo day")
@@ -104,6 +106,7 @@ def main(argv=None) -> int:
     with open(a.config, "rb") as fh:
         rules = septoria.Rules.from_config(tomllib.load(fh))
     pw_hash = hash_password(a.password)                    # one salt for all demo users is enough for a demonstration
+    analyst_pw = a.analyst_password or secrets.token_urlsafe(9)
     with psycopg.connect(dsn) as con:
         cur = con.cursor()
         cur.execute("SELECT setseed(%s)", ((a.seed % 1000) / 1000.0,))
@@ -114,8 +117,10 @@ def main(argv=None) -> int:
         cur.execute("DELETE FROM app.field WHERE data_status = 'mock'")
         cur.execute("DELETE FROM app.demo_user")
         cur.execute("INSERT INTO app.demo_user (login, password_hash, owner_id, role, display_name) "
-                    "VALUES ('analyst', %s, 'analyst', 'analyst', 'Analyst')", (pw_hash,))
+                    "VALUES ('analyst', %s, 'analyst', 'analyst', 'Analyst')", (hash_password(analyst_pw),))
         con.commit()
+        if not a.analyst_password:
+            print(f"analyst password (random, shown once): {analyst_pw}", flush=True)
 
         plan = []
         for name, share, *_ in PROFILES:

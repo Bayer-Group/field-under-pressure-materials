@@ -33,10 +33,27 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-gis_user}:${POSTGRES_PASSWORD:-secretpassword}@postgis:5432/${POSTGRES_DB:-spatial_db}
       AUTH_SECRET: ${AUTH_SECRET:-}      # empty: random at start (tokens expire on restart)
     ports:
-      - "${BACKEND_PORT:-8000}:8000"
+      - "127.0.0.1:${BACKEND_PORT:-8000}:8000"   # only this machine; the internet reaches the API through caddy (HTTPS)
     depends_on:
       postgis:
         condition: service_healthy
+
+  # 1c. HTTPS (Caddy): ports 80 (certificate challenge, redirect) and 443; needs PUBLIC_HOST in .env
+  caddy:
+    image: caddy:2
+    container_name: spatial_caddy
+    restart: unless-stopped
+    environment:
+      PUBLIC_HOST: ${PUBLIC_HOST:-localhost}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
 
   # 2. Local S3 for COG raster files (MinIO)
   minio:
@@ -69,3 +86,5 @@ services:
 volumes:
   postgis_data:
   minio_data:
+  caddy_data:
+  caddy_config:
