@@ -36,6 +36,7 @@ from ml.prepare_dataset import (
     build_fields_master,
     build_weather_table_from_bayer,
     build_weather_table_from_open_meteo,
+    extract_pixel_dataset_from_tiffs,
     extract_satellite_indices_from_tiffs,
 )
 
@@ -387,6 +388,8 @@ def run_stage_satellite(
     voivs: list[str],
     env_path: Path,
     run_zones: bool,
+    prepare_pixels: bool,
+    pixels_per_field: int,
     skip_download: bool,
     force: bool,
 ) -> Path | None:
@@ -422,6 +425,19 @@ def run_stage_satellite(
         tiff_inputs=sat_dir,
         out_path=out_sat_parquet,
     )
+
+    if prepare_pixels:
+        ml_dir = out_sat_parquet.parent
+        extract_pixel_dataset_from_tiffs(
+            fields_geojson=fields_crops_geojson,
+            tiff_inputs=sat_dir,
+            soil_h3_parquet=ROOT / "data/soil/field_soil_h3_cells.parquet",
+            fields_master_parquet=ml_dir / "fields_master.parquet",
+            out_master_path=ml_dir / "pixel_master.parquet",
+            out_sat_path=ml_dir / "pixel_satellite_indices.parquet",
+            min_area_ha=min_area_ha,
+            pixels_per_field=pixels_per_field,
+        )
 
     if run_zones:
         try:
@@ -720,6 +736,8 @@ def build_cli() -> argparse.ArgumentParser:
     p.add_argument("--min-area-ha", type=float, default=DEFAULT_MIN_AREA_HA, help="Minimalna powierzchnia pola w ha.")
     p.add_argument("--env-file", type=Path, default=ROOT / ".env", help="Ścieżka do pliku .env z linkami.")
     p.add_argument("--run-zones", action="store_true", help="Uruchom klasteryzację stref NDVI 10m + glebę per strefa.")
+    p.add_argument("--prepare-pixels", action="store_true", help="Przygotuj próbki pikseli 10 m z komórek glebowych H3 (pixel_master + pixel_satellite_indices).")
+    p.add_argument("--pixels-per-field", type=int, default=9, help="Liczba stratyfikowanych pikseli 10 m na pole (domyślnie 9).")
     p.add_argument("--run-protection", action="store_true", help="Uruchom Moduł 2 (choroby + okna oprysku).")
     p.add_argument("--skip-download", action="store_true", help="Bez pobierania z sieci — użyj wyłącznie lokalnego cache.")
     p.add_argument("--force", action="store_true", help="Nadpisz istniejące pliki pośrednie / cache.")
@@ -744,9 +762,18 @@ def _print_ml_readiness_summary() -> None:
             ready_all = False
             print(f"  [BRAK] {label:20s} -> {p.relative_to(ROOT)}")
 
+    px_master = ml_dir / "pixel_master.parquet"
+    px_sat = ml_dir / "pixel_satellite_indices.parquet"
+    for label, p in (("pixel_master", px_master), ("pixel_sat_indices", px_sat)):
+        if p.exists():
+            n_rows = len(pd.read_parquet(p))
+            print(f"  [OK]   {label:20s} -> {p.relative_to(ROOT)} ({n_rows} wierszy)")
+
     if ready_all:
         print("\nWszystkie 3 tabele są gotowe! Możesz odpalić trening sieci:")
         print("  .venv/bin/python -m ml.train --data-dir data/ml")
+        if px_master.exists() and px_sat.exists():
+            print("  .venv/bin/python -m ml.train --data-dir data/ml --mode pixel")
     else:
         print(
             "\nBrakuje części tabel czasowych (satelita lub pogoda). Po uzupełnieniu linków w .env "
@@ -845,6 +872,8 @@ def main(argv: list[str] | None = None) -> None:
         voivs=voivs,
         env_path=args.env_file,
         run_zones=args.run_zones,
+        prepare_pixels=args.prepare_pixels,
+        pixels_per_field=args.pixels_per_field,
         skip_download=args.skip_download,
         force=args.force,
     )
