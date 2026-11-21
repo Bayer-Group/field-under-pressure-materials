@@ -105,7 +105,8 @@
       addSpray: (id, body) => request(`/crop-areas/${encodeURIComponent(id)}/sprays`, { method: 'POST', body }),
       field: id => request(`/fields/${encodeURIComponent(id)}`),
       validateField: body => request('/fields/validate', { method: 'POST', body }),
-      putField: (id, body) => request(`/fields/${encodeURIComponent(id)}`, { method: 'PUT', body })
+      putField: (id, body) => request(`/fields/${encodeURIComponent(id)}`, { method: 'PUT', body }),
+      gridRisk: day => request(`/grid/risk?${new URLSearchParams({ date: day })}`)
     };
   }
   root.SandboxClient = { create, BASE_URL, STORAGE_KEY };

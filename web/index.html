@@ -9,7 +9,7 @@
   <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
   <script src="https://unpkg.com/@turf/turf@7.1.0/turf.min.js"></script>
   <script src="geometry-preview.js?v=multicut-2"></script>
-  <script src="sandbox-client.js?v=area-edit-1"></script>
+  <script src="sandbox-client.js?v=grid-export-1"></script>
   <script src="farmer-data.js?v=wheat-only-14"></script>
   <script src="crop-workflow.js?v=validation-errors-4"></script>
   <style>
@@ -181,7 +181,7 @@
     .fc-index-head h2 { margin: 0; }
     .fc-index-value { font-size: 20px; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
     .fc-index-note { margin: 8px 0 0; color: #5f7266; font-size: 12px; line-height: 1.4; }
-    .risk-legend { display: none; position: absolute; z-index: 2; right: 86px; bottom: calc(var(--drawer-height, 370px) + max(26px, env(safe-area-inset-bottom) + 12px)); height: 106px; width: max-content; min-width: 200px; align-content: center; padding: 12px 14px; white-space: nowrap; border: 1px solid rgba(255,255,255,.85); border-radius: 15px; background: rgba(248,251,247,.92); box-shadow: 0 4px 16px rgba(24,50,35,.14); backdrop-filter: blur(16px); color: #344f3d; font-size: 10px; font-weight: 650; pointer-events: none; }
+    .risk-legend { display: none; position: absolute; z-index: 2; right: 86px; bottom: calc(var(--drawer-height, 370px) + max(32px, env(safe-area-inset-bottom) + 12px)); height: 106px; width: max-content; min-width: 200px; align-content: center; padding: 12px 14px; white-space: nowrap; border: 1px solid rgba(255,255,255,.85); border-radius: 15px; background: rgba(248,251,247,.92); box-shadow: 0 4px 16px rgba(24,50,35,.14); backdrop-filter: blur(16px); color: #344f3d; font-size: 10px; font-weight: 650; pointer-events: none; }
     .app.sandbox-mode:has(.sheet.collapsed) .risk-legend { display: grid; gap: 5px; }
     .compass-ctrl { position: absolute; z-index: 2; top: calc(max(16px, env(safe-area-inset-top)) + 62px); right: 16px; margin: 0 !important; }
     .app.sandbox-mode .compass-ctrl { top: max(16px, env(safe-area-inset-top)); }
@@ -195,6 +195,14 @@
     .risk-legend-none { display: flex; align-items: center; gap: 4px; color: #5f7266; font-weight: 600; }
     .risk-legend-swatch { width: 10px; height: 10px; border-radius: 3px; background: #89928c; }
     .risk-legend-swatch.none { margin-left: 4px; background: #c3cac5; outline: 1px dashed #6f7a73; }
+    .fc-export { display: grid; gap: 8px; }
+    .fc-export h2 { margin: 0; }
+    .fc-export-scope { margin: -4px 0 2px; color: #5f7266; font-size: 12px; font-variant-numeric: tabular-nums; }
+    .fc-export-button { display: grid; justify-items: start; gap: 2px; min-height: 56px; padding: 9px 14px; text-align: left; }
+    .fc-export-button small { color: #66766d; font-size: 11px; font-weight: 550; line-height: 1.35; }
+    .fc-export-status { margin: 0; color: #285b3e; font-size: 12px; line-height: 1.4; }
+    .fc-export-status:empty { display: none; }
+    .fc-export-note { margin: 0; color: #7a8a7f; font-size: 11px; line-height: 1.4; }
     .fc-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
     .fc-soon { display: grid; justify-items: center; gap: 1px; min-height: 52px; padding: 6px 8px; }
     .fc-soon small { color: #7a8a7f; font-size: 10px; font-weight: 600; }
@@ -207,14 +215,14 @@
     .fc-marker-flag { padding: 3px 6px; border-radius: 9px; background: #fff; color: #a23730; font-size: 10px; letter-spacing: .02em; }
     .fc-marker.tone-high { box-shadow: 0 0 0 4px rgba(199,70,62,.28), 0 3px 12px rgba(20,44,30,.3); }
     .fc-marker.active { outline: 3px solid #15221b; outline-offset: 1px; }
-    .fc-area-marker { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; background: transparent; cursor: pointer; -webkit-tap-highlight-color: transparent; }
-    .fc-area-dot { position: relative; z-index: 1; width: 16px; height: 16px; border: 2.5px solid #fff; border-radius: 50%; background: #e3e7e4; box-shadow: 0 1px 5px rgba(20,44,30,.5); transition: transform 160ms cubic-bezier(.22,1,.36,1); }
+    .fc-area-marker { display: grid; place-items: center; width: 52px; height: 52px; padding: 0; border: 0; background: transparent; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+    .fc-area-dot { position: relative; z-index: 1; width: 26px; height: 26px; border: 3px solid #fff; border-radius: 50%; background: #e3e7e4; box-shadow: 0 1px 5px rgba(20,44,30,.5); transition: transform 160ms cubic-bezier(.22,1,.36,1); }
     .fc-area-marker.tone-none .fc-area-dot { border-style: dashed; border-color: #5d6c63; }
     .fc-area-marker.tone-high .fc-area-dot { box-shadow: 0 0 0 3px rgba(199,70,62,.4), 0 1px 5px rgba(20,44,30,.5); }
     .fc-area-marker:active .fc-area-dot { transform: scale(.88); }
-    .fc-area-marker.active .fc-area-dot { width: 20px; height: 20px; border-color: #15221b; border-width: 3px; }
+    .fc-area-marker.active .fc-area-dot { width: 30px; height: 30px; border-color: #15221b; border-width: 3.5px; }
     .fc-area-marker:focus-visible { outline: 3px solid #2d815d; outline-offset: -4px; border-radius: 50%; }
-    .fc-area-leader { position: absolute; left: 50%; top: 50%; height: 1.5px; margin-top: -.75px; background: rgba(21,34,27,.75); transform-origin: 0 50%; pointer-events: none; }
+    .fc-area-leader { position: absolute; left: 50%; top: 50%; height: 2px; margin-top: -1px; background: rgba(21,34,27,.75); transform-origin: 0 50%; pointer-events: none; }
     .area-dialog { max-height: min(88dvh, 720px); overflow-y: auto; }
     .area-dialog h2 { margin-bottom: 2px; }
     .area-dialog-sub { margin: 0 0 12px; }
@@ -576,7 +584,7 @@
     .selection-rectangle { display: none; position: absolute; z-index: 1; pointer-events: none; border: 1.5px solid var(--green); background: rgba(23,101,68,.16); }
     .selection-rectangle.visible { display: block; }
     dialog .close-dialog { border: 0; padding: 10px 16px; border-radius: 12px; background: #14221a; color: #fff; }
-    .maplibregl-ctrl-top-right { top: auto; bottom: calc(var(--drawer-height, 370px) + max(26px, env(safe-area-inset-bottom) + 12px)); right: 16px; transition: bottom 220ms ease; }
+    .maplibregl-ctrl-top-right { top: auto; bottom: calc(var(--drawer-height, 370px) + max(32px, env(safe-area-inset-bottom) + 12px)); right: 16px; transition: bottom 220ms ease; }
     .maplibregl-ctrl-group { border-radius: 17px !important; overflow: hidden; box-shadow: 0 5px 22px rgba(24,50,35,.12) !important; }
     .maplibregl-ctrl-group button { width: 52px !important; height: 52px !important; background: rgba(248,251,247,.94) !important; }
 
@@ -588,7 +596,7 @@
     .result-id { color: #89948d; font-size: 10px; }
     .results-hint { color: #286346; padding: 10px 10px 8px; font-size: 12px; line-height: 1.4; }
     .results button:hover { background: #edf5ee; }
-    .maplibregl-ctrl-bottom-right { bottom: min(68dvh, 570px); }
+    .maplibregl-ctrl-bottom-right { bottom: calc(var(--drawer-height, 370px) + 2px); transition: bottom 220ms ease; }   /* just under the zoom buttons, above the drawer */
     .maplibregl-ctrl-attrib { font-size: 10px !important; }
     @media (min-width: 720px) { .risk-legend { bottom: max(26px, env(safe-area-inset-bottom) + 12px); } .top { left: 24px; right: 24px; width: auto; top: 24px; } .sheet { left: 24px; bottom: 0; right: auto; width: 390px; max-height: calc(100dvh - 115px); border-radius: 25px 25px 0 0; border-bottom: 0; } .sheet.search-hidden { transform: translateY(calc(100% + 12px)); } .maplibregl-ctrl-top-right { bottom: max(26px, env(safe-area-inset-bottom) + 12px); } .maplibregl-ctrl-bottom-right { bottom: 0; } .results, .parcel-step { left: 24px; right: 84px; width: auto; top: 82px; } .results.after-parcel-step { top: 140px; } .parcel-step.searching { top: calc(50% + 38px); } .results.searching.after-parcel-step { top: calc(50% + 96px); } }
     @media (prefers-reduced-motion: reduce) { .vertex-demo-shape, .vertex-demo-pointer, .vertex-demo-added, .vertex-demo-first { animation: none; } .vertex-demo-added { opacity: 1; } .vertex-demo-pointer { transform: translate(105px,42px); } .demo-marquee-parcel { animation: none !important; fill: rgba(23,101,68,.35); } .demo-draw-triangle { display: none; } .demo-tap-pointer, .demo-draw-pointer { opacity: 1; animation: none; transform: translate(92px, 72px); } .demo-draw-line, .demo-draw-point { opacity: 1; animation: none !important; } .demo-tap-fill { animation: none; fill: rgba(23,101,68,.35); } .demo-tap-ring { animation: none; opacity: 0; } *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; scroll-behavior: auto !important; } .demo-marquee { opacity: 1; transform: none; stroke-dashoffset: 0; } .demo-pointer { opacity: 1; transform: translate(157px, 94px); } }
@@ -777,13 +785,13 @@
     let previewParcel = null;
     let previewRequest = 0;
     /** Animate between measured panel heights without showing temporary scrollbars. */
-    function animateDrawerResize(previousHeight) {
+    function animateDrawerResize(previousHeight, options = {}) {
       if (drawerResizeAnimation) { drawerResizeAnimation.cancel(); drawerResizeAnimation = null; }
       sheet.classList.add('resizing');
       const nextHeight = sheet.getBoundingClientRect().height;
       const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       if (Math.abs(previousHeight - nextHeight) < 1) { sheet.classList.remove('resizing'); return; }
-      if (window.matchMedia('(max-width: 719px)').matches && !sheet.classList.contains('search-hidden')) {
+      if (options.pan !== false && window.matchMedia('(max-width: 719px)').matches && !sheet.classList.contains('search-hidden')) {
         map.panBy([0, (nextHeight - previousHeight) / 2], { duration: reduceMotion ? 0 : 280, easing: t => 1 - Math.pow(1 - t, 3) });
       }
       if (reduceMotion) { sheet.classList.remove('resizing'); return; }
@@ -881,7 +889,7 @@
     function sandboxRefitAfterDrawer() {
       if (!sandboxActive || !sandboxAutoFit) return;
       const geometry = sandboxScopeGeometry();
-      if (geometry) fitParcelPreview({ geometry }, { camera: sandboxView.mode === 'farm' ? 'north' : 'rotate', labelPadding: sandboxView.mode === 'farm' ? sandboxLabelPadding() : null });
+      if (geometry) fitParcelPreview({ geometry }, { fill: true, camera: sandboxView.mode === 'farm' ? 'north' : 'rotate', labelPadding: sandboxView.mode === 'farm' ? sandboxLabelPadding() : null });
     }
     drawerToggle.addEventListener('pointerup', finishDrawerGesture);
     drawerToggle.addEventListener('pointercancel', finishDrawerGesture);
@@ -928,7 +936,7 @@
       }
       if (sandboxActive && options.camera) {
         const label = options.labelPadding || { x: 0, y: 0 };
-        sandboxFlyTo(polygons.flatMap(polygon => polygon[0]), { top: padding.top + label.y, bottom: padding.bottom + label.y, left: padding.left + label.x, right: padding.right + label.x }, options.camera === 'rotate');
+        sandboxFlyTo(polygons.flatMap(polygon => polygon[0]), { top: padding.top + label.y, bottom: padding.bottom + label.y, left: padding.left + label.x, right: padding.right + label.x }, options.camera === 'rotate', Boolean(options.fill));
         return;
       }
       map.fitBounds(bounds, { padding, maxZoom: 17, duration: 450 });
@@ -964,16 +972,17 @@
      * Camera that shows the points as large as possible inside the padded viewport. With `rotate`, every hull edge is
      * tried as horizontal or vertical, so north is not kept up; without it, north stays up.
      */
-    function bestCamera(lngLats, padding, rotate) {
+    function bestCamera(lngLats, padding, rotate, fixedBearing = null) {
       const rect = map.getContainer().getBoundingClientRect();
       const width = Math.max(40, rect.width - padding.left - padding.right), height = Math.max(40, rect.height - padding.top - padding.bottom);
       const points = lngLats.map(point => { const m = maplibregl.MercatorCoordinate.fromLngLat(point); return [m.x, m.y]; });
       const hull = convexHull(points);
-      const angles = rotate ? [0, Math.PI / 2] : [0];
-      if (rotate) hull.forEach((point, i) => { const next = hull[(i + 1) % hull.length]; const a = Math.atan2(next[1] - point[1], next[0] - point[0]); angles.push(a, a + Math.PI / 2); });
+      const angles = fixedBearing !== null ? [fixedBearing * Math.PI / 180] : rotate ? [0, Math.PI / 2] : [0];
+      if (rotate && fixedBearing === null) hull.forEach((point, i) => { const next = hull[(i + 1) % hull.length]; const a = Math.atan2(next[1] - point[1], next[0] - point[0]); angles.push(a, a + Math.PI / 2); });
       let best = null;
       angles.forEach(raw => {
-        let angle = ((raw % Math.PI) + Math.PI) % Math.PI; if (angle > Math.PI / 2) angle -= Math.PI;   // the smallest turn that gives the same fit
+        let angle = raw;
+        if (fixedBearing === null) { angle = ((raw % Math.PI) + Math.PI) % Math.PI; if (angle > Math.PI / 2) angle -= Math.PI; }   // the smallest turn that gives the same fit
         const cos = Math.cos(angle), sin = Math.sin(angle);
         let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
         hull.forEach(([x, y]) => { const sx = x * cos + y * sin, sy = -x * sin + y * cos; minX = Math.min(minX, sx); maxX = Math.max(maxX, sx); minY = Math.min(minY, sy); maxY = Math.max(maxY, sy); });
@@ -993,12 +1002,32 @@
       });
       return best;
     }
-    /** Fly to the points with a smooth, interruptible camera move (instant when reduced motion is preferred). */
-    function sandboxFlyTo(lngLats, padding, rotate) {
+    /**
+     * Move the camera to the points only when it helps:
+     * - already well shown (fully inside the visible area and not much smaller than the best fit) → no move;
+     * - nearby (the target is on screen or close to it) → a short ease that keeps the current bearing, no zoom-out arc;
+     * - far away → a smooth flight that shows the change of location, then the best (possibly turned) fit.
+     * Reduced motion jumps directly.
+     */
+    function sandboxFlyTo(lngLats, padding, rotate, fill = false) {
       if (!lngLats.length) return;
-      const camera = bestCamera(lngLats, padding, rotate);
+      const rect = map.getContainer().getBoundingClientRect();
+      const inside = lngLats.every(point => { const p = map.project(point); return p.x >= padding.left - 2 && p.x <= rect.width - padding.right + 2 && p.y >= padding.top - 2 && p.y <= rect.height - padding.bottom + 2; });
+      const ideal = bestCamera(lngLats, padding, rotate);
+      // `fill` (the drawer opened or closed) always reframes to the best fit for the new visible area.
+      if (!fill && inside && map.getZoom() >= ideal.zoom - 1.2) { sandboxAutoFit = true; return; }
       const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      map.flyTo({ center: camera.center, zoom: camera.zoom, bearing: rotate ? camera.bearing : 0, pitch: 0, speed: 1.4, curve: 1.3, maxDuration: 1600, essential: false, ...(reduce ? { duration: 0 } : {}) });
+      const target = map.project(ideal.center), viewport = Math.max(rect.width, rect.height);
+      const distance = Math.hypot(target.x - rect.width / 2, target.y - rect.height / 2);
+      const near = distance < viewport * 1.5 && Math.abs(ideal.zoom - map.getZoom()) < 3;
+      if (near) {
+        const camera = rotate && !fill ? bestCamera(lngLats, padding, rotate, map.getBearing()) : ideal;
+        map.easeTo({ center: camera.center, zoom: camera.zoom, bearing: rotate ? camera.bearing : 0, pitch: 0, duration: reduce ? 0 : 520, easing: t => 1 - Math.pow(1 - t, 3), essential: false });
+      } else {
+        // A fixed, bounded duration: flyTo's maxDuration turns long flights into instant jumps.
+        const duration = reduce ? 0 : Math.round(Math.min(2400, 1100 + 260 * Math.log2(1 + distance / viewport)));
+        map.flyTo({ center: ideal.center, zoom: ideal.zoom, bearing: rotate ? ideal.bearing : 0, pitch: 0, curve: 1.42, duration, essential: false });
+      }
       sandboxAutoFit = true;
     }
     // Any camera move by the farmer (drag, pinch, wheel, rotate) ends the automatic framing.
@@ -2207,9 +2236,9 @@
       let notice = options.saved || (options.unconfirmed ? 'The spray could not be confirmed. Check the protection shown for this area before recording it again.' : '');
       const restore = () => {
         sandboxDay = snapshot.day && snapshot.day <= sandboxToday ? snapshot.day : sandboxToday;
-        if (snapshot.view.mode === 'area' && sandboxFeature(snapshot.areaId)) sandboxShow({ mode: 'area', areaId: snapshot.areaId });
-        else if (snapshot.view.mode === 'set' && sandboxSetOf(snapshot.firstArea)) sandboxShow({ mode: 'set', setId: sandboxSetOf(snapshot.firstArea).id });
-        else sandboxShow({ mode: 'farm' });
+        if (snapshot.view.mode === 'area' && sandboxFeature(snapshot.areaId)) sandboxShow({ mode: 'area', areaId: snapshot.areaId }, { force: true });
+        else if (snapshot.view.mode === 'set' && sandboxSetOf(snapshot.firstArea)) sandboxShow({ mode: 'set', setId: sandboxSetOf(snapshot.firstArea).id }, { force: true });
+        else sandboxShow({ mode: 'farm' }, { force: true });
       };
       if (!snapshot.top || !after) {
         restore();
@@ -2218,13 +2247,103 @@
       else {
         sandboxDay = sandboxToday;
         const highest = sandboxSets.slice().sort((a, b) => sandboxSeverity(sandboxWorst(b.areaIds, sandboxToday)) - sandboxSeverity(sandboxWorst(a.areaIds, sandboxToday)))[0];
-        sandboxShow(highest ? { mode: 'set', setId: highest.id } : { mode: 'farm' }, { focus: true });
+        sandboxShow(highest ? { mode: 'set', setId: highest.id } : { mode: 'farm' }, { focus: true, force: true });
         notice += ` The highest risk on the farm today changed from ${label(snapshot.top)} to ${label(after)}.`;
       }
       sandboxNotice = notice.trim(); sandboxRender();
       sandboxLoadAll(openVersion);
     }
     areaDialog.addEventListener('cancel', event => { if (areaEdit?.step === 'saving') event.preventDefault(); else areaEdit = null; });
+    // ---- Export for QGIS: GeoJSON (RFC 7946, WGS 84 / EPSG:4326) of the current scope and day, values exactly as the API returns.
+    let sandboxExportState = { key: '', text: '', busy: '' };
+    /** The assessment row of an area for a day from the loaded history, or fetched for that day; null when none exists. */
+    async function sandboxExportRow(id, day) {
+      const history = sandboxHistory.get(id);
+      if (history?.rows) return history.rows.get(day) || null;
+      const rows = await sandboxClient.risk(id, day, day);
+      if (!Array.isArray(rows)) throw new Error('The farm service returned incomplete conditions.');
+      return rows.find(row => row.date === day) || null;
+    }
+    async function sandboxExportSowing(id) {
+      if (sandboxDetails.get(id)) return sandboxDetails.get(id).sowing;
+      const result = await sandboxClient.area(id);
+      return /^\d{4}-\d{2}-\d{2}$/.test(result?.properties?.sowing_date || '') ? result.properties.sowing_date : null;
+    }
+    function sandboxDownload(name, data) {
+      const blob = new Blob([JSON.stringify(data)], { type: 'application/geo+json' });
+      const url = URL.createObjectURL(blob), link = document.createElement('a');
+      link.href = url; link.download = name; document.body.append(link); link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+    function sandboxSlug(text) { return String(text).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'farm'; }
+    /** Crop areas of the scope with their geometry and the day's assessment; missing values stay null. */
+    async function sandboxExportAreas(ids, day, scopeName) {
+      const features = [];
+      for (const id of ids) {
+        const feature = sandboxFeature(id), props = feature?.properties || {};
+        const [row, sowing] = await Promise.all([sandboxExportRow(id, day), sandboxExportSowing(id)]);
+        features.push({ type: 'Feature', geometry: feature.geometry, properties: {
+          crop_area_id: id, area_name: sandboxAreaName(id), field_id: props.field_id ?? null, field_name: props.field_name ?? null,
+          group_name: sandboxSetOf(id)?.name ?? null, crop: props.farmer_crop_id ?? null, sowing_date: sowing, date: day,
+          assessed: Boolean(row), status: row ? row.status : 'no_assessment', risk_class: row?.risk_class ?? null,
+          risk_index: row?.risk_index ?? null, index_low: row?.index_low ?? null, index_high: row?.index_high ?? null,
+          h_hours: row?.h_hours ?? null, h_low: row?.h_low ?? null, h_high: row?.h_high ?? null, coverage: row?.coverage ?? null,
+          window_hours: row?.reasons?.window_hours ?? null, longest_gap_hours: row?.reasons?.longest_gap_hours ?? null,
+          protected_until: row?.protected_until ?? null, growth_stage_zone: row?.growth_stage_zone ?? null,
+          growth_stage_source: row?.growth_stage_source ?? null, model_version: row?.model_version ?? null } });
+      }
+      return { type: 'FeatureCollection', name: `septoria_crop_areas_${day}`,
+        metadata: { scope: scopeName, date: day, crs: 'EPSG:4326', disease: 'septoria', crop: 'wheat', source: 'GET /me/crop-areas, GET /crop-areas/{id}/risk',
+          note: 'Risk describes weather conditions favourable for septoria, not a diagnosis. risk_index: 0 = no wet hours, 0.5 = moderate threshold, 1 = high threshold or more; null where the day has no risk class.' },
+        features };
+    }
+    /** Weather grid cells of the day that overlap the scope's areas, as the API returns them (not area-specific). */
+    async function sandboxExportGrid(ids, day, scopeName) {
+      const grid = await sandboxClient.gridRisk(day);
+      if (grid?.type !== 'FeatureCollection' || !Array.isArray(grid.features)) throw new Error('The farm service returned incomplete grid data.');
+      const areas = ids.map(sandboxFeature).filter(feature => feature?.geometry);
+      const boxes = areas.map(feature => turf.bbox(feature));
+      const features = grid.features.filter(cell => {
+        const box = turf.bbox(cell);
+        return areas.some((area, i) => box[0] <= boxes[i][2] && box[2] >= boxes[i][0] && box[1] <= boxes[i][3] && box[3] >= boxes[i][1] && turf.booleanIntersects(cell, area));
+      }).map(cell => ({ ...cell, properties: { ...cell.properties, date: cell.properties?.date ?? day } }));
+      return { type: 'FeatureCollection', name: `septoria_weather_grid_${day}`,
+        metadata: { scope: scopeName, date: day, crs: 'EPSG:4326', source: 'GET /grid/risk', note: 'Weather grid cells (about 3 x 5 km) with their own assessment; growth stage and sprays of the crop areas are not included. Not interpolated.' },
+        features };
+    }
+    function sandboxExportSection(ids, scopeName) {
+      const day = sandboxDay, key = `${scopeName}|${day}|${ids.join(',')}`;
+      if (sandboxExportState.key !== key) sandboxExportState = { key, text: '', busy: '' };
+      const section = sandboxElement('section', 'fc-section fc-export');
+      section.append(sandboxElement('h2', '', 'Export for QGIS'));
+      section.append(sandboxElement('p', 'fc-export-scope', `${scopeName} · ${sandboxFormatDate(day)} · GeoJSON (WGS 84)`));
+      const run = async (kind, build, name) => {
+        sandboxExportState = { key, text: '', busy: kind }; sandboxRender();
+        try {
+          const data = await build();
+          if (sandboxExportState.key !== key) return;
+          sandboxDownload(name, data);
+          sandboxExportState = { key, busy: '', text: `Downloaded ${data.features.length} ${kind === 'areas' ? (data.features.length === 1 ? 'crop area' : 'crop areas') : (data.features.length === 1 ? 'grid cell' : 'grid cells')} for ${sandboxFormatDate(day)}.` };
+        } catch (error) {
+          if (sandboxExportState.key !== key) return;
+          sandboxExportState = { key, busy: '', text: error.status === 403 ? 'The weather grid is not available for this account.' : (error.message || 'The export could not be prepared.') };
+        }
+        if (sandboxActive) sandboxRender();
+      };
+      const slug = `${sandboxSlug(scopeName)}_${day}`;
+      [['areas', 'Crop areas', `${ids.length} ${ids.length === 1 ? 'area' : 'areas'} with their geometry and this day's risk values`, () => sandboxExportAreas(ids, day, scopeName), `septoria-crop-areas_${slug}.geojson`],
+       ['grid', 'Weather grid cells', 'Cells of about 3 × 5 km overlapping these areas, with their own values', () => sandboxExportGrid(ids, day, scopeName), `septoria-weather-grid_${slug}.geojson`]]
+        .forEach(([kind, title, note, build, name]) => {
+          const button = sandboxElement('button', 'crop-outline fc-export-button'); button.type = 'button'; button.dataset.key = `export-${kind}`;
+          button.disabled = Boolean(sandboxExportState.busy);
+          button.append(sandboxElement('span', '', sandboxExportState.busy === kind ? 'Preparing…' : `${title} · GeoJSON`), sandboxElement('small', '', note));
+          button.addEventListener('click', () => run(kind, build, name));
+          section.append(button);
+        });
+      const status = sandboxElement('p', 'fc-export-status', sandboxExportState.text); status.setAttribute('role', 'status'); section.append(status);
+      section.append(sandboxElement('p', 'fc-export-note', 'Shapefile (ZIP) is not available yet: it needs a Shapefile writer, which this app does not include.'));
+      return section;
+    }
     function sandboxLabel(id) { return sandboxCrops.find(item => item.farmer_crop_id === id)?.label || id || 'Crop unavailable'; }
     function sandboxRender() {
       const focusKey = sandboxPanel.contains(document.activeElement) ? document.activeElement.dataset.key : null;
@@ -2264,6 +2383,7 @@
       else if (sandboxView.mode === 'set' && set) sandboxPanel.append(...sandboxSetContent(set, day));
       else sandboxPanel.append(...sandboxFarmContent(day));
       sandboxPanel.append(sandboxElement('p', 'risk-note', 'Risk shows weather conditions favourable for septoria, not a diagnosis.'));
+      sandboxPanel.append(sandboxExportSection(sandboxScope(), title));
       const worst = sandboxWorst(sandboxScope(), day);
       document.getElementById('drawer-summary').textContent = `${title} · ${sandboxSummary(worst)}${day === sandboxToday ? '' : ` · ${sandboxFormatDate(day, { day: 'numeric', month: 'short' })}`}`;
       if (focusKey) [...sandboxPanel.querySelectorAll('[data-key]')].find(element => element.dataset.key === focusKey && !element.disabled)?.focus({ preventScroll: true });
@@ -2285,15 +2405,24 @@
         const set = sandboxSetOf(view.areaId); if (!set) return;
         next = { mode: 'area', setId: set.id }; sandboxSelected = view.areaId;
       } else sandboxSelected = null;
+      // Selecting the view that is already shown re-renders nothing; the camera moves only if the view is not
+      // well shown any more (for example after zooming out), see sandboxFlyTo.
+      if (previousView.mode === next.mode && previousView.setId === next.setId && previousView.areaId === sandboxSelected && !options.force) {
+        if (options.focus) sandboxFocusCamera(Boolean(options.fromMap));
+        return;
+      }
       sandboxView = next; sandboxRequest++; sandboxNotice = '';
       const min = sandboxMinDay(sandboxScope());
       if (min && sandboxDay < min) sandboxDay = min;
       const previousHeight = sheet.getBoundingClientRect().height;
       sandboxRender(); sandboxPaint();
-      if (!sheet.classList.contains('collapsed')) animateDrawerResize(previousHeight);
-      const geometry = sandboxScopeGeometry();
-      if (options.focus && geometry) fitParcelPreview({ geometry }, { onlyIfObscured: Boolean(options.fromMap), camera: sandboxView.mode === 'farm' ? 'north' : 'rotate', labelPadding: sandboxView.mode === 'farm' ? sandboxLabelPadding() : null });
+      if (!sheet.classList.contains('collapsed')) animateDrawerResize(previousHeight, { pan: false });   // the camera fit below decides any move
+      if (options.focus) sandboxFocusCamera(Boolean(options.fromMap));
       sandboxAnimatePanel(previousView, { ...sandboxView, areaId: sandboxSelected });
+    }
+    function sandboxFocusCamera(fromMap) {
+      const geometry = sandboxScopeGeometry();
+      if (geometry) fitParcelPreview({ geometry }, { onlyIfObscured: fromMap, camera: sandboxView.mode === 'farm' ? 'north' : 'rotate', labelPadding: sandboxView.mode === 'farm' ? sandboxLabelPadding() : null });
     }
     /** Half of the widest group label and its height, so whole labels stay on screen in the farm view. */
     function sandboxLabelPadding() {
@@ -2334,6 +2463,19 @@
       sandboxUpdateMarkers();
     }
     /** Show markers for area groups that are too small to read at the current scale, merging overlapping ones. */
+    // Markers are rebuilt when the map or the data changes, which can replace the element between the press and the
+    // click. A short press that started at the same spot also counts as a tap on the new element.
+    let sandboxPress = null, sandboxLastTap = 0;
+    document.addEventListener('pointerdown', event => { sandboxPress = { x: event.clientX, y: event.clientY, t: Date.now() }; }, true);
+    function sandboxOnTap(element, action) {
+      element.addEventListener('pointerup', event => {
+        if (!sandboxPress || (event.pointerType === 'mouse' && event.button !== 0)) return;
+        if (Math.hypot(event.clientX - sandboxPress.x, event.clientY - sandboxPress.y) > 8 || Date.now() - sandboxPress.t > 600) return;
+        event.stopPropagation(); sandboxPress = null; sandboxLastTap = Date.now(); action();
+      });
+      // Keyboard activation; the click that follows a handled press (possibly on a rebuilt element) is ignored.
+      element.addEventListener('click', event => { event.stopPropagation(); if (Date.now() - sandboxLastTap < 500) return; action(); });
+    }
     function sandboxUpdateMarkers() {
       sandboxMarkers.forEach(marker => marker.remove()); sandboxMarkers = [];
       if (!sandboxActive || !sandboxSets.length) return;
@@ -2341,10 +2483,22 @@
       sandboxSets.forEach(set => {
         const [west, south, east, north] = set.bbox;
         const a = map.project([west, south]), b = map.project([east, north]);
-        // A group becomes one tag when it is tiny, or as soon as the points of its small areas would crowd each other.
-        const points = Math.abs(b.x - a.x) > 28 || Math.abs(b.y - a.y) > 28 ? sandboxAreaCandidates(set) : null;
-        const focused = sandboxView.mode !== 'farm' && sandboxView.setId === set.id;   // the open group spreads its points instead
-        if (points && (focused || !points.some((item, i) => points.some((other, j) => j > i && Math.hypot(item.point.x - other.point.x, item.point.y - other.point.y) < SANDBOX_POINT_GAP)))) return;
+        // Outside the open group, the group becomes one tag when its areas cannot each keep a point inside themselves.
+        const focused = sandboxView.mode !== 'farm' && sandboxView.setId === set.id;
+        // A group narrower on screen than a few points side by side cannot show its areas apart: it becomes a tag,
+        // also when it is the open group. Tapping the tag zooms in until the areas are distinguishable.
+        // The open group keeps its points at its own full-screen fit and slightly below it; zooming out further than
+        // SANDBOX_FIT_MARGIN turns it into its tag. Other groups use their on-screen width.
+        if (focused) {
+          const fit = bestCamera(sandboxPolygons(set.geometry).flatMap(polygon => polygon[0]), mapVisiblePadding(), true).zoom;
+          if (map.getZoom() >= fit - SANDBOX_FIT_MARGIN) return;
+        }
+        const bigEnough = !focused && (Math.abs(b.x - a.x) > 28 || Math.abs(b.y - a.y) > 28) && sandboxScreenWidth(set.geometry) >= SANDBOX_GROUP_MIN_WIDTH;
+        if (bigEnough) {
+          const points = sandboxAreaCandidates(set);
+          const rings = set.areaIds.map(id => ({ id, rings: sandboxScreenRings(sandboxFeature(id)?.geometry) }));
+          if (!sandboxPlacePoints(points, rings).some(item => item.outside)) return;
+        }
         tinySets.add(set.id);
         const center = [(west + east) / 2, (south + north) / 2], point = map.project(center);
         const near = clusters.find(cluster => Math.abs(cluster.point.x - point.x) < 96 && Math.abs(cluster.point.y - point.y) < 40);
@@ -2363,9 +2517,8 @@
         element.append(sandboxElement('span', 'fc-marker-dot'), sandboxElement('span', '', name + count));
         if (highCount) element.append(sandboxElement('span', 'fc-marker-flag', single && ids.length === 1 ? 'High' : `${highCount} high`));
         element.setAttribute('aria-label', `${name}: ${sandboxSummary(worst)}${single ? '' : '. Zoom in to separate the groups.'}`);
-        element.addEventListener('click', event => {
-          event.stopPropagation();
-          if (single) sandboxShow({ mode: 'set', setId: single.id }, { focus: true });
+        sandboxOnTap(element, () => {
+          if (single) sandboxOpenGroupTag(single);
           else fitParcelPreview({ geometry: { type: 'MultiPolygon', coordinates: cluster.sets.flatMap(set => set.geometry.coordinates) } });
         });
         sandboxMarkers.push(new maplibregl.Marker({ element }).setLngLat(cluster.center).addTo(map));
@@ -2373,7 +2526,16 @@
       sandboxAreaMarkers(tinySets);
     }
     // An area gets its own point while it is hard to tap on screen: smaller than about 80 × 80 px, or thinner than 24 px.
-    const SANDBOX_TAPPABLE_PX2 = 6400, SANDBOX_TAPPABLE_WIDTH = 24, SANDBOX_POINT_GAP = 40;
+    const SANDBOX_TAPPABLE_PX2 = 6400, SANDBOX_TAPPABLE_WIDTH = 24, SANDBOX_POINT_GAP = 54;
+    // Another group narrower than this on screen shows its tag. The open group shows its tag only when zoomed out more
+    // than SANDBOX_FIT_MARGIN zoom levels below its own full-screen fit.
+    const SANDBOX_GROUP_MIN_WIDTH = 60, SANDBOX_FIT_MARGIN = .6;
+    /** Open a group from its tag: show it and fit it to the visible map, where its areas get their points. */
+    function sandboxOpenGroupTag(set) {
+      sandboxShow({ mode: 'set', setId: set.id });
+      const geometry = sandboxCurrentSet()?.geometry;
+      if (geometry) fitParcelPreview({ geometry }, { fill: true, camera: 'rotate' });
+    }
     /** Narrowest on-screen width of a geometry (minimum over hull edges of the farthest point from that edge), in px. */
     function sandboxScreenWidth(geometry) {
       const hull = convexHull(sandboxPolygons(geometry).flatMap(polygon => polygon[0]).map(point => { const p = map.project(point); return [p.x, p.y]; }));
@@ -2385,19 +2547,80 @@
       });
       return best;
     }
-    /** Small areas of a group that need a point, with an anchor inside each area. */
+    /** Screen rings of a geometry at the current camera. */
+    function sandboxScreenRings(geometry) {
+      return sandboxPolygons(geometry).flatMap(polygon => polygon.map(ring => ring.map(point => { const p = map.project(point); return [p.x, p.y]; })));
+    }
+    /** Even-odd point-in-polygon test on screen rings. */
+    function sandboxInsideRings(x, y, rings) {
+      let inside = false;
+      rings.forEach(ring => { for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) { const [xi, yi] = ring[i], [xj, yj] = ring[j]; if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside; } });
+      return inside;
+    }
+    /** Nearest point on the rings to (x, y) and its distance. */
+    function sandboxNearestOnRings(x, y, rings) {
+      let best = { d: Infinity, x, y };
+      rings.forEach(ring => { for (let i = 0; i < ring.length - 1; i++) {
+        const [ax, ay] = ring[i], [bx, by] = ring[i + 1], vx = bx - ax, vy = by - ay, len = vx * vx + vy * vy || 1;
+        const t = Math.max(0, Math.min(1, ((x - ax) * vx + (y - ay) * vy) / len)), px = ax + t * vx, py = ay + t * vy, d = Math.hypot(x - px, y - py);
+        if (d < best.d) best = { d, x: px, y: py };
+      } });
+      return best;
+    }
+    /**
+     * Small areas of a group that need a point. Each gets candidate positions inside its own polygon, spread along its
+     * longest axis (the middle first), so neighbouring strips can each keep their point inside themselves.
+     */
     function sandboxAreaCandidates(set) {
       const rect = map.getContainer().getBoundingClientRect();
       const out = [];
       set.areaIds.forEach(id => {
         const feature = sandboxFeature(id);
         if (!feature?.geometry || (sandboxScreenArea(feature.geometry) >= SANDBOX_TAPPABLE_PX2 && sandboxScreenWidth(feature.geometry) >= SANDBOX_TAPPABLE_WIDTH)) return;
-        let anchor; try { anchor = turf.pointOnFeature(feature).geometry.coordinates; } catch (_) { return; }
-        const point = map.project(anchor);
-        if (point.x < -40 || point.y < -40 || point.x > rect.width + 40 || point.y > rect.height + 40) return;
-        out.push({ id, anchor, point });
+        const rings = sandboxScreenRings(feature.geometry);
+        const hull = convexHull(rings.flat());
+        let a = hull[0] || [0, 0], b = hull[0] || [0, 0], far = -1;
+        hull.forEach(p => hull.forEach(q => { const d = (p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2; if (d > far) { far = d; a = p; b = q; } }));
+        const positions = [.5, .38, .62, .26, .74, .16, .84, .08, .92].map(t => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]).filter(([x, y]) => sandboxInsideRings(x, y, rings));
+        let fallback; try { const p = map.project(turf.pointOnFeature(feature).geometry.coordinates); fallback = [p.x, p.y]; } catch (_) { fallback = positions[0]; }
+        if (!fallback) return;
+        if (!positions.length) positions.push(fallback);
+        const center = positions[0];
+        if (center[0] < -40 || center[1] < -40 || center[0] > rect.width + 40 || center[1] > rect.height + 40) return;
+        out.push({ id, rings, positions, center, point: { x: center[0], y: center[1] } });
       });
       return out;
+    }
+    /**
+     * Place points for the candidates without overlap: inside their own polygon when possible; otherwise as close to
+     * their own area as possible, only where that area is nearer than any neighbour, joined to it by a short line.
+     */
+    function sandboxPlacePoints(candidates, neighbourRings, taken = []) {
+      const gap = SANDBOX_POINT_GAP;
+      const free = (x, y) => taken.every(item => Math.hypot(item.x - x, item.y - y) >= gap);
+      const placed = [];
+      candidates.slice().sort((a, b) => a.positions.length - b.positions.length || a.center[1] - b.center[1]).forEach(candidate => {
+        let spot = candidate.positions.find(([x, y]) => free(x, y)), outside = false;
+        if (!spot) {
+          const others = neighbourRings.filter(item => item.id !== candidate.id);
+          search: for (let ring = 1; ring <= 5; ring++) {
+            const steps = 8 * ring;
+            for (let k = 0; k < steps; k++) {
+              const angle = -Math.PI / 2 + k * 2 * Math.PI / steps;
+              const x = candidate.center[0] + Math.cos(angle) * gap * .75 * ring, y = candidate.center[1] + Math.sin(angle) * gap * .75 * ring;
+              if (!free(x, y)) continue;
+              const own = sandboxNearestOnRings(x, y, candidate.rings).d;
+              if (others.some(item => sandboxInsideRings(x, y, item.rings) || sandboxNearestOnRings(x, y, item.rings).d < own)) continue;
+              spot = [x, y]; outside = true; break search;
+            }
+          }
+        }
+        if (!spot) { spot = candidate.center; outside = !sandboxInsideRings(spot[0], spot[1], candidate.rings); }
+        taken.push({ x: spot[0], y: spot[1] });
+        const tip = outside ? sandboxNearestOnRings(spot[0], spot[1], candidate.rings) : null;
+        placed.push({ ...candidate, spot, outside, leader: tip ? [tip.x - spot[0], tip.y - spot[1]] : null });
+      });
+      return placed;
     }
     /** Screen area of a polygon geometry at the current camera, in px². */
     function sandboxScreenArea(geometry) {
@@ -2409,45 +2632,26 @@
       }));
       return total;
     }
-    /**
-     * Compact, tappable points for areas that are too small on screen, in groups large enough to show their areas.
-     * Points that would overlap are moved around their anchor on rings and joined to it by a short line.
-     */
+    /** Compact, tappable points for areas that are too small on screen, in groups large enough to show their areas. */
     function sandboxAreaMarkers(tinySets) {
-      const candidates = sandboxSets.filter(set => !tinySets.has(set.id)).flatMap(sandboxAreaCandidates);
-      const gap = SANDBOX_POINT_GAP, taken = [];
-      const free = (x, y) => taken.every(item => Math.hypot(item.x - x, item.y - y) >= gap);
-      candidates.sort((a, b) => a.point.y - b.point.y || a.point.x - b.point.x).forEach(candidate => {
-        let dx = 0, dy = 0;
-        if (!free(candidate.point.x, candidate.point.y)) {
-          search: for (let ring = 1; ring <= 4; ring++) {
-            const steps = 6 * ring;
-            for (let k = 0; k < steps; k++) {
-              const angle = -Math.PI / 2 + k * 2 * Math.PI / steps;
-              const x = candidate.point.x + Math.cos(angle) * gap * ring, y = candidate.point.y + Math.sin(angle) * gap * ring;
-              if (free(x, y)) { dx = x - candidate.point.x; dy = y - candidate.point.y; break search; }
-            }
-          }
-        }
-        taken.push({ x: candidate.point.x + dx, y: candidate.point.y + dy });
+      const sets = sandboxSets.filter(set => !tinySets.has(set.id));
+      const neighbourRings = sets.flatMap(set => set.areaIds.map(id => ({ id, rings: sandboxScreenRings(sandboxFeature(id)?.geometry) })));
+      const placed = sandboxPlacePoints(sets.flatMap(sandboxAreaCandidates), neighbourRings);
+      placed.forEach(candidate => {
         const row = sandboxAssessment(candidate.id, sandboxDay), tone = sandboxTone(row), index = sandboxIndex(row);
         const element = sandboxElement('button', `fc-area-marker tone-${tone}`); element.type = 'button';
         element.classList.toggle('active', sandboxView.mode === 'area' && sandboxSelected === candidate.id);
         const label = `${sandboxAreaName(candidate.id)}: ${sandboxSummary(row)}${index ? ` ${sandboxIndexText(index)}` : ''}`;
         element.setAttribute('aria-label', label); element.title = label;
-        if (dx || dy) {
+        if (candidate.leader && Math.hypot(...candidate.leader) > 9) {
           const leader = sandboxElement('span', 'fc-area-leader');
-          leader.style.width = `${Math.hypot(dx, dy)}px`; leader.style.transform = `rotate(${Math.atan2(-dy, -dx)}rad)`;
+          leader.style.width = `${Math.hypot(...candidate.leader)}px`; leader.style.transform = `rotate(${Math.atan2(candidate.leader[1], candidate.leader[0])}rad)`;
           element.append(leader);
         }
         const dot = sandboxElement('span', 'fc-area-dot'); if (tone !== 'none') dot.style.background = sandboxIndexColor(tone, index ? index.value : null);
         element.append(dot);
-        element.addEventListener('click', event => {
-          event.stopPropagation();
-          setDrawer(true);
-          sandboxSelect(candidate.id, { focus: true });
-        });
-        sandboxMarkers.push(new maplibregl.Marker({ element, offset: [dx, dy] }).setLngLat(candidate.anchor).addTo(map));
+        sandboxOnTap(element, () => { setDrawer(true); sandboxSelect(candidate.id, { focus: true }); });
+        sandboxMarkers.push(new maplibregl.Marker({ element }).setLngLat(map.unproject(candidate.spot)).addTo(map));
       });
     }
     function sandboxSource() {
@@ -2502,7 +2706,7 @@
         if (pendingJourney === 'setup') { pendingJourney = 'farmer'; enterParcelSetup(); return true; }
         // Open the group that holds today's highest available risk and zoom to it above the drawer.
         const highest = sandboxSets.slice().sort((a, b) => sandboxSeverity(sandboxWorst(b.areaIds, sandboxToday)) - sandboxSeverity(sandboxWorst(a.areaIds, sandboxToday)))[0];
-        if (highest) sandboxShow({ mode: 'set', setId: highest.id }, { focus: true }); else sandboxPaint();
+        if (highest) sandboxShow({ mode: 'set', setId: highest.id }, { focus: true, force: true }); else sandboxPaint();
         sandboxLoadAll(openVersion);
         return true;
       } catch (error) {
