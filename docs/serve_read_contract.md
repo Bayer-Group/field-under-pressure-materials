@@ -33,6 +33,7 @@ over them, so the farmer front end and QGIS see the same data and no business lo
 | `DELETE /sandbox` | `app.field` | deletes everything of the sandbox, 204 |
 | `POST /login` `{login, password}` | `app.demo_user` | `{token, owner_id, role}`; development logins only; the token goes in `Authorization: Bearer` |
 | `GET /crops` | `curated.crop_mapping` | `{crops: [{id, label}], data_status}` (the shape of `FARMER_INPUT_CONTRACT.md`) |
+| `GET /places?q=` | GUGiK UUG + names of the parcels we know | `{places: [{name, label, lon, lat, zoom, source}], data_status: "live"}` for the map search box |
 | `GET /parcels?lon=&lat=` or `?number=` | GUGiK ULDK (cached in `app.parcel`) | `{parcels: [{parcel_id, parcel_number, geometry}], data_status: "live"}` |
 | `GET /fields`, `GET /fields/{id}` | `app.field`, `app.parcel`, `app.crop_area` | the field model of the front end, see section 5 |
 | `POST /fields/validate` | PostGIS | findings of the geometry validation, see section 5 |
@@ -98,6 +99,13 @@ does not answer). The `parcel_id` is the identifier of the cadastre. Mock parcel
 Each parcel also has the names of its place from GUGiK: `region` (the cadastral precinct: a village, or a number in a town),
 `commune`, `county`, `voivodeship` and a ready `location` for display ("Krępica, gm. Płońsk"; "Warszawa"; "Śródmieście 2, Radom").
 The same fields are in the `parcels` of `GET /fields`.
+
+**Search box.** `GET /places?q=<text>` (at least 2 characters) returns places of Mazowieckie with the position to fly to:
+`{name, label, lon, lat, zoom, source}`; `zoom` is 16, the zoom from which the parcel boundaries (the WMS below) are visible, so flying
+there shows the parcels at once. Two sources: the geocoder of GUGiK (whole names only, from 3 characters; towns with the rights of a
+county first, then the villages of the same name) and the names of the parcels we know (prefix matching, so it can suggest while the
+user types; villages only). Same-named places are told apart by `label` ("Ostrołęka", "Ostrołęka, gm. Warka, pow. grójecki"). No match is
+an empty list. Answers are cached for a day and limited to 120 per minute per owner; send the request after a pause in typing (about 250 ms).
 
 **Parcel boundaries on the map (GUGiK WMS, no backend needed).** GUGiK publishes the parcels as a map service only (there is no WFS and
 no bulk download of vector parcels): the layers `dzialki` (boundaries), `numery_dzialek` (numbers), `uzytki` (land-use contours),
