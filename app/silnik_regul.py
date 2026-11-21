@@ -1,43 +1,10 @@
-import json
 from pathlib import Path
 from typing import Optional
 import pandas as pd
 
 DATA_DIR = Path(__file__).parent / "data"
-FARM_PROFILE_PATH = DATA_DIR / "moje_gospodarstwo.json"
 
 SOWING_ALIASES = {"ZASIEJ", "SIEJ", "ZASADŹ"}
-FALLOW_LABEL = "Brak uprawy / Pod zasiew"
-
-KNOWN_CROPS = [
-    "Pszenica ozima",
-    "Pszenica jara",
-    "Jęczmień",
-    "Jęczmień jary",
-    "Żyto",
-    "Owies",
-    "Kukurydza",
-    "Rzepak ozimy",
-    "Ziemniaki",
-    "Buraki cukrowe",
-    "Rośliny strączkowe",
-    "Użytki zielone",
-    FALLOW_LABEL,
-]
-
-ECO_FERTILIZER_KEYWORDS = (
-    "eko",
-    "wapno",
-    "dolomit",
-    "obornik",
-    "kompost",
-    "biohumus",
-    "patentkali",
-    "siarczan potasu",
-    "mączka",
-    "fosforyt",
-    "biolog",
-)
 
 
 def _to_float_series(series: pd.Series) -> pd.Series:
@@ -55,142 +22,12 @@ def normalize_decision(value: str) -> str:
 
 
 def load_static_fields() -> pd.DataFrame:
-    df = pd.read_parquet(DATA_DIR / "fields_static_33uxr.parquet").copy()
-    if "field_uid" not in df.columns:
-        df["field_uid"] = [f"P-{i+1:03d}" for i in range(len(df))]
-    return df
+    return pd.read_parquet(DATA_DIR / "fields_static_33uxr.parquet")
 
 
 def load_weather_timeseries() -> pd.DataFrame:
     df = pd.read_parquet(DATA_DIR / "weather_timeseries_33uxr.parquet")
     df["timestamp"] = pd.to_datetime(df["timestamp"])
-    return df
-
-
-def load_admin_hierarchy() -> dict[str, dict[str, list[dict]]]:
-    gminy_path = DATA_DIR / "gminy_polska.parquet"
-    if gminy_path.exists():
-        gdf = pd.read_parquet(gminy_path)
-        hierarchy: dict[str, dict[str, list[dict]]] = {}
-        for r in gdf.itertuples(index=False):
-            woj = str(getattr(r, "wojewodztwo", "Małopolskie"))
-            powiat = str(getattr(r, "powiat", "proszowicki"))
-            gmina = str(getattr(r, "gmina", "Proszowice"))
-            bbox = [
-                float(getattr(r, "min_lon", 20.15)),
-                float(getattr(r, "min_lat", 50.05)),
-                float(getattr(r, "max_lon", 20.55)),
-                float(getattr(r, "max_lat", 50.32)),
-            ]
-            hierarchy.setdefault(woj, {}).setdefault(powiat, []).append(
-                {"gmina": gmina, "bbox": bbox}
-            )
-        return hierarchy
-
-    return {
-        "Małopolskie": {
-            "proszowicki": [
-                {"gmina": "Wszystkie gminy (33UXR)", "bbox": [20.10, 50.00, 20.60, 50.36]},
-                {"gmina": "Proszowice", "bbox": [20.22, 50.14, 20.38, 50.25]},
-                {"gmina": "Koniusza", "bbox": [20.15, 50.10, 20.30, 50.20]},
-                {"gmina": "Nowe Brzesko", "bbox": [20.32, 50.10, 20.46, 50.18]},
-                {"gmina": "Radziemice", "bbox": [20.20, 50.22, 20.35, 50.31]},
-            ],
-            "brzeski": [
-                {"gmina": "Brzesko", "bbox": [20.48, 49.94, 20.70, 50.06]},
-                {"gmina": "Szczurowa", "bbox": [20.45, 50.05, 20.62, 50.15]},
-            ],
-        },
-        "Świętokrzyskie": {
-            "kazimierski": [
-                {"gmina": "Kazimierza Wielka", "bbox": [20.42, 50.22, 20.58, 50.34]},
-                {"gmina": "Skalbmierz", "bbox": [20.34, 50.26, 20.48, 50.36]},
-            ],
-        },
-    }
-
-
-def load_farm_profile() -> dict:
-    if FARM_PROFILE_PATH.exists():
-        try:
-            with open(FARM_PROFILE_PATH, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            if isinstance(data, dict):
-                data.setdefault("farm_name", "Moje Gospodarstwo")
-                data.setdefault("wojewodztwo", "Małopolskie")
-                data.setdefault("powiat", "proszowicki")
-                data.setdefault("gmina", "Wszystkie gminy (33UXR)")
-                data.setdefault("only_my_farm", False)
-                data.setdefault("eco_mode", False)
-                data.setdefault("fields", {})
-                return data
-        except Exception:
-            pass
-    return {
-        "farm_name": "Moje Gospodarstwo",
-        "wojewodztwo": "Małopolskie",
-        "powiat": "proszowicki",
-        "gmina": "Wszystkie gminy (33UXR)",
-        "only_my_farm": False,
-        "eco_mode": False,
-        "fields": {},
-    }
-
-
-def save_farm_profile(profile: dict) -> None:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    with open(FARM_PROFILE_PATH, "w", encoding="utf-8") as f:
-        json.dump(profile, f, ensure_ascii=False, indent=2)
-
-
-def apply_farm_profile(
-    fields_df: pd.DataFrame,
-    farm_profile: dict,
-    crop_dict_df: Optional[pd.DataFrame] = None,
-) -> pd.DataFrame:
-    df = fields_df.copy()
-    selected_map: dict = farm_profile.get("fields", {})
-    global_eco = bool(farm_profile.get("eco_mode", False))
-
-    df["is_my_field"] = df["field_uid"].isin(selected_map.keys())
-    df["is_fallow"] = False
-    df["is_eco_field"] = global_eco
-
-    if selected_map:
-        new_crops = []
-        new_ndvi = []
-        is_fallow_list = []
-        is_eco_list = []
-        for r in df.itertuples(index=False):
-            cfg = selected_map.get(r.field_uid)
-            if cfg is not None:
-                declared = str(cfg.get("crop_name", r.crop_name)).strip()
-                is_eco_list.append(bool(cfg.get("is_eco", global_eco)))
-                if declared == FALLOW_LABEL:
-                    rec_crop, _ = recommend_crop_by_soil(
-                        r.soil_ph, r.soil_soc, r.soil_texture, crop_dict_df=crop_dict_df
-                    )
-                    new_crops.append(f"Pod zasiew ({rec_crop})")
-                    new_ndvi.append(min(float(r.ndvi), 0.18))
-                    is_fallow_list.append(True)
-                else:
-                    new_crops.append(declared)
-                    new_ndvi.append(float(r.ndvi))
-                    is_fallow_list.append(False)
-            else:
-                new_crops.append(r.crop_name)
-                new_ndvi.append(float(r.ndvi))
-                is_fallow_list.append(False)
-                is_eco_list.append(global_eco)
-
-        df["crop_name"] = new_crops
-        df["ndvi"] = pd.Series(new_ndvi, index=df.index, dtype="float32")
-        df["is_fallow"] = is_fallow_list
-        df["is_eco_field"] = is_eco_list
-
-    if farm_profile.get("only_my_farm", False) and df["is_my_field"].any():
-        df = df[df["is_my_field"]].copy().reset_index(drop=True)
-
     return df
 
 
@@ -215,10 +52,6 @@ def load_agronomic_rules() -> pd.DataFrame:
                 "ph_max",
                 "soc_max_g_kg",
                 "zalecany_nawoz",
-                "nawozy_eko",
-                "dawka_nawozu_kg_ha",
-                "preparat_eko",
-                "metoda_oprysku",
                 "decyzja_norm",
             ]
         )
@@ -231,15 +64,11 @@ def load_agronomic_rules() -> pd.DataFrame:
         df["poziom_ryzyka"] = "ŚREDNI"
     if "zalecany_nawoz" not in df.columns:
         df["zalecany_nawoz"] = ""
-    if "nawozy_eko" not in df.columns:
-        df["nawozy_eko"] = ""
-    if "preparat_eko" not in df.columns:
-        df["preparat_eko"] = ""
-    if "metoda_oprysku" not in df.columns:
-        df["metoda_oprysku"] = ""
 
+    # Ujednolicenie nazw decyzji (ZASIEJ / SIEJ / ZASADŹ -> ZASIEJ)
     df["decyzja_norm"] = df["decyzja"].apply(normalize_decision)
 
+    # Konwersja kolumn liczbowych (odporna na przecinki z Google Sheets)
     numeric_cols = [
         "temp_min_c",
         "temp_max_c",
@@ -250,7 +79,6 @@ def load_agronomic_rules() -> pd.DataFrame:
         "ph_min",
         "ph_max",
         "soc_max_g_kg",
-        "dawka_nawozu_kg_ha",
     ]
     for col in numeric_cols:
         if col in df.columns:
@@ -281,6 +109,7 @@ def recommend_crop_by_soil(
 ) -> tuple[str, str]:
     texture = str(soil_texture).strip().lower()
 
+    # 1. Jeśli Osoba 3 dostarczyła opcjonalny Plik D (rekomendacje_upraw.csv)
     if crop_dict_df is not None and not crop_dict_df.empty and pd.notna(soil_ph) and pd.notna(soil_soc):
         for r in crop_dict_df.itertuples(index=False):
             ph_ok = (pd.isna(r.ph_min) or soil_ph >= r.ph_min) and (pd.isna(r.ph_max) or soil_ph <= r.ph_max)
@@ -291,6 +120,7 @@ def recommend_crop_by_soil(
                 reason = str(getattr(r, "uzasadnienie", f"Dopasowanie do pH {soil_ph:.1f}, SOC {soil_soc:.1f} g/kg"))
                 return str(r.uprawa), reason
 
+    # 2. Wbudowana logika agronomiczna oparta na SoilGrids v2
     if pd.isna(soil_ph) or pd.isna(soil_soc):
         return "Jęczmień jary", "Uniwersalny wybór przy niepełnych danych glebowych"
 
@@ -306,81 +136,8 @@ def recommend_crop_by_soil(
     return "Jęczmień jary", f"Bezpieczny wybór dla stanowiska o pH {soil_ph:.1f} ({soil_texture})"
 
 
-def recommend_fertilization(
-    soil_ph: float,
-    soil_soc: float,
-    soil_texture: str,
-    crop_name: str,
-    area_ha: float,
-    temp_c: Optional[float] = None,
-    precip_24h_mm: Optional[float] = None,
-    rule_fertilizer: str = "",
-    rule_eco_fertilizer: str = "",
-    rule_dose_kg_ha: Optional[float] = None,
-    eco_mode: bool = False,
-) -> dict:
-    area = float(area_ha) if pd.notna(area_ha) and float(area_ha) > 0 else 1.5
-    ph = float(soil_ph) if pd.notna(soil_ph) else 6.2
-    soc = float(soil_soc) if pd.notna(soil_soc) else 15.0
-    crop_l = str(crop_name).strip().lower()
-
-    weather_blocked = (
-        (pd.notna(precip_24h_mm) and float(precip_24h_mm) >= 5.0)
-        or (pd.notna(temp_c) and (float(temp_c) < 2.0 or float(temp_c) > 32.0))
-    )
-
-    clean_rule_fert = str(rule_fertilizer).strip() if pd.notna(rule_fertilizer) else ""
-    clean_rule_eco = str(rule_eco_fertilizer).strip() if pd.notna(rule_eco_fertilizer) else ""
-
-    if ph < 5.5:
-        eco_name = clean_rule_eco or "Wapno kredowe / dolomitowe (EKO)"
-        conv_name = clean_rule_fert or "Wapno węglanowe granulowane"
-        dose_ha = float(rule_dose_kg_ha) if (rule_dose_kg_ha is not None and pd.notna(rule_dose_kg_ha) and rule_dose_kg_ha > 0) else 650.0
-        reason = f"Niskie pH ({ph:.1f} < 5,5) — zalecane wapnowanie korygujące odczyn gleby."
-    elif soc < 13.5:
-        eco_name = clean_rule_eco or "Obornik granulowany / kompost (EKO)"
-        conv_name = clean_rule_fert or "Obornik / nawóz organiczno-mineralny"
-        dose_ha = float(rule_dose_kg_ha) if (rule_dose_kg_ha is not None and pd.notna(rule_dose_kg_ha) and rule_dose_kg_ha > 0) else 400.0
-        reason = f"Niska zawartość próchnicy/SOC ({soc:.1f} g/kg < 13,5) — uzupełnienie materii organicznej."
-    elif "rzepak" in crop_l:
-        eco_name = clean_rule_eco or "Patentkali + siarka i bor (EKO)"
-        conv_name = clean_rule_fert or "NPK pod rzepak + siarczan magnezu"
-        dose_ha = float(rule_dose_kg_ha) if (rule_dose_kg_ha is not None and pd.notna(rule_dose_kg_ha) and rule_dose_kg_ha > 0) else 220.0
-        reason = f"Zapotrzebowanie rzepaku na siarkę, potas i magnez przy pH {ph:.1f}."
-    elif "kukurydz" in crop_l:
-        eco_name = clean_rule_eco or "Obornik / biohumus pod kukurydzę (EKO)"
-        conv_name = clean_rule_fert or "NPK startowy pod kukurydzę"
-        dose_ha = float(rule_dose_kg_ha) if (rule_dose_kg_ha is not None and pd.notna(rule_dose_kg_ha) and rule_dose_kg_ha > 0) else 250.0
-        reason = f"Zapotrzebowanie kukurydzy przy SOC {soc:.1f} g/kg i pH {ph:.1f}."
-    else:
-        eco_name = clean_rule_eco or "Biohumus / mączka mineralna (EKO)"
-        conv_name = clean_rule_fert or "Nawóz wieloskładnikowy pogłówny"
-        dose_ha = float(rule_dose_kg_ha) if (rule_dose_kg_ha is not None and pd.notna(rule_dose_kg_ha) and rule_dose_kg_ha > 0) else 180.0
-        reason = f"Utrzymanie zasobności stanowiska ({soil_texture}, pH {ph:.1f}, SOC {soc:.1f} g/kg)."
-
-    if eco_mode:
-        chosen_fert = eco_name
-        eco_status = "TAK (EKO)"
-    else:
-        chosen_fert = conv_name if conv_name else eco_name
-        check_str = f"{chosen_fert} {clean_rule_eco}".lower()
-        is_eco_compatible = any(k in check_str for k in ECO_FERTILIZER_KEYWORDS)
-        eco_status = "TAK (EKO)" if is_eco_compatible else "NIE"
-
-    if weather_blocked:
-        reason = f"Warunki pogodowe ograniczają aplikację (sprawdź opady/temperaturę) — {reason}"
-
-    total_kg = round(dose_ha * area, 1)
-    return {
-        "zalecany_nawoz": chosen_fert,
-        "nawozy_eko": eco_status,
-        "dawka_nawozu_kg_ha": round(dose_ha, 1),
-        "ilosc_nawozu_kg": total_kg,
-        "uzasadnienie_nawozenia": reason,
-    }
-
-
 def _rule_matches_row(rule, row) -> bool:
+    # Warunki pogodowe (puste progi w CSV nie blokują dopasowania)[cite: 6]
     if pd.notna(rule.temp_min_c) and pd.notna(row.temp_c) and row.temp_c < rule.temp_min_c:
         return False
     if pd.notna(rule.temp_max_c) and pd.notna(row.temp_c) and row.temp_c > rule.temp_max_c:
@@ -392,6 +149,7 @@ def _rule_matches_row(rule, row) -> bool:
     if pd.notna(rule.wiatr_max_ms) and pd.notna(row.wind_ms) and row.wind_ms > rule.wiatr_max_ms:
         return False
 
+    # Logika ndvi_prog wg v2.0: dla ZASIEJ i ZBIERAJ próg górny (<=), dla reszty próg dolny (>=)[cite: 6]
     if pd.notna(rule.ndvi_prog) and pd.notna(row.ndvi):
         if rule.decyzja_norm in {"ZASIEJ", "ZBIERAJ"}:
             if row.ndvi > rule.ndvi_prog:
@@ -400,6 +158,7 @@ def _rule_matches_row(rule, row) -> bool:
             if row.ndvi < rule.ndvi_prog:
                 return False
 
+    # Opcjonalne warunki glebowe (ph_min, ph_max, soc_max_g_kg)[cite: 6]
     if pd.notna(rule.ph_min) and pd.notna(row.soil_ph) and row.soil_ph < rule.ph_min:
         return False
     if pd.notna(rule.ph_max) and pd.notna(row.soil_ph) and row.soil_ph > rule.ph_max:
@@ -420,7 +179,6 @@ def evaluate_fields(
     override_wind_ms: Optional[float] = None,
     override_precip_24h_mm: Optional[float] = None,
     crop_dict_df: Optional[pd.DataFrame] = None,
-    eco_mode: bool = False,
 ) -> pd.DataFrame:
     weather_slice = weather_df[weather_df["timestamp"] == pd.to_datetime(selected_timestamp)].copy()
     merged = fields_df.merge(weather_slice, on="grid_id", how="left")
@@ -439,10 +197,6 @@ def evaluate_fields(
     rule_ids = []
     risk_levels = []
     fertilizers = []
-    eco_statuses = []
-    dose_kg_ha_list = []
-    total_kg_list = []
-    fert_reasons = []
     recommended_crops = []
     soil_reasons = []
 
@@ -458,44 +212,28 @@ def evaluate_fields(
         hazard = "Brak krytycznego zagrożenia"
         rule_id = "DEFAULT-00"
         risk_level = "NISKI"
-        rule_fert = ""
-        rule_eco = ""
-        rule_dose = None
-        is_fallow = bool(getattr(row, "is_fallow", False))
+        fertilizer = "-"
 
+        # 1. Nadrzędne blokady bezpieczeństwa (zgodnie ze scenariuszem demo i v2.0)[cite: 6]
         if pd.notna(row.precip_24h_mm) and row.precip_24h_mm >= 5.0:
             decision = "CZEKAJ"
-            message = f"CZEKAJ: Wysoki opad 24h ({row.precip_24h_mm:.1f} mm) — ryzyko zmycia środka / grząska gleba"
+            message = f"CZEKAJ: Wysoki opad 24h ({row.precip_24h_mm:.1f} mm) — ryzyko zmycia środka"
             hazard = "Nadmierny opad 24h"
             rule_id = "BLK-RAIN"
             risk_level = "KRYTYCZNY"
-        elif pd.notna(row.wind_ms) and row.wind_ms > 4.0 and not is_fallow:
+        elif pd.notna(row.wind_ms) and row.wind_ms > 4.0:
             decision = "CZEKAJ"
             message = f"CZEKAJ: Zbyt silny wiatr > 4 m/s ({row.wind_ms:.1f} m/s)"
             hazard = "Znoszenie cieczy roboczej"
             rule_id = "BLK-WIND"
             risk_level = "WYSOKI"
-        elif is_fallow:
-            if pd.notna(row.soil_ph) and row.soil_ph < 5.5:
-                decision = "NAWOŹ"
-                rule_fert = "Wapno węglanowe granulowane"
-                rule_eco = "Wapno kredowe / dolomitowe (EKO)"
-                hazard = "Zbyt kwaśny odczyn gleby przed siewem"
-                rule_id = "FALLOW-LIME"
-                risk_level = "WYSOKI"
-                message = f"NAWOŹ przed siewem: pH {row.soil_ph:.1f} wymaga wapnowania | Docelowo: {rec_crop}"
-            else:
-                decision = "ZASIEJ"
-                hazard = "Pole nieobsiane — gotowe do siewu"
-                rule_id = "FALLOW-SOW"
-                risk_level = "OPTYMALNY"
-                message = f"ZASIEJ: Pole pod zasiew — zalecany gatunek: {rec_crop} ({soil_reason})"
         else:
             crop_rules = rules_df[
                 (rules_df["uprawa"].str.strip().str.lower() == str(row.crop_name).strip().lower())
                 | (rules_df["uprawa"].str.strip().str.upper() == "WSZYSTKIE")
             ]
 
+            # 2. Najpierw sprawdzamy reguły blokujące CZEKAJ z CSV (np. stres termiczny)[cite: 6]
             blocking_rules = crop_rules[crop_rules["decyzja_norm"] == "CZEKAJ"]
             action_rules = crop_rules[crop_rules["decyzja_norm"] != "CZEKAJ"]
 
@@ -505,6 +243,7 @@ def evaluate_fields(
                     matched_rule = r
                     break
 
+            # 3. Jeśli brak blokady, dopasowujemy reguły zabiegowe (PRYSKAJ TERAZ, NAWOŹ, ZASIEJ, ZBIERAJ)[cite: 6]
             if matched_rule is None:
                 for r in action_rules.itertuples(index=False):
                     if _rule_matches_row(r, row):
@@ -518,49 +257,20 @@ def evaluate_fields(
                 rule_id = str(matched_rule.rule_id)
                 risk_level = str(matched_rule.poziom_ryzyka).strip().upper()
                 raw_fert = getattr(matched_rule, "zalecany_nawoz", "")
-                raw_eco = getattr(matched_rule, "nawozy_eko", "")
-                raw_dose = getattr(matched_rule, "dawka_nawozu_kg_ha", None)
                 if pd.notna(raw_fert) and str(raw_fert).strip():
-                    rule_fert = str(raw_fert).strip()
-                if pd.notna(raw_eco) and str(raw_eco).strip():
-                    rule_eco = str(raw_eco).strip()
-                if pd.notna(raw_dose):
-                    rule_dose = float(raw_dose)
+                    fertilizer = str(raw_fert).strip()
 
-        row_eco_mode = bool(getattr(row, "is_eco_field", eco_mode)) or bool(eco_mode)
-        fert_info = recommend_fertilization(
-            soil_ph=row.soil_ph,
-            soil_soc=row.soil_soc,
-            soil_texture=row.soil_texture,
-            crop_name=row.crop_name,
-            area_ha=getattr(row, "area_ha", 1.5),
-            temp_c=row.temp_c,
-            precip_24h_mm=row.precip_24h_mm,
-            rule_fertilizer=rule_fert,
-            rule_eco_fertilizer=rule_eco,
-            rule_dose_kg_ha=rule_dose,
-            eco_mode=row_eco_mode,
-        )
-
-        if decision == "ZASIEJ":
-            message = f"{message} | Rekomendowany siew: {rec_crop}"
-        elif decision == "NAWOŹ":
-            message = (
-                f"{message} | Nawóz: {fert_info['zalecany_nawoz']} "
-                f"({fert_info['dawka_nawozu_kg_ha']:.0f} kg/ha, {fert_info['ilosc_nawozu_kg']:.0f} kg łącznie) "
-                f"[{fert_info['nawozy_eko']}]"
-            )
+                if decision == "ZASIEJ":
+                    message = f"{message} | Rekomendowany siew: {rec_crop}"
+                elif decision == "NAWOŹ" and fertilizer != "-":
+                    message = f"{message} | Zalecany nawóz: {fertilizer}"
 
         decisions.append(decision)
         messages.append(message)
         hazards.append(hazard)
         rule_ids.append(rule_id)
         risk_levels.append(risk_level)
-        fertilizers.append(fert_info["zalecany_nawoz"])
-        eco_statuses.append(fert_info["nawozy_eko"])
-        dose_kg_ha_list.append(fert_info["dawka_nawozu_kg_ha"])
-        total_kg_list.append(fert_info["ilosc_nawozu_kg"])
-        fert_reasons.append(fert_info["uzasadnienie_nawozenia"])
+        fertilizers.append(fertilizer)
 
     merged["decyzja"] = decisions
     merged["komunikat"] = messages
@@ -568,10 +278,8 @@ def evaluate_fields(
     merged["rule_id"] = rule_ids
     merged["poziom_ryzyka"] = risk_levels
     merged["zalecany_nawoz"] = fertilizers
-    merged["nawozy_eko"] = eco_statuses
-    merged["dawka_nawozu_kg_ha"] = dose_kg_ha_list
-    merged["ilosc_nawozu_kg"] = total_kg_list
-    merged["uzasadnienie_nawozenia"] = fert_reasons
     merged["rekomendowana_uprawa"] = recommended_crops
     merged["uzasadnienie_glebowe"] = soil_reasons
     return merged
+
+

@@ -12,7 +12,7 @@ from rasterio.windows import from_bounds
 from shapely.geometry import Polygon, shape
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-APP_DATA_DIR = ROOT_DIR / "app" / "data"
+APP_DATA_DIR = ROOT_DIR / "app" / "data_app"
 APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 CROP_NAMES = {
