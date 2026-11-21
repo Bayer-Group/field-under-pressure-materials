@@ -5,7 +5,8 @@ import { PlotMap, type MapOverlay } from './features/map/PlotMap'
 import { MicrobiomePanel } from './features/microbiome/MicrobiomePanel'
 import { PlotTimeline, type MapLayer, type TimelineChoice } from './features/timeline/PlotTimeline'
 import { formatDate } from './format'
-import { microbesHref, navigate, plotHref, type PlotTab } from './router'
+import { RiskPanel } from './features/risk/RiskPanel'
+import { microbesHref, navigate, plotHref, riskHref, type PlotTab } from './router'
 import { bySite, formatLatLon, shortId, siteName } from './sites'
 import { useFetch } from './useFetch'
 
@@ -14,8 +15,12 @@ const CONTEXT_M: Record<MapLayer, number> = { photo: 130, greenness: 1050, none:
 
 /** Map of all plots beside a panel. With no plot chosen the panel lists the plots by site; once one is chosen
  *  it has one tab per kind of plot data: the timeline (greenness, visits, aerial photos; the image chosen on it
- *  is laid over the map) and the soil microbiome. Panels for future backend results become further tabs. */
-export function Explorer({ plotId, tab, sampleId }: { plotId: string | null; tab: PlotTab; sampleId: string | null }) {
+ *  is laid over the map), the soil microbiome and the crop disease risk. Panels for future backend results become further tabs. */
+const tabHref = (tab: PlotTab, id: string) => (tab === 'microbes' ? microbesHref(id) : tab === 'risk' ? riskHref(id) : plotHref(id))
+
+export function Explorer({ plotId, tab, sampleId, unit, crop }: {
+  plotId: string | null; tab: PlotTab; sampleId: string | null; unit: string | null; crop: string | null
+}) {
   const plots = useFetch('plots', api.plots)
   const photos = useFetch(plotId, (s) => api.aerial(plotId!, s))
   const maps = useFetch(plotId, (s) => api.greennessMaps(plotId!, s))
@@ -49,9 +54,12 @@ export function Explorer({ plotId, tab, sampleId }: { plotId: string | null; tab
     : undefined
 
   const selected = plots.data?.find((p) => p.plot_id === plotId) ?? null
-  const error = plots.error ?? photos.error ?? maps.error ?? greenness.error ?? events.error
+  // Only the plot list gates the whole panel; greenness/photo/event errors belong to the greenness tab,
+  // so a missing satellite or aerial table does not hide the microbes and crop risk tabs.
+  const error = plots.error
+  const timelineError = photos.error ?? maps.error ?? greenness.error ?? events.error
   const loading = greenness.loading || events.loading || photos.loading || maps.loading
-  const open = (id: string) => { setHighlight(null); navigate(tab === 'microbes' ? microbesHref(id) : plotHref(id)) }
+  const open = (id: string) => { setHighlight(null); navigate(tabHref(tab, id)) }
 
   return (
     <main className={`explorer ${selected ? 'has-plot' : ''}`}>
@@ -69,6 +77,10 @@ export function Explorer({ plotId, tab, sampleId }: { plotId: string | null; tab
             <PlotHead plot={selected} plots={plots.data!} tab={tab} onOpen={open} />
             {tab === 'microbes' ? (
               <MicrobiomePanel plotId={selected.plot_id} sampleId={sampleId} />
+            ) : tab === 'risk' ? (
+              <RiskPanel plotId={selected.plot_id} unit={unit} crop={crop} />
+            ) : timelineError ? (
+              <p className="message error">Could not load data: {timelineError}</p>
             ) : loading ? (
               <p className="message">Loading…</p>
             ) : (
@@ -163,6 +175,7 @@ function PlotHead({ plot, plots, tab, onOpen }: { plot: Plot; plots: Plot[]; tab
       <nav className="tabs" aria-label="What to show for this plot">
         <a href={plotHref(plot.plot_id)} aria-current={tab === 'greenness' ? 'page' : undefined}>Greenness over time</a>
         <a href={microbesHref(plot.plot_id)} aria-current={tab === 'microbes' ? 'page' : undefined}>Soil microbes</a>
+        <a href={riskHref(plot.plot_id)} aria-current={tab === 'risk' ? 'page' : undefined}>Crop disease risk</a>
       </nav>
     </div>
   )

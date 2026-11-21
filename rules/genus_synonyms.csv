@@ -1,0 +1,5 @@
+alias,canonical,note
+Rhizoctonia,Rhizoctonia_complex,anamorph of the R. solani / R. cerealis group; merged as in neon.RHIZ and plot_its
+Thanatephorus,Rhizoctonia_complex,teleomorph of Rhizoctonia solani (multinucleate); merged as in neon.RHIZ
+Ceratobasidium,Rhizoctonia_complex,teleomorph of binucleate Rhizoctonia (e.g. R. cerealis); merged as in neon.RHIZ
+Gibberella,Fusarium,teleomorph of several Fusarium species (e.g. G. zeae = F. graminearum); dual names may double-count species

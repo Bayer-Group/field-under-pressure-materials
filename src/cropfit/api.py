@@ -198,10 +198,11 @@ def greenness_map_value(map_id: str, lat: float, lon: float):
 
 
 def create_app() -> FastAPI:
-    from . import api_microbiome                # imported here: it uses table() and plot_rows() from this module
+    from . import api_microbiome, api_risk      # imported here: they use table() and plot_rows() from this module
     app = FastAPI(title="cropfit GUI API")
     app.include_router(router)
     app.include_router(api_microbiome.router)
+    app.include_router(api_risk.router)
     if WEB_DIST.exists():                       # built frontend (npm run build in web/); absent in dev mode
         app.mount("/", StaticFiles(directory=WEB_DIST, html=True), name="web")
     return app

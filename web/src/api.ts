@@ -75,6 +75,119 @@ export interface Composition {
   notes: string[]
 }
 
+export type RiskMethod = 'current' | 'older'
+export type CropStatus = 'ok' | 'no_knowledge' | 'insufficient_depth' | 'no_scored_genera'
+
+export interface RiskUnitRef {
+  unit: string // e.g. '2016-002'
+  year: number
+  product: string
+  method: RiskMethod
+  method_label: string
+  collect_dates: string[]
+  total_reads: number
+  n_cores: number
+  low_depth: boolean
+}
+
+export interface RiskPeer {
+  plot_id: string
+  risk_index: number
+}
+
+export interface CropRiskRow {
+  crop: string
+  label: string
+  status: CropStatus
+  risk_index: number | null
+  from_detected: number | null
+  from_not_detected: number | null
+  rank: number | null // 1 = highest among peers
+  n_peers: number
+  n_peers_too_shallow: number
+  percentile: number | null // 0-100
+  peers: RiskPeer[] // includes this plot, sorted descending
+  top_genus: string | null
+  n_genera_contributing: number
+  n_genera_not_detected: number
+  small_reference: boolean
+  same_as: string | null
+}
+
+export interface SkippedGenus {
+  genus: string | null
+  reads: number | null
+  detail: string | null
+}
+
+export interface SkippedGroup {
+  reason: string
+  label: string
+  n: number
+  genera: SkippedGenus[]
+  more: number
+}
+
+export interface KbSource {
+  name: string
+  source_version: string | null
+  retrieved_utc: string | null
+  url: string | null
+}
+
+export interface PlotCropRisk {
+  plot_id: string
+  site: string
+  unit: string
+  year: number
+  product: string
+  method: RiskMethod
+  method_label: string
+  collect_dates: string[]
+  total_reads: number
+  n_cores: number
+  low_depth: boolean
+  n_units_in_group: number
+  crops: CropRiskRow[]
+  skipped: SkippedGroup[]
+  caveats: string[]
+  notes: string[]
+  kb: KbSource[]
+  parameters: Record<string, number>
+  index_type: string
+}
+
+export interface Contribution {
+  genus: string
+  members: string[]
+  detected: boolean
+  reads: number
+  share_pct: number
+  a: number
+  percentile: number
+  reference_n: number
+  small_reference: boolean
+  h: number
+  n_species_on_crop: number
+  n_species_documented: number
+  species_on_crop: string[]
+  n_species_more: number
+  n_records_on_crop: number
+  lifestyle: string | null
+  passed_by: string | null
+  contribution: number
+}
+
+export interface CropContributions {
+  plot_id: string
+  unit: string
+  crop: string
+  label: string
+  row: CropRiskRow
+  contributions: Contribution[] // largest first
+  n_scored_zero_h: number
+}
+
 async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
   const r = await fetch(`/api${path}`, { signal })
   if (!r.ok) {
@@ -99,3 +212,9 @@ export const api = {
     get<Composition>(`/microbiome/${id(sampleId)}?rank=${rank}`, s),
   event: (eventId: string, s?: AbortSignal) => get<EventDetail>(`/events/${id(eventId)}`, s),
 }
+
+export const getCropRiskUnits = (plotId: string, s?: AbortSignal) => get<RiskUnitRef[]>(`/plots/${id(plotId)}/crop-risk`, s)
+export const getCropRisk = (plotId: string, unit: string, s?: AbortSignal) =>
+  get<PlotCropRisk>(`/plots/${id(plotId)}/crop-risk/${id(unit)}`, s)
+export const getCropContributions = (plotId: string, unit: string, crop: string, s?: AbortSignal) =>
+  get<CropContributions>(`/plots/${id(plotId)}/crop-risk/${id(unit)}/${id(crop)}`, s)
