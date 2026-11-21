@@ -1,6 +1,6 @@
 import { api } from '../../api'
 import { daysBetween, formatDate } from '../../format'
-import { eventHref, microbesHref, plotHref } from '../../router'
+import { eventHref, greennessHref, microbesHref, plotHref } from '../../router'
 import { siteName } from '../../sites'
 import { useFetch } from '../../useFetch'
 
@@ -85,7 +85,7 @@ export function EventDetails({ eventId }: { eventId: string }) {
           ) : (
             <p className="message">No cloud-free satellite reading within {NEAR_DAYS} days of this visit.</p>
           )}
-          <a href={plotHref(event.plot_id)}>See the whole greenness timeline →</a>
+          <a href={greennessHref(event.plot_id)}>See the whole greenness timeline →</a>
         </section>
       </div>
     </main>

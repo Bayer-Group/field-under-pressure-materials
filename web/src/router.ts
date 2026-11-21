@@ -2,7 +2,8 @@ import { useSyncExternalStore } from 'react'
 
 // Hash routes, so the app works from any static server and links can be bookmarked:
 //   #/                                    overview map
-//   #/plot/<plot_id>                      map zoomed to one plot, with its greenness chart
+//   #/plot/<plot_id>                      map zoomed to one plot, on its default tab (soil microbes)
+//   #/plot/<plot_id>/greenness            the same plot with its greenness chart
 //   #/plot/<plot_id>/microbes[/<sample>][?view=roles]  the same plot with its soil microbiome composition (or roles)
 //   #/plot/<plot_id>/functions[/<sample>] the same plot with what its soil microbes are equipped to do
 //   #/plot/<plot_id>/risk[/<unit>[/<crop>]]  the same plot with its crop disease risk
@@ -20,18 +21,19 @@ export function parseRoute(hash: string): Route {
   const view: MicrobeView = new URLSearchParams(query).get('view') === 'roles' ? 'roles' : 'taxonomy'
   if (page === 'event' && arg) return { page: 'event', eventId: arg }
   const plotId = page === 'plot' && arg ? arg : null
-  const microbes = plotId !== null && tab === 'microbes'
+  const greenness = plotId !== null && tab === 'greenness'
   const functions = plotId !== null && tab === 'functions'
   const risk = plotId !== null && tab === 'risk'
   const plan = plotId !== null && tab === 'plan'
   return {
-    page: 'map', plotId, tab: microbes ? 'microbes' : functions ? 'functions' : risk ? 'risk' : plan ? 'plan' : 'greenness',
-    sampleId: (microbes || functions) && third ? third : null,
+    page: 'map', plotId, tab: greenness ? 'greenness' : functions ? 'functions' : risk ? 'risk' : plan ? 'plan' : 'microbes',
+    sampleId: (tab === 'microbes' || functions) && third ? third : null,
     unit: (risk || plan) && third ? third : null, crop: (risk || plan) && third && fourth ? fourth : null, view,
   }
 }
 
 export const plotHref = (plotId: string) => `#/plot/${encodeURIComponent(plotId)}`
+export const greennessHref = (plotId: string) => `${plotHref(plotId)}/greenness`
 export const microbesHref = (plotId: string, sampleId?: string, view?: MicrobeView) =>
   `${plotHref(plotId)}/microbes${sampleId ? `/${encodeURIComponent(sampleId)}` : ''}${view === 'roles' ? '?view=roles' : ''}`
 export const riskHref = (plotId: string, unit?: string | null, crop?: string | null) =>
