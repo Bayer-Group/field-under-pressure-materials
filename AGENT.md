@@ -15,7 +15,7 @@ Related: `docs/nmdc-data-guide.md` (how to interpret the NMDC files and how STER
 ```bash
 uv venv --python 3.12 .venv            # geo wheels are risky on newer system Pythons
 uv pip install --python .venv/bin/python -e .
-.venv/bin/python -m pytest -q          # 22 tests, no network, no data needed
+.venv/bin/python -m pytest -q          # 33 tests, no network, no data needed
 ```
 
 The package is `cropfit` in `src/cropfit/` (the name is historical). Scripts add `src/` to `sys.path` themselves; run them from the repo root: `.venv/bin/python scripts/<name>.py`. `e1_match.py` and `pull_nmdc_cropland.py` use paths relative to the current directory, so run them from the repo root.
@@ -31,6 +31,12 @@ The package is `cropfit` in `src/cropfit/` (the name is historical). Scripts add
 | `daymet.py` | Single-pixel Daymet fetch and derived agro-climate indicators. |
 | `cdl.py` | CDL crop history per point from Planetary Computer. |
 | `csb.py` | NASS Crop Sequence Boundaries clipped to a window. |
+| `events.py` | Sampling-event registry (the anchor all geo data is linked to), plot footprints, core positions. |
+| `stac.py` | Shared raster access: Planetary Computer catalogue, area-weighted footprint reads, chips, fetch manifests. |
+| `satellite.py` | Sentinel-2 / Landsat observations per plot, vegetation indices, season metrics. |
+| `aerial.py` | Aerial photo chips and in-plot statistics: NAIP and the NEON airborne camera. |
+| `terrain.py` | Elevation, slope, aspect, relative position from the 3DEP 10 m elevation model. |
+| `link.py` | Temporal operators that attach every dataset to the sampling events (see 3.9). |
 | `e1.py` | Open-Meteo / NASA POWER climate for EU points, plus modelling helpers used by the LUCAS experiment (needs scikit-learn). |
 
 Lookup tables in `rules/` (generic, read by the code): `cdl_codes.csv` (all 132 CDL codes to a crop-group vocabulary), `ko_panel.csv` (KEGG KOs of interest with function group and caveat), `lucas_lc1_groups.csv` (LUCAS land-cover codes with `is_cereal`; documentation only, `e1_match.py` hard-codes its own cereal rule B11-B19). Small input tables in `resources/` are listed under each dataset.
@@ -43,7 +49,9 @@ data/raw/neon/<DPID>/ NEON tables as parquet
 data/raw/csb/         NationalCSB_2018-2025_rev23.zip (you place it here)
 data/raw/lucas/       lucas_harmo_uf.zip and a slimmed CSV (you create it)
 data/cache/<ns>/      http.cached() JSON/text: sda/, daymet/, openmeteo_e1/, power_e1/
-data/processed/       parquet outputs of scripts 02b-05
+data/raw/satellite/   one small parquet per satellite scene (resumable) + manifest
+data/raw/imagery/     aerial chips (GeoTIFF) and previews (PNG) per source and plot + manifest
+data/processed/       parquet outputs of scripts 01-09
 ```
 
 Pipeline order (what produces what):
@@ -53,12 +61,17 @@ Pipeline order (what produces what):
 | NMDC download | `scripts/pull_nmdc_cropland.py` | `data/nmdc/` |
 | NEON download | `scripts/02_fetch_neon.py` (needs token) | `data/raw/neon/` |
 | NEON tables | `scripts/02b_build_neon_features.py` (offline) | `its_core_genus`, `its_genus`, `plot_its*`, `neon_metagenome_pooling`, `neon_chem`, `neon_qpcr` |
-| Plot tables | `scripts/03_build_plots.py` | `plots`, `plot_crop_history`, `plot_climate_yearly` |
+| Event registry | `scripts/01_build_events.py` (offline, after 02b and 05) | `events`, `plot_geometry`, `event_cores` (see 3.9) |
+| Plot tables | `scripts/03_build_plots.py` (after 01) | `plots`, `plot_crop_history`, `plot_climate_yearly`, `plot_weather_daily` |
 | Field tables | `scripts/04_build_fields.py` (needs CSB zip) | `fields`, `plot_csb`, `csb_raw_<site>` |
 | NMDC tables | `scripts/05_build_biology.py` (offline) | `metagenomes`, `ko_*`, `taxa_genus`, `plot_biology*` |
+| Satellite | `scripts/08_fetch_satellite.py` (after 01) | `plot_vi_timeseries`, `plot_season` |
+| Aerial photos | `scripts/09_fetch_aerial.py [naip] [aop]` (after 01; `aop` needs token) | `plot_aerial`, chips under `data/raw/imagery/` |
+| Event features | `scripts/07_build_event_features.py` (offline, last) | `event_features`, `event_table` (see 3.9) |
+| Inspector | `scripts/10_inspect_data.py` (offline) | `outputs/inspect/index.html`, a developer page to look at all of the above |
 | Joined table | `scripts/06_build_joined.py` (offline, after 02b and 05) | `joined_metagenomes`, `joined_fungi_genus` (see 3.8) |
 
-Note: `03_build_plots.py` and `04_build_fields.py` carry the `window`/`plot` selection logic of the original prototype (the 44 NEON "cultivatedCrops" plots; the two windows in `config/regions.yaml`). To reuse them elsewhere, edit `config/regions.yaml` and the plot filter in `03_build_plots.py`.
+Note: `03_build_plots.py` takes its plots from the event registry (the 29 plots that were actually sampled). `04_build_fields.py` still carries the two windows of `config/regions.yaml`. The site list is defined once, as the keys of `windows` in `config/regions.yaml` (`config.sites()`); only the standalone NMDC pull script has its own `--sites` default.
 
 ---
 
@@ -250,6 +263,36 @@ Note: `03_build_plots.py` and `04_build_fields.py` carry the `window`/`plot` sel
 
   Only 10 metagenomes have both usable gene profiles and fungal data, 8 of them STER 2022. Without DP1.10081.002 it would be 2.
 - **Pitfalls:** `fungal_products` mixes the two ITS pipelines; 32 rows and hundreds of genera is a p >> n setting, so use a small set of chosen features.
+
+### 3.9 Geo data linked to the sampling events
+
+- **Idea:** the anchor is a **sampling event** = one visit to a plot (`plotID`, date; visits at most 3 days apart are one event). Every other dataset is reduced to the plot footprint when it is fetched, then attached to each event through a time window. `config/modalities.yaml` is the registry (role, spatial and temporal support, table, operator); `cropfit/link.py` holds the operators; `scripts/07_build_event_features.py` applies them.
+- **Events (measured):** 721 events on 29 plots, 175 with biology (metagenome or ITS) on 28 plots. `event_cores` gives each soil core its position inside the plot (NEON reports the plot centre as lat/lon for every core; the offset is `coreCoordinateX/Y` in metres from the south-west corner).
+- **Footprint:** the 40 x 40 m plot square. Raster values are area-weighted (`stac.footprint_window`): a 30 m pixel half outside the plot counts half.
+- **Time windows:** `static`; `antecedent_7d/30d/90d` and `year_to_date` (weather before sampling); `at_sample` (nearest observation within a tolerance, lag recorded); `last_before`; `nearest_flight`, `nearest_survey`; `season` (year of the event), `prior_t-k` (k years before), `anomaly` (event year minus the plot's mean of other years). A feature that cannot be computed is absent, never 0.
+- **Outputs:**
+  - `event_features.parquet` (long): `event_id, modality, role, variable, window, value | value_text, obs_date, lag_days, n_obs, source`. `lag_days` = observation date minus sampling date (negative = before).
+  - `event_table.parquet` (wide, the 175 events with biology): event columns, biology (`joined_metagenomes` columns, `its_share_<Genus>`), and every feature as `<modality>__<variable>__<window>` plus `<modality>__lag_days__<window>`.
+- **Datasets added for this** (all per plot):
+
+  | Table | Source | Content | Notes |
+  |---|---|---|---|
+  | `plot_vi_timeseries`, `plot_season` | Sentinel-2 L2A (2015+) and Landsat 8/9 C2 L2 (2013+), Planetary Computer, keyless | per scene: band reflectances, `ndvi, evi, ndmi, ndre` (S2 only), `bare_soil_index`, `clear_frac`, `clear`; per year: peak, peak day, season integral, green-up, senescence | 2,686 scenes, 17,019 clear plot-observations; use only `clear`. Sentinel-2 NDVI is on average 0.05 below Landsat on the same days (r = 0.98): keep `sensor`. 3 Landsat scenes could not be read (listed with `read = False` in the manifest) |
+  | `plot_aerial` + chips | NAIP (0.3-1 m, R G B NIR; 2011-2023, every 2 years) and NEON airborne camera `DP3.30010.001` (10 cm R G B) | in-plot greenness (`ndvi_*` NAIP only, `exg_*`, `green_frac`), spread = patchiness, chip and preview paths | camera digital numbers, not reflectance: compare within one flight. NEON gives the campaign month, not the day (`date_precision`). NEON tiles are read remotely row by row (a tile is ~300 MB); slow, about 1.5 chips per minute |
+  | `plot_terrain` | USGS 3DEP 10 m | elevation, slope, aspect, `tpi_150m` (plot minus its 150 m surroundings), relief | static |
+  | `plot_weather_daily` | Daymet | daily tmax, tmin, prcp 2007-2025 | 2026 not published yet: 2026 events have no weather windows |
+  | `neon_inorganic_n` | NEON `DP1.10086.001` `ntr_*` tables (already in the chemistry pull) | ammonium and nitrate (mg N/kg dry soil), net N mineralisation and nitrification per day | 117 plot-dates, 20 plots, 2017/2019/2022/2024 |
+  | `neon_management_events`, `neon_crop_reported` | NEON `DP1.10111.001` | dated seeding, harvest, tillage, herbicide, fertiliser per plot, with product or species; harvested species per plot and year | 1,134 plot-events 2013-2026. **Fills the crop gap after 2021** (CDL ends 2021, CSB zip not present). Some dates are estimates (`date_quality`) |
+  | `neon_soil_baseline` | NEON `DP1.10047.001` | one soil pit per plot, top horizon: pH, C, N, CEC, texture, bulk density | 18 of the 29 plots; measured once (STER 2015, KONA 2018) |
+  | `neon_plant_cover` | NEON `DP1.10058.001` | per ground survey: plant cover, bare soil, litter (%), species count, dominant species | 214 surveys on 20 plots |
+
+- **Fetch the three extra NEON products:** `.venv/bin/python scripts/02_fetch_neon.py DP1.10111.001 DP1.10047.001 DP1.10058.001`, then `02b_build_neon_features.py`.
+- **Checks done (measured):** season peak by CDL crop of the same plot-year: winter wheat day 124, barley/oats 144, millet 214, corn and soybean 226; fallow peaks at NDVI 0.30 against 0.67-0.81 for corn and soybean. 97% of biology events have a clear satellite observation within 6 days.
+- **Pitfalls:**
+  - Weather is 1 km: plots of one site share a few cells, so it separates sampling dates, not plots.
+  - `season` uses the calendar year; autumn growth of winter wheat belongs to the year before.
+  - Imagery before the sampling date is plant input to the soil community; imagery after it is an outcome. `lag_days` tells which.
+  - Not done: NEON hyperspectral indices and canopy height (the lidar height model is set to 0 below 2 m, useless for crops), CSB field polygons (zip absent), Sentinel-1 radar.
 
 ## 4. Quick recipes
 

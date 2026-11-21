@@ -14,13 +14,13 @@ from pyproj import Transformer
 from shapely.geometry import Point, box
 
 from .cdl import crop_group
-from .config import PROCESSED, RAW, regions, window_bbox
+from .config import PROCESSED, RAW, regions, sites, window_bbox
 
 CSB_DIR = RAW / "csb"
 CSB_ZIP = CSB_DIR / "NationalCSB_2018-2025_rev23.zip"
 GDB_NAME = "CSB1825.gdb"
 YEARS = list(range(2018, 2026))
-SITES = ["STER", "KONA"]
+SITES = sites()
 
 
 def clip_path(site: str):

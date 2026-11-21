@@ -103,3 +103,40 @@ def climate_features(lat: float, lon: float, start_year: int = 2008, end_year: i
     out = summarise_yearly(yc)
     out["climate_years_used"] = f"{int(yc.year.min())}-{int(yc.year.max())}"
     return out
+
+
+def event_windows(df: pd.DataFrame, date, windows=(7, 30, 90)) -> dict:
+    """Weather the soil experienced before a sampling date, from the daily frame of fetch_daymet().
+
+    Each window covers the N days ending the day before `date`. A window is NaN unless at least N-1 days are
+    present (Daymet drops 31 Dec in leap years). Keys: prcp_<N>d_mm, tmean_<N>d_c, plus tmax_max_7d_c,
+    frost_days_30d, days_since_rain5 (days since the last day with >= 5 mm, looking back up to 90 days; NaN if
+    none), gdd10_ytd (growing degree days base 10 from 1 Jan to the day before), weather_last_day."""
+    date = pd.Timestamp(date).normalize()
+    d = df[(df["date"] < date) & (df["date"] >= date - pd.Timedelta(days=366))]
+    out: dict = {}
+
+    def win(n):
+        w = d[d["date"] >= date - pd.Timedelta(days=n)]
+        return w if len(w) >= n - 1 else None
+
+    for n in windows:
+        w = win(n)
+        out[f"prcp_{n}d_mm"] = float(w["prcp"].sum()) if w is not None else np.nan
+        out[f"tmean_{n}d_c"] = float(((w["tmax"] + w["tmin"]) / 2).mean()) if w is not None else np.nan
+    w7, w30, w90 = win(7), win(30), win(90)
+    out["tmax_max_7d_c"] = float(w7["tmax"].max()) if w7 is not None else np.nan
+    out["frost_days_30d"] = float((w30["tmin"] <= 0).sum()) if w30 is not None else np.nan
+    if w90 is not None:
+        wet = w90[w90["prcp"] >= 5]
+        out["days_since_rain5"] = float((date - wet["date"].max()).days) if len(wet) else np.nan
+    else:
+        out["days_since_rain5"] = np.nan
+    ytd = d[d["date"] >= pd.Timestamp(year=date.year, month=1, day=1)]
+    if len(ytd) >= date.day_of_year - 2:
+        gdd = np.maximum(0, (np.minimum(ytd["tmax"], 30) + np.maximum(ytd["tmin"], 10)) / 2 - 10)
+        out["gdd10_ytd"] = float(gdd.sum())
+    else:
+        out["gdd10_ytd"] = np.nan
+    out["weather_last_day"] = d["date"].max() if len(d) else pd.NaT
+    return out

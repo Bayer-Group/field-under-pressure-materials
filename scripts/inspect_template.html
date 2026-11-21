@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Data inspector</title>
+<style>
+:root{--bg:#f6f7f8;--panel:#fff;--ink:#1c2126;--mute:#66707a;--line:#dde1e5;--acc:#1f6feb;--ok:#2e8b57;--warn:#c47a00;--bad:#c0392b;
+  --s2:#2e8b57;--ls:#8a6fd1;--mg:#c0392b;--its:#1f6feb;--chem:#9aa3ab}
+@media (prefers-color-scheme:dark){:root{--bg:#14171a;--panel:#1c2024;--ink:#e6e9ec;--mute:#98a2ac;--line:#2e343a;--acc:#6aa5ff;--ok:#5fc08a;--warn:#e0a84a;--bad:#ee7b6c;
+  --s2:#5fc08a;--ls:#b29cf0;--mg:#ee7b6c;--its:#6aa5ff;--chem:#7b858f}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+header{position:sticky;top:0;z-index:5;background:var(--panel);border-bottom:1px solid var(--line);padding:10px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+header h1{font-size:15px;margin:0;font-weight:650}
+header .meta{color:var(--mute);font-size:12px}
+nav{display:flex;gap:4px;flex-wrap:wrap}
+nav button{border:1px solid var(--line);background:transparent;color:var(--ink);padding:5px 12px;border-radius:6px;cursor:pointer;font:inherit}
+nav button.on{background:var(--acc);border-color:var(--acc);color:#fff}
+main{padding:16px;max-width:1500px;margin:0 auto}
+section{display:none}section.on{display:block}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px;margin-bottom:14px;overflow:auto}
+.card h2{font-size:14px;margin:0 0 4px}
+.card p.note{color:var(--mute);margin:0 0 10px;font-size:12.5px;max-width:95ch}
+table{border-collapse:collapse;font-size:12.5px;width:100%}
+th,td{padding:4px 8px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap;vertical-align:top}
+th{color:var(--mute);font-weight:600;position:sticky;top:0;background:var(--panel)}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+tr.click{cursor:pointer}tr.click:hover{background:color-mix(in srgb,var(--acc) 10%,transparent)}
+select,input{font:inherit;padding:4px 8px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink);max-width:100%}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+.kv{border:1px solid var(--line);border-radius:6px;padding:6px 8px}
+.kv b{display:block;font-size:11px;color:var(--mute);font-weight:600}
+.pill{display:inline-block;padding:1px 7px;border-radius:10px;font-size:11px;border:1px solid var(--line);margin-right:3px}
+.pill.mg{color:var(--mg);border-color:var(--mg)}.pill.its{color:var(--its);border-color:var(--its)}.pill.chem{color:var(--mute)}
+.heat td{text-align:center;min-width:44px}
+.gallery{display:flex;gap:10px;flex-wrap:wrap}
+.gallery figure{margin:0;width:190px;font-size:11.5px;color:var(--mute)}
+.gallery img{width:190px;height:190px;object-fit:cover;border-radius:6px;border:1px solid var(--line);display:block;background:#000}
+.gallery figcaption b{color:var(--ink)}
+svg{display:block;max-width:100%}
+svg text{fill:var(--mute);font-size:11px}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--mute);margin:4px 0 8px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px;vertical-align:-1px}
+.scroll{max-height:460px;overflow:auto}
+.miss{color:var(--mute)}
+h3{font-size:13px;margin:14px 0 6px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Data inspector</h1>
+  <nav id="nav"></nav>
+  <span class="meta" id="meta"></span>
+</header>
+<main>
+  <section id="overview"></section>
+  <section id="plot"></section>
+  <section id="event"></section>
+  <section id="compare"></section>
+  <section id="tables"></section>
+</main>
+<script>
+const D = /*__DATA__*/null;
+const $ = (s, el=document) => el.querySelector(s);
+const esc = v => String(v).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmt = v => v === null || v === undefined ? '<span class="miss">–</span>' : v && v.html ? v.html : (typeof v === 'number' ? (Number.isInteger(v) ? v : +v.toPrecision(4)) : esc(v));
+const rows = (arr, cols) => (arr || []).map(r => Object.fromEntries(cols.map((c, i) => [c, r[i]])));
+const day = s => Date.parse(s + 'T00:00:00Z') / 864e5;
+const EV = rows(D.events, D.event_cols), PL = rows(D.plots, D.plot_cols);
+const state = {plot: (EV.find(e => e.has_metagenome) || EV[0]).plotID, event: null, table: null, x: null, y: null};
+
+function tableHTML(cols, data, opt={}) {
+  const numeric = cols.map((c, i) => data.some(r => typeof r[i] === 'number'));
+  return `<table><thead><tr>${cols.map((c, i) => `<th class="${numeric[i] ? 'num' : ''}">${esc(c)}</th>`).join('')}</tr></thead><tbody>` +
+    data.map((r, k) => `<tr ${opt.click ? `class="click" data-k="${k}"` : ''}>${r.map((v, i) => `<td class="${numeric[i] ? 'num' : ''}">${fmt(v)}</td>`).join('')}</tr>`).join('') + '</tbody></table>';
+}
+
+// ---------- tiny SVG charts
+function chart({w=1100, h=230, series=[], marks=[], bands=[], xdate=true, xlab='', ylab='', xr=null, yr=null}) {
+  const m = {l: 46, r: 12, t: 10, b: xlab ? 44 : 26};
+  const pts = series.flatMap(s => s.pts);
+  if (!pts.length && !marks.length) return '<p class="miss">no data</p>';
+  const xs = pts.map(p => p[0]).concat(marks.map(k => k.x)), ys = pts.map(p => p[1]);
+  let [x0, x1] = xr || [Math.min(...xs), Math.max(...xs)], [y0, y1] = yr || [Math.min(...ys), Math.max(...ys)];
+  if (x0 === x1) { x0 -= 1; x1 += 1 } if (y0 === y1) { y0 -= 1; y1 += 1 }
+  if (!yr) { const p = (y1 - y0) * .06; y0 -= p; y1 += p }
+  const X = v => m.l + (v - x0) / (x1 - x0) * (w - m.l - m.r), Y = v => h - m.b - (v - y0) / (y1 - y0) * (h - m.t - m.b);
+  let o = `<svg viewBox="0 0 ${w} ${h}" width="${w}">`;
+  for (const b of bands) o += `<rect x="${X(Math.max(b.x0, x0))}" y="${m.t}" width="${Math.max(0, X(Math.min(b.x1, x1)) - X(Math.max(b.x0, x0)))}" height="${h - m.t - m.b}" fill="${b.color}" opacity=".13"><title>${esc(b.label)}</title></rect>`;
+  for (let i = 0; i <= 4; i++) { const v = y0 + (y1 - y0) * i / 4; o += `<line x1="${m.l}" x2="${w - m.r}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)"/><text x="${m.l - 6}" y="${Y(v) + 4}" text-anchor="end">${+v.toPrecision(3)}</text>` }
+  if (xdate) { const a = new Date(x0 * 864e5).getUTCFullYear(), b = new Date(x1 * 864e5).getUTCFullYear();
+    for (let y = a; y <= b + 1; y++) { const v = Date.UTC(y, 0, 1) / 864e5; if (v >= x0 && v <= x1) o += `<line x1="${X(v)}" x2="${X(v)}" y1="${m.t}" y2="${h - m.b}" stroke="var(--line)"/><text x="${X(v) + 3}" y="${h - 8}">${y}</text>` } }
+  else for (let i = 0; i <= 5; i++) { const v = x0 + (x1 - x0) * i / 5; o += `<text x="${X(v)}" y="${h - m.b + 16}" text-anchor="middle">${+v.toPrecision(3)}</text>` }
+  for (const k of marks) if (k.x >= x0 && k.x <= x1) o += `<line x1="${X(k.x)}" x2="${X(k.x)}" y1="${m.t}" y2="${h - m.b}" stroke="${k.color}" stroke-width="${k.w || 1.5}" stroke-dasharray="${k.dash || ''}"><title>${esc(k.label)}</title></line>`;
+  for (const s of series) {
+    if (s.line && s.pts.length > 1) o += `<polyline fill="none" stroke="${s.color}" stroke-width="1.2" opacity=".7" points="${s.pts.map(p => X(p[0]) + ',' + Y(p[1])).join(' ')}"/>`;
+    for (const p of s.pts) o += `<circle cx="${X(p[0])}" cy="${Y(p[1])}" r="${s.r || 2.6}" fill="${s.color}" opacity=".85"><title>${esc(p[2] || '')}</title></circle>`;
+  }
+  if (ylab) o += `<text x="12" y="${m.t + 4}" transform="rotate(-90 12 ${m.t + 4})" text-anchor="end">${esc(ylab)}</text>`;
+  if (xlab) o += `<text x="${(m.l + w - m.r) / 2}" y="${h - 6}" text-anchor="middle">${esc(xlab)}</text>`;
+  return o + '</svg>';
+}
+const CROP_COL = {corn:'#e6b800',soybean:'#3a9d5d',winter_wheat:'#b5651d',spring_wheat:'#d9a066',sorghum:'#c0392b',sunflower:'#f39c12',alfalfa:'#8e44ad',millet:'#16a085',fallow:'#95a5a6',grass_pasture:'#7fb069',barley_oats:'#5d6d7e',dry_bean:'#a04000',double_wheat_soy:'#2874a6',noncrop:'#34495e',other_crop:'#7f8c8d',unknown:'#bdc3c7'};
+
+// ---------- overview
+function overview() {
+  const el = $('#overview');
+  const sy = rows(D.site_years || [], ['site', 'year', 'tot']);
+  let h = `<div class="card"><h2>Sampling events</h2><p class="note">An event is one visit to a plot. ${EV.length} events on ${new Set(EV.map(e => e.plotID)).size} plots; ${EV.filter(e => e.has_metagenome || e.has_its).length} carry biology (metagenome or fungal ITS). Counts of events with biology per site and year:</p>`;
+  const sites = [...new Set(EV.map(e => e.site))].sort(), years = [...new Set(EV.map(e => e.year))].sort();
+  h += '<table class="heat"><thead><tr><th>site</th><th>kind</th>' + years.map(y => `<th>${y}</th>`).join('') + '</tr></thead><tbody>';
+  for (const s of sites) for (const [k, lab] of [['has_metagenome', 'metagenome'], ['has_its', 'fungi (ITS)'], ['has_chem', 'chemistry']])
+    h += `<tr><td>${s}</td><td>${lab}</td>` + years.map(y => { const n = EV.filter(e => e.site === s && e.year === y && e[k]).length; return `<td>${n || '<span class="miss">·</span>'}</td>` }).join('') + '</tr>';
+  h += '</tbody></table></div>';
+  if (D.coverage) {
+    const cov = rows(D.coverage, ['modality', 'role', 'window', 'n', 'share', 'lag']);
+    h += `<div class="card"><h2>What is linked to the ${D.n_bio_events} events with biology</h2><p class="note">Share of those events that have at least one value per dataset and time window. Lag = median days between the observation used and the sampling date (negative = before).</p>` +
+      tableHTML(['dataset', 'role', 'time window', 'events', 'share', 'median lag (d)'], cov.map(c => [c.modality, c.role, c.window, c.n, Math.round(c.share * 100) + ' %', c.lag])) + '</div>';
+    const csy = rows(D.coverage_sy, ['modality', 'site', 'year', 'n', 'tot']);
+    const mods = [...new Set(csy.map(c => c.modality))];
+    h += '<div class="card"><h2>Coverage by site and year</h2><p class="note">Percent of biology events in that site-year with any value from the dataset. Gaps show where a source has no data for the sampling year (e.g. crop maps end in 2021).</p><table class="heat"><thead><tr><th>dataset</th>' +
+      sy.map(s => `<th>${s.site}<br>${s.year}</th>`).join('') + '</tr></thead><tbody>' +
+      mods.map(mo => `<tr><td style="text-align:left">${mo}</td>` + sy.map(s => { const c = csy.find(c => c.modality === mo && c.site === s.site && c.year === s.year); const p = c ? c.n / c.tot : 0;
+        return `<td style="background:color-mix(in srgb,var(--ok) ${Math.round(p * 55)}%,transparent)">${c ? Math.round(p * 100) : '<span class="miss">0</span>'}</td>` }).join('') + '</tr>').join('') +
+      '<tr><td style="text-align:left"><b>events</b></td>' + sy.map(s => `<td><b>${s.tot}</b></td>`).join('') + '</tr></tbody></table></div>';
+  }
+  h += '<div class="card"><h2>Processed tables</h2><p class="note">Everything in data/processed/. Click a row to browse it.</p><div id="dslist"></div></div>';
+  if (D.raw.length) h += '<div class="card"><h2>Raw fetch manifests</h2>' + tableHTML(['source', 'items', 'fetched at (UTC)'], D.raw.map(r => [r.name, r.rows, r.fetched_at])) + '</div>';
+  el.innerHTML = h;
+  $('#dslist').innerHTML = tableHTML(['table', 'rows', 'columns', 'plots', 'from', 'to', 'kB', 'modified'], D.datasets.map(d => [d.name, d.rows, d.ncols, d.plots, d.date_min, d.date_max, d.kb, d.modified]), {click: true});
+  $('#dslist').onclick = e => { const tr = e.target.closest('tr.click'); if (tr) { state.table = D.datasets[+tr.dataset.k].name; show('tables') } };
+}
+
+// ---------- plot
+function plotView() {
+  const el = $('#plot'), p = PL.find(p => p.plotID === state.plot), evs = EV.filter(e => e.plotID === state.plot);
+  const vi = rows((D.vi || {})[state.plot], D.vi_cols || []), crops = rows((D.crops || {})[state.plot], D.crop_cols || []);
+  const aer = rows((D.aerial || {})[state.plot], D.aerial_cols || []), chem = rows((D.chem || {})[state.plot], D.chem_cols || []);
+  const inorg = rows((D.inorg || {})[state.plot], D.inorg_cols || []), season = rows((D.season || {})[state.plot], D.season_cols || []);
+  const marks = evs.filter(e => e.has_metagenome || e.has_its).map(e => ({x: day(e.date), color: e.has_metagenome ? 'var(--mg)' : 'var(--its)', label: `${e.event_id}: ${e.has_metagenome ? 'metagenome ' : ''}${e.has_its ? 'ITS' : ''}`}))
+    .concat(aer.map(a => ({x: day(a.date), color: 'var(--warn)', dash: '2 3', w: 1, label: `${a.source} ${a.date}`})));
+  const bands = crops.filter(c => c.crop_group).map(c => ({x0: Date.UTC(c.year, 0, 1) / 864e5, x1: Date.UTC(c.year + 1, 0, 1) / 864e5, color: CROP_COL[c.crop_group] || '#888', label: `${c.year}: ${c.crop_group}`}));
+  const xr = [Date.UTC(2013, 0, 1) / 864e5, Date.now() / 864e5];
+  let h = `<div class="row"><label>Plot <select id="plotsel">${PL.map(q => `<option ${q.plotID === state.plot ? 'selected' : ''}>${q.plotID}</option>`).join('')}</select></label>
+    <span class="meta">${p.site} · ${p.lat}, ${p.lon} · ${evs.length} events, ${evs.filter(e => e.has_metagenome).length} with metagenome, ${evs.filter(e => e.has_its).length} with ITS</span></div>`;
+  h += `<div class="card"><h2>Greenness over time, with sampling dates</h2><p class="note">Each dot is one clear satellite observation of the 40 m plot. Vertical lines: red = metagenome sampled, blue = fungi only, dotted orange = aerial photo. Background colour = crop of that year (hover for the name).</p>
+    <div class="legend"><span><i style="background:var(--s2)"></i>Sentinel-2 NDVI</span><span><i style="background:var(--ls)"></i>Landsat NDVI</span>${[...new Set(crops.map(c => c.crop_group))].filter(Boolean).map(c => `<span><i style="background:${CROP_COL[c] || '#888'};border-radius:2px"></i>${c}</span>`).join('')}</div>` +
+    (vi.length ? chart({series: [{color: 'var(--s2)', pts: vi.filter(v => v.sensor === 'sentinel2' && v.ndvi !== null).map(v => [day(v.date), v.ndvi, `${v.date} S2 NDVI ${v.ndvi}`])}, {color: 'var(--ls)', pts: vi.filter(v => v.sensor === 'landsat' && v.ndvi !== null).map(v => [day(v.date), v.ndvi, `${v.date} Landsat NDVI ${v.ndvi}`])}], marks, bands, xr, yr: [0, 1], ylab: 'NDVI'})
+               : (marks.length ? chart({marks, bands, xr, yr: [0, 1], series: []}) + '<p class="miss">no satellite time series built yet (scripts/08_fetch_satellite.py)</p>' : '<p class="miss">no data</p>')) + '</div>';
+  h += `<div class="card"><h2>Measured soil over time</h2><p class="note">NEON plot-date means. Left: pH (water). Right: nitrate and ammonium (mg N per kg dry soil).</p><div class="row" style="align-items:flex-start">` +
+    chart({w: 540, h: 180, series: [{color: 'var(--acc)', line: true, pts: chem.filter(c => c.ph_water !== null).map(c => [day(c.collectDate), c.ph_water, `${c.collectDate} pH ${c.ph_water}`])}], marks: marks.filter(k => !k.dash), xr, ylab: 'pH'}) +
+    chart({w: 540, h: 180, series: [{color: 'var(--ok)', line: true, pts: inorg.filter(c => c.nitrate_n_mgkg !== null).map(c => [day(c.collectDate), c.nitrate_n_mgkg, `${c.collectDate} nitrate ${c.nitrate_n_mgkg}`])}, {color: 'var(--warn)', line: true, pts: inorg.filter(c => c.ammonium_n_mgkg !== null).map(c => [day(c.collectDate), c.ammonium_n_mgkg, `${c.collectDate} ammonium ${c.ammonium_n_mgkg}`])}], marks: marks.filter(k => !k.dash), xr, ylab: 'mg N/kg'}) + '</div></div>';
+  h += `<div class="card"><h2>Aerial photos (${aer.length})</h2><p class="note">Yellow square = the 40 m plot. NAIP: USDA flights, 0.3–1 m. NEON camera: 10 cm, flight month known, not the day. Camera values are not calibrated: compare within one photo, not between photos.</p><div class="gallery">` +
+    aer.map(a => `<figure><a href="../../${esc(a.preview)}" target="_blank"><img loading="lazy" src="../../${esc(a.preview)}" alt=""></a><figcaption><b>${a.date_precision === 'month' ? a.date.slice(0, 7) : a.date}</b> · ${a.source === 'naip' ? 'NAIP' : 'NEON camera'} · ${fmt(a.gsd_m)} m<br>${a.ndvi_mean !== null ? 'NDVI ' + fmt(a.ndvi_mean) + ' ± ' + fmt(a.ndvi_std) : 'green index ' + fmt(a.exg_mean) + ' ± ' + fmt(a.exg_std)}</figcaption></figure>`).join('') + (aer.length ? '' : '<p class="miss">none fetched yet (scripts/09_fetch_aerial.py)</p>') + '</div></div>';
+  h += `<div class="card"><h2>Static properties</h2><div class="grid">${Object.entries(p).filter(([k]) => !['plotID', 'site', 'x_5070', 'y_5070'].includes(k)).map(([k, v]) => `<div class="kv"><b>${esc(k)}</b>${fmt(v)}</div>`).join('')}</div></div>`;
+  const mg = (D.mgmt || {})[state.plot] || [], pc = (D.cover || {})[state.plot] || [];
+  h += `<div class="card"><h2>Reported management (${mg.length})</h2><p class="note">Farm operations reported to NEON for this plot (site-wide reports included, see scope).</p><div class="scroll" style="max-height:300px">${mg.length ? tableHTML(D.mgmt_cols, mg) : '<p class="miss">none</p>'}</div></div>`;
+  if (pc.length) h += `<div class="card"><h2>Ground surveys of plant cover (${pc.length})</h2><div class="scroll" style="max-height:300px">${tableHTML(D.cover_cols, pc)}</div></div>`;
+  if (season.length) h += `<div class="card"><h2>Season summary per year</h2><div class="scroll">${tableHTML(D.season_cols, (D.season[state.plot] || []))}</div></div>`;
+  h += `<div class="card"><h2>Events of this plot</h2><p class="note">Click an event to see everything linked to it.</p><div id="plotev" class="scroll">${tableHTML(['event', 'date', 'metagenome', 'fungi (ITS)', 'chemistry', 'linked features'], evs.map(e => [e.event_id, e.date, e.has_metagenome ? 'yes' : null, e.has_its ? 'yes' : null, e.has_chem ? 'yes' : null, ((D.features || {})[e.event_id] || []).length]), {click: true})}</div></div>`;
+  el.innerHTML = h;
+  $('#plotsel').onchange = e => { state.plot = e.target.value; plotView() };
+  $('#plotev').onclick = e => { const tr = e.target.closest('tr.click'); if (tr) { state.event = evs[+tr.dataset.k].event_id; show('event') } };
+}
+
+// ---------- event
+function eventView() {
+  const el = $('#event'), bio = EV.filter(e => e.has_metagenome || e.has_its);
+  if (!state.event) state.event = (bio.find(e => e.plotID === state.plot && e.has_metagenome) || bio[0]).event_id;
+  const e = EV.find(x => x.event_id === state.event), F = rows((D.features || {})[state.event], D.feat_cols || []);
+  let h = `<div class="row"><label>Event <select id="evsel">${bio.map(b => `<option ${b.event_id === state.event ? 'selected' : ''}>${b.event_id}</option>`).join('')}</select></label>
+    <span>${e.has_metagenome ? '<span class="pill mg">metagenome</span>' : ''}${e.has_its ? '<span class="pill its">fungi (ITS)</span>' : ''}${e.has_chem ? '<span class="pill chem">chemistry</span>' : ''}</span>
+    <span class="meta">${e.site} · plot ${e.plotID} · sampled ${e.date} · ${F.length} linked values</span></div>`;
+  const its = rows((D.its_top || {})[state.event], ['genus', 'share_pct', 'fungal_reads', 'cores', 'pipeline']);
+  const mg = (D.mg || {})[state.event];
+  h += '<div class="row" style="align-items:flex-start">';
+  h += `<div class="card" style="flex:1;min-width:320px"><h2>Fungi (top genera, % of fungal reads)</h2>${its.length ? tableHTML(['genus', '% of fungal reads', 'fungal reads', 'cores', 'pipeline'], its.map(r => Object.values(r))) : '<p class="miss">no ITS data that passed the read check for this event</p>'}</div>`;
+  h += `<div class="card" style="flex:1;min-width:320px"><h2>Metagenome</h2>${mg ? mg.map(r => `<div class="grid">${D.mg_cols.map((c, i) => `<div class="kv"><b>${esc(c)}</b>${fmt(r[i])}</div>`).join('')}</div>`).join('<hr>') : '<p class="miss">no metagenome for this event</p>'}</div></div>`;
+  const roles = ['state', 'forcing', 'management', 'response'], RL = {state: 'Soil state', forcing: 'Weather and climate', management: 'Management', response: 'Plant condition (imagery)'};
+  for (const r of roles) {
+    const f = F.filter(x => x.role === r);
+    h += `<div class="card"><h2>${RL[r]} <span class="meta">(${f.length})</span></h2>` + (f.length ? `<div class="scroll">${tableHTML(['dataset', 'variable', 'time window', 'value', 'observed', 'lag (d)', 'source'], f.map(x => [x.modality, x.variable, x.window, x.value !== null ? x.value : (x.variable === 'preview' ? {html: `<a href="../../${esc(x.value_text)}" target="_blank">open photo</a>`} : x.value_text), x.obs_date, x.lag_days, x.source]))}</div>` : '<p class="miss">nothing linked</p>') + '</div>';
+  }
+  el.innerHTML = h;
+  $('#evsel').onchange = ev => { state.event = ev.target.value; state.plot = EV.find(x => x.event_id === state.event).plotID; eventView() };
+}
+
+// ---------- compare
+function compareView() {
+  const el = $('#compare');
+  if (!D.table) { el.innerHTML = '<div class="card"><p class="miss">event_table.parquet not built yet (scripts/07_build_event_features.py)</p></div>'; return }
+  const cols = D.table_cols.slice(4), T = rows(D.table, D.table_cols);
+  state.x = state.x || cols.find(c => c.startsWith('soil_measured__ph_water')) || cols[0];
+  state.y = state.y || cols.find(c => c.startsWith('its_share_Fusarium')) || cols[1];
+  const opt = s => cols.map(c => `<option ${c === s ? 'selected' : ''}>${esc(c)}</option>`).join('');
+  const sites = [...new Set(T.map(t => t.site))], col = {STER: 'var(--warn)', KONA: 'var(--acc)'};
+  const pts = T.filter(t => t[state.x] !== null && t[state.y] !== null);
+  const r = (() => { if (pts.length < 3) return null; const rk = k => { const s = pts.map((p, i) => [p[k], i]).sort((a, b) => a[0] - b[0]); const o = []; s.forEach(([v, i], j) => o[i] = j); return o };
+    const a = rk(state.x), b = rk(state.y), n = pts.length, ma = (n - 1) / 2; let num = 0, da = 0, db = 0; for (let i = 0; i < n; i++) { num += (a[i] - ma) * (b[i] - ma); da += (a[i] - ma) ** 2; db += (b[i] - ma) ** 2 } return num / Math.sqrt(da * db) })();
+  el.innerHTML = `<div class="card"><h2>Compare any two columns of the event table</h2><p class="note">One dot per sampling event with biology. Column names read dataset__variable__time-window; microbiome columns have no prefix (its_share_*, bac_share_*, ko_*). Few events, two sites, mixed years and sequencing pipelines: use this to look, not to conclude.</p>
+    <div class="row"><label>x <select id="cx">${opt(state.x)}</select></label><label>y <select id="cy">${opt(state.y)}</select></label>
+    <span class="meta">${pts.length} of ${T.length} events have both${r !== null ? ' · rank correlation ' + r.toFixed(2) : ''}</span></div>
+    <div class="legend">${sites.map(s => `<span><i style="background:${col[s] || 'var(--mute)'}"></i>${s}</span>`).join('')}</div>` +
+    chart({w: 900, h: 420, xdate: false, xlab: state.x, ylab: state.y, series: sites.map(s => ({color: col[s] || 'var(--mute)', r: 3.6, pts: pts.filter(p => p.site === s).map(p => [p[state.x], p[state.y], `${p.event_id}\nx ${p[state.x]}\ny ${p[state.y]}`])}))}) + '</div>';
+  $('#cx').onchange = e => { state.x = e.target.value; compareView() }; $('#cy').onchange = e => { state.y = e.target.value; compareView() };
+}
+
+// ---------- tables
+function tablesView() {
+  const el = $('#tables'); state.table = state.table || D.datasets[0].name;
+  const d = D.datasets.find(x => x.name === state.table);
+  el.innerHTML = `<div class="row"><label>Table <select id="tsel">${D.datasets.map(x => `<option ${x.name === state.table ? 'selected' : ''}>${x.name}</option>`).join('')}</select></label>
+    <span class="meta">${d.rows} rows × ${d.ncols} columns · ${d.kb} kB · modified ${d.modified}</span></div>
+    <div class="card"><h2>Columns</h2><div class="scroll">${tableHTML(['column', 'type', 'filled', 'min', 'max', 'distinct'], d.columns.map(c => [c.name, c.dtype, Math.round(c.nonnull * 100) + ' %', c.min ?? null, c.max ?? null, c.distinct ?? null]))}</div></div>
+    <div class="card"><h2>First ${d.head.length} rows</h2><div class="scroll">${tableHTML(d.head_cols, d.head)}</div></div>`;
+  $('#tsel').onchange = e => { state.table = e.target.value; tablesView() };
+}
+
+const TABS = {overview: ['Overview', overview], plot: ['Plot', plotView], event: ['Event', eventView], compare: ['Compare', compareView], tables: ['Tables', tablesView]};
+function show(id) {
+  for (const s of document.querySelectorAll('section')) s.classList.toggle('on', s.id === id);
+  for (const b of document.querySelectorAll('nav button')) b.classList.toggle('on', b.dataset.id === id);
+  TABS[id][1](); window.scrollTo(0, 0);
+}
+$('#nav').innerHTML = Object.entries(TABS).map(([k, v]) => `<button data-id="${k}">${v[0]}</button>`).join('');
+$('#nav').onclick = e => { if (e.target.dataset.id) show(e.target.dataset.id) };
+$('#meta').textContent = `built ${D.generated} · ${D.datasets.length} tables`;
+const h0 = location.hash.slice(1).split('/'); if (h0[1]) state.plot = h0[1]; show(TABS[h0[0]] ? h0[0] : 'overview');
+</script>
+</body>
+</html>

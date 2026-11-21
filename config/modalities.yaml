@@ -1,0 +1,184 @@
+# Registry of datasets linked to the sampling events (scripts/07_build_event_features.py reads this).
+# One entry = one modality. Fields:
+#   role      state | forcing | management | response   (which side of a comparison it sits on)
+#   spatial   how it was reduced to the plot             (documentation)
+#   temporal  its native time support                    (documentation)
+#   table     parquet in data/processed/
+#   link      temporal operator in cropfit/link.py: static | nearest | annual | weather | last_before
+#   variables numeric columns; text = categorical columns
+# Operator options: key, date, year, where (column: value filter), max_lag_days, direction, window,
+#   offsets (annual: 0 = event year, -1 = year before), anomaly, source_col, type_col, max_days.
+modalities:
+  soil_map:
+    role: state
+    spatial: dominant SSURGO map unit over 5 points in the plot
+    temporal: static
+    source: SSURGO (USDA Soil Data Access)
+    table: plots
+    key: unit_id
+    link: static
+    variables: [ph_surface, clay_pct, om_pct, caco3_pct, ec_dsm, awc100_mm, mukey_share]
+    text: [muname, drainage_class]
+  terrain:
+    role: state
+    spatial: 10 m elevation model, plot and 150 m neighbourhood
+    temporal: static
+    source: USGS 3DEP
+    table: plot_terrain
+    link: static
+    variables: [elevation_m, slope_deg, aspect_deg, tpi_150m, relief_150m]
+  climate_normal:
+    role: forcing
+    spatial: 1 km cell
+    temporal: static (median of 2008-2025)
+    source: Daymet
+    table: plots
+    key: unit_id
+    link: static
+    variables: [gdd10_may_sep, frost_free_days, prcp_apr_sep_mm, prcp_oct_jun_mm, p_wet_may, p_hot_dry_jul_aug, p_june_heat]
+  weather:
+    role: forcing
+    spatial: 1 km cell (plots of a site share a few cells)
+    temporal: daily
+    source: Daymet
+    table: plot_weather_daily
+    key: unit_id
+    link: weather
+  soil_measured:
+    role: state
+    spatial: mean of the cores of the plot
+    temporal: per sampling bout
+    source: NEON DP1.10086.001
+    table: neon_chem
+    date: collectDate
+    link: nearest
+    max_lag_days: 3
+    variables: [organic_c_pct, total_n_pct, cn_ratio, ph_water, ph_cacl2, soil_moisture]
+  inorganic_n:
+    role: state
+    spatial: mean of the cores of the plot
+    temporal: per N-transformation bout
+    source: NEON DP1.10086.001 (ntr tables)
+    table: neon_inorganic_n
+    date: collectDate
+    link: nearest
+    max_lag_days: 3
+    variables: [ammonium_n_mgkg, nitrate_n_mgkg, net_n_min_mgkg_d, net_nitrif_mgkg_d]
+  microbial_abundance:
+    role: state
+    spatial: mean of the cores of the plot
+    temporal: per sampling bout (2013-2017)
+    source: NEON DP1.10109.001 (qPCR, copies per ng DNA)
+    table: neon_qpcr
+    date: collectDate
+    link: nearest
+    max_lag_days: 3
+    variables: [fungal_copies, bacterial_copies, archaeal_copies]
+  crop:
+    role: management
+    spatial: majority class of 30 m pixels in the plot
+    temporal: annual (2008-2021)
+    source: USDA CDL via Planetary Computer
+    table: plot_crop_history
+    key: unit_id
+    link: annual
+    offsets: [0, -1, -2, -3, -4, -5]
+    variables: [share]
+    text: [crop_group]
+  greenness:
+    role: response
+    spatial: area-weighted pixels in the plot (10-30 m)
+    temporal: every 2-16 days, clouds permitting
+    source: Sentinel-2 L2A / Landsat 8-9 C2 L2 via Planetary Computer
+    table: plot_vi_timeseries
+    where: {clear: true}
+    link: nearest
+    max_lag_days: 10
+    source_col: sensor
+    variables: [ndvi, evi, ndmi, ndre, bare_soil_index]
+  greenness_before:
+    role: response
+    spatial: area-weighted pixels in the plot (10-30 m)
+    temporal: last clear observation on or before sampling
+    source: Sentinel-2 L2A / Landsat 8-9 C2 L2 via Planetary Computer
+    table: plot_vi_timeseries
+    where: {clear: true}
+    link: nearest
+    direction: backward
+    max_lag_days: 30
+    window: last_before
+    source_col: sensor
+    variables: [ndvi, ndmi]
+  season:
+    role: response
+    spatial: area-weighted pixels in the plot (10-30 m)
+    temporal: growing season (1 Apr - 31 Oct) per calendar year
+    source: Sentinel-2 + Landsat
+    table: plot_season
+    link: annual
+    offsets: [0, -1]
+    variables: [ndvi_peak, peak_doy, ndvi_mean_gs, ndvi_integral_gs, ndvi_amplitude, greenup_doy, senescence_doy, bare_share_gs, n_clear_gs]
+    anomaly: [ndvi_peak, ndvi_integral_gs]
+  aerial_naip:
+    role: response
+    spatial: all 0.3-1 m pixels in the plot
+    temporal: one flight every 2-3 years
+    source: USDA NAIP via Planetary Computer
+    table: plot_aerial
+    where: {source: naip}
+    link: nearest
+    max_lag_days: 200
+    window: nearest_flight
+    variables: [ndvi_mean, ndvi_std, exg_mean, exg_std, green_frac, gsd_m]
+    text: [preview]
+  aerial_neon:
+    role: response
+    spatial: all 10 cm pixels in the plot
+    temporal: one flight campaign in most years (month known, not the day)
+    source: NEON airborne camera DP3.30010.001
+    table: plot_aerial
+    where: {source: neon_aop_camera}
+    link: nearest
+    max_lag_days: 200
+    window: nearest_flight
+    variables: [exg_mean, exg_std, green_frac, gsd_m]
+    text: [preview]
+  management:
+    role: management
+    spatial: plots named in the report (site-wide reports apply to every plot)
+    temporal: dated events (seeding, harvest, tillage, herbicide, fertiliser ...)
+    source: NEON DP1.10111.001 site management reports
+    table: neon_management_events
+    link: last_before
+    type_col: type
+    text_col: what
+    max_days: 365
+  soil_baseline:
+    role: state
+    spatial: one soil pit in the plot, topmost horizon
+    temporal: measured once (STER 2015, KONA 2018)
+    source: NEON DP1.10047.001
+    table: neon_soil_baseline
+    link: static
+    variables: [base_ph_water, base_carbon_gkg, base_nitrogen_gkg, base_cec, base_caco3_gkg, base_ec, base_sand_pct, base_silt_pct, base_clay_pct, base_bulk_density]
+    text: [base_soil_series]
+  plant_cover:
+    role: response
+    spatial: 1 m2 quadrats inside the plot
+    temporal: one or two ground surveys per year
+    source: NEON DP1.10058.001
+    table: neon_plant_cover
+    link: nearest
+    max_lag_days: 120
+    window: nearest_survey
+    variables: [plant_cover_pct, bare_soil_pct, litter_pct, n_species]
+    text: [dominant_species]
+  crop_reported:
+    role: management
+    spatial: plots named in the harvest report
+    temporal: annual (year of harvest)
+    source: NEON DP1.10111.001 harvest reports
+    table: neon_crop_reported
+    link: annual
+    offsets: [0, -1, -2]
+    text: [crop_species]

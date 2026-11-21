@@ -16,13 +16,30 @@ Two NEON farm sites: **STER** (North Sterling, CO, dryland) and **KONA** (Konza,
 | Microbial abundance (NEON qPCR) | `neon_qpcr` | plot-date | 128 plot-dates, 2013-2017; copies per ng DNA, not per gram soil |
 | **Joined biology** | `joined_metagenomes` (59 x 72), `joined_fungi_genus` | metagenome | bacteria + genes + chemistry + fungi from exactly the pooled cores; 32 metagenomes have fungi |
 
-### Code ready, not yet run on this checkout
+### Geo data, linked to each sampling event (built)
 
-| Layer | Script | Needs | Output |
-|---|---|---|---|
-| Soil map (SSURGO), weather (Daymet), crop history 2008-2021 (CDL) for the 44 plots | `scripts/03_build_plots.py` | network only, keyless, minutes | `plots`, `plot_crop_history`, `plot_climate_yearly` |
-| Field polygons with crops 2018-2025 (CSB) + soil + weather for ~4,850 fields | `scripts/04_build_fields.py` | the 3.76 GB CSB zip in `data/raw/csb/` (manual download) | `fields`, `plot_csb` |
-| EU cross-check: LUCAS fungi vs land-cover history | `scripts/e1_match.py` | JRC LUCAS zip in `data/raw/lucas/` | `outputs/e1/` |
+721 sampling events on 29 plots, 175 with biology. Each dataset below is attached to every event with an explicit time window and the date actually used (`event_features`, `event_table`; AGENT.md 3.9).
+
+| Layer | Tables | Coverage of the 175 biology events |
+|---|---|---|
+| Soil map, terrain, climate normals | `plots`, `plot_terrain` | all |
+| Weather before sampling (7, 30, 90 days) | `plot_weather_daily` | all |
+| Satellite greenness (Sentinel-2, Landsat), 2013-2026 | `plot_vi_timeseries`, `plot_season` | 97% have a clear image within 6 days; season summaries for all |
+| Aerial photos (NAIP; NEON airborne camera) | `plot_aerial`, chips in `data/raw/imagery/` | NAIP within 200 days: 44% (flights every 2 years) |
+| Farm management and crop sown/harvested, 2013-2026 | `neon_management_events`, `neon_crop_reported` | 97% have a reported operation in the year before |
+| Crop map 2008-2021 | `plot_crop_history` | sampling year: 66% (ends 2021) |
+| Nitrate, ammonium, N turnover | `neon_inorganic_n` | 64% |
+| Ground survey of plant cover | `neon_plant_cover` | 70% within 120 days |
+| Soil pit (texture, CEC), once | `neon_soil_baseline` | 62% |
+
+To look at all of it: `.venv/bin/python scripts/10_inspect_data.py`, then open `outputs/inspect/index.html`.
+
+### Not built
+
+| Layer | Script | Needs |
+|---|---|---|
+| Field polygons with crops 2018-2025 (CSB) + soil + weather for ~4,850 fields | `scripts/04_build_fields.py` | the 3.76 GB CSB zip in `data/raw/csb/` (manual download) |
+| EU cross-check: LUCAS fungi vs land-cover history | `scripts/e1_match.py` | JRC LUCAS zip in `data/raw/lucas/` |
 
 ## 2. What the data is useful for
 
@@ -39,11 +56,8 @@ Two NEON farm sites: **STER** (North Sterling, CO, dryland) and **KONA** (Konza,
 ## 3. How to proceed with implementation
 
 1. **Fix the app question and the unit.** Recommended unit: **plot x year** (biology, chemistry, crops and weather all exist per year). Fields are a second, biology-free layer for the map.
-2. **Run the geo side:** `.venv/bin/python scripts/03_build_plots.py`; add `04_build_fields.py` once the CSB zip is in place.
-3. **Write one integration step** (e.g. `scripts/07_build_unit_year.py` -> `unit_year.parquet`), the missing piece today. One row per plot and year, every source joined there and nowhere else:
-   - an explicit date and source column per layer (`its_date`, `metagenome_date`, `chem_date`, `crop_source`), so a 2024 fungal sample is never shown as if it belonged to a 2017 metagenome (today the "latest per plot" tables differ by 5-7 years on 11 of 28 plots);
-   - crop history merged from CDL and CSB;
-   - depth, QC and pipeline flags carried along (`ko_depth_ok`, `n_fungal_cores_ok`, ITS `product`).
+2. **Geo side: done for the plots** (see section 1). Add `04_build_fields.py` once the CSB zip is in place if the field map is wanted.
+3. **Integration step: done at event level.** `event_table.parquet` has one row per sampling event with biology and every linked dataset, each with the date used and its distance in time. If the app wants plot x year instead, aggregate from `event_features`.
 4. **Compute scores in the app layer, not in the processed tables.** Percentiles, risk flags and status labels belong next to the question they answer, each stating its reference group (site, year, pipeline). Treat the existing `bio_*_pct_*` columns as a starting point, not as comparable numbers (they use three different reference groups).
 5. **App reads `unit_year` (+ `fields` for the map)** with pandas or DuckDB. Carry the caveats of AGENT.md section 5 into the UI: relative abundance only, "not detected" never "absent", "insufficient depth" shown as such.
 

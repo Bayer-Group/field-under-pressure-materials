@@ -64,3 +64,6 @@ Crop group vocabulary (exact strings): `corn, soybean, winter_wheat, spring_whea
 | `bio_genus_pct_<Genus>` | read share percentile (Kraken2, % of bacterial reads) within site-year, e.g. `Bradyrhizobium` |
 | `bio_its_pct_<Genus>` | NEON ITS genus relative-abundance percentile within site (2016-2024; mixes ITS pipelines DP1.10081.001 and .002, see AGENT.md 3.2), e.g. `Fusarium, Macrophomina, Gaeumannomyces, Rhizoctonia, Sclerotinia` |
 | `bio_its_detected_<Genus>` | bool |
+
+## Event-linked features
+Geo and context data attached to each sampling event live in `event_features.parquet` (long) and `event_table.parquet` (wide, columns `<modality>__<variable>__<window>`). Modalities, variables and windows are listed in `config/modalities.yaml`; see AGENT.md 3.9.

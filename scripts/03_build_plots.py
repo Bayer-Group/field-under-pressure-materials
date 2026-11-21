@@ -1,4 +1,8 @@
-"""Build plots.parquet, plot_crop_history.parquet, plot_climate_yearly.parquet for the 44 NEON crop plots."""
+"""Build plots.parquet, plot_crop_history.parquet, plot_climate_yearly.parquet and plot_weather_daily.parquet
+for the plots of the event registry (run scripts/01_build_events.py first).
+
+Network: SSURGO (SDA), Daymet, CDL (Planetary Computer); all cached or small. CSB crops (2018-2025) are merged
+into the crop history when data/processed/plot_csb.parquet exists (scripts/04_build_fields.py)."""
 from __future__ import annotations
 
 import sys
@@ -9,22 +13,17 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from cropfit import cdl, daymet, ssurgo  # noqa: E402
+from cropfit import cdl, daymet, events, ssurgo  # noqa: E402
 from cropfit.config import PROCESSED, RESOURCES  # noqa: E402
 
 START, END = 2008, 2025
 
 
-def plot_id(name: str) -> str:
-    return name.replace(".basePlot.bgc", "")
-
-
 def load_plots() -> pd.DataFrame:
-    df = pd.read_csv(RESOURCES / "neon_soil_plots_landcover.csv")
-    df = df[df["nlcd"] == "cultivatedCrops"].copy()
-    df["unit_id"] = df["plot"].map(plot_id)
-    df["unit_type"] = "plot"
-    return df[["unit_id", "unit_type", "site", "lat", "lon"]].drop_duplicates("unit_id").reset_index(drop=True)
+    """Plots that have sampling events (not the outdated NLCD 2001 'cultivatedCrops' label)."""
+    g = events.load_geometry()
+    return (g.rename(columns={"plotID": "unit_id"}).assign(unit_type="plot")
+            [["unit_id", "unit_type", "site", "lat", "lon"]].reset_index(drop=True))
 
 
 def safe(fn, *a, default=None, label=""):
@@ -52,8 +51,8 @@ def main():
             yc = yc[yc.year.map(full) >= 365]
             f = daymet.summarise_yearly(yc)
             f["climate_years_used"] = f"{int(yc.year.min())}-{int(yc.year.max())}"
-            return f, yc
-        return safe(go, default=({}, pd.DataFrame()), label=f"climate {r['unit_id']}")
+            return f, yc, df
+        return safe(go, default=({}, pd.DataFrame(), pd.DataFrame()), label=f"climate {r['unit_id']}")
 
     with ThreadPoolExecutor(4) as ex:
         soils = list(ex.map(soil, recs))
@@ -66,17 +65,21 @@ def main():
     hist.to_parquet(PROCESSED / "plot_crop_history.parquet", index=False)
     print("cdl done", flush=True)
 
-    yearly = []
-    for r, (f, yc) in zip(recs, clims):
+    yearly, daily = [], []
+    for r, (f, yc, df) in zip(recs, clims):
         if len(yc):
             yc = yc.copy()
             yc.insert(0, "unit_id", r["unit_id"])
             yearly.append(yc)
+        if len(df):
+            daily.append(df[["date", "tmax", "tmin", "prcp"]].assign(unit_id=r["unit_id"]))
     if yearly:
         pd.concat(yearly).to_parquet(PROCESSED / "plot_climate_yearly.parquet", index=False)
+    if daily:  # daily series, needed for weather windows relative to each sampling date
+        pd.concat(daily).to_parquet(PROCESSED / "plot_weather_daily.parquet", index=False)
 
     rows = []
-    for r, s, (f, _) in zip(recs, soils, clims):
+    for r, s, (f, _, _) in zip(recs, soils, clims):
         row = {**r, **s, **f}
         row["water_supply_summer_mm"] = row.get("prcp_apr_sep_mm", np.nan) + row.get("awc100_mm", np.nan)
         row["water_supply_winter_mm"] = row.get("prcp_oct_jun_mm", np.nan) + row.get("awc100_mm", np.nan)
@@ -88,6 +91,18 @@ def main():
         if y > 2021:
             out[f"crop_{y}"] = np.nan
     out["history_source"] = "cdl"
+    csb_file = PROCESSED / "plot_csb.parquet"
+    if csb_file.exists():  # CSB gives 2018-2025; CDL stays the source where both exist
+        c = pd.read_parquet(csb_file).set_index("plotID")
+        for y in range(2018, 2026):
+            if f"crop_{y}" in c:
+                cdl_ok = out[f"crop_{y}"].notna() & (out[f"crop_{y}"] != "unknown")
+                out[f"crop_{y}"] = out[f"crop_{y}"].where(cdl_ok, out["unit_id"].map(c[f"crop_{y}"]))
+        out["history_source"] = np.where(out["unit_id"].isin(c.index[c["CSBID"].notna()]), "csb+cdl", "cdl")
+    else:
+        print("no plot_csb.parquet: crop history ends in 2021 (CDL only)", flush=True)
+    for k in range(1, 6):
+        out[f"crop_t{k}"] = out[f"crop_{2026 - k}"]
     out.to_parquet(PROCESSED / "plots.parquet", index=False)
     print("wrote", out.shape, flush=True)
 

@@ -1,13 +1,13 @@
 """USDA CDL crop history per point from Microsoft Planetary Computer (windowed COG reads)."""
 from __future__ import annotations
 
-import math
 from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 
 import numpy as np
 import pandas as pd
 
+from . import stac
 from .config import RULES
 
 STAC = "https://planetarycomputer.microsoft.com/api/stac/v1"
@@ -46,25 +46,8 @@ def crop_group(code: int) -> str:
     return "noncrop" if c in NONCROP else "other_crop"
 
 
-@lru_cache
-def _catalog():
-    import planetary_computer as pc
-    import pystac_client
-    return pystac_client.Client.open(STAC, modifier=pc.sign_inplace)
-
-
 def _items(lat: float, lon: float, years: tuple[int, ...]):
-    import time
-    for attempt in range(4):
-        try:
-            s = _catalog().search(collections=[COLLECTION], intersects={"type": "Point", "coordinates": [lon, lat]},
-                                  query={TYPE_PROP: {"eq": "cropland"}}, limit=100)
-            items = list(s.items())
-            break
-        except Exception:
-            if attempt == 3:
-                raise
-            time.sleep(2 ** attempt)
+    items = stac.search(COLLECTION, lon, lat, query={TYPE_PROP: {"eq": "cropland"}})
     out = {}
     for it in items:
         y = int(it.properties["start_datetime"][:4])
@@ -74,39 +57,21 @@ def _items(lat: float, lon: float, years: tuple[int, ...]):
 
 
 def _read_year(item, lat, lon):
+    """Majority class over the plot square (area-weighted pixels) and its share."""
     import rasterio
-    from pyproj import Transformer
-    from rasterio.windows import Window
-    import planetary_computer as pc
-    href = pc.sign(item.assets["cropland"].href)
+    href = stac.sign(item.assets["cropland"].href)
     crs = item.properties.get("proj:code", "EPSG:5070")
-    x, y = Transformer.from_crs("EPSG:4326", crs, always_xy=True).transform(lon, lat)
-    with rasterio.Env(GDAL_DISABLE_READDIR_ON_OPEN="EMPTY_DIR", GDAL_HTTP_MAX_RETRY="4",
-                      GDAL_HTTP_RETRY_DELAY="1", CPL_VSIL_CURL_ALLOWED_EXTENSIONS=".tif"):
+    x, y = stac.to_xy(lon, lat, crs)
+    with rasterio.Env(**stac.GDAL_ENV):
         with rasterio.open(href) as ds:
-            t = ds.transform
-            c0, r0 = ~t * (x - HALF_M, y + HALF_M)
-            c1, r1 = ~t * (x + HALF_M, y - HALF_M)
-            ci0, ri0 = math.floor(c0), math.floor(r0)
-            ci1, ri1 = math.ceil(c1), math.ceil(r1)
-            arr = ds.read(1, window=Window(ci0, ri0, ci1 - ci0, ri1 - ri0))
-    # area weights: overlap of each pixel with the plot square (fractional pixel coords)
-    w = np.zeros(arr.shape)
-    for i in range(arr.shape[0]):
-        for j in range(arr.shape[1]):
-            ox = max(0.0, min(ci0 + j + 1, c1) - max(ci0 + j, c0))
-            oy = max(0.0, min(ri0 + i + 1, r1) - max(ri0 + i, r0))
-            w[i, j] = ox * oy
-    tot = {}
-    for v, wt in zip(arr.ravel(), w.ravel()):
-        tot[int(v)] = tot.get(int(v), 0.0) + wt
-    code, wt = max(tot.items(), key=lambda kv: kv[1])
-    return code, wt / sum(tot.values())
+            arr, w = stac.read_footprint(ds, x, y, HALF_M, 1)
+    return stac.majority(arr, w)
 
 
 def cdl_history(lat: float, lon: float, years=range(2008, 2022)) -> pd.DataFrame:
     """Majority CDL class in a 40x40 m window per year.
-    Columns: year, cdl_code, crop_group, share, edge (share < 0.6), source='cdl'."""
+    Columns: year, cdl_code, crop_group, share, edge (share < 0.6), source ('cdl', or 'cdl_read_failed'
+    when the raster could not be read, so a network failure is not mistaken for an unknown crop)."""
     years = tuple(years)
     items = _items(lat, lon, years)
     rows = []
@@ -120,8 +85,9 @@ def cdl_history(lat: float, lon: float, years=range(2008, 2022)) -> pd.DataFrame
             g = crop_group(code) if code != 0 else "unknown"
             rows.append(dict(year=y, cdl_code=code, crop_group=g, share=round(share, 3),
                              edge=bool(share < EDGE_SHARE), source="cdl"))
-        except Exception:
-            rows.append(dict(year=y, cdl_code=np.nan, crop_group="unknown", share=np.nan, edge=False, source="cdl"))
+        except Exception:  # noqa: BLE001 - a failed read must not look like a real "unknown" crop
+            rows.append(dict(year=y, cdl_code=np.nan, crop_group="unknown", share=np.nan, edge=False,
+                             source="cdl_read_failed"))
     return pd.DataFrame(rows)
 
 

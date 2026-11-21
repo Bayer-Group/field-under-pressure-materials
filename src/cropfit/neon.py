@@ -8,9 +8,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from .config import RAW, PROCESSED
+from .config import RAW, PROCESSED, sites
 
-SITES = ["STER", "KONA"]
+SITES = sites()
 RAW_NEON = RAW / "neon"
 
 GENERA = ["Fusarium", "Macrophomina", "Gaeumannomyces", "Rhizoctonia", "Thanatephorus", "Ceratobasidium",
@@ -327,6 +327,151 @@ def build_chem(tables: dict[str, pd.DataFrame]) -> pd.DataFrame:
     out["collectDate"] = out["collectDate"].dt.date
     out["site"] = out["plotID"].str[:4]
     return out.sort_values(["plotID", "collectDate"]).reset_index(drop=True)
+
+
+def build_inorganic_n(tables: dict[str, pd.DataFrame]) -> pd.DataFrame:
+    """KCl-extractable inorganic N and net N transformation rates per plotID x collectDate (DP1.10086 ntr_*).
+
+    Needs ntr_externalLab (extract concentrations, mg N/L), ntr_internalLab (fresh soil mass, KCl volume,
+    incubation pairs), sls_soilMoisture (g water per g dry soil) and, when present, ntr_internalLabBlanks.
+    Per sample: blank-corrected concentration (negatives set to 0) x KCl volume / dry soil mass = mg N per kg
+    dry soil. Plot-date columns: ammonium_n_mgkg, nitrate_n_mgkg (initial cores, i.e. the field state),
+    net_n_min_mgkg_d, net_nitrif_mgkg_d (final minus initial of an incubation pair, per day), n_cores, n_pairs.
+    Rates are reported at the collect date of the initial core."""
+    ext, lab, moist = tables["ntr_externalLab"].copy(), tables["ntr_internalLab"].copy(), tables["sls_soilMoisture"]
+    for c in ("kclAmmoniumNConc", "kclNitrateNitriteNConc"):
+        ext[c] = pd.to_numeric(ext[c], errors="coerce")
+    conc = ext.groupby("kclSampleID")[["kclAmmoniumNConc", "kclNitrateNitriteNConc"]].mean()
+    blank = pd.DataFrame(columns=["kclReferenceID", "b_nh4", "b_no3"])
+    bl = tables.get("ntr_internalLabBlanks")
+    if bl is not None and len(bl):
+        b = bl.melt(id_vars="kclReferenceID", value_vars=[c for c in bl.columns if c.endswith("ID") and "Blank" in c],
+                    value_name="kclSampleID").dropna(subset=["kclSampleID"])
+        b = b.merge(conc, left_on="kclSampleID", right_index=True)
+        blank = (b.groupby("kclReferenceID")[["kclAmmoniumNConc", "kclNitrateNitriteNConc"]].mean()
+                 .rename(columns={"kclAmmoniumNConc": "b_nh4", "kclNitrateNitriteNConc": "b_no3"}).reset_index())
+    m = moist[["sampleID", "soilMoisture"]].copy()
+    m["soilMoisture"] = pd.to_numeric(m["soilMoisture"], errors="coerce")
+    s = (lab.merge(conc, left_on="kclSampleID", right_index=True, how="inner")
+         .merge(blank, on="kclReferenceID", how="left")
+         .merge(m.groupby("sampleID", as_index=False)["soilMoisture"].mean(), on="sampleID", how="left"))
+    for c in ("soilFreshMass", "kclVolume", "incubationLength"):
+        s[c] = pd.to_numeric(s[c], errors="coerce")
+    dry = s["soilFreshMass"] / (1 + s["soilMoisture"])
+    s["nh4"] = (s["kclAmmoniumNConc"] - s["b_nh4"].fillna(0)).clip(lower=0) * s["kclVolume"] / dry
+    s["no3"] = (s["kclNitrateNitriteNConc"] - s["b_no3"].fillna(0)).clip(lower=0) * s["kclVolume"] / dry
+    s["collectDate"] = pd.to_datetime(s["collectDate"]).dt.tz_localize(None).dt.normalize()
+    ini = s[s["nTransBoutType"] == "tInitial"]
+    fin = s[s["nTransBoutType"] == "tFinal"]
+    state = ini.groupby(["plotID", "collectDate"]).agg(ammonium_n_mgkg=("nh4", "mean"), nitrate_n_mgkg=("no3", "mean"),
+                                                        n_cores=("sampleID", "nunique")).reset_index()
+    pair = ini[["plotID", "collectDate", "incubationPairID", "nh4", "no3"]].merge(
+        fin[["incubationPairID", "nh4", "no3", "incubationLength"]], on="incubationPairID", suffixes=("_i", "_f"))
+    pair = pair[pair["incubationLength"] > 0]
+    pair["net_n_min_mgkg_d"] = ((pair["nh4_f"] + pair["no3_f"]) - (pair["nh4_i"] + pair["no3_i"])) / pair["incubationLength"]
+    pair["net_nitrif_mgkg_d"] = (pair["no3_f"] - pair["no3_i"]) / pair["incubationLength"]
+    rates = pair.groupby(["plotID", "collectDate"]).agg(
+        net_n_min_mgkg_d=("net_n_min_mgkg_d", "mean"), net_nitrif_mgkg_d=("net_nitrif_mgkg_d", "mean"),
+        n_pairs=("net_n_min_mgkg_d", "count")).reset_index()
+    out = state.merge(rates, on=["plotID", "collectDate"], how="outer")
+    out["n_pairs"] = out["n_pairs"].fillna(0).astype(int)
+    out["site"] = out["plotID"].str[:4]
+    out["collectDate"] = out["collectDate"].dt.date
+    return out.sort_values(["plotID", "collectDate"]).reset_index(drop=True)
+
+
+# ---------------------------------------------------------------- management, baseline soil, plant cover
+MGMT_TYPES = [("addition-seeds", "seeding"), ("cropHarvest", "harvest"), ("herbicide", "herbicide"),
+              ("fungicide", "fungicide"), ("insecticide", "insecticide"), ("pesticide", "pesticide"),
+              ("fertilizer", "fertilizer"), ("tillage", "tillage"), ("mowing", "mowing"), ("grazing", "grazing"),
+              ("fire", "fire")]
+
+
+def build_management(ev: pd.DataFrame, plot_ids) -> pd.DataFrame:
+    """DP1.10111.001 sim_eventData -> one row per plot and reported management event.
+
+    NEON lists the affected locations in `locationID`; base plots are picked out of it. An event reported for
+    the whole site (location = the site code) is given to every plot in plot_ids of that site, scope='site'.
+    Columns: plotID, site, date (start), end_date, type (seeding, harvest, herbicide, fungicide, fertilizer,
+    tillage, mowing, grazing, other), method, what (product or species named), scope, date_quality, remarks."""
+    plot_ids = sorted(set(plot_ids))
+    rows = []
+    for r in ev.itertuples():
+        loc = str(r.locationID)
+        plots = set(re.findall(r"([A-Z]{4}_\d{3})\.basePlot", loc))
+        scope = "plot"
+        if not plots and r.siteID in [x.strip() for x in loc.split(",")]:
+            plots, scope = {p for p in plot_ids if p.startswith(r.siteID)}, "site"
+        method = str(r.methodTypeChoice or "")
+        typ = next((name for key, name in MGMT_TYPES if key.lower() in method.lower()), None)
+        typ = typ or next((name for key, name in MGMT_TYPES if key.lower() in str(r.eventType).lower()), "other")
+        what = str(r.scientificName or "").strip() or str(r.name or "").strip() or None
+        for pl in plots & set(plot_ids):
+            rows.append(dict(plotID=pl, site=r.siteID, date=r.startDate, end_date=r.endDate, type=typ,
+                             method=method or r.eventType, what=what, scope=scope,
+                             date_quality=getattr(r, "estimatedOrActualDate", None), remarks=r.remarks))
+    out = pd.DataFrame(rows)
+    for c in ("date", "end_date"):
+        out[c] = pd.to_datetime(out[c], errors="coerce", utc=True).dt.tz_localize(None).dt.normalize()
+    return out.dropna(subset=["date"]).sort_values(["plotID", "date"]).reset_index(drop=True)
+
+
+def build_soil_baseline(tables: dict[str, pd.DataFrame]) -> pd.DataFrame:
+    """DP1.10047.001 (one-time soil pit per plot) -> topmost horizon per plot: measured pH, C, N, CEC,
+    carbonate, EC, texture, bulk density. Columns prefixed base_; base_top_cm/base_bottom_cm give the layer."""
+    def top(df, depth, cols):
+        d = df.copy()
+        for c in [depth] + list(cols):
+            d[c] = pd.to_numeric(d[c], errors="coerce")
+        d = d.sort_values(["plotID", depth]).drop_duplicates("plotID")
+        return d.set_index("plotID")
+    b = top(tables["spc_biogeochem"], "biogeoTopDepth",
+            {"phH2o", "phCacl2", "carbonTot", "nitrogenTot", "cecdNh4", "caco3Conc", "ec12pre", "biogeoBottomDepth"})
+    out = pd.DataFrame({"base_ph_water": b["phH2o"], "base_ph_cacl2": b["phCacl2"], "base_carbon_gkg": b["carbonTot"],
+                        "base_nitrogen_gkg": b["nitrogenTot"], "base_cec": b["cecdNh4"], "base_caco3_gkg": b["caco3Conc"],
+                        "base_ec": b["ec12pre"], "base_top_cm": b["biogeoTopDepth"], "base_bottom_cm": b["biogeoBottomDepth"],
+                        "base_horizon": b["horizonName"]})
+    if "spc_particlesize" in tables:
+        s = top(tables["spc_particlesize"], "biogeoTopDepth", {"sandTotal", "siltTotal", "clayTotal"})
+        out = out.join(s[["sandTotal", "siltTotal", "clayTotal"]].rename(
+            columns={"sandTotal": "base_sand_pct", "siltTotal": "base_silt_pct", "clayTotal": "base_clay_pct"}))
+    if "spc_bulkdensity" in tables:
+        d = top(tables["spc_bulkdensity"], "bulkDensTopDepth", {"bulkDensOvenDry", "bulkDensThirdBar"})
+        out = out.join(d["bulkDensOvenDry"].combine_first(d["bulkDensThirdBar"]).rename("base_bulk_density"))
+    if "spc_perplot" in tables:
+        pp = tables["spc_perplot"].drop_duplicates("plotID").set_index("plotID")
+        out = out.join(pp[["collectDate", "soilSeries", "soilOrder"]].rename(
+            columns={"collectDate": "base_date", "soilSeries": "base_soil_series", "soilOrder": "base_soil_order"}))
+        out["base_date"] = pd.to_datetime(out["base_date"], errors="coerce", utc=True).dt.tz_localize(None).dt.date
+    return out.reset_index()
+
+
+def build_plant_cover(div: pd.DataFrame) -> pd.DataFrame:
+    """DP1.10058.001 div_1m2Data (1 m2 quadrats) -> one row per plot and survey date: mean per quadrat of total
+    plant cover, bare soil and litter cover (%), number of plant species seen, and the species with the highest
+    mean cover (the crop, or the dominant weed in fallow). n_quadrats says how many squares were read."""
+    d = div.copy()
+    d["date"] = pd.to_datetime(d["endDate"], errors="coerce", utc=True).dt.tz_localize(None).dt.normalize()
+    d["percentCover"] = pd.to_numeric(d["percentCover"], errors="coerce")
+    d = d.dropna(subset=["date"])
+    key = ["plotID", "date"]
+    nq = d.groupby(key)["subplotID"].nunique().rename("n_quadrats")
+    sp = d[d["divDataType"] == "plantSpecies"]
+    plant = sp.groupby(key)["percentCover"].sum().rename("s")
+    ov = d[d["divDataType"] == "otherVariables"]
+
+    def other(name):
+        return ov[ov["otherVariables"] == name].groupby(key)["percentCover"].sum().rename(name)
+    out = pd.concat([nq, plant, other("soil"), other("litter"), sp.groupby(key)["taxonID"].nunique().rename("n_species")],
+                    axis=1).reset_index()
+    for c, new in (("s", "plant_cover_pct"), ("soil", "bare_soil_pct"), ("litter", "litter_pct")):
+        out[new] = out[c].fillna(0) / out["n_quadrats"]
+    dom = (sp.groupby(key + ["scientificName"])["percentCover"].sum().reset_index()
+           .sort_values("percentCover", ascending=False).drop_duplicates(key))
+    out = out.merge(dom[key + ["scientificName"]].rename(columns={"scientificName": "dominant_species"}), on=key, how="left")
+    out["n_species"] = out["n_species"].fillna(0).astype(int)
+    return out[key + ["n_quadrats", "plant_cover_pct", "bare_soil_pct", "litter_pct", "n_species",
+                      "dominant_species"]].sort_values(key).reset_index(drop=True)
 
 
 # ---------------------------------------------------------------- ITS per-sample files

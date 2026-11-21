@@ -26,6 +26,11 @@ def regions() -> dict:
     return yaml.safe_load((ROOT / "config" / "regions.yaml").read_text())
 
 
+def sites() -> list[str]:
+    """Site codes, defined once: the keys of `windows` in config/regions.yaml."""
+    return list(regions()["windows"])
+
+
 def window_bbox(site: str) -> tuple[float, float, float, float]:
     """(minlon, minlat, maxlon, maxlat) in WGS84 for a window (approximate square)."""
     w = regions()["windows"][site]

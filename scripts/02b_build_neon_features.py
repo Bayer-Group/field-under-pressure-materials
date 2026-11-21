@@ -40,6 +40,13 @@ chem = neon.build_chem(t)
 chem.to_parquet(PROCESSED / "neon_chem.parquet", index=False)
 print("neon_chem", len(chem))
 
+# ---- inorganic N and net N transformation rates (same product, ntr_* tables)
+t.update({os.path.basename(f)[:-8]: pd.read_parquet(f) for f in glob.glob(str(R / "DP1.10086.001" / "ntr_*.parquet"))})
+if {"ntr_externalLab", "ntr_internalLab", "sls_soilMoisture"} <= set(t):
+    inorg = neon.build_inorganic_n(t)
+    inorg.to_parquet(PROCESSED / "neon_inorganic_n.parquet", index=False)
+    print("neon_inorganic_n", len(inorg), "plot-dates,", int(inorg.n_pairs.gt(0).sum()), "with rates")
+
 # ---- qPCR
 q = pd.read_parquet(R / "DP1.10109.001" / "mga_soilGroupAbundances.parquet")
 q["collectDate"] = pd.to_datetime(q.collectDate).dt.tz_localize(None).dt.normalize()
@@ -57,3 +64,29 @@ out["unit"] = "gene copies per ng extracted DNA (NEON meanCopyNumber, numberPerN
 out["collectDate"] = out.collectDate.dt.date
 out.to_parquet(PROCESSED / "neon_qpcr.parquet", index=False)
 print("neon_qpcr", len(out))
+
+# ---- management events, baseline soil pits, plant cover (products fetched on request, skipped when absent)
+plots = sorted(set(chem.plotID) | set(core.plotID))
+f = R / "DP1.10111.001" / "sim_eventData.parquet"
+if f.exists():
+    mgmt = neon.build_management(pd.read_parquet(f), plots)
+    mgmt.to_parquet(PROCESSED / "neon_management_events.parquet", index=False)
+    print("neon_management_events", len(mgmt), mgmt.type.value_counts().to_dict())
+    # crop of the year as reported by the farm: species of the harvest events of that calendar year
+    h = mgmt[(mgmt.type == "harvest") & mgmt.what.notna()].assign(year=lambda d: d.date.dt.year)
+    rep = (h.groupby(["plotID", "year"]).agg(crop_species=("what", lambda s: "; ".join(sorted(set(s)))),
+                                             harvest_date=("date", "max"), n_reports=("what", "size")).reset_index())
+    rep.to_parquet(PROCESSED / "neon_crop_reported.parquet", index=False)
+    print("neon_crop_reported", len(rep), "plot-years")
+d = R / "DP1.10047.001"
+if (d / "spc_biogeochem.parquet").exists():
+    base = neon.build_soil_baseline({os.path.basename(x)[:-8]: pd.read_parquet(x) for x in glob.glob(str(d / "spc_*.parquet"))})
+    base = base[base.plotID.isin(plots)]
+    base.to_parquet(PROCESSED / "neon_soil_baseline.parquet", index=False)
+    print("neon_soil_baseline", len(base), "plots")
+f = R / "DP1.10058.001" / "div_1m2Data.parquet"
+if f.exists():
+    cover = neon.build_plant_cover(pd.read_parquet(f))
+    cover = cover[cover.plotID.isin(plots)]
+    cover.to_parquet(PROCESSED / "neon_plant_cover.parquet", index=False)
+    print("neon_plant_cover", len(cover), "plot-surveys on", cover.plotID.nunique(), "plots")
