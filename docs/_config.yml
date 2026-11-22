@@ -1,0 +1,32 @@
+# GitHub Pages (Jekyll) configuration for the project documentation.
+# GitHub builds the site from this folder: Settings -> Pages -> "Deploy from a branch", folder /docs.
+# No local tooling is needed; the theme and plugins below are the ones GitHub Pages provides.
+
+title: GeoEarth Junction · Field Under Pressure
+description: >-
+  Weather-driven crop disease risk and spray windows for farmers, with QGIS and a web map on one FastAPI backend.
+repository: geoearth-junction/field-under-pressure-materials
+theme: minima
+
+# Pages shown in the header, in this order.
+header_pages:
+  - getting-started.md
+  - architecture.md
+  - risk-models.md
+  - api.md
+  - deployment.md
+  - data-sources.md
+  - team.md
+
+plugins:
+  - jekyll-relative-links      # links to .md files become links to the built pages
+  - jekyll-optional-front-matter
+  - jekyll-titles-from-headings
+
+relative_links:
+  enabled: true
+  collections: false
+
+# Instructions for AI agents are not part of the published site.
+exclude:
+  - AGENTS.md

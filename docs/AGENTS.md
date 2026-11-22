@@ -15,9 +15,18 @@ The `docs/` directory is the central geospatial knowledge base of the project. I
 ## 📂 Directory Structure
 ```text
 docs/
+├── _config.yml                          # GitHub Pages (Jekyll) site configuration
+├── index.md                             # Home page of the documentation site
+├── getting-started.md, architecture.md, risk-models.md, api.md, deployment.md, data-sources.md, team.md
+├── PROJECT.md                           # Product requirements and open decisions
+├── *_CONTRACT.md, *_contract.md         # Agreed contracts (farmer input, geometry validation, curated layer, serve read)
+├── LIVE_SANDBOX_INTEGRATION.md, MOCK_API_GUIDE.md, DATA_PIPELINE_NOTES.md
 ├── polskie_rejestry_publiczne_gis.csv   # Table with sources, formats and URLs (46 services)
 └── polskie_rejestry_publiczne_gis.md    # Detailed description divided into categories
 ```
+
+The folder is published as the GitHub Pages site. Avoid Liquid syntax (`{{ }}`, `{% %}`) in Markdown files here: Jekyll would
+try to evaluate it. Link to code outside `docs/` with full GitHub URLs, because relative links leave the published site.
 
 ---
 
