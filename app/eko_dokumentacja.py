@@ -57,7 +57,7 @@ def build_filled_eko_workbook(
         crop = str(getattr(row, "crop_name", "Uprawa EKO"))
         rot = _suggest_rotation(crop)
 
-        ws1[f"A{idx}"] = str(getattr(row, "h3_index", f"Działka-{idx-11}"))
+        ws1[f"A{idx}"] = str(getattr(row, "field_uid", "") or getattr(row, "h3_index", f"Działka-{idx-11}"))
         ws1[f"B{idx}"] = round(area, 2)
         ws1[f"C{idx}"] = f"Pakiet 1. Uprawy rolnicze (EKO) — {crop}"
         ws1[f"D{idx}"] = rot[0]
@@ -111,7 +111,7 @@ def build_filled_eko_workbook(
         obs_txt = f"NDVI: {ndvi:.2f} | Gleba: pH {ph:.2f}, próchnica {soc:.1f} g/kg ({getattr(row, 'soil_texture', '')})"
 
         ws2[f"B{row_cursor}"] = ts_str
-        ws2[f"C{row_cursor}"] = f"{getattr(row, 'h3_index', '')} ({area} ha)"
+        ws2[f"C{row_cursor}"] = f"{getattr(row, 'field_uid', '') or getattr(row, 'h3_index', '')} ({area} ha)"
         ws2[f"D{row_cursor}"] = crop
         ws2[f"E{row_cursor}"] = "Nawożenie / Agrotechnika EKO" if decision in {"NAWOŹ", "MONITORUJ"} else decision
         ws2[f"F{row_cursor}"] = fert
@@ -161,7 +161,7 @@ def build_filled_eko_workbook(
     ws4 = wb["4_Ryzyko_i_Maszyny"]
     risk_rows = []
     for row in eco_fields_df.itertuples(index=False):
-        field_id = str(getattr(row, "h3_index", ""))
+        field_id = str(getattr(row, "field_uid", "") or getattr(row, "h3_index", ""))
         crop = str(getattr(row, "crop_name", ""))
         if pd.notna(getattr(row, "soil_ph", None)) and row.soil_ph < 5.6:
             risk_rows.append((
@@ -260,19 +260,21 @@ def render_eko_documentation_tab(
         return
 
     # 1. Wybór pól prowadzonych ekologicznie (domyślnie zaciągane z oznaczeń 'Działka EKO' w Moim Gospodarstwie)
-    all_ids = result_df["h3_index"].astype(str).tolist()
+    id_col = "field_uid" if "field_uid" in result_df.columns else "h3_index"
+    all_ids = list(dict.fromkeys(result_df[id_col].astype(str).tolist()))
     labels_map = {}
     preselected_eco_ids = []
 
     for r in result_df.itertuples(index=False):
-        h3_str = str(r.h3_index)
+        h3_str = str(getattr(r, "h3_index", "")).strip()
         uid_str = str(getattr(r, "field_uid", "")).strip()
-        prefix = f"{uid_str} ({h3_str})" if uid_str else h3_str
-        labels_map[h3_str] = (
+        key_id = uid_str if id_col == "field_uid" else h3_str
+        prefix = f"{uid_str} ({h3_str})" if (uid_str and h3_str and uid_str != h3_str) else key_id
+        labels_map[key_id] = (
             f"{prefix} — {r.crop_name} ({getattr(r, 'area_ha', 1.5):.2f} ha, pH {r.soil_ph:.1f})"
         )
-        if bool(getattr(r, "is_eco_field", False)):
-            preselected_eco_ids.append(h3_str)
+        if bool(getattr(r, "is_eco_field", False)) and key_id not in preselected_eco_ids:
+            preselected_eco_ids.append(key_id)
 
     default_selection = (
         preselected_eco_ids if preselected_eco_ids else all_ids[: min(5, len(all_ids))]
@@ -297,7 +299,7 @@ def render_eko_documentation_tab(
         )
         return
 
-    eco_df = result_df[result_df["h3_index"].astype(str).isin(selected_eco_ids)].copy()
+    eco_df = result_df[result_df[id_col].astype(str).isin(selected_eco_ids)].copy()
     eco_area = (
         float(eco_df["area_ha"].sum())
         if "area_ha" in eco_df.columns

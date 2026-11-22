@@ -889,7 +889,7 @@ def evaluate_fields_with_rules(
         raw_crop = str(getattr(row, "crop_name", "Pszenica ozima"))
         is_fallow = raw_crop == FALLOW_LABEL
         canon_crop = _canonical_crop_for_rules(raw_crop)
-        row_eco = bool(getattr(row, "is_eco", eco_mode))
+        row_eco = bool(getattr(row, "is_eco", getattr(row, "is_eco_field", eco_mode)))
 
         if not rules_df.empty:
             if is_fallow:
@@ -1128,7 +1128,7 @@ def calculate_profit_forecast(
     for r in evaluated_df.itertuples(index=False):
         raw_crop = str(getattr(r, "crop_name", "Pszenica ozima"))
         canon_crop = _canonical_crop_for_rules(raw_crop)
-        if canon_crop == FALLOW_LABEL:
+        if canon_crop == FALLOW_LABEL or bool(getattr(r, "is_fallow", False)) or _is_unsown_crop_rule(raw_crop):
             rec = str(getattr(r, "rekomendowana_uprawa", "Pszenica ozima")).split("/")[0].strip()
             canon_crop = _canonical_crop_for_rules(rec)
 
@@ -1138,7 +1138,7 @@ def calculate_profit_forecast(
 
         area = float(getattr(r, "area_ha", 1.0) or 1.0)
         ndvi = float(getattr(r, "ndvi", 0.5) or 0.5)
-        is_eco = bool(getattr(r, "is_eco", False))
+        is_eco = bool(getattr(r, "is_eco", getattr(r, "is_eco_field", False)))
         dec = normalize_decision(getattr(r, "decyzja", "MONITORUJ"))
         dose_kg_ha = float(getattr(r, "dawka_nawozu_kg_ha", 0.0) or 0.0)
 
