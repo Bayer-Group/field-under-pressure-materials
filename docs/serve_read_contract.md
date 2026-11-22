@@ -36,7 +36,9 @@ over them, so the farmer front end and QGIS see the same data and no business lo
 | --- | --- | --- |
 | `POST /sandbox` `{mode}` | `app.field` (copy) | `{token, owner_id, role, expires_in, crop_areas}`; no password (see above) |
 | `DELETE /sandbox` | `app.field` | deletes everything of the sandbox, 204 |
-| `POST /login` `{login, password}` | `app.demo_user` | `{token, owner_id, role}`; development logins only; the token goes in `Authorization: Bearer` |
+| `POST /login` `{login, password}` | `app.user_account`, `app.demo_user` | `{token, kind, login, owner_id, role, display_name, expires_in}`; the token goes in `Authorization: Bearer`; see section 6 |
+| `GET /me` | the token | who is logged in: `{kind, login, owner_id, role, display_name, can_write, expires_at, expires_in}` |
+| `POST /register` `{login, password, display_name?}` | `app.user_account` | adds the user (just a login and a password), logged in at once; see section 6 |
 | `GET /crops` | `curated.crop_mapping` | `{crops: [{id, label}], data_status}` (the shape of `FARMER_INPUT_CONTRACT.md`) |
 | `GET /places?q=` | GUGiK UUG + names of the parcels we know | `{places: [{name, label, lon, lat, zoom, source}], data_status: "live"}` for the map search box |
 | `GET /parcels?lon=&lat=` or `?number=` | GUGiK ULDK (cached in `app.parcel`) | `{parcels: [{parcel_id, parcel_number, geometry}], data_status: "live"}` |
@@ -223,3 +225,54 @@ instead of sending the spray again.
 needs the confirmation `outside:<id>`); otherwise the repaired geometry is stored as it is, so saving the same area again does not change
 it (a crop area equal to a parcel used to gain vertices with every save). After a clipping the geometry follows the parcel boundary and
 the next saves leave it unchanged.
+
+## 6. Users: a login and a password (switching users)
+
+A **mock for switching between users, not real authentication**: a login and a password kept in the database (scrypt hashes), a signed
+token that lives 8 hours, and isolation on the server (a user sees only the farms of the `owner_id` in the token). A production system
+would use OIDC. There is nothing to confirm and no e-mail.
+
+**Who exists**
+
+| Kind (`kind`) | Examples | Writes |
+| --- | --- | --- |
+| `account` | `danuta.wisniewska`, `nowy.rolnik1`, `analityk`, or anybody who adds themselves with `POST /register` | yes, on its own farms (the analyst role reads everything and edits nothing) |
+| `example` | `farmer001` / `demo001` ... (the example farmers of the mock data generator) | **no** (403): they are the templates that sandboxes copy |
+| `sandbox` | a visitor of `POST /sandbox` | yes, on the copy, for 8 hours |
+
+The generated accounts each have their own copy of an example farm (the parcels and the computed risk included), so a user can edit it; the
+`nowy.rolnik*` accounts have no field, to try creating the first one. Their passwords are set by `scripts/generate_user_accounts.py`: random ones kept only in the team's private file
+`data/_loader/user_accounts.csv` (outside git), or, for tests of the front end, one simple password for all of them (`--password`; a mock).
+
+**Endpoints**
+- `POST /login` `{login, password}`: the login is case-insensitive. Wrong password and unknown login give the same `401 wrong login or
+  password` (and take the same time). `422` for an empty or too long input. The earlier logins of the example farmers work here too.
+- `GET /me`: who the token belongs to (the front end can show the name and the remaining time after a reload, without storing more);
+  `can_write` tells whether to offer editing. `401` without a valid token.
+- `POST /register` `{login, password, display_name?}`: adds a user and logs in at once (`201`, the same answer as `/login` plus
+  `created: true`). The login is 3 to 30 characters: lower-case letters, digits, `.`, `_`, `-`, starting with a letter or a digit (an upper
+  case letter is lowered); the password 4 to 100 characters. `409` if the login is taken (also by an example farmer), `422` for an
+  invalid input. The new user owns an empty farm (`owner_id` `u-<login>`).
+- Limits (per worker process): `/login` 60 attempts a minute per address and 10 per login (`429`); `/register` 20 a minute per
+  address, at most `MAX_ACCOUNTS` (500) accounts. `ALLOW_REGISTRATION=0` or `DEMO_READONLY=1` switch the registration off (`503`).
+
+**Switching users in the front end.** The token is stateless, so any number of tokens work at the same time. Keep the sessions by login
+and mark the active one; "log out" is just forgetting the token (the server keeps nothing):
+
+```js
+const KEY = 'fup.sessions.v1';
+const store = () => JSON.parse(localStorage.getItem(KEY) || '{"active":null,"sessions":{}}');
+async function signIn(login, password) {                       // also the way to switch: sign in as somebody else
+  const r = await fetch(BASE + '/login', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ login, password }) });
+  if (!r.ok) throw new Error(r.status === 401 ? 'Wrong login or password.' : 'Could not sign in.');
+  const s = await r.json(), st = store();
+  st.sessions[s.login] = { token: s.token, name: s.display_name, expiresAt: Date.now() + s.expires_in * 1000 };
+  st.active = s.login; localStorage.setItem(KEY, JSON.stringify(st)); return s;
+}
+const switchTo = login => { const st = store(); if (st.sessions[login]) { st.active = login; localStorage.setItem(KEY, JSON.stringify(st)); } };
+const signOut = () => { const st = store(); delete st.sessions[st.active]; st.active = Object.keys(st.sessions)[0] || null; localStorage.setItem(KEY, JSON.stringify(st)); };
+// every request: headers.Authorization = 'Bearer ' + store().sessions[store().active].token; on 401 drop that session and ask for the login again
+```
+
+An existing sandbox visitor is one more session of the same kind (`kind: "sandbox"`, no login): it can sit in the list next to the accounts.
