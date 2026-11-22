@@ -14,12 +14,16 @@
 #   GCLOUD_CONFIG (geoearth)  gcloud configuration name: account, project, region
 #   VM_NAME (fup-vm)  ZONE (europe-central2-a)  MACHINE_TYPE (e2-standard-4)  DISK_GB (100)
 #   REPO_URL, BRANCH (team/geoearth-junction)  LOCAL_PORT (5433)  API_PORT (8000)
+#   VM_USER (mterlecki)  the Linux user on the VM that owns the checkout and .env; setup and deploy log in as this user
 #   DRY_RUN=1  only print the state-changing commands, do not run them
 #
 # Rules:
 #   - The database port (5432) is NOT opened in the GCP firewall; access only through an SSH tunnel.
-#   - The database password is generated on the VM and stays only in ~/field-under-pressure-materials/.env there.
-#     To read it (e.g. for QGIS): gcloud compute ssh "$VM_NAME" --command 'grep POSTGRES_PASSWORD ~/field-under-pressure-materials/.env'
+#   - The checkout and .env live in the home directory of VM_USER (/home/$VM_USER/field-under-pressure-materials).
+#     gcloud otherwise logs in as your local user name, whose home on the VM has no checkout, so a deploy by another
+#     team member would fail. Tunnels work as any user and do not use VM_USER.
+#   - The database password is generated on the VM and stays only in the .env of that checkout.
+#     To read it (e.g. for QGIS): gcloud compute ssh "$VM_USER@$VM_NAME" --command 'grep POSTGRES_PASSWORD ~/field-under-pressure-materials/.env'
 #   - The script never deletes anything. Delete the VM manually: gcloud compute instances delete "$VM_NAME"
 
 set -euo pipefail
@@ -33,6 +37,7 @@ REPO_URL="${REPO_URL:-https://github.com/geoearth-junction/field-under-pressure-
 BRANCH="${BRANCH:-team/geoearth-junction}"
 LOCAL_PORT="${LOCAL_PORT:-5433}"
 API_PORT="${API_PORT:-8000}"
+VM_USER="${VM_USER:-mterlecki}"
 DRY_RUN="${DRY_RUN:-0}"
 
 # gcloud configuration for this process only (does not switch the active configuration in other terminals).
@@ -102,7 +107,7 @@ cmd_setup() {
     return 0
   fi
   # Script executed on the VM. Variables are passed explicitly; the password is generated on the spot.
-  gcloud compute ssh "$VM_NAME" --zone "$ZONE" \
+  gcloud compute ssh "$VM_USER@$VM_NAME" --zone "$ZONE" \
     --command "REPO_URL='$REPO_URL' BRANCH='$BRANCH' bash -s" <<'REMOTE'
 set -euo pipefail
 
@@ -160,7 +165,7 @@ cmd_deploy() {
     echo "[DRY_RUN] ssh to $VM_NAME: update $BRANCH, ensure AUTH_SECRET in .env, docker compose up -d --build backend, health check"
     return 0
   fi
-  gcloud compute ssh "$VM_NAME" --zone "$ZONE" --command "BRANCH='$BRANCH' API_PORT='$API_PORT' bash -s" <<'REMOTE'
+  gcloud compute ssh "$VM_USER@$VM_NAME" --zone "$ZONE" --command "BRANCH='$BRANCH' API_PORT='$API_PORT' bash -s" <<'REMOTE'
 set -euo pipefail
 DIR="$HOME/field-under-pressure-materials"
 cd "$DIR"
