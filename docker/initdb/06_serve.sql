@@ -104,3 +104,17 @@ FROM curated.septoria_cell_day d
 JOIN raw.grid_cell g ON g.grid_id = d.grid_id
 CROSS JOIN o
 CROSS JOIN LATERAL (SELECT o.lon0 + round((g.lon - o.lon0) / 0.044) * 0.044 AS x, o.lat0 + round((g.lat - o.lat0) / 0.044) * 0.044 AS y) n;
+
+-- Hourly weather for the spray window (docs/serve_read_contract.md, "Spray window"; rules in config/spray_window.toml): wind and
+-- gusts in m/s (the source stores km/h), times shifted for the demo. In the demo this is the "forecast" (replay of the actual
+-- weather of the next hours). No business logic: the API applies the limits.
+CREATE OR REPLACE VIEW serve.spray_weather_hourly AS
+SELECT w.grid_id,
+       w.utc_time + make_interval(days => sh.s)   AS utc_time,
+       w.local_time + make_interval(days => sh.s) AS local_time,
+       w.temperature,                                           -- degrees C, 2 m
+       w.precipitation,                                         -- mm per hour (IMERG)
+       w.wind_speed / 3.6                         AS wind_speed_ms,   -- m/s, 10 m
+       w.wind_gust / 3.6                          AS wind_gust_ms     -- m/s, 10 m
+FROM raw.weather_hourly w
+CROSS JOIN (SELECT serve.shift_days() AS s) sh;
