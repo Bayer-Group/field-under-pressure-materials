@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import os
 import tomllib
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Optional
 from zoneinfo import ZoneInfo
@@ -43,6 +43,23 @@ def now_shown(at: Optional[datetime] = None) -> datetime:
     if t.tzinfo is not None:
         t = t.astimezone(TZ).replace(tzinfo=None)
     return t.replace(minute=0, second=0, microsecond=0)
+
+
+# The demo clock of the database: the same "today" as GET /clock (serve.clock) and the wall-clock hour in Europe/Warsaw, so that the
+# septoria signal of the day and the shifted hourly weather come from one clock (not from the clock of the API process).
+CLOCK_SQL = """
+SELECT date_trunc('hour', now() AT TIME ZONE 'Europe/Warsaw') AS now, today FROM serve.clock
+"""
+
+
+def shown_now(con, at: Optional[datetime] = None) -> tuple[datetime, date]:
+    """(start of the hour, day of the septoria signal). With `at`: that hour and its date. Without it: the database clock,
+    where the day is serve.clock.today (what GET /clock and GET /me/crop-areas call today)."""
+    if at is not None:
+        hour = now_shown(at)
+        return hour, hour.date()
+    row = con.execute(CLOCK_SQL).fetchone()
+    return row["now"].replace(minute=0, second=0, microsecond=0), row["today"]
 
 
 # Crop areas with the septoria assessment of the day and the grid cell of their weather (owner NULL = all, for the analyst).
@@ -90,8 +107,8 @@ def compute(con, owner_id: Optional[str], at: Optional[datetime] = None, work_ho
     """[(crop area row, assessment of domain.spray_window.assess)]: the crop areas of owner_id (None = all, the analyst),
     or only crop_area_id."""
     r = rules()
-    now = now_shown(at)
-    params = {"day": now.date(), "owner": owner_id, "area": crop_area_id}
+    now, day = shown_now(con, at)
+    params = {"day": day, "owner": owner_id, "area": crop_area_id}
     areas = con.execute(AREAS_SQL, params).fetchall()
     cells = sorted({a["grid_id"] for a in areas if a["grid_id"]})
     hours = _hours(con, cells, now, r) if cells else {}

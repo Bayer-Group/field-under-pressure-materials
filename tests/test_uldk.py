@@ -11,15 +11,17 @@ if BASE_DIR not in sys.path:
 from backend.app.ingestion.uldk_connector import UldkConnector, UldkError, parse_response  # noqa: E402
 
 POLY = "SRID=4326;POLYGON((20.99 52.19, 21.0 52.19, 21.0 52.2, 20.99 52.19))"
+LOC = "mazowieckie|powiat płoński|Płońsk"
 
 
 class Parse(unittest.TestCase):
     def test_one_parcel(self):
-        r = parse_response(f"0\n146505_8.0116.5|5|1-01-16|{POLY}\n")
-        self.assertEqual(r, [{"parcel_id": "146505_8.0116.5", "parcel_number": "5", "region": "1-01-16", "ewkt": POLY}])
+        r = parse_response(f"0\n142009_2.0016.31|31|Krępica|{LOC}|{POLY}\n")
+        self.assertEqual(r, [{"parcel_id": "142009_2.0016.31", "parcel_number": "31", "region": "Krępica", "voivodeship": "mazowieckie",
+                              "county": "powiat płoński", "commune": "Płońsk", "ewkt": POLY}])
 
     def test_several_parcels(self):
-        r = parse_response(f"2\n111_1.0001.1|1|A|{POLY}\n111_1.0001.2|2|A|{POLY}\n")
+        r = parse_response(f"2\n111_1.0001.1|1|A|{LOC}|{POLY}\n111_1.0001.2|2|A|{LOC}|{POLY}\n")
         self.assertEqual([p["parcel_id"] for p in r], ["111_1.0001.1", "111_1.0001.2"])
 
     def test_no_match_is_empty_not_an_error(self):
@@ -31,14 +33,14 @@ class Parse(unittest.TestCase):
                 parse_response(bad)
 
     def test_incomplete_or_wrong_srid_records_are_skipped(self):
-        self.assertEqual(parse_response(f"1\nonly|two\n111|1|A|POLYGON((0 0, 1 0, 1 1, 0 0))\n"), [])
+        self.assertEqual(parse_response(f"1\nonly|two\n111|1|A|{LOC}|POLYGON((0 0, 1 0, 1 1, 0 0))\n111|1|A|POLYGON((0 0, 1 0, 1 1, 0 0))\n"), [])
 
 
 class Connector(unittest.TestCase):
     @patch("urllib.request.urlopen")
     def test_lookup_by_xy_and_number(self, urlopen):
         resp = MagicMock()
-        resp.read.return_value = f"0\n146505_8.0116.5|5|1-01-16|{POLY}\n".encode()
+        resp.read.return_value = f"0\n146505_8.0116.5|5|1-01-16|{LOC}|{POLY}\n".encode()
         urlopen.return_value.__enter__.return_value = resp
         self.assertEqual(UldkConnector.lookup_by_xy(21.0, 52.2)[0]["parcel_id"], "146505_8.0116.5")
         self.assertEqual(UldkConnector.lookup_by_number("146505_8.0116.5")[0]["parcel_number"], "5")
@@ -50,6 +52,19 @@ class Connector(unittest.TestCase):
     def test_network_failure_is_uldk_error(self, _):
         with self.assertRaises(UldkError):
             UldkConnector.lookup_by_xy(21.0, 52.2)
+
+
+class Location(unittest.TestCase):
+    def test_label(self):
+        from backend.app.services.parcels import location_label
+        self.assertEqual(location_label("Krępica", "Płońsk"), "Krępica, gm. Płońsk")           # a village in a rural commune
+        self.assertEqual(location_label("1-01-16", "Warszawa (miasto)"), "Warszawa")             # a town: the precinct is a number
+        self.assertEqual(location_label("Płońsk", "Płońsk"), "Płońsk")                           # no repetition
+        self.assertEqual(location_label("Śródmieście 2", "Radom (miasto)"), "Śródmieście 2, Radom")   # a named district of a town
+        self.assertEqual(location_label("3", "Ostrołęka (miasto)"), "Ostrołęka")
+        self.assertEqual(location_label(None, "Radom (miasto)"), "Radom")
+        self.assertEqual(location_label("Wola", None), "Wola")
+        self.assertIsNone(location_label(None, None))
 
 
 if __name__ == "__main__":

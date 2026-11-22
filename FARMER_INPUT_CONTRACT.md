@@ -10,6 +10,17 @@ This document records the agreed input direction and an example contract. It is 
 4. MapLibre saves the data via the backend. QGIS reads the same backend representation for spatial inspection. The crop reported by a farmer is distinguishable from any crop-map value.
 5. The switchable frontend mock supplies five example plots, some with saved data and some empty, and accepts and returns submitted data. The frontend will switch to the real backend once endpoints are ready. QGIS can use the same mock examples; frontend-local changes are not shared with QGIS without an agreed exchange. Clearly identify mock data and document its storage lifetime.
 
+The farmer-approved multi-parcel geometry validation and group-save extension is described in
+[GEOMETRY_VALIDATION_CONTRACT.md](GEOMETRY_VALIDATION_CONTRACT.md). The one-parcel examples
+below describe the existing implementation, not the completed multi-parcel workflow.
+
+## Spray input interaction
+
+The farmer explicitly selects whether a spray was carried out; neither answer is selected
+by default. If yes, each spray requires the application date and a positive protection
+duration in days. If no, the saved `past_sprays` list is empty. An unanswered question
+cannot be saved. The UI shows the duration field after a date is selected.
+
 ## Proposed field representation
 
 The example uses GeoJSON geometry in longitude/latitude and ISO calendar dates. The examples show values in a saved record and an unfilled example. All required inputs must be supplied before a record is saved. An empty spray list is allowed when no sprays have been carried out. Dates describe calendar days, not timestamps.
@@ -118,9 +129,9 @@ No match is a successful response with `"parcels": []`; the client displays a no
 ```json
 {
   "crops": [
-    {"id": "wheat", "label": "Pszenica"},
-    {"id": "soy", "label": "Soja"},
-    {"id": "maize", "label": "Kukurydza"}
+    {"id": "wheat", "label": "Wheat"},
+    {"id": "soy", "label": "Soy"},
+    {"id": "maize", "label": "Maize"}
   ],
   "data_status": "mock"
 }

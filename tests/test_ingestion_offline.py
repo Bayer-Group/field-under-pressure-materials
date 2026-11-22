@@ -19,7 +19,7 @@ class TestIngestionConnectorsOffline(unittest.TestCase):
     def test_uldk_connector_success(self, mock_urlopen):
         # Prawdziwy format ULDK: status 0, potem rekord id|numer|obręb|EWKT (pola rozdzielone znakiem |)
         mock_response = MagicMock()
-        mock_response.read.return_value = (b"0\n141201_1.0001.123/4|123/4|1-01-16|"
+        mock_response.read.return_value = (b"0\n141201_1.0001.123/4|123/4|1-01-16|mazowieckie|powiat Warszawa|Warszawa (miasto)|"
                                            b"SRID=4326;POLYGON((20.75 52.18, 20.76 52.18, 20.76 52.17, 20.75 52.17, 20.75 52.18))\n")
         mock_urlopen.return_value.__enter__.return_value = mock_response
 

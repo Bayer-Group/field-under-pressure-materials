@@ -3,8 +3,9 @@
 Konektor do ULDK GUGiK (Usługa Lokalizacji Działek Katastralnych), https://uldk.gugik.gov.pl/.
 
 Odpowiedź ULDK to tekst: pierwsza linia to status (`0` lub liczba trafień przy wyniku, `-1 ...` gdy nie znaleziono), kolejne linie to
-rekordy z polami rozdzielonymi znakiem `|` w kolejności z parametru `result`. Prosimy o `id,parcel,region,geom_wkt` w EPSG:4326, więc
-ostatnie pole to EWKT w postaci `SRID=4326;POLYGON((lon lat, ...))`. Brak działki to pusty wynik; awaria usługi to `UldkError`.
+rekordy z polami rozdzielonymi znakiem `|` w kolejności z parametru `result`. Prosimy o `id,parcel,region,voivodeship,county,commune,geom_wkt`
+w EPSG:4326: numer działki, obręb (`region`, wieś albo numer obrębu w mieście), województwo, powiat, gmina, a ostatnie pole to EWKT w
+postaci `SRID=4326;POLYGON((lon lat, ...))`. Brak działki to pusty wynik; awaria usługi to `UldkError`.
 """
 from __future__ import annotations
 
@@ -14,7 +15,7 @@ import urllib.request
 
 from backend.app.core.config import ULDK_API_URL
 
-RESULT_FIELDS = "id,parcel,region,geom_wkt"
+RESULT_FIELDS = "id,parcel,region,voivodeship,county,commune,geom_wkt"
 
 
 class UldkError(Exception):
@@ -33,12 +34,13 @@ def parse_response(text: str) -> list[dict]:
         raise UldkError(f"unexpected ULDK answer: {lines[0][:120]}")
     parcels = []
     for line in lines[1:]:
-        parts = line.split("|", 3)
-        if len(parts) < 4:
+        parts = line.split("|", 6)
+        if len(parts) < 7:
             continue
-        parcel_id, number, region, ewkt = (p.strip() for p in parts)
+        parcel_id, number, region, voivodeship, county, commune, ewkt = (p.strip() for p in parts)
         if parcel_id and ewkt.upper().startswith("SRID=4326;"):
-            parcels.append({"parcel_id": parcel_id, "parcel_number": number, "region": region, "ewkt": ewkt})
+            parcels.append({"parcel_id": parcel_id, "parcel_number": number, "region": region, "voivodeship": voivodeship,
+                            "county": county, "commune": commune, "ewkt": ewkt})
     return parcels
 
 
@@ -82,7 +84,7 @@ class UldkConnector:
         if not found:
             return {"status": "NOT_FOUND", "message": f"Działka {teryt_id} nie została znaleziona w ULDK."}
         p = found[0]
-        return {"status": "OK", "teryt_id": p["parcel_id"], "wkt": p["ewkt"], "raw_info": [p["parcel_number"], p["region"]]}
+        return {"status": "OK", "teryt_id": p["parcel_id"], "wkt": p["ewkt"], "raw_info": [p["parcel_number"], p["region"], p["commune"]]}
 
     @classmethod
     def get_parcel_by_xy(cls, x: float, y: float, epsg: int = 2180):
