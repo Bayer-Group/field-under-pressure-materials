@@ -7,7 +7,7 @@ the VM, see `docker/VM.md`). CORS allows any origin and no cookies are used, so 
 call it with the `Authorization: Bearer` header.
 
 **Start here: the sandbox.** `POST /sandbox` `{"mode": "mock" | "empty"}` needs no password and returns a token for 8 hours. `mock`
-copies **the next example farm in turn** (the example farms are handed out one after another, so a room gets different farms; the
+copies **the next example farm in turn** (a pool of ten reviewed example farms, `SANDBOX_TEMPLATES`, handed out one after another; the
 answer has `template`, the example farm that was copied, and `display_name`): a farm of mostly 3 fields, some of them split into 2 or 3
 crop areas, with sprays, parcels (`parcel_ids`) and risk. `empty` starts from scratch. Whatever the visitor saves belongs to that
 sandbox and is kept for the 8 hours (keep the token, for example in `localStorage`, and the data is there after a reload);

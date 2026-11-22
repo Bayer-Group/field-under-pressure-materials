@@ -36,6 +36,7 @@ services:
       ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-1}   # 0: POST /register is switched off
       MAX_ACCOUNTS: ${MAX_ACCOUNTS:-500}
       SANDBOX_RATE_PER_MIN: ${SANDBOX_RATE_PER_MIN:-150}
+      SANDBOX_TEMPLATES: ${SANDBOX_TEMPLATES-farmer-024,farmer-055,farmer-042,farmer-020,farmer-015,farmer-016,farmer-099,farmer-086,farmer-051,farmer-093}   # example farms a sandbox copies; empty: all
       WEB_CONCURRENCY: ${WEB_CONCURRENCY:-3}    # uvicorn worker processes (one Python process is limited by the GIL)
     ports:
       - "127.0.0.1:${BACKEND_PORT:-8000}:8000"   # only this machine; the internet reaches the API through caddy (HTTPS)

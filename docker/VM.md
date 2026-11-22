@@ -123,7 +123,8 @@ The API is served over **HTTPS** by the compose service `caddy` (automatic certi
 The external IP of the VM is ephemeral: after a stop and start the address changes (and the certificate is requested again). Do not
 stop the VM before a demo; reserve a static IP or use a domain to make the address permanent. Switches in the VM's `.env`:
 `DEMO_READONLY=1` (nobody saves anything, visitors get a read-only view), `SANDBOX_TTL_HOURS`, `SANDBOX_MAX_OWNERS`,
-`MAX_AREAS_SANDBOX`, `MAX_AREA_HA`, `WEB_CONCURRENCY`; apply with `scripts/provision_vm.sh deploy`. Load test:
+`MAX_AREAS_SANDBOX`, `MAX_AREA_HA`, `WEB_CONCURRENCY`, `SANDBOX_TEMPLATES` (comma-separated example farms a sandbox copies, empty:
+all of them); apply with `scripts/provision_vm.sh deploy`. Load test:
 `python scripts/load_test_api.py --base https://<PUBLIC_HOST> --users 100 --ramp 15` (100 people in 15 s: p95 0.4 s, no errors).
 
 ## Who needs the tunnel (and who does not)
