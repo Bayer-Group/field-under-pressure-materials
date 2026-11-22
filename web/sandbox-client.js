@@ -1,59 +1,119 @@
-/** API client for the deployed demo sandbox. Tokens stay in browser storage. */
+/** API client for the farm service. Each instance owns one type of session. */
 (function (root) {
   'use strict';
   const BASE_URL = 'https://34-118-11-71.nip.io/api/v1';
   const STORAGE_KEY = 'field-under-pressure.sandbox.v1';
+  const ACCOUNT_STORAGE_KEY = 'field-under-pressure.account.v1';
+
+  /** Create an independent client for a sandbox or an account session. */
   function create(options = {}) {
     const base = (options.baseUrl || BASE_URL).replace(/\/$/, '');
     const fetcher = options.fetch || root.fetch.bind(root);
     const storage = options.storage || root.localStorage;
-    const storageKey = options.storageKey || STORAGE_KEY;
-    let session = null;
-    let renewal = null;
-    try { session = JSON.parse(storage.getItem(storageKey) || 'null'); } catch (_) { session = null; }
+    const kind = options.kind || 'sandbox';
+    const storageKey = options.storageKey || (kind === 'account' ? ACCOUNT_STORAGE_KEY : STORAGE_KEY);
+
+    /** Read only this client's persisted session. */
+    function readSession() {
+      try { return JSON.parse(storage.getItem(storageKey) || 'null'); }
+      catch (_) { return null; }
+    }
+    let session = readSession();
+
+    /** Report a recorded expiry even after the expired token has been discarded. */
+    function sessionState() {
+      if (!session) return 'none';
+      if (session.expired || (session.token && (!Number.isFinite(session.expiresAt) || session.expiresAt <= Date.now()))) return 'expired';
+      return session.token ? 'active' : 'none';
+    }
+
+    /** Discard the expired token without touching a replacement saved in another tab. */
+    function expire(expected = session) {
+      if (!expected?.token || expected !== session) return;
+      session = { expired: true };
+      try {
+        if (readSession()?.token === expected.token) storage.setItem(storageKey, JSON.stringify(session));
+      } catch (_) { /* This instance has already stopped using the token. */ }
+      options.onExpired?.();
+    }
+
+    /** Use the token captured at dispatch and invalidate it on an authenticated 401. */
     async function request(path, { method = 'GET', body, authenticated = true } = {}) {
+      const requestedSession = authenticated ? session : null;
       const headers = {};
       if (authenticated) {
-        if (!session?.token) { const error = new Error('Sandbox session is unavailable.'); error.status = 401; throw error; }
-        headers.Authorization = `Bearer ${session.token}`;
+        if (sessionState() !== 'active') {
+          expire(requestedSession);
+          throw Object.assign(new Error('Your farm session has expired.'), { status: 401 });
+        }
+        headers.Authorization = `Bearer ${requestedSession.token}`;
       }
       if (body !== undefined) headers['Content-Type'] = 'application/json';
       let response;
       try { response = await fetcher(base + path, { method, headers, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) }); }
       catch (_) { throw new Error('Unable to reach the farm service. Please try again.'); }
       let data = null;
-      if (response.status !== 204) { try { data = await response.json(); } catch (_) { throw new Error('The farm service returned an invalid response.'); } }
+      if (response.status === 401 && requestedSession) expire(requestedSession);
+      if (response.status !== 204) {
+        try { data = await response.json(); }
+        catch (_) { if (response.ok) throw new Error('The farm service returned an invalid response.'); }
+      }
       if (!response.ok) {
-        const message = response.status === 401 ? 'Your farm session has expired.' :
-          response.status === 422 ? 'The farm service rejected the inputs. Check the field and parcel limits.' : 'The farm service could not complete the request.';
+        const message = response.status === 401 && authenticated ? 'Your farm session has expired.' :
+          response.status === 422 ? 'The farm service rejected the inputs. Check the field and parcel limits.' :
+          response.status === 429 ? 'Too many requests. Wait a minute and try again.' :
+          'The farm service could not complete the request. Please try again.';
         const error = new Error(message); error.status = response.status; error.detail = data?.detail; throw error;
       }
       return data;
     }
-    async function start(mode) {
-      if (!['mock', 'empty'].includes(mode)) throw new Error('Invalid sandbox mode.');
-      const data = await request('/sandbox', { method: 'POST', body: { mode }, authenticated: false });
-      if (typeof data?.token !== 'string' || !data.token) throw new Error('The farm session could not be created.');
-      const next = { token: data.token, mode, expiresAt: Date.now() + Number(data.expires_in || 28800) * 1000 };
+    /** Keep only the token, expiry and public session information. */
+    function saveSession(data, mode) {
+      const ttl = data?.expires_in;
+      if (typeof data?.token !== 'string' || !data.token || !Number.isFinite(ttl) || ttl <= 0) {
+        throw new Error('The farm service returned an incomplete session.');
+      }
+      const next = { token: data.token, mode, expiresAt: Date.now() + ttl * 1000 };
       try { storage.setItem(storageKey, JSON.stringify(next)); } catch (_) { throw new Error('Could not save your farm session in this browser.'); }
       session = next;
       return { mode, expiresAt: next.expiresAt };
     }
+
+    /** Open a sandbox only when explicitly requested. */
+    async function start(mode) {
+      if (kind !== 'sandbox' || !['mock', 'empty'].includes(mode)) throw new Error('Invalid sandbox mode.');
+      const data = await request('/sandbox', { method: 'POST', body: { mode }, authenticated: false });
+      return saveSession(data, mode);
+    }
+
+    /** Login and registration both return an account token. */
+    async function authenticate(path, body) {
+      if (kind !== 'account') throw new Error('An account client is required.');
+      const data = await request(path, { method: 'POST', body, authenticated: false });
+      return saveSession(data);
+    }
+
+    /** Sign out locally because the API has no token revocation endpoint. */
+    function logout() {
+      if (kind !== 'account') return;
+      if (readSession()?.token === session?.token) storage.removeItem(storageKey);
+      session = null;
+    }
+
     return {
-      hasSession: () => Boolean(session?.token),
+      hasSession: () => sessionState() === 'active',
+      sessionState,
+      restore: () => { session = readSession(); },
+      expiresAt: () => session?.expiresAt,
+      expire,
       start,
-      async places(query) {
-        const path = `/places?${new URLSearchParams({ q: query })}`;
-        try { return await request(path); }
-        catch (error) {
-          if (error.status !== 401 || !session?.mode) throw error;
-          if (!renewal) renewal = start(session.mode).finally(() => { renewal = null; });
-          await renewal;
-          return request(path);
-        }
-      },
+      login: body => authenticate('/login', body),
+      register: body => authenticate('/register', body),
+      logout,
+      me: () => request('/me'),
+      places: query => request(`/places?${new URLSearchParams({ q: query })}`),
       fields: () => request('/fields'),
-      clock: () => request('/clock'),
+      clock: () => request('/clock', { authenticated: false }),
       async crops() {
         const result = await request('/crops', { authenticated: false });
         const items = Array.isArray(result) ? result : result?.crops;
@@ -115,6 +175,6 @@
       deleteSpray: (id, sprayId) => request(`/crop-areas/${encodeURIComponent(id)}/sprays/${encodeURIComponent(sprayId)}`, { method: 'DELETE' })
     };
   }
-  root.SandboxClient = { create, BASE_URL, STORAGE_KEY };
-  if (typeof module !== 'undefined' && module.exports) module.exports = { create, BASE_URL, STORAGE_KEY };
+  root.SandboxClient = { create, BASE_URL, STORAGE_KEY, ACCOUNT_STORAGE_KEY };
+  if (typeof module !== 'undefined' && module.exports) module.exports = root.SandboxClient;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

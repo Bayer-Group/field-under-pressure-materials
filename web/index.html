@@ -9,7 +9,7 @@
   <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
   <script src="https://unpkg.com/@turf/turf@7.1.0/turf.min.js"></script>
   <script src="geometry-preview.js?v=multicut-2"></script>
-  <script src="sandbox-client.js?v=area-patch-1"></script>
+  <script src="sandbox-client.js?v=spray-window-1"></script>
   <script src="crop-workflow.js?v=validation-errors-4"></script>
   <style>
     :root { color-scheme: light; --green: #176544; --ink: #15221b; --muted: #66766d; --line: rgba(32,62,45,.10); --paper: rgba(248,251,247,.93); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-kerning: normal; }
@@ -33,6 +33,8 @@
     .locate { width: 52px; height: 52px; display: grid; place-items: center; flex: none; border: 1px solid rgba(255,255,255,.8); border-radius: 17px; background: var(--paper); color: var(--ink); box-shadow: 0 5px 22px rgba(24,50,35,.12); backdrop-filter: blur(18px); }
     .locate:active, .option:active { transform: scale(.985); }
     .sheet { position: absolute; z-index: 2; left: 0; right: 0; bottom: 0; padding: 10px 20px max(20px, env(safe-area-inset-bottom)); border: 1px solid rgba(255,255,255,.85); border-bottom: 0; border-radius: 28px 28px 0 0; background: rgba(235,246,238,.94); box-shadow: 0 -10px 40px rgba(20,50,33,.14); backdrop-filter: blur(25px); max-height: min(68dvh, 570px); overflow-y: auto; transition: transform 360ms cubic-bezier(.22,1,.36,1), opacity 220ms ease; }
+    .app.sandbox-mode .sheet:not(.collapsed) { height: min(68dvh, 570px); scrollbar-gutter: stable; overflow-anchor: none; }
+    @media (min-width: 720px) { .app.sandbox-mode .sheet:not(.collapsed) { height: calc(100dvh - 115px); } }
     .sheet.resizing { overflow: hidden; }
     .handle { width: 36px; height: 4px; border-radius: 4px; background: #a9bdb0; margin: 1px auto 20px; }
     .eyebrow { color: var(--green); font-size: 11px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; margin: 0 0 8px; }
@@ -59,18 +61,50 @@
     .parcel-popup .maplibregl-popup-content { min-width: 235px; max-width: min(80vw, 310px); padding: 16px; border: 1px solid rgba(255,255,255,.85); border-radius: 16px; background: rgba(248,251,247,.96); box-shadow: 0 8px 28px rgba(24,50,35,.2); color: var(--ink); }
     .parcel-popup .maplibregl-popup-close-button { width: 36px; height: 36px; font-size: 22px; color: #61766a; border-radius: 0 16px 0 10px; }
     .app.sandbox-mode .search[hidden] { display: none; }
-    dialog.journey-dialog { width: min(520px, calc(100vw - 32px)); max-width: none; padding: clamp(24px, 6vw, 38px); border: 1px solid rgba(255,255,255,.85); border-radius: 28px; color: var(--ink); background: rgba(241,248,242,.96); box-shadow: 0 22px 70px rgba(20,50,33,.25); }
-    dialog.journey-dialog::backdrop { background: rgba(27,48,36,.30); backdrop-filter: blur(9px); }
+    .app.entry-open > :not(#map, dialog) { visibility: hidden; }
+    .app.workspace-exiting #map { visibility: hidden; }
+    dialog.journey-dialog { width: min(440px, calc(100vw - 32px - env(safe-area-inset-left) - env(safe-area-inset-right))); max-width: none; max-height: calc(100dvh - 32px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); padding: clamp(20px, 6vw, 32px); border: 1px solid rgba(255,255,255,.85); border-radius: 24px; color: var(--ink); background: #f1f8f2; box-shadow: 0 22px 70px rgba(20,50,33,.25); overscroll-behavior: contain; }
+    dialog.journey-dialog::backdrop { background: rgba(27,48,36,.30); backdrop-filter: blur(7px); }
+    .journey-screen:not([hidden]) { animation: journey-in 180ms cubic-bezier(.22,1,.36,1) both; }
+    @keyframes journey-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
     .journey-eyebrow { margin: 0 0 12px; color: var(--green); font-size: 11px; font-weight: 750; letter-spacing: .1em; text-transform: uppercase; }
-    .journey-dialog h2 { margin: 0; font-size: clamp(27px, 7vw, 34px); line-height: 1.08; letter-spacing: -.04em; }
-    .journey-intro { margin: 10px 0 22px; color: #5a6e60; font-size: 15px; line-height: 1.45; }
-    .journey-choices { display: grid; gap: 10px; }
-    .journey-choice { width: 100%; min-height: 80px; padding: 16px; display: flex; align-items: center; justify-content: space-between; gap: 14px; text-align: left; color: var(--ink); background: rgba(255,255,255,.82); border: 1px solid rgba(33,75,47,.1); border-radius: 17px; }
-    .journey-choice:active { transform: scale(.99); }
+    .journey-dialog h2 { margin: 0; font-size: clamp(25px, 7vw, 32px); line-height: 1.12; letter-spacing: -.04em; text-wrap: balance; }
+    .journey-dialog h2:focus { outline: none; }
+    .journey-choices, .journey-form { display: grid; gap: 10px; margin-top: 18px; }
+    .journey-choice { width: 100%; min-height: 76px; padding: 13px; display: flex; align-items: center; gap: 12px; text-align: left; color: var(--ink); background: #fff; border: 1px solid #d5e2d7; border-radius: 16px; transition: background 140ms ease, transform 100ms ease; }
+    .journey-choice:hover:not(:disabled) { background: #e8f3eb; }
+    .journey-choice:active:not(:disabled) { transform: scale(.985); }
+    .journey-choice-icon { flex: none; display: grid; place-items: center; width: 38px; height: 38px; border-radius: 12px; background: #e2f0e5; color: var(--green); }
+    .journey-choice > svg { margin-left: auto; width: 16px; color: #53715e; }
     .journey-choice strong, .journey-choice small { display: block; }
     .journey-choice strong { font-size: 16px; letter-spacing: -.02em; }
-    .journey-choice small { margin-top: 4px; color: #627568; font-size: 13px; line-height: 1.35; }
-    .journey-choice svg { color: #759080; width: 18px; }
+    .journey-choice small { margin-top: 3px; color: #53685a; font-size: 13px; line-height: 1.35; }
+    .journey-back, .journey-link { min-height: 44px; border: 0; border-radius: 9px; padding: 0 8px; color: var(--green); background: transparent; font-size: 14px; font-weight: 700; }
+    .journey-back { display: flex; align-items: center; gap: 3px; margin: -8px 0 8px -8px; }
+    .journey-back svg { width: 16px; }
+    .journey-link { justify-self: center; }
+    .journey-form label { display: grid; gap: 5px; font-size: 14px; font-weight: 650; }
+    .journey-form label small { color: #53685a; font-weight: 400; }
+    .journey-form input { width: 100%; min-height: 46px; border: 1px solid #c8d8cb; border-radius: 12px; padding: 9px 12px; background: #fff; color: var(--ink); font-size: 16px; }
+    .journey-password { position: relative; display: block; }
+    .journey-password input { padding-right: 66px; }
+    .journey-password button { position: absolute; inset: 1px 1px 1px auto; min-width: 60px; }
+    .journey-form .primary { margin: 4px 0 0; }
+    .journey-dialog button:disabled { cursor: wait; opacity: .65; }
+    .journey-message { margin: 0; }
+    .journey-message:not(:empty) { margin-top: 12px; }
+    .journey-message[data-error] { color: #8a332e; }
+    .workspace-note { margin: 0; color: #53685a; font-size: 12px; line-height: 1.35; }
+    .workspace-button { display: flex; align-items: center; gap: 7px; width: auto; min-width: 52px; max-width: min(190px, 60vw); padding: 0 11px; font-size: 13px; font-weight: 700; }
+    .workspace-button[hidden] { display: none; }
+    .workspace-button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .top.searching .workspace-button, .app.cropping .workspace-button { display: none; }
+    @media (max-width: 719px) {
+      .app:not(.sandbox-mode) .workspace-button { justify-content: center; }
+      .app:not(.sandbox-mode) .workspace-button span { display: none; }
+    }
+    .workspace-actions { display: grid; gap: 8px; }
+    .workspace-actions [hidden] { display: none; }
     .sandbox-panel { display: grid; gap: 12px; }
     .sandbox-panel[hidden] { display: none; }
     .sandbox-list { display: grid; gap: 7px; max-height: 38dvh; overflow-y: auto; }
@@ -140,6 +174,20 @@
     .fc-summary.tone-none, .fc-level.tone-none { background: transparent; box-shadow: inset 0 0 0 1.5px rgba(32,62,45,.2); }
     .fc-summary-title { margin: 0; font-size: 17px; font-weight: 750; letter-spacing: -.02em; line-height: 1.25; }
     .fc-summary-note { margin: 4px 0 0; font-size: 12px; line-height: 1.4; opacity: .88; }
+    .fc-mode { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; padding: 3px; border: 1px solid var(--line); border-radius: 15px; background: #dfece2; }
+    .fc-mode button { min-height: 44px; padding: 5px 8px; border: 0; border-radius: 11px; background: transparent; color: #344f3d; font-size: 14px; font-weight: 700; transition: background 150ms ease, transform 100ms ease; }
+    .fc-mode button[aria-pressed="true"] { background: #fff; color: var(--ink); box-shadow: 0 1px 4px rgba(20,50,33,.12); }
+    .fc-mode button:active { transform: scale(.98); }
+    .spray-context, .spray-limits { color: #465e50; font-size: 12px; line-height: 1.45; }
+    .spray-context { min-height: 1.45em; margin: 0; }
+    .spray-when { margin: 5px 0 0; font-size: 14px; line-height: 1.4; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .spray-card .crop-outline { margin-top: 9px; }
+    .spray-row { position: relative; padding-right: 35px; }
+    .spray-row .fc-row-text small { overflow: visible; white-space: normal; font-size: 12px; font-variant-numeric: tabular-nums; }
+    .spray-row > svg { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); width: 16px; color: #536c5c; }
+    .spray-limits summary { display: list-item; align-content: center; min-height: 44px; cursor: pointer; font-weight: 700; }
+    .spray-limits summary:focus-visible { outline: 3px solid #2d815d; outline-offset: 3px; border-radius: 5px; }
+    .spray-limits p { margin: 0 0 6px; }
     .fc-level-kicker { margin: 0; font-size: 11px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; opacity: .8; }
     .fc-level-title { margin: 3px 0 0; font-size: 28px; font-weight: 760; letter-spacing: -.04em; line-height: 1.1; }
     .fc-level-note { margin: 7px 0 0; font-size: 13px; line-height: 1.42; }
@@ -180,7 +228,7 @@
     .fc-index-value { font-size: 20px; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
     .fc-index-note { margin: 8px 0 0; color: #5f7266; font-size: 12px; line-height: 1.4; }
     .risk-legend { display: none; position: absolute; z-index: 2; right: 86px; bottom: calc(var(--drawer-height, 370px) + max(32px, env(safe-area-inset-bottom) + 12px)); height: 106px; width: max-content; min-width: 200px; align-content: center; padding: 12px 14px; white-space: nowrap; border: 1px solid rgba(255,255,255,.85); border-radius: 15px; background: rgba(248,251,247,.92); box-shadow: 0 4px 16px rgba(24,50,35,.14); backdrop-filter: blur(16px); color: #344f3d; font-size: 10px; font-weight: 650; pointer-events: none; }
-    .app.sandbox-mode:has(.sheet.collapsed) .risk-legend { display: grid; gap: 5px; }
+    .app.sandbox-mode:not(.spray-mode):has(.sheet.collapsed) .risk-legend { display: grid; gap: 5px; }
     .compass-ctrl { position: absolute; z-index: 2; top: calc(max(16px, env(safe-area-inset-top)) + 62px); right: 16px; margin: 0 !important; }
     .app.sandbox-mode .compass-ctrl { top: max(16px, env(safe-area-inset-top)); }
     @media (min-width: 720px) { .compass-ctrl { top: 86px; right: 24px; } .app.sandbox-mode .compass-ctrl { top: 24px; } }
@@ -235,8 +283,6 @@
     .area-changes { margin: 4px 0 10px; padding-left: 18px; color: var(--ink); font-size: 14px; line-height: 1.5; font-variant-numeric: tabular-nums; }
     .area-dialog-actions { display: grid; gap: 8px; margin-top: 14px; }
     .area-dialog-actions .primary { margin-top: 0; }
-    .sandbox-choice { display: grid; gap: 8px; }
-    .sandbox-choice .crop-outline { text-align: left; }
     .geometry-popup-message { margin: 8px 0 0; color: #5c7062; font-size: 13px; line-height: 1.4; }
     .geometry-popup-action { min-height: 44px; }
     .geometry-fix-actions { display: grid; gap: 6px; margin-top: 10px; max-height: 180px; overflow-y: auto; }
@@ -601,7 +647,7 @@
   </style>
 </head>
 <body>
-  <main class="app">
+  <main class="app entry-open">
     <div id="map" aria-label="Parcel map"></div>
     <div id="selection-rectangle" class="selection-rectangle" aria-hidden="true"></div>
     <div id="search-backdrop" class="search-backdrop"></div>
@@ -663,8 +709,11 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4 4"/></svg>
         <input id="parcel-number" aria-label="Village, parcel number or identifier" placeholder="Search for a place or parcel number" autocomplete="off" />
       </form>
+      <button class="locate workspace-button" id="workspace-button" type="button" aria-haspopup="dialog" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM4 13l6-4 4 3 6-4M10 9v10"/></svg><span></span>
+      </button>
       <button class="locate crop-magnet-btn active" id="crop-draw-magnet" type="button" aria-label="Snap to boundaries" title="Snap to boundaries" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v7a8 8 0 0 0 16 0V4M4 4h4m8 0h4M4 8h4m8 0h4"/></svg></button>
-      <button class="locate" id="locate" type="button" aria-label="Find my location"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 3-7.5 18-2.7-7.8L3 10.5 21 3Z"/></svg></button>
+      <button class="locate" id="locate" type="button" aria-label="Go to the Faculty of Geology, University of Warsaw" title="Faculty of Geology, University of Warsaw"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 3-7.5 18-2.7-7.8L3 10.5 21 3Z"/></svg></button>
     </div>
     <div id="parcel-step" class="parcel-step">
       <form class="search" id="parcel-step-form" role="search">
@@ -705,30 +754,61 @@
       <div id="crop-panel" class="crop-panel" hidden></div>
       <div id="sandbox-panel" class="sandbox-panel" hidden></div>
     </section>
-    <dialog id="journey-dialog" class="journey-dialog" aria-labelledby="journey-title" aria-describedby="journey-intro">
-      <p class="journey-eyebrow">Field Under Pressure</p>
-      <h2 id="journey-title">Where would you like to start?</h2>
-      <p class="journey-intro" id="journey-intro">View your farm or set up a new one.</p>
-      <div class="journey-choices">
-        <button class="journey-choice" id="journey-farmer" type="button"><span><strong>Farmer view</strong><small>See your crop areas and their conditions.</small></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>
-        <button class="journey-choice" id="journey-new" type="button"><span><strong>New view</strong><small>Choose parcels and set up crops in a separate sandbox.</small></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>
-      </div>
+    <dialog id="journey-dialog" class="journey-dialog" aria-labelledby="entry-title">
+      <section class="journey-screen" data-screen="entry">
+        <p class="journey-eyebrow">Field Under Pressure</p>
+        <h2 id="entry-title" tabindex="-1">Where would you like to start?</h2>
+        <div class="journey-choices">
+          <button class="journey-choice" id="journey-sandbox" type="button">
+            <span class="journey-choice-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 7 6-3 6 3 6-3v13l-6 3-6-3-6 3V7Zm6-3v13m6-10v13"/></svg></span>
+            <span><strong>Sandbox</strong><small>Explore a temporary copy of an example farm. No account needed.</small></span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg>
+          </button>
+          <button class="journey-choice" id="journey-account" type="button">
+            <span class="journey-choice-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>
+            <span><strong>Log in</strong><small>Open your farm or create an account.</small></span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg>
+          </button>
+        </div>
+      </section>
+      <section class="journey-screen" data-screen="login" hidden>
+        <button class="journey-back" data-go="entry" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg>Back</button>
+        <h2 id="login-title" tabindex="-1">Log in</h2>
+        <form class="journey-form" id="login-form" method="post">
+          <label>Login<input name="login" autocomplete="username" autocapitalize="none" spellcheck="false" inputmode="text" required /></label>
+          <label for="login-password">Password</label>
+          <div class="journey-password">
+            <input id="login-password" name="password" type="password" autocomplete="current-password" autocapitalize="none" spellcheck="false" required />
+            <button class="journey-link" type="button" aria-controls="login-password" aria-label="Show password" data-password>Show</button>
+          </div>
+          <button class="primary" type="submit">Log in</button>
+          <button class="journey-link" data-go="register" type="button">Create an account</button>
+        </form>
+      </section>
+      <section class="journey-screen" data-screen="register" hidden>
+        <button class="journey-back" data-go="login" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg>Back</button>
+        <h2 id="register-title" tabindex="-1">Create an account</h2>
+        <form class="journey-form" id="register-form" method="post">
+          <label>Login<input name="login" autocomplete="username" autocapitalize="none" spellcheck="false" inputmode="text" required /></label>
+          <label for="register-password">Password</label>
+          <div class="journey-password">
+            <input id="register-password" name="password" type="password" autocomplete="new-password" autocapitalize="none" spellcheck="false" required />
+            <button class="journey-link" type="button" aria-controls="register-password" aria-label="Show password" data-password>Show</button>
+          </div>
+          <label><span>Display name <small>(optional)</small></span><input name="display_name" autocomplete="nickname" maxlength="60" /></label>
+          <button class="primary" type="submit">Create account</button>
+        </form>
+      </section>
+      <p class="journey-message" id="journey-message" role="status"></p>
     </dialog>
-    <dialog id="setup-dialog" aria-labelledby="setup-title">
-      <h2 id="setup-title">Preparing your map</h2>
-      <p id="setup-message" role="status" aria-live="polite">Connecting…</p>
-      <button id="setup-retry" class="primary" type="button" hidden>Try again</button>
-      <button id="setup-restart" class="primary" type="button" hidden>Start a new sandbox</button>
-      <button id="setup-back" class="crop-outline" type="button" hidden>Back</button>
-    </dialog>
-    <dialog id="sandbox-dialog" aria-labelledby="sandbox-title">
-      <h2 id="sandbox-title">Choose your farm</h2>
-      <p>Start with an example farm or an empty one. Your farm session is saved in this browser for up to 8 hours.</p>
-      <div class="sandbox-choice">
-        <button class="crop-outline" id="sandbox-mock" type="button">Explore an example farm</button>
-        <button class="crop-outline" id="sandbox-empty" type="button">Start with an empty farm</button>
+    <dialog id="workspace-dialog" aria-labelledby="workspace-title" aria-describedby="workspace-description">
+      <h2 id="workspace-title">Your workspace</h2>
+      <p id="workspace-description"></p>
+      <div class="workspace-actions">
+        <button class="crop-outline" id="workspace-switch" type="button">Switch workspace</button>
+        <button class="crop-outline" id="workspace-logout" type="button">Log out</button>
+        <form method="dialog"><button class="journey-link" type="submit">Back to farm</button></form>
       </div>
-      <p id="sandbox-error" role="status" aria-live="polite"></p>
     </dialog>
     <dialog id="area-dialog" class="area-dialog" aria-labelledby="area-dialog-title">
       <h2 id="area-dialog-title">Edit area</h2>
@@ -749,14 +829,16 @@
   </main>
   <script>
     'use strict';
-    // Set mode to 'backend' and provide baseUrl when the real search API is ready.
-    const farmerClient = SandboxClient.create();
-    const newViewClient = SandboxClient.create({ storageKey: `${SandboxClient.STORAGE_KEY}.new-view` });
-    // Always the farm service; each journey replaces it with the provider of its own session.
-    let dataProvider = farmerClient.farmerProvider();
+    const workspaceKey = 'field-under-pressure.workspace.v1';
+    const workspaceClients = {
+      sandbox: SandboxClient.create({ onExpired: () => workspaceExpired('sandbox') }),
+      account: SandboxClient.create({ kind: 'account', onExpired: () => workspaceExpired('account') }),
+    };
+    let activeWorkspace = null;
+    let workspaceCanWrite = false;
+    let farmClient = workspaceClients.sandbox;
+    let dataProvider = farmClient.farmerProvider();
     const provider = new Proxy({}, { get: (_, name) => dataProvider[name] });
-    let sandboxClient = farmerClient;
-    let pendingJourney = 'farmer';
     let sandboxActive = false;
     const selected = new Map();
     const input = document.getElementById('parcel-number');
@@ -1176,7 +1258,7 @@
       try {
         if (!searchLocality && !/^[\d]/.test(term)) {
           if (term.length < 2) { results.replaceChildren(); results.classList.remove('visible'); return; }
-          const response = await sandboxClient.places(term);
+          const response = await farmClient.places(term);
           if (version !== searchVersion) return;
           if (!Array.isArray(response?.places)) throw new Error('Invalid place response');
           showPlaces(response.places); return;
@@ -1233,7 +1315,8 @@
     const zoomHint = document.getElementById('zoom-hint');
     function updateZoomHint() { zoomHint.hidden = provider.mode !== 'backend' || map.getZoom() >= 15; }
     map.on('zoom', updateZoomHint);
-    map.on('load', async () => {
+    // The selection tools need the local style, so opening a farm does not wait for remote basemap tiles.
+    const mapReady = new Promise(resolve => map.once('style.load', () => {
       map.addSource('gugik-dzialki', { type: 'raster', tileSize: 128, minzoom: 15, maxzoom: 20,
         attribution: '© GUGiK', tiles: ['https://integracja01.gugik.gov.pl/cgi-bin/KrajowaIntegracjaEwidencjiGruntow?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=dzialki,numery_dzialek&STYLES=&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256&FORMAT=image/png&TRANSPARENT=TRUE'] });
       map.addLayer({ id: 'gugik-dzialki', type: 'raster', source: 'gugik-dzialki', minzoom: 15, paint: { 'raster-opacity': 0.9 } });
@@ -1253,8 +1336,8 @@
       map.addLayer({ id: 'geometry-findings-outline', type: 'line', source: 'geometry-findings', paint: { 'line-color': '#ad2424', 'line-width': 3 } });
       map.addLayer({ id: 'crop-selected-outline', type: 'line', source: 'crop-areas', filter: ['==', ['get', 'selected'], true], paint: { 'line-color': '#ffffff', 'line-width': 5 } });
       renderSelection();
-      setupSandbox();
-    });
+      resolve();
+    }));
     let suppressMapClick = false, suppressClickTimer = null;
     // Hold, then draw a marquee; sample the existing point-lookup mock inside it.
     // The first click dismisses an instructional overlay without editing the map.
@@ -1472,10 +1555,13 @@
       }
       importPreview = null; importDialog.close();
     });
+    const geologyFaculty = [20.986264, 52.211058];
     document.getElementById('locate').addEventListener('click', () => {
-      if (!navigator.geolocation) { status.textContent = 'Location is not available on this device.'; return; }
-      status.textContent = 'Finding your location…';
-      navigator.geolocation.getCurrentPosition(position => { map.flyTo({ center: [position.coords.longitude, position.coords.latitude], zoom: 16 }); status.textContent = 'Location found. Tap a parcel on the map.'; }, () => { status.textContent = 'Could not find your location. Search for a parcel or select one on the map.'; });
+      sandboxAutoFit = false;
+      previewRequest++;
+      const zoom = 17;
+      const center = centerForPadded(geologyFaculty, zoom, 0, mapVisiblePadding());
+      map.flyTo({ center, zoom, bearing: 0, pitch: 0 });
     });
     next.addEventListener('click', () => cropWorkflow.open());
 
@@ -1488,6 +1574,8 @@
     let sandboxSets = [];
     let sandboxView = { mode: 'farm', setId: null };
     let sandboxDay = null;
+    let conditionsMode = 'risk';
+    let sprayAssessment = null;
     let sandboxMarkers = [];
     let sandboxNotice = '';
     let sandboxWhyOpen = false;
@@ -1496,9 +1584,7 @@
     // Initial UI-only threshold for grouping neighbouring areas; it does not change stored geometries.
     const SANDBOX_GROUP_DISTANCE_M = 100;
     const sandboxRank = { low: 1, medium: 2, high: 3 };
-    const sandboxDialog = document.getElementById('sandbox-dialog');
     const sandboxPanel = document.getElementById('sandbox-panel');
-    const sandboxError = document.getElementById('sandbox-error');
     const sandboxElement = (tag, cls, value) => {
       const element = document.createElement(tag);
       if (cls) element.className = cls;
@@ -1550,6 +1636,105 @@
       const level = ({ low: 'Low risk', medium: 'Moderate risk', high: 'High risk' })[row.risk_class];
       if (['ok', 'protected'].includes(row.status) && level) return level;
       return ({ protected: 'Protected', uncertain: 'Uncertain', insufficient_data: 'Not enough data', stage_unknown: 'Growth stage unknown', out_of_window: 'Outside susceptible stage' })[row.status] || 'No assessment';
+    }
+    /** Read an available window against the API's assessment hour, including windows already open. */
+    function sprayWindowAt(window, assessedAt, horizonHours) {
+      const at = Date.parse(assessedAt);
+      const start = Date.parse(window.start);
+      const end = Date.parse(window.end);
+      if (![at, start, end].every(Number.isFinite) || start >= end || end <= at) return null;
+      // The layer omits open_end. Its horizon is measured in Warsaw wall-clock hours, as on the server.
+      const wallClock = value => Date.parse(value.slice(0, 19) + 'Z');
+      const openEnd = window.open_end ?? (wallClock(window.end) - wallClock(assessedAt) >= horizonHours * 3600000);
+      return { ...window, assessedAt, openEnd, openNow: start <= at };
+    }
+    /** Find the earliest available window and keep the area it belongs to. */
+    function sprayNext(ids) {
+      let next = null;
+      ids.forEach(id => {
+        const window = sprayAssessment?.areas.get(id);
+        if (window && (!next || Date.parse(window.start) < Date.parse(next.window.start))) next = { id, window };
+      });
+      return next;
+    }
+    /** Show local times supplied by the API, including both dates on an overnight interval. */
+    function sprayDateTime(value, assessedAt, relative = true) {
+      const day = value.slice(0, 10);
+      const assessedDay = assessedAt.slice(0, 10);
+      const date = relative && day === assessedDay ? 'Today' : relative && day === sandboxDate(1, assessedDay) ? 'Tomorrow'
+        : sandboxFormatDate(day, { weekday: 'short', day: 'numeric', month: 'short' });
+      return `${date}, ${value.slice(11, 16)}`;
+    }
+    /** Separate an unconfirmed end at the horizon from a closed interval. */
+    function sprayTiming(window) {
+      const start = sprayDateTime(window.start, window.assessedAt);
+      if (window.openEnd) return `${start} onward · End unconfirmed`;
+      const end = window.start.slice(0, 10) === window.end.slice(0, 10)
+        ? window.end.slice(11, 16) : sprayDateTime(window.end, window.assessedAt);
+      return `${start}–${end}`;
+    }
+    /** Describe spray availability independently of the selected historical risk day. */
+    function sprayAvailability(next) {
+      if (!sprayAssessment || sprayAssessment.phase === 'loading') return 'Loading spray windows…';
+      if (sprayAssessment.phase === 'error') return sprayAssessment.message;
+      return next ? (next.window.openNow ? 'Window open now' : 'Window available') : 'No window';
+    }
+    /** Supply scope controls and the map with the condition for the active mode. */
+    function sandboxCondition(ids, single = false) {
+      if (conditionsMode === 'spray') {
+        const next = sprayNext(ids);
+        return { tone: next ? 'low' : 'none', color: next ? '#328250' : '#c3cac5', label: sprayAvailability(next) };
+      }
+      const row = single ? sandboxAssessment(ids[0], sandboxDay) : sandboxWorst(ids, sandboxDay);
+      const tone = sandboxTone(row);
+      const index = sandboxIndex(row);
+      return { tone, index, color: sandboxIndexColor(tone, index?.value), label: sandboxSummary(row) };
+    }
+    /** Fetch one current farm assessment. A late response cannot replace a newer assessment. */
+    async function loadSprayFarm() {
+      if (!sandboxFeatures.length) return;
+      const state = { phase: 'loading', areas: new Map(), details: new Map() };
+      sprayAssessment = state;
+      sandboxRefresh();
+      try {
+        const data = await farmClient.sprayWindows();
+        if (data?.type !== 'FeatureCollection' || !Array.isArray(data.features) || !Number.isFinite(Date.parse(data.assessed_at))) {
+          throw new Error('Incomplete spray-window layer.');
+        }
+        state.assessedAt = data.assessed_at;
+        state.notes = data.notes;
+        data.features.forEach(({ properties }) => {
+          if (!properties?.crop_area_id) return;
+          const window = sprayWindowAt({ start: properties.next_window_start, end: properties.next_window_end },
+            state.assessedAt, state.notes?.limits?.horizon_hours ?? 72);
+          if (window) state.areas.set(properties.crop_area_id, window);
+        });
+        state.phase = 'ready';
+      } catch (error) {
+        state.phase = 'error';
+        state.message = [404, 405, 501].includes(error.status)
+          ? 'Spray windows are unavailable on this server.' : 'Could not load spray windows.';
+      }
+      if (sprayAssessment !== state || conditionsMode !== 'spray') return;
+      loadSprayArea();
+      sandboxRefresh();
+    }
+    /** Fetch the selected area's end and latest-start details for the same assessment hour as the layer. */
+    async function loadSprayArea() {
+      const state = sprayAssessment;
+      const id = sandboxSelected;
+      if (conditionsMode !== 'spray' || !id || state?.phase !== 'ready' || state.details.has(id)) return;
+      state.details.set(id, { phase: 'loading' });
+      try {
+        const data = await farmClient.sprayWindow(id, { at: state.assessedAt });
+        if (!Array.isArray(data?.windows) || !Number.isFinite(Date.parse(data.assessed_at))) throw new Error('Incomplete spray-window details.');
+        const window = data.windows.map(item => sprayWindowAt(item, data.assessed_at, data.notes?.limits?.horizon_hours ?? 72))
+          .filter(Boolean).sort((a, b) => Date.parse(a.start) - Date.parse(b.start))[0];
+        state.details.set(id, { phase: 'ready', window, assessedAt: data.assessed_at, notes: data.notes });
+      } catch (_) {
+        state.details.set(id, { phase: 'error' });
+      }
+      if (sprayAssessment === state && conditionsMode === 'spray' && sandboxSelected === id) sandboxRender();
     }
     // ---- risk_index (backend contract): 0 at 0 wet hours, 0.5 at the moderate threshold, 1 at the high threshold and above,
     // linear in between, null without a risk class. index_low / index_high bound it when hours are missing.
@@ -1676,19 +1861,19 @@
     /** Load the sowing date and the past-to-today assessment history of one area. */
     async function sandboxLoadArea(id, version) {
       try {
-        const result = await sandboxClient.area(id);
+        const result = await farmClient.area(id);
         if (version !== sandboxOpenVersion) return;
         const sowing = result?.properties?.sowing_date;
         sandboxDetails.set(id, { sowing: /^\d{4}-\d{2}-\d{2}$/.test(sowing || '') ? sowing : null });
       } catch (_) { if (version !== sandboxOpenVersion) return; sandboxDetails.set(id, { sowing: null, error: true }); }
-      sandboxRefresh();
+      if (conditionsMode === 'risk') sandboxRefresh();
       try {
-        const rows = await sandboxClient.risk(id, sandboxDetails.get(id).sowing || sandboxDate(-365), sandboxToday);
+        const rows = await farmClient.risk(id, sandboxDetails.get(id).sowing || sandboxDate(-365), sandboxToday);
         if (version !== sandboxOpenVersion) return;
         if (!Array.isArray(rows)) throw new Error('Invalid conditions response');
         sandboxHistory.set(id, { rows: new Map(rows.filter(row => row?.date && row.date <= sandboxToday).map(row => [row.date, row])) });
       } catch (_) { if (version !== sandboxOpenVersion) return; sandboxHistory.set(id, { error: true }); }
-      sandboxRefresh();
+      if (conditionsMode === 'risk') sandboxRefresh();
     }
     async function sandboxLoadAll(version) {
       const queue = sandboxAreaIds();
@@ -1809,7 +1994,7 @@
       });
       const manage = sandboxElement('button', 'crop-outline', 'Manage parcels'); manage.type = 'button'; manage.dataset.key = 'manage';
       manage.addEventListener('click', enterParcelSetup);
-      return [summary, heading, list, manage];
+      return workspaceCanWrite ? [summary, heading, list, manage] : [summary, heading, list];
     }
     function sandboxSetContent(set, day) {
       const worst = sandboxWorst(set.areaIds, day);
@@ -1915,7 +2100,7 @@
         button.addEventListener('click', () => sandboxOpenEditor(key, id));
         actions.append(button);
       });
-      crop.append(actions);
+      if (workspaceCanWrite) crop.append(actions);
       parts.push(crop);
       return parts;
     }
@@ -1925,7 +2110,7 @@
     const AREA_DATE = /^\d{4}-\d{2}-\d{2}$/;
     /** Read the stored sprays of an area (GET /crop-areas/{id}/sprays, with their ids); null when the answer is incomplete. */
     async function sandboxReadSprays(id) {
-      const result = await sandboxClient.sprays(id);
+      const result = await farmClient.sprays(id);
       return Array.isArray(result?.sprays) ? result.sprays : null;
     }
     function sandboxSprayText(spray) { return `${sandboxFormatDate(spray.date)} · ${spray.protection_duration_days} ${spray.protection_duration_days === 1 ? 'day' : 'days'}`; }
@@ -1949,7 +2134,7 @@
     }
     /** Read the stored sowing date, the answer about sprays and the sprays (with their ids) of one area. */
     async function sandboxReadArea(id) {
-      const [list, area] = await Promise.all([sandboxClient.sprays(id), sandboxClient.area(id)]);
+      const [list, area] = await Promise.all([farmClient.sprays(id), farmClient.area(id)]);
       const sowing = area?.properties?.sowing_date;
       if (!Array.isArray(list?.sprays) || typeof list.sprays_confirmed !== 'boolean' || !AREA_DATE.test(sowing || '') ||
           list.sprays.some(item => !Number.isInteger(item.spray_id) || !AREA_DATE.test(item.date || '') || !Number.isInteger(item.protection_duration_days)))
@@ -2102,7 +2287,7 @@
         let before = null;
         try { before = await sandboxReadSprays(state.id); } catch (_) { before = null; }
         state.before = before; state.sent = { date: state.date, protection_duration_days: Number(state.days) };
-        try { await sandboxClient.addSpray(state.id, { spray_date: state.sent.date, protection_duration_days: state.sent.protection_duration_days }); }
+        try { await farmClient.addSpray(state.id, { spray_date: state.sent.date, protection_duration_days: state.sent.protection_duration_days }); }
         catch (error) {
           if (areaEdit !== state) return;
           if (error.status) { state.step = 'error'; state.error = sandboxErrorText(error); sandboxRenderEditor(); return; }
@@ -2130,15 +2315,15 @@
         }
         state.attempted = true;
         const ops = sandboxEditorOps(state);
-        if (ops.sowing) { await sandboxClient.patchArea(state.id, { sowing_date: ops.sowing }); state.original.sowing = ops.sowing; }
-        for (const item of ops.removes) await sandboxClient.deleteSpray(state.id, item.spray_id);
-        for (const op of ops.patches) await sandboxClient.patchSpray(state.id, op.id, op.body);
+        if (ops.sowing) { await farmClient.patchArea(state.id, { sowing_date: ops.sowing }); state.original.sowing = ops.sowing; }
+        for (const item of ops.removes) await farmClient.deleteSpray(state.id, item.spray_id);
+        for (const op of ops.patches) await farmClient.patchSpray(state.id, op.id, op.body);
         for (const op of ops.adds) {
-          const result = await sandboxClient.addSpray(state.id, { spray_date: op.next.date, protection_duration_days: op.next.protection_duration_days });
+          const result = await farmClient.addSpray(state.id, { spray_date: op.next.date, protection_duration_days: op.next.protection_duration_days });
           const id = result?.spray?.spray_id ?? result?.spray_id;
           if (Number.isInteger(id)) op.item.sprayId = id;
         }
-        if (ops.confirmNone) await sandboxClient.patchArea(state.id, { sprays_confirmed: true });
+        if (ops.confirmNone) await farmClient.patchArea(state.id, { sprays_confirmed: true });
         const check = await sandboxReadArea(state.id);
         const want = state.sprays.map(item => [item.date, Number(item.days)]).sort().join('|');
         if (check.sowing !== state.sowing || check.sprays.map(item => [item.date, item.protection_duration_days]).sort().join('|') !== want)
@@ -2175,7 +2360,7 @@
     async function sandboxReloadAfterSave(snapshot, options = {}) {
       const openVersion = ++sandboxOpenVersion;
       try {
-        const [collection, clock] = await Promise.all([sandboxClient.areas(), sandboxClient.clock()]);
+        const [collection, clock] = await Promise.all([farmClient.areas(), farmClient.clock()]);
         if (openVersion !== sandboxOpenVersion) return;
         if (collection?.type !== 'FeatureCollection' || !Array.isArray(collection.features) || !AREA_DATE.test(clock?.today || '')) throw new Error('incomplete');
         sandboxFeatures = collection.features; sandboxToday = clock.today; sandboxRequest++;
@@ -2204,7 +2389,9 @@
         sandboxShow(highest ? { mode: 'set', setId: highest.id } : { mode: 'farm' }, { focus: true, force: true });
         notice += ` The highest risk on the farm today changed from ${label(snapshot.top)} to ${label(after)}.`;
       }
-      sandboxNotice = notice.trim(); sandboxRender();
+      sandboxNotice = notice.trim();
+      if (conditionsMode === 'spray') loadSprayFarm();
+      else sandboxRender();
       sandboxLoadAll(openVersion);
     }
     areaDialog.addEventListener('cancel', event => { if (areaEdit?.step === 'saving') event.preventDefault(); else areaEdit = null; });
@@ -2214,13 +2401,13 @@
     async function sandboxExportRow(id, day) {
       const history = sandboxHistory.get(id);
       if (history?.rows) return history.rows.get(day) || null;
-      const rows = await sandboxClient.risk(id, day, day);
+      const rows = await farmClient.risk(id, day, day);
       if (!Array.isArray(rows)) throw new Error('The farm service returned incomplete conditions.');
       return rows.find(row => row.date === day) || null;
     }
     async function sandboxExportSowing(id) {
       if (sandboxDetails.get(id)) return sandboxDetails.get(id).sowing;
-      const result = await sandboxClient.area(id);
+      const result = await farmClient.area(id);
       return /^\d{4}-\d{2}-\d{2}$/.test(result?.properties?.sowing_date || '') ? result.properties.sowing_date : null;
     }
     function sandboxDownload(name, data) {
@@ -2253,7 +2440,7 @@
     }
     /** Weather grid cells of the day that overlap the scope's areas, as the API returns them (not area-specific). */
     async function sandboxExportGrid(ids, day, scopeName) {
-      const grid = await sandboxClient.gridRisk(day);
+      const grid = await farmClient.gridRisk(day);
       if (grid?.type !== 'FeatureCollection' || !Array.isArray(grid.features)) throw new Error('The farm service returned incomplete grid data.');
       const areas = ids.map(sandboxFeature).filter(feature => feature?.geometry);
       const boxes = areas.map(feature => turf.bbox(feature));
@@ -2299,12 +2486,112 @@
       return section;
     }
     function sandboxLabel(id) { return sandboxCrops.find(item => item.farmer_crop_id === id)?.label || id || 'Crop unavailable'; }
+    /** Switch the assessment without moving the map or changing the farm scope. */
+    function sandboxModeControl() {
+      const control = sandboxElement('div', 'fc-mode');
+      control.setAttribute('role', 'group'); control.setAttribute('aria-label', 'Field conditions view');
+      for (const [mode, label] of [['risk', 'Risk'], ['spray', 'Spray window']]) {
+        const button = sandboxElement('button', '', label);
+        button.type = 'button'; button.dataset.key = 'conditions:' + mode;
+        button.setAttribute('aria-pressed', String(conditionsMode === mode));
+        button.addEventListener('click', () => {
+          if (mode === conditionsMode) return;
+          conditionsMode = mode;
+          sheet.closest('.app').classList.toggle('spray-mode', mode === 'spray');
+          if (mode === 'spray' && sandboxFeatures.length) loadSprayFarm();
+          else sandboxRefresh();
+        });
+        control.append(button);
+      }
+      return control;
+    }
+    /** Show a group or area with its nearest window, naming the area when it represents a group. */
+    function sprayRow(label, next, onClick, group = false, key = '') {
+      const button = sandboxElement('button', 'sandbox-area spray-row');
+      button.type = 'button'; button.dataset.key = 'spray:' + key;
+      const copy = sandboxElement('span', 'fc-row-text');
+      copy.append(sandboxElement('strong', '', label));
+      const area = group && next ? `${sandboxAreaName(next.id)} · ` : '';
+      const time = next ? `${next.window.openNow ? 'Open now · ' : ''}${sprayTiming(next.window)}` : 'No window';
+      copy.append(sandboxElement('small', '', area + time));
+      button.append(copy, sandboxChevron(1)); button.addEventListener('click', onClick);
+      return button;
+    }
+    /** Render the current spray assessment for the farm, group or selected area. */
+    function sprayContent(set, limitsOpen) {
+      const state = sprayAssessment;
+      const id = sandboxView.mode === 'area' ? sandboxSelected : null;
+      const area = id ? state?.details.get(id) : null;
+      const card = sandboxElement('section', 'fc-summary spray-card');
+      const heading = sandboxElement('p', 'fc-summary-title'); heading.setAttribute('role', 'status');
+      card.append(heading);
+      const content = [];
+      const assessedAt = area?.assessedAt ?? state?.assessedAt;
+      const notes = area?.notes ?? state?.notes;
+      const assessmentTime = assessedAt
+        ? `Assessed ${sprayDateTime(assessedAt, assessedAt, false)} · ${notes?.limits?.horizon_hours ?? 72} h` : '';
+      content.push(sandboxElement('p', 'spray-context', assessmentTime));
+      content.push(card);
+      if (!state || state.phase === 'loading' || (state.phase === 'ready' && id && (!area || area.phase === 'loading'))) {
+        heading.textContent = 'Loading spray windows…';
+        return content;
+      }
+      if (state.phase === 'error' || area?.phase === 'error') {
+        const retry = sandboxElement('button', 'crop-outline', 'Try again');
+        retry.type = 'button'; retry.dataset.key = 'spray-retry';
+        heading.textContent = state.phase === 'error' ? state.message : 'Could not load this area’s spray window.';
+        retry.addEventListener('click', () => {
+          if (state.phase === 'error') loadSprayFarm();
+          else { state.details.delete(id); loadSprayArea(); sandboxRender(); }
+        });
+        card.append(retry);
+      } else {
+        const next = id ? (area.window ? { id, window: area.window } : null) : sprayNext(sandboxScope());
+        heading.textContent = next ? 'Spray may be needed' : 'No window';
+        if (next) {
+          const window = next.window;
+          const label = window.openNow ? 'Open now' : window.indicative ? 'Indicative window'
+            : window.confidence === 'borderline' ? 'Borderline window' : id ? 'Good window' : 'Next window';
+          card.classList.add('tone-low');
+          card.append(sandboxElement('p', 'spray-when', `${label} · ${sprayTiming(window)}`));
+          if (!id) card.append(sandboxElement('p', 'fc-summary-note', sandboxAreaName(next.id)));
+          if (window.openEnd && id) {
+            card.append(sandboxElement('p', 'fc-summary-note', `Assessment covers weather through ${sprayDateTime(window.end, window.assessedAt)}.`));
+          }
+          if (Number.isFinite(Date.parse(window.latest_start))) {
+            const startLabel = window.openEnd ? 'Latest start within this assessment' : 'Latest start';
+            card.append(sandboxElement('p', 'fc-summary-note', `${startLabel} · ${sprayDateTime(window.latest_start, window.assessedAt)}`));
+          }
+        }
+        if (!id) {
+          const list = sandboxElement('div', 'sandbox-list fc-list');
+          if (set) {
+            set.areaIds.forEach(areaId => list.append(sprayRow(sandboxAreaName(areaId), sprayNext([areaId]),
+              () => sandboxSelect(areaId, { focus: true }), false, areaId)));
+          } else {
+            sandboxSets.forEach(group => list.append(sprayRow(group.name, sprayNext(group.areaIds),
+              () => sandboxShow({ mode: 'set', setId: group.id }, { focus: true }), group.areaIds.length > 1, group.id)));
+          }
+          content.push(sandboxElement('p', 'risk-list-heading', set ? 'Areas' : 'Area groups'), list);
+        }
+      }
+      if (notes) {
+        const limits = sandboxElement('details', 'spray-limits'); limits.open = limitsOpen;
+        limits.append(sandboxElement('summary', '', 'About this assessment'));
+        for (const text of [notes.disclaimer, notes.wind_height, 'Times shown in Europe/Warsaw.']) {
+          if (text) limits.append(sandboxElement('p', '', text));
+        }
+        content.push(limits);
+      }
+      return content;
+    }
     function sandboxRender() {
       const focusKey = sandboxPanel.contains(document.activeElement) ? document.activeElement.dataset.key : null;
+      const limitsOpen = sandboxPanel.querySelector('.spray-limits')?.open ?? false;
       const scroll = {}; sandboxPanel.querySelectorAll('.fc-scopes').forEach(row => { scroll[row.dataset.key] = row.scrollLeft; });
       sandboxPanel.replaceChildren();
       const set = sandboxCurrentSet();
-      const day = sandboxDay;
+      const spray = conditionsMode === 'spray';
       const title = sandboxView.mode === 'area' ? sandboxAreaName(sandboxSelected) : sandboxView.mode === 'set' && set ? set.name : 'Whole farm';
       const heading = sandboxElement('h1', 'risk-heading', title); heading.id = 'sandbox-heading';
       if (sandboxView.mode !== 'farm' && sandboxFeatures.length) {
@@ -2314,14 +2601,31 @@
         if (sandboxView.mode === 'area' && set && set.areaIds.length > 1) back('crumb:set', set.name, () => sandboxShow({ mode: 'set', setId: set.id }, { focus: true }));
         sandboxPanel.append(crumbs);
       }
-      sandboxPanel.append(sandboxElement('p', 'risk-eyebrow', 'SEPTORIA · WHEAT'), heading);
-      if (sandboxNotice) { const notice = sandboxElement('p', 'fc-notice', sandboxNotice); notice.setAttribute('role', 'status'); sandboxPanel.append(notice); }
-      const earliest = sandboxMinDay(sandboxScope());
+      sandboxPanel.append(sandboxElement('p', 'risk-eyebrow', 'FIELD CONDITIONS'), heading, sandboxModeControl());
+      const temporary = farmClient === workspaceClients.sandbox && workspaceCanWrite;
+      const workspaceNote = temporary ? sandboxElement('p', 'workspace-note', 'Sandbox changes stay here until the session expires.') : null;
+      if (workspaceNote && !spray) sandboxPanel.append(workspaceNote);
+      if (sandboxNotice && !spray) { const notice = sandboxElement('p', 'fc-notice', sandboxNotice); notice.setAttribute('role', 'status'); sandboxPanel.append(notice); }
+      const earliest = !spray && sandboxMinDay(sandboxScope());
       if (earliest && sandboxDay < earliest) sandboxDay = earliest;
+      const day = sandboxDay;
+      const restoreFocus = () => {
+        if (focusKey) [...sandboxPanel.querySelectorAll('[data-key]')].find(element => element.dataset.key === focusKey && !element.disabled)?.focus({ preventScroll: true });
+      };
       if (!sandboxFeatures.length) {
         const manage = sandboxElement('button', 'crop-outline', 'Manage parcels'); manage.type = 'button'; manage.addEventListener('click', enterParcelSetup);
-        sandboxPanel.append(sandboxElement('p', 'risk-empty', 'There are no crop areas yet. Select parcels to get started.'), manage);
+        sandboxPanel.append(sandboxElement('p', 'risk-empty', spray ? 'No window' : workspaceCanWrite ? 'There are no crop areas yet. Select parcels to get started.' : 'There are no crop areas yet.'));
+        if (workspaceCanWrite) sandboxPanel.append(manage);
+        if (workspaceNote && spray) sandboxPanel.append(workspaceNote);
         document.getElementById('drawer-summary').textContent = 'No crop areas yet';
+        restoreFocus();
+        return;
+      }
+      if (spray) {
+        sandboxPanel.append(...sprayContent(set, limitsOpen));
+        if (workspaceNote) sandboxPanel.append(workspaceNote);
+        document.getElementById('drawer-summary').textContent = `${title} · ${sprayAvailability(sprayNext(sandboxScope()))}`;
+        restoreFocus();
         return;
       }
       const scopeChips = [sandboxChip('scope:farm', 'Whole farm', sandboxWorst(sandboxAreaIds(), day), sandboxView.mode === 'farm', () => sandboxShow({ mode: 'farm' }, { focus: true }))];
@@ -2340,7 +2644,7 @@
       sandboxPanel.append(sandboxExportSection(sandboxScope(), title));
       const worst = sandboxWorst(sandboxScope(), day);
       document.getElementById('drawer-summary').textContent = `${title} · ${sandboxSummary(worst)}${day === sandboxToday ? '' : ` · ${sandboxFormatDate(day, { day: 'numeric', month: 'short' })}`}`;
-      if (focusKey) [...sandboxPanel.querySelectorAll('[data-key]')].find(element => element.dataset.key === focusKey && !element.disabled)?.focus({ preventScroll: true });
+      restoreFocus();
     }
     function sandboxScopeGeometry() {
       if (sandboxView.mode === 'area') return sandboxFeature(sandboxSelected)?.geometry;
@@ -2366,8 +2670,7 @@
         return;
       }
       sandboxView = next; sandboxRequest++; sandboxNotice = '';
-      const min = sandboxMinDay(sandboxScope());
-      if (min && sandboxDay < min) sandboxDay = min;
+      loadSprayArea();
       const previousHeight = sheet.getBoundingClientRect().height;
       sandboxRender(); sandboxPaint();
       if (!sheet.classList.contains('collapsed')) animateDrawerResize(previousHeight, { pan: false });   // the camera fit below decides any move
@@ -2402,15 +2705,16 @@
       // Selecting on the map keeps the drawer in its chosen state.
       if (feature?.properties?.crop_area_id) sandboxSelect(feature.properties.crop_area_id, { focus: true, fromMap: true });
     }
-    /** Paint the selected day's levels on the map and emphasise the current scope. */
+    /** Paint the active assessment on the map and emphasise the current scope. */
     function sandboxPaint() {
       const source = map.getSource('sandbox-areas'); if (!source) return;
       const scope = new Set(sandboxView.mode === 'farm' ? sandboxAreaIds() : sandboxCurrentSet()?.areaIds || []);
       source.setData({ type: 'FeatureCollection', features: sandboxFeatures.map(feature => {
         const id = feature.properties?.crop_area_id;
-        const row = sandboxAssessment(id, sandboxDay), tone = sandboxTone(row), index = sandboxIndex(row);
-        // One colour per area: the class and its index (the midpoint of a range), never a gradient inside the area.
-        return { ...feature, properties: { ...feature.properties, tone, focus: scope.has(id), color: sandboxIndexColor(tone, index ? (index.low + index.high) / 2 : null) } };
+        const { tone, index, color } = sandboxCondition([id], true);
+        // In Risk, the fill shade uses the midpoint of a bounded index.
+        const fill = index ? sandboxIndexColor(tone, (index.low + index.high) / 2) : color;
+        return { ...feature, properties: { ...feature.properties, tone, focus: scope.has(id), color: fill } };
       }) });
       map.setFilter('sandbox-highlight', ['==', ['get', 'crop_area_id'], sandboxView.mode === 'area' && sandboxSelected ? sandboxSelected : '']);
       map.setFilter('sandbox-scope', sandboxView.mode === 'farm' ? ['==', ['get', 'crop_area_id'], ''] : ['==', ['get', 'focus'], true]);
@@ -2461,16 +2765,16 @@
       clusters.forEach(cluster => {
         const single = cluster.sets.length === 1 ? cluster.sets[0] : null;
         const ids = cluster.sets.flatMap(set => set.areaIds);
-        const worst = sandboxWorst(ids, sandboxDay);
-        const highCount = ids.filter(id => sandboxTone(sandboxAssessment(id, sandboxDay)) === 'high').length;
-        const element = sandboxElement('button', `fc-marker tone-${sandboxTone(worst)}`); element.type = 'button';
-        const worstIndex = sandboxIndex(worst); if (worstIndex) element.style.background = sandboxIndexColor(sandboxTone(worst), worstIndex.value);
+        const condition = sandboxCondition(ids);
+        const highCount = conditionsMode === 'risk' ? ids.filter(id => sandboxTone(sandboxAssessment(id, sandboxDay)) === 'high').length : 0;
+        const element = sandboxElement('button', `fc-marker tone-${condition.tone}`); element.type = 'button';
+        if (condition.index) element.style.background = condition.color;
         element.classList.toggle('active', Boolean(single) && sandboxView.mode !== 'farm' && sandboxView.setId === single.id);
         const name = single ? single.name : `${cluster.sets.length} groups`;
         const count = single && single.areaIds.length > 1 ? ` · ${single.areaIds.length} areas` : '';
         element.append(sandboxElement('span', 'fc-marker-dot'), sandboxElement('span', '', name + count));
         if (highCount) element.append(sandboxElement('span', 'fc-marker-flag', single && ids.length === 1 ? 'High' : `${highCount} high`));
-        element.setAttribute('aria-label', `${name}: ${sandboxSummary(worst)}${single ? '' : '. Zoom in to separate the groups.'}`);
+        element.setAttribute('aria-label', `${name}: ${condition.label}${single ? '' : '. Zoom in to separate the groups.'}`);
         sandboxOnTap(element, () => {
           if (single) sandboxOpenGroupTag(single);
           else fitParcelPreview({ geometry: { type: 'MultiPolygon', coordinates: cluster.sets.flatMap(set => set.geometry.coordinates) } });
@@ -2595,17 +2899,17 @@
       const neighbourRings = sets.flatMap(set => set.areaIds.map(id => ({ id, rings: sandboxScreenRings(sandboxFeature(id)?.geometry) })));
       const placed = sandboxPlacePoints(sets.flatMap(sandboxAreaCandidates), neighbourRings);
       placed.forEach(candidate => {
-        const row = sandboxAssessment(candidate.id, sandboxDay), tone = sandboxTone(row), index = sandboxIndex(row);
+        const { tone, index, color, label: condition } = sandboxCondition([candidate.id], true);
         const element = sandboxElement('button', `fc-area-marker tone-${tone}`); element.type = 'button';
         element.classList.toggle('active', sandboxView.mode === 'area' && sandboxSelected === candidate.id);
-        const label = `${sandboxAreaName(candidate.id)}: ${sandboxSummary(row)}${index ? ` ${sandboxIndexText(index)}` : ''}`;
+        const label = `${sandboxAreaName(candidate.id)}: ${condition}${index ? ` ${sandboxIndexText(index)}` : ''}`;
         element.setAttribute('aria-label', label); element.title = label;
         if (candidate.leader && Math.hypot(...candidate.leader) > 9) {
           const leader = sandboxElement('span', 'fc-area-leader');
           leader.style.width = `${Math.hypot(...candidate.leader)}px`; leader.style.transform = `rotate(${Math.atan2(candidate.leader[1], candidate.leader[0])}rad)`;
           element.append(leader);
         }
-        const dot = sandboxElement('span', 'fc-area-dot'); if (tone !== 'none') dot.style.background = sandboxIndexColor(tone, index ? index.value : null);
+        const dot = sandboxElement('span', 'fc-area-dot'); if (tone !== 'none') dot.style.background = color;
         element.append(dot);
         sandboxOnTap(element, () => { setDrawer(true); sandboxSelect(candidate.id, { focus: true }); });
         sandboxMarkers.push(new maplibregl.Marker({ element }).setLngLat(map.unproject(candidate.spot)).addTo(map));
@@ -2628,7 +2932,7 @@
     }
     function enterParcelSetup() {
         sandboxOpenVersion++; sandboxActive = false; sandboxRequest++; sandboxPanel.hidden = true;
-        dataProvider = sandboxClient.farmerProvider(); selected.clear();
+        dataProvider = farmClient.farmerProvider(); selected.clear();
         document.getElementById('drawer-content').hidden = false; document.getElementById('search-form').hidden = false;
         document.querySelector('.app').classList.remove('sandbox-mode'); document.querySelector('.sheet').setAttribute('aria-labelledby', 'heading');
         sandboxHideMap();
@@ -2638,15 +2942,26 @@
         document.getElementById('import-option').disabled = true; document.getElementById('import-option').title = 'File import is not available in the backend yet.';
         renderSelection(); status.textContent = ''; setDrawer(true);
     }
+    /** Open the existing analysis, or start parcel setup for an empty account. */
     async function sandboxOpen(options = {}) {
       const openVersion = ++sandboxOpenVersion;
-      sandboxError.textContent = 'Loading farm…';
       try {
-        const [collection, crops, clock] = await Promise.all([sandboxClient.areas(), sandboxClient.crops(), sandboxClient.clock()]);
+        const [collection, crops, clock] = await Promise.all([farmClient.areas(), farmClient.crops(), farmClient.clock()]);
         if (openVersion !== sandboxOpenVersion) return;
         if (collection?.type !== 'FeatureCollection' || !Array.isArray(collection.features) || !Array.isArray(crops) || !/^\d{4}-\d{2}-\d{2}$/.test(clock?.today || '')) throw new Error('The farm service returned incomplete data.');
-        if (options.afterSave && cropWorkflow.isEditing()) cropWorkflow.close();
+        if (options.setupIfEmpty && !collection.features.length) {
+          const response = await farmClient.fields();
+          if (!Array.isArray(response?.fields)) throw new Error('The farm service returned incomplete field data.');
+          enterParcelSetup();
+          fitFields(response.fields);
+          return;
+        }
+        if (options.afterSave && cropWorkflow.isEditing()) {
+          cropWorkflow.close();
+          document.querySelector('.app').classList.remove('cropping');
+        }
         sandboxFeatures = collection.features; sandboxCrops = crops; sandboxToday = clock.today; sandboxSelected = null; sandboxRequest++;
+        sprayAssessment = null;
         sandboxDay = clock.today; sandboxView = { mode: 'farm', setId: null }; sandboxNotice = ''; sandboxHistory.clear(); sandboxDetails.clear();
         sandboxSets = sandboxGroupAreas(sandboxFeatures);
         sandboxSource();
@@ -2658,97 +2973,251 @@
         document.getElementById('search-form').hidden = true; document.getElementById('parcel-step').classList.remove('visible'); results.classList.remove('visible');
         document.querySelector('.app').classList.add('sandbox-mode'); document.querySelector('.sheet').setAttribute('aria-labelledby', 'sandbox-heading');
         document.getElementById('drawer-summary').textContent = 'Your crop areas'; status.textContent = '';
-        sandboxRender(); setDrawer(true); sandboxError.textContent = ''; if (sandboxDialog.open) sandboxDialog.close();
-        if (pendingJourney === 'setup') { pendingJourney = 'farmer'; enterParcelSetup(); return true; }
+        sandboxRender(); setDrawer(true);
         // Open the group that holds today's highest available risk and zoom to it above the drawer.
         const highest = sandboxSets.slice().sort((a, b) => sandboxSeverity(sandboxWorst(b.areaIds, sandboxToday)) - sandboxSeverity(sandboxWorst(a.areaIds, sandboxToday)))[0];
         if (highest) sandboxShow({ mode: 'set', setId: highest.id }, { focus: true, force: true }); else sandboxPaint();
+        if (conditionsMode === 'spray') loadSprayFarm();
         sandboxLoadAll(openVersion);
         return true;
       } catch (error) {
-        if (openVersion !== sandboxOpenVersion || options.afterSave) return false;
-        sandboxError.textContent = error.message || 'Could not load the farm. Please try again.';
-        if (!sandboxDialog.open) sandboxDialog.showModal();
-        return false;
+        if (openVersion !== sandboxOpenVersion) return;
+        if (!options.afterSave) throw error;
+        status.textContent = 'Saved, but the updated analysis could not be loaded. Reopen the farm to try again.';
       }
     }
-    function setupSandbox() {
-      for (const mode of ['mock', 'empty']) document.getElementById(`sandbox-${mode}`).addEventListener('click', async () => {
-        if (sandboxClient.hasSession() && !window.confirm('Start a new farm? This browser will no longer hold the current farm token.')) return;
-        const buttons = sandboxDialog.querySelectorAll('button'); buttons.forEach(button => button.disabled = true);
-        try { sandboxError.textContent = 'Creating farm…'; await sandboxClient.start(mode); await sandboxOpen(); }
-        catch (error) { sandboxError.textContent = error.message || 'Could not create a farm.'; }
-        finally { buttons.forEach(button => button.disabled = false); }
+
+    /** Frame any parcels already saved to a farm that has no crop areas yet. */
+    function fitFields(fields) {
+      const bounds = new maplibregl.LngLatBounds();
+      const extend = value => {
+        if (Array.isArray(value) && typeof value[0] === 'number' && typeof value[1] === 'number') bounds.extend(value);
+        else if (Array.isArray(value)) value.forEach(extend);
+      };
+      fields.forEach(field => {
+        const geometries = [...(field.parcels || []), ...(field.parcel ? [field.parcel] : []), ...(field.crop_areas || [])];
+        geometries.forEach(item => { if (item.geometry?.coordinates) extend(item.geometry.coordinates); });
       });
-      const resume = sandboxElement('button', 'crop-outline', 'Resume saved farm'); resume.type = 'button';
-      resume.addEventListener('click', sandboxOpen); sandboxDialog.querySelector('.sandbox-choice').prepend(resume);
-      const updateResume = () => { resume.hidden = !sandboxClient.hasSession(); };
-      const observer = new MutationObserver(updateResume);
-      observer.observe(sandboxDialog, { attributes: true, attributeFilter: ['open'] });
-      updateResume();
-      const journey = document.getElementById('journey-dialog');
-      const setupDialog = document.getElementById('setup-dialog');
-      const setupMessage = document.getElementById('setup-message');
-      const setupRetry = document.getElementById('setup-retry');
-      const setupRestart = document.getElementById('setup-restart');
-      const setupBack = document.getElementById('setup-back');
-      journey.addEventListener('cancel', event => event.preventDefault());
-      setupDialog.addEventListener('cancel', event => event.preventDefault());
-      function fitFields(fields) {
-        const bounds = new maplibregl.LngLatBounds();
-        const extend = value => { if (Array.isArray(value) && typeof value[0] === 'number' && typeof value[1] === 'number') bounds.extend(value); else if (Array.isArray(value)) value.forEach(extend); };
-        fields.forEach(field => {
-          const geometries = [...(field.parcels || []), ...(field.parcel ? [field.parcel] : []), ...(field.crop_areas || [])];
-          geometries.forEach(item => { if (item.geometry?.coordinates) extend(item.geometry.coordinates); });
-        });
-        if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: { top: 90, right: 50, bottom: 170, left: 50 }, maxZoom: 16, duration: 500 });
-      }
-      let newSetupReady = false;
-      const startSetup = async (renewed = false) => {
-        sandboxClient = newViewClient;
-        if (!setupDialog.open) setupDialog.showModal();
-        setupMessage.textContent = 'Connecting…';
-        setupRetry.hidden = true; setupRestart.hidden = true; setupBack.hidden = true;
-        try {
-          if (!newSetupReady) { await sandboxClient.start('empty'); newSetupReady = true; }
-          const response = await sandboxClient.fields();
-          if (!Array.isArray(response?.fields)) throw new Error('The farm service returned incomplete field data.');
-          setupDialog.close();
-          enterParcelSetup();
-          fitFields(response.fields);
-        } catch (error) {
-          if (error.status === 401) {
-            if (!renewed) { newSetupReady = false; await startSetup(true); return; }
-            setupMessage.textContent = 'Could not start a new sandbox. Please try again.';
-            setupRetry.hidden = false;
-          } else {
-            setupMessage.textContent = error.message || 'Could not connect. Please try again.';
-            setupRetry.hidden = false;
-          }
-          setupBack.hidden = false;
-        }
-      };
-      setupRetry.addEventListener('click', () => startSetup());
-      setupRestart.addEventListener('click', () => { newSetupReady = false; startSetup(); });
-      setupBack.addEventListener('click', () => { setupDialog.close(); journey.showModal(); });
-      const startJourney = async setup => {
-        if (setup) { newSetupReady = false; journey.close(); await startSetup(); return; }
-        sandboxClient = farmerClient;
-        pendingJourney = setup ? 'setup' : 'farmer';
-        sandboxError.textContent = '';
-        journey.close();
-        if (sandboxClient.hasSession()) { await sandboxOpen(); return; }
-        updateResume(); sandboxDialog.showModal();
-        const buttons = sandboxDialog.querySelectorAll('button');
-        buttons.forEach(button => button.disabled = true);
-        try { sandboxError.textContent = 'Preparing your farm…'; await sandboxClient.start(setup ? 'empty' : 'mock'); await sandboxOpen(); }
-        catch (error) { sandboxError.textContent = error.message || 'Could not create a farm.'; }
-        finally { buttons.forEach(button => button.disabled = false); }
-      };
-      document.getElementById('journey-farmer').addEventListener('click', () => startJourney(false));
-      document.getElementById('journey-new').addEventListener('click', () => startJourney(true));
-      journey.showModal();
+      if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: { top: 90, right: 50, bottom: 170, left: 50 }, maxZoom: 16, duration: 500 });
     }
+
+    /** Leave the farm document so map, editor and pending requests stay bound to one identity. */
+    function reloadWorkspace(keepSelection = false) {
+      document.querySelector('.app').classList.add('entry-open', 'workspace-exiting');
+      if (!keepSelection) sessionStorage.removeItem(workspaceKey);
+      location.reload();
+    }
+
+    /** Reopen the entry screen with the expired session identified. */
+    function workspaceExpired(kind) {
+      if (activeWorkspace === kind) reloadWorkspace(true);
+    }
+
+    /** Connect the entry screens to the two independent farm sessions. */
+    function setupEntry() {
+      const app = document.querySelector('.app');
+      const entry = document.getElementById('journey-dialog');
+      const message = document.getElementById('journey-message');
+      const sandboxChoice = document.getElementById('journey-sandbox');
+      const accountChoice = document.getElementById('journey-account');
+      const workspaceButton = document.getElementById('workspace-button');
+      const workspaceDialog = document.getElementById('workspace-dialog');
+      const logoutButton = document.getElementById('workspace-logout');
+      const forms = { login: document.getElementById('login-form'), register: document.getElementById('register-form') };
+      let screen = 'entry';
+      let busy = false;
+
+      /** Describe whether each option starts or resumes a session. */
+      function updateChoices() {
+        const sandboxState = workspaceClients.sandbox.sessionState();
+        sandboxChoice.querySelector('strong').textContent = sandboxState === 'active' ? 'Resume sandbox' : sandboxState === 'expired' ? 'Start a new sandbox' : 'Sandbox';
+        sandboxChoice.querySelector('small').textContent = sandboxState === 'active'
+          ? 'Return to your temporary farm and its saved changes.'
+          : 'Explore a temporary copy of an example farm. No account needed.';
+        const signedIn = workspaceClients.account.hasSession();
+        accountChoice.querySelector('strong').textContent = signedIn ? 'Return to account' : 'Log in';
+        accountChoice.querySelector('small').textContent = signedIn ? 'Open your signed-in farm.' : 'Open your farm or create an account.';
+      }
+
+      /** Announce progress or an error without shifting focus from the current control. */
+      function report(text, error = false) {
+        message.textContent = text;
+        message.toggleAttribute('data-error', error);
+      }
+
+      /** Change the visible screen and move keyboard focus to its heading. */
+      function showScreen(next) {
+        if (screen !== next && forms[screen]) {
+          const form = forms[screen];
+          form.reset();
+          setPasswordVisibility(form.querySelector('[data-password]'), false);
+        }
+        screen = next;
+        entry.querySelectorAll('[data-screen]').forEach(panel => { panel.hidden = panel.dataset.screen !== next; });
+        const heading = document.getElementById(next + '-title');
+        entry.setAttribute('aria-labelledby', heading.id);
+        report('');
+        if (next === 'entry') updateChoices();
+        if (!entry.open) entry.showModal();
+        heading.focus();
+      }
+
+      /** Toggle visibility without changing the field's value or autocomplete hint. */
+      function setPasswordVisibility(button, show) {
+        const input = document.getElementById(button.getAttribute('aria-controls'));
+        input.type = show ? 'text' : 'password';
+        button.textContent = show ? 'Hide' : 'Show';
+        button.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+      }
+
+      /** Keep recovery explicit after either type of session expires. */
+      function showExpired(kind) {
+        showScreen(kind === 'sandbox' ? 'entry' : 'login');
+        report(kind === 'sandbox'
+          ? 'Your sandbox session expired. Start a new sandbox to explore another copy.'
+          : 'Your account session expired. Log in again to open your farm.', true);
+      }
+
+      /** Open the analysis or parcel setup with the chosen session and its permissions. */
+      async function openWorkspace(kind) {
+        const client = workspaceClients[kind];
+        report(kind === 'sandbox' ? 'Loading your sandbox…' : 'Loading your farm…');
+        const profile = await client.me();
+        if (kind === 'sandbox' ? profile?.kind !== 'sandbox' : !['account', 'example'].includes(profile?.kind)) {
+          throw new Error('The farm service returned a session for a different workspace.');
+        }
+        await mapReady;
+        farmClient = client;
+        dataProvider = client.farmerProvider();
+        workspaceCanWrite = profile.can_write === true;
+        await sandboxOpen({ setupIfEmpty: kind === 'account' && workspaceCanWrite });
+        if (!client.hasSession()) {
+          client.expire();
+          throw Object.assign(new Error('Your farm session expired.'), { status: 401 });
+        }
+        const isSandbox = kind === 'sandbox';
+        const label = isSandbox ? 'Temporary sandbox' : profile.display_name || profile.login || 'Your account';
+        document.getElementById('workspace-title').textContent = label;
+        document.getElementById('workspace-description').textContent = isSandbox
+          ? 'This is a temporary example farm. Saved changes stay in this sandbox until it expires.'
+          : profile.kind === 'example' ? 'You are viewing an example farm with a read-only login.' : 'You are signed in to your farm.';
+        if (isSandbox && !workspaceCanWrite) {
+          document.getElementById('workspace-description').textContent = 'This temporary example farm is read-only.';
+        }
+        workspaceButton.querySelector('span').textContent = label;
+        workspaceButton.setAttribute('aria-label', label + ' options');
+        logoutButton.hidden = isSandbox;
+        workspaceButton.hidden = false;
+        sessionStorage.setItem(workspaceKey, kind);
+        activeWorkspace = kind;
+        setTimeout(() => client.expire(), Math.max(0, client.expiresAt() - Date.now()));
+        app.classList.remove('entry-open');
+        entry.close();
+        workspaceButton.focus({ preventScroll: true });
+      }
+
+      /** Prevent duplicate submissions and recover in the appropriate entry screen. */
+      async function runAccess(kind, progress, action) {
+        if (busy) return;
+        busy = true;
+        const controls = entry.querySelectorAll('button, input');
+        controls.forEach(control => { control.disabled = true; });
+        report(progress);
+        try {
+          await action();
+        } catch (error) {
+          if (workspaceClients[kind].sessionState() === 'expired' && error.status === 401) showExpired(kind);
+          else {
+            if (screen === 'entry') updateChoices();
+            report(error.message || 'Could not open your farm. Please try again.', true);
+          }
+        } finally {
+          busy = false;
+          controls.forEach(control => { control.disabled = false; });
+        }
+      }
+
+      /** Map authentication errors to messages specific to the form being submitted. */
+      function authError(error, mode) {
+        if (error.status === 401 && mode === 'login') return 'Incorrect login or password.';
+        if (error.status === 429) return 'Too many attempts. Wait a minute and try again.';
+        if (error.status === 409) return 'That login is already taken. Choose another one.';
+        if (error.status === 422) {
+          if (mode === 'login') return 'Check your login and password and try again.';
+          const detail = error.detail;
+          if (typeof detail === 'string' && detail) return detail[0].toUpperCase() + detail.slice(1) + '.';
+          return 'Check the registration details and try again.';
+        }
+        if (error.status === 503 && mode === 'register') return 'Registration is currently unavailable. Try again later.';
+        return error.message;
+      }
+
+      entry.addEventListener('cancel', event => {
+        event.preventDefault();
+        if (!busy && screen !== 'entry') showScreen(screen === 'register' ? 'login' : 'entry');
+      });
+      entry.querySelectorAll('[data-go]').forEach(button => button.addEventListener('click', () => showScreen(button.dataset.go)));
+      entry.querySelectorAll('[data-password]').forEach(button => button.addEventListener('click', () => {
+        setPasswordVisibility(button, document.getElementById(button.getAttribute('aria-controls')).type === 'password');
+      }));
+      sandboxChoice.addEventListener('click', () => runAccess('sandbox', 'Preparing your sandbox…', async () => {
+        if (!workspaceClients.sandbox.hasSession()) await workspaceClients.sandbox.start('mock');
+        await openWorkspace('sandbox');
+      }));
+      accountChoice.addEventListener('click', () => {
+        if (workspaceClients.account.hasSession()) runAccess('account', 'Loading your farm…', () => openWorkspace('account'));
+        else if (workspaceClients.account.sessionState() === 'expired') showExpired('account');
+        else showScreen('login');
+      });
+      Object.entries(forms).forEach(([mode, form]) => form.addEventListener('submit', event => {
+        event.preventDefault();
+        const data = new FormData(form);
+        const body = { login: data.get('login').trim(), password: data.get('password') };
+        const displayName = data.get('display_name')?.trim();
+        if (displayName) body.display_name = displayName;
+        if (!body.login) { report('Enter your login.', true); return; }
+        runAccess('account', mode === 'login' ? 'Logging in…' : 'Creating your account…', async () => {
+          try { await workspaceClients.account[mode](body); }
+          catch (error) { throw new Error(authError(error, mode)); }
+          showScreen('entry');
+          await openWorkspace('account');
+        });
+      }));
+      workspaceButton.addEventListener('click', () => workspaceDialog.showModal());
+      document.getElementById('workspace-switch').addEventListener('click', () => reloadWorkspace());
+      logoutButton.addEventListener('click', () => {
+        workspaceClients.account.logout();
+        reloadWorkspace();
+      });
+      window.addEventListener('storage', event => {
+        if (event.storageArea !== localStorage) return;
+        const kind = event.key === SandboxClient.ACCOUNT_STORAGE_KEY ? 'account' : event.key === SandboxClient.STORAGE_KEY ? 'sandbox' : null;
+        if (event.key === null && activeWorkspace) reloadWorkspace();
+        if (!kind) return;
+        if (activeWorkspace === kind) {
+          let expired = false;
+          try { expired = JSON.parse(event.newValue)?.expired === true; } catch (_) { /* An unreadable session also closes the workspace. */ }
+          reloadWorkspace(expired);
+        } else if (!busy) {
+          workspaceClients[kind].restore();
+          updateChoices();
+        }
+      });
+
+      const previous = sessionStorage.getItem(workspaceKey);
+      if (Object.hasOwn(workspaceClients, previous) && workspaceClients[previous].sessionState() === 'expired') {
+        workspaceClients[previous].expire();
+        sessionStorage.removeItem(workspaceKey);
+        showExpired(previous);
+      } else {
+        showScreen('entry');
+        if (Object.hasOwn(workspaceClients, previous) && workspaceClients[previous].hasSession()) {
+          runAccess(previous, 'Loading your farm…', () => openWorkspace(previous));
+        }
+      }
+    }
+
+    setupEntry();
 
   </script>
 </body>
