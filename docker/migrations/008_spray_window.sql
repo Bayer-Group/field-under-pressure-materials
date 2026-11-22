@@ -1,8 +1,8 @@
--- Migration 007: serve.spray_weather_hourly, the hourly weather of the spray window (docker/initdb/06_serve.sql).
+-- Migration 008: serve.spray_weather_hourly, the hourly weather of the spray window (docker/initdb/06_serve.sql).
 -- Requires migration 004 (schema serve, serve.shift_days()). A fresh database (docker/initdb/) already has this view.
 --
 -- Run once, from the repo root:
---   PGPASSWORD=... psql -h localhost -p 5433 -U <user> <database> -v ON_ERROR_STOP=1 -f docker/migrations/007_spray_window.sql
+--   PGPASSWORD=... psql -h localhost -p 5433 -U <user> <database> -v ON_ERROR_STOP=1 -f docker/migrations/008_spray_window.sql
 -- It deletes no data, and running it again changes nothing.
 
 BEGIN;
