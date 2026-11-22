@@ -13,7 +13,7 @@
     18 – 24  03 soil characteristics
     24 – 32  break: soil DNA (double helix) and map layers flow through Terranos into the app's outputs
     32 – 38  04 crop disease risk
-    38 – 60  break: two neighbours. One checks the crop disease risk (corn high, wheat low) and plants wheat, which shoots up;
+    38 – 60  break: two neighbours. One checks the crop disease risk (corn high, sugar beet low) and plants beet, which shoots up;
              the other plants corn anyway; a soil pathogen infects its roots (close-up under the ground), red veins climb the stalk and it falls ill;
              he finally listens and buys from the treatment plan; everyone is happy
     60 – 66  end card
@@ -686,7 +686,7 @@ scene(32, 38, (root) => {
 })
 
 // =====================================================================================
-// 38-60 s  Break: two neighbours, wheat and corn
+// 38-60 s  Break: two neighbours, sugar beet and corn
 // =====================================================================================
 // A small cartoon in one SVG "world" behind a camera. The two characters are rigs: a build function draws the parts once
 // and returns pose(p), which only sets transforms and a few path strings.
@@ -920,51 +920,52 @@ function makeCorn(parent) {
   }
 }
 
-/** The wheat: a golden ear with awns on a thin stalk, with a face and leaf arms. Origin at the foot of the stalk. */
-function makeWheat(parent) {
+/** The sugar beet: a round magenta root with a face, under a crown of big leaves on pink stems; the outer two leaves are its arms.
+ *  Origin at the ground under the root. Pose as the corn's, with `awn` for the leaves' flutter. */
+function makeBeet(parent) {
   const root = S('g', {}, parent)
-  const shadow = S('ellipse', { cy: 3, rx: 100, ry: 14, fill: '#1b140e', opacity: 0.2 }, root)
-  const lean = S('g', {}, root), grow = S('g', {}, lean)
-  const leaf = (par, x, y, side, len, wid, fill) => {
-    const g = S('g', {}, par), e = S('path', { fill, ...OUT }, g)
-    return (ang, bend) => { tf(g, `translate(${x},${y}) scale(${side},1) rotate(${ang})`); e.setAttribute('d', leafD(len, wid, bend)) }
+  const shadow = S('ellipse', { cy: 3, rx: 118, ry: 15, fill: '#1b140e', opacity: 0.2 }, root)
+  const lean = S('g', {}, root), grow = S('g', {}, lean), body = S('g', {}, grow)
+  const leaf = (par, len, wid, fill) => {
+    const g = S('g', {}, par)
+    const stem = limb(g, 9, '#d63a76')
+    const blade = S('path', { fill, ...OUT }, g), rib = S('path', { fill: 'none', stroke: '#e0588a', 'stroke-width': 4, 'stroke-linecap': 'round', opacity: 0.8 }, g)
+    return (x, y, side, ang, bend) => {
+      tf(g, `translate(${x},${y}) scale(${side},1) rotate(${ang})`)
+      const s0 = len * 0.32
+      stem(`M0,0 Q${s0 * 0.5},${bend * 0.1} ${s0},${bend * 0.15}`)
+      blade.setAttribute('transform', `translate(${s0},${bend * 0.15})`); blade.setAttribute('d', leafD(len - s0, wid, bend))
+      rib.setAttribute('d', `M${s0},${bend * 0.15} Q${s0 + (len - s0) * 0.5},${bend * 0.45} ${len - 12},${bend * 1.1}`)
+    }
   }
-  const baseL = [leaf(grow, 0, -24, -1, 170, 18, '#7fb843'), leaf(grow, 0, -24, 1, 170, 18, '#8cc44c'),
-    leaf(grow, 0, -110, -1, 120, 14, '#8cc44c'), leaf(grow, 0, -110, 1, 120, 14, '#7fb843')]
-  S('path', { d: 'M-10,2 C-8,-80 -10,-160 -8,-236 L8,-236 C10,-160 8,-80 10,2Z', fill: '#a9cf55', ...OUT }, grow)
-  S('path', { d: 'M-9,-80 Q0,-75 9,-80 M-9,-160 Q0,-155 9,-160', fill: 'none', stroke: INK, 'stroke-width': 3, opacity: 0.5 }, grow)
-  const ear = S('g', {}, grow)
-  const arms = [leaf(ear, -50, -96, -1, 140, 20, '#8cc44c'), leaf(ear, 50, -96, 1, 140, 20, '#7fb843')]
-  const awns = Array.from({ length: 11 }, () => S('path', { fill: 'none', stroke: '#c9962e', 'stroke-width': 5, 'stroke-linecap': 'round' }, ear))
-  const EAR = 'M-52,8 C-78,-60 -72,-196 -30,-268 C-14,-292 14,-292 30,-268 C72,-196 78,-60 52,8 C28,22 -28,22 -52,8Z'
-  S('path', { d: EAR, fill: '#f2cf6b', ...OUT }, ear)
-  const clip = S('clipPath', { id: 'wheatclip' }, ear); S('path', { d: EAR }, clip)
-  const kern = S('g', { 'clip-path': 'url(#wheatclip)', fill: '#dba640', opacity: 0.55 }, ear)
-  for (let y = -276; y < 20; y += 34) for (const sd of [-1, 1]) {
-    const cx = sd * 36, cy = y + (sd > 0 ? 17 : 0)
-    S('ellipse', { cx, cy, rx: 27, ry: 14, transform: `rotate(${sd * -30} ${cx} ${cy})` }, kern)
-  }
-  S('path', { d: 'M-40,-214 C-54,-170 -58,-120 -52,-80', fill: 'none', stroke: '#fff', 'stroke-width': 9, 'stroke-linecap': 'round', opacity: 0.4 }, ear)
-  const face = S('g', {}, ear)
-  for (const x of [-40, 40]) S('ellipse', { cx: x, cy: -116, rx: 14, ry: 9, fill: '#ff8a65', opacity: 0.5 }, face)
-  const eyes = [makeEye(face, -21, -152, 16, 20, 8.5), makeEye(face, 21, -152, 16, 20, 8.5)]
-  const brows = [-21, 21].map((x) => S('path', { d: 'M-13,0 Q0,-5 13,0', fill: 'none', stroke: INK, 'stroke-width': 5.5, 'stroke-linecap': 'round' }, S('g', { transform: `translate(${x},-186)` }, face)))
-  const mouth = S('path', { fill: '#8a2f2a', ...OUT, 'stroke-width': 5 }, S('g', { transform: 'translate(0,-104) scale(0.8)' }, face))
+  // the crown of leaves (behind the root): three in the middle, two outer ones as arms
+  const crown = S('g', {}, body)
+  const inner = [[-24, 230, 60, '#4f9e3f'], [0, 260, 66, '#5cb84a'], [24, 230, 60, '#4f9e3f']].map(([a, len, wid, fill]) => ({ a, f: leaf(crown, len, wid, fill) }))
+  const arms = [leaf(body, 200, 56, '#5cb84a'), leaf(body, 200, 56, '#4aa942')]
+  // the root
+  const BULB = 'M0,-206 C74,-206 116,-152 110,-92 C104,-34 58,2 0,4 C-58,2 -104,-34 -110,-92 C-116,-152 -74,-206 0,-206Z'
+  S('path', { d: 'M8,0 C14,26 2,40 22,56', fill: 'none', stroke: INK, 'stroke-width': 11, 'stroke-linecap': 'round' }, body)
+  S('path', { d: 'M8,0 C14,26 2,40 22,56', fill: 'none', stroke: '#8c1a44', 'stroke-width': 5, 'stroke-linecap': 'round' }, body)
+  S('path', { d: BULB, fill: '#a3214f', ...OUT }, body)
+  S('path', { d: 'M-80,-150 C-96,-110 -92,-70 -70,-40 M80,-150 C96,-110 92,-70 70,-40 M-40,-190 C-56,-150 -58,-80 -36,-24 M40,-190 C56,-150 58,-80 36,-24',
+    fill: 'none', stroke: '#c4396f', 'stroke-width': 5, 'stroke-linecap': 'round', opacity: 0.7 }, body)
+  S('path', { d: 'M-70,-170 C-90,-140 -96,-110 -92,-84', fill: 'none', stroke: '#fff', 'stroke-width': 10, 'stroke-linecap': 'round', opacity: 0.3 }, body)
+  S('ellipse', { cx: 0, cy: -202, rx: 28, ry: 9, fill: '#7d1239', stroke: INK, 'stroke-width': 4 }, body)
+  for (const x of [-64, 64]) S('ellipse', { cx: x, cy: -78, rx: 17, ry: 10, fill: '#ff8fb0', opacity: 0.6 }, body)
+  const eyes = [makeEye(body, -34, -116, 19, 23, 9.5), makeEye(body, 34, -116, 19, 23, 9.5)]
+  const brows = [-34, 34].map((x) => S('path', { d: 'M-14,0 Q0,-6 14,0', fill: 'none', stroke: INK, 'stroke-width': 6, 'stroke-linecap': 'round' }, S('g', { transform: `translate(${x},-154)` }, body)))
+  const mouth = S('path', { fill: '#5a0f24', ...OUT, 'stroke-width': 4.5 }, S('g', { transform: 'translate(0,-64)' }, body))
 
   return (p) => {
-    tf(root, `translate(${WHEAT_X + p.dx},${GROUND})`)
+    tf(root, `translate(${BEET_X + p.dx},${GROUND})`)
     show(root, p.s > 0)
-    at(shadow, { rx: 100 * p.s * (1 - 0.3 * clamp(-p.y / 100)) })
+    at(shadow, { rx: 118 * p.s * (1 - 0.3 * clamp(-p.y / 100)) })
     tf(lean, `translate(0,${p.y}) rotate(${p.lean})`)
     tf(grow, `scale(${p.s / Math.sqrt(p.sy)},${p.s * p.sy})`)
-    baseL[0](-30 + p.sway, 40); baseL[1](-30 - p.sway, 40); baseL[2](-38 - p.sway, 28); baseL[3](-38 + p.sway, 28)
-    tf(ear, `translate(0,-228) rotate(${p.head})`)
-    arms[0](...p.armL); arms[1](...p.armR)
-    awns.forEach((e, i) => {
-      const k = i - 5, sx = k * 9, sy = -266 + Math.abs(k) * 15, a = (k * 13 * Math.PI) / 180, len = 74 + (5 - Math.abs(k)) * 7
-      const ex = sx + Math.sin(a) * len + p.awn * (0.6 + Math.abs(k) * 0.1), ey = sy - Math.cos(a) * len
-      e.setAttribute('d', `M${sx},${sy} Q${(sx + ex) / 2 + p.awn * 0.3},${(sy + ey) / 2} ${ex.toFixed(1)},${ey.toFixed(1)}`)
-    })
+    tf(body, `rotate(${p.head} 0 -100)`)
+    inner.forEach(({ a, f }, i) => f(0, -196, 1, -90 + a + p.sway * (i - 1) + p.awn * 0.25 * (i - 1), -14 + 0.4 * p.awn))
+    arms[0](-46, -178, -1, p.armL[0] - 42, p.armL[1] * 0.6)
+    arms[1](46, -178, 1, p.armR[0] - 42, p.armR[1] * 0.6)
     eyes.forEach((e) => e(p.look, p.blink, p.eye, p.joy))
     brows.forEach((b, i) => tf(b, `translate(0,${-p.browL}) rotate(${(i ? 1 : -1) * p.browA})`))
     mouth.setAttribute('d', mouthD(...p.mouth))
@@ -992,11 +993,11 @@ function makeSprout(parent, kernel) {
   }
 }
 
-// Two neighbours, one fence. The careful one (glasses, green shirt) checks Terranos and plants low-risk wheat;
+// Two neighbours, one fence. The careful one (glasses, green shirt) checks Terranos and plants low-risk sugar beet;
 // the other plants high-risk corn anyway, it falls ill, and he finally opens the Treatment plan.
-const WHEAT_X = 560, FENCE_X = 960
+const BEET_X = 560, FENCE_X = 960
 const SMART = { shirt: '#2f9e5a', shirtD: '#25804a', denim: '#8a6240', denimD: '#74512f', pocket: '#5e4126', hair: '#6b4a2b', mou: '#6b4a2b',
-  band: '#1f6f43', seed: '#e0b04a', glasses: true }
+  band: '#1f6f43', seed: '#a3214f', glasses: true }
 /** Default farmer pose; scenes override what they animate. */
 const POSE = { y: 0, sy: 1, walk: 0, ph: 0, lean: 0, hf: [-42, -124], hb: [54, -126], bag: false, phone: false, head: 0, look: [0.6, 0], blink: 0,
   eye: 1, joy: false, browL: 0, browA: 0, mouth: [16, 9, 0], mou: 0, hatY: 0, hatR: 0 }
@@ -1054,12 +1055,12 @@ scene(38, 60, (root) => {
     S('ellipse', { cx: -8, cy: -5, rx: 40, ry: 6, fill: '#96633c' }, g)
     return (t, land, burst) => tf(g, `translate(${x},${GROUND + 2}) scale(${1 + 0.12 * bump(t, land, 0.25)},${1 - 0.25 * bump(t, land, 0.25) + 0.3 * bump(t, burst, 0.2)})`)
   }
-  const moundW = mound(WHEAT_X), moundC = mound(CORN_X)
+  const moundW = mound(BEET_X), moundC = mound(CORN_X)
   const fallLeaf = S('path', { d: leafD(62, 15, 8), fill: '#c4ae4a', ...OUT, 'stroke-width': 4 }, mid)
   S('radialGradient', { id: 'infect' }, S('defs', {}, svg)).innerHTML = '<stop offset="0" stop-color="#dc2626" stop-opacity=".75"/><stop offset=".6" stop-color="#dc2626" stop-opacity=".3"/><stop offset="1" stop-color="#dc2626" stop-opacity="0"/>'
   const footGlow = S('ellipse', { cx: CORN_X, cy: GROUND + 4, rx: 150, ry: 34, fill: 'url(#infect)' }, mid)
-  const wheat = makeWheat(mid), corn = makeCorn(mid)
-  const sproutW = makeSprout(mid, '#f2cf6b'), sproutC = makeSprout(mid, '#ffd84a')
+  const beet = makeBeet(mid), corn = makeCorn(mid)
+  const sproutW = makeSprout(mid, '#c4396f'), sproutC = makeSprout(mid, '#ffd84a')
   // the parcel
   const BOX_X = 1100
   const box = S('g', {}, mid), boxIn = S('g', {}, box)
@@ -1071,7 +1072,7 @@ scene(38, 60, (root) => {
   const flaps = [-1, 1].map(() => { const g = S('g', {}, boxIn); S('rect', { x: 0, y: -7, width: 58, height: 12, rx: 4, fill: '#e3b983', ...OUT, 'stroke-width': 4 }, g); return g })
   const smart = makeFarmer(mid, SMART), neigh = makeFarmer(mid)
   const seedShape = (fill) => S('path', { d: 'M0,-11 C10,-9 12,6 0,11 C-12,6 -10,-9 0,-11Z', fill, ...OUT, 'stroke-width': 3.5 }, mid)
-  const seedW = seedShape('#e0b04a'), seedC = seedShape('#ffc93c')
+  const seedW = seedShape('#a3214f'), seedC = seedShape('#ffc93c')
   const puff = (n, c) => makePuff(mid, n, c)
   const puffSeedW = puff(6, '#b98a5e'), puffSeedC = puff(6, '#b98a5e'), puffGrowW = puff(9, '#b98a5e'), puffGrowC = puff(9, '#b98a5e')
   const puffBox = puff(10, '#e9dcc4')
@@ -1146,16 +1147,15 @@ scene(38, 60, (root) => {
 
   const frost = css(el('div', 'abs', root), { ...full, background: '#eef6ef' })
 
-  // ---- beat 1: the careful neighbour's phone shows the crop disease risk of his soil: corn high, wheat low
+  // ---- beat 1: the careful neighbour's phone shows the crop disease risk of his soil: corn high, sugar beet low
   const cornIcon = `<svg width="54" height="64" viewBox="-27 -34 54 64"><path d="M-16,26 C-30,6 -26,-22 0,-32 C26,-22 30,6 16,26Z" fill="#ffd84a" stroke="${INK}" stroke-width="3.5"/>
     <path d="M-20,28 C-30,10 -26,-6 -20,-14 C-16,4 -8,18 2,28Z M20,28 C30,10 26,-6 20,-14 C16,4 8,18 -2,28Z" fill="#58b043" stroke="${INK}" stroke-width="3.5" stroke-linejoin="round"/></svg>`
-  const wheatIcon = `<svg width="54" height="64" viewBox="-27 -34 54 64"><path d="M0,30 V-6" stroke="#8aa63a" stroke-width="4" stroke-linecap="round"/>
-    ${[-24, -12, 0, 12].map((y, i) => `<ellipse cx="-8" cy="${y}" rx="9" ry="6" transform="rotate(-35 -8 ${y})" fill="#f2cf6b" stroke="${INK}" stroke-width="2.5"/><ellipse cx="8" cy="${y + 5}" rx="9" ry="6" transform="rotate(35 8 ${y + 5})" fill="#f2cf6b" stroke="${INK}" stroke-width="2.5"/>`).join('')}
-    <path d="M0,-30 V-40 M-6,-28 L-12,-38 M6,-28 L12,-38" stroke="#c9962e" stroke-width="2.5" stroke-linecap="round"/></svg>`
+  const beetIcon = `<svg width="54" height="64" viewBox="-27 -34 54 64"><path d="M-4,-12 C-16,-24 -18,-34 -8,-38 C0,-34 0,-22 -4,-12Z M4,-12 C14,-26 22,-32 26,-26 C22,-16 12,-12 4,-12Z M0,-12 C-2,-26 2,-38 8,-40" fill="#5cb84a" stroke="${INK}" stroke-width="2.5" stroke-linejoin="round"/>
+    <path d="M0,-14 C18,-14 24,0 20,12 C16,22 6,26 2,32 C-2,26 -14,22 -18,12 C-22,0 -18,-14 0,-14Z" fill="#a3214f" stroke="${INK}" stroke-width="3" stroke-linejoin="round"/></svg>`
   const rcard = el('div', 'rcard', root, `<div class="hd"><img src="brand/terranos.png"><b>Crop disease risk</b></div>
     <div class="lab">Your plot · soil fungi scored for each crop</div>
     <div class="row bad"><span class="ic">${cornIcon}</span><span class="nm">Corn</span><span class="cell">Higher risk</span><i class="ring"></i></div>
-    <div class="row good"><span class="ic">${wheatIcon}</span><span class="nm">Wheat</span><span class="cell">Lower risk</span><i class="ring"></i><span class="tick">✓</span></div>
+    <div class="row good"><span class="ic">${beetIcon}</span><span class="nm">Sugar beet</span><span class="cell">Lower risk</span><i class="ring"></i><span class="tick">✓</span></div>
     <div class="key"><i style="background:#1f7a45"></i>lower risk <i style="background:#c0262d;margin-left:18px"></i>higher risk</div>`)
   const [ringC, ringW] = rcard.querySelectorAll('.ring'), tick = rcard.querySelector('.tick')
   const RC_X = 1010, RC_Y = 250
@@ -1212,7 +1212,7 @@ scene(38, 60, (root) => {
     const toFar = (x, y) => { const [sx, sy] = toScreen(x, y); return [(sx - 960) / zf + cxf, (sy - 540) / zf + cyf] }
     for (const c of clouds) { tf(c.g, `translate(${c.x + (t - 38) * 9},${c.y}) scale(${c.s})`); c.g.setAttribute('fill', '#fff') }
 
-    // ---- the careful neighbour (A): walks in, checks the risk on his phone, plants wheat, is amazed, later shows the app across the fence
+    // ---- the careful neighbour (A): walks in, checks the risk on his phone, plants beet, is amazed, later shows the app across the fence
     const aWalk = Math.max(1 - prog(t, 38.85, 38.98), life(t, 51.4, 52.4, 0.08, 0.1))
     const ax = kf(t, [[38, -60], [38.95, 300], [51.4, 300], [52.4, 860]], E.lin), aph = ax / 20, aSwing = 26 * Math.sin(aph) * aWalk
     const aSur = life(t, 43.37, 44.4, 0.08, 0.3), aLaugh = t >= 43.95 && t < 44.8, aConcern = life(t, 50.0, 51.5, 0.4, 0.3)
@@ -1281,11 +1281,11 @@ scene(38, 60, (root) => {
     at(bulbG, { opacity: clamp(bl * 3) }); tf(bulbG, `translate(${bx - 14},${GROUND - 510}) scale(${Math.max(0, bl) * 0.9}) rotate(${4 * Math.sin(t * 12)})`)
 
     // ---- seeds, mounds, sprouts
-    toss(seedW, t, 42.3, 42.62, ax + 110, GROUND - 250, WHEAT_X); puffSeedW(t, 42.62, WHEAT_X, GROUND - 6, 50, 0.4, 11); moundW(t, 42.62, 43.0)
+    toss(seedW, t, 42.3, 42.62, ax + 110, GROUND - 250, BEET_X); puffSeedW(t, 42.62, BEET_X, GROUND - 6, 50, 0.4, 11); moundW(t, 42.62, 43.0)
     toss(seedC, t, 45.82, 46.14, bx - 110, GROUND - 250, CORN_X); puffSeedC(t, 46.14, CORN_X, GROUND - 6, 50, 0.4, 11); moundC(t, 46.14, 46.72)
-    sproutW(t, 42.64, 0.5, WHEAT_X, -0.75); sproutC(t, 46.16, 0.7, CORN_X, 0.75)
+    sproutW(t, 42.64, 0.5, BEET_X, -0.75); sproutC(t, 46.16, 0.7, CORN_X, 0.75)
 
-    // ---- the wheat: shoots up at once, waves at its farmer, worries for the corn, cheers at the end
+    // ---- the beet: shoots up at once, waves at its farmer, worries for the corn, cheers at the end
     const wGrown = prog(t, 43.12, 43.7), wtw = Math.max(0, t - 43.7), wSpring = t > 43.7 ? 1 : 0
     const wWave = life(t, 44.2, 45.1, 0.2, 0.25), wWorry = life(t, 50.0, 51.6, 0.4, 0.3), wHappy = prog(t, 58.1, 58.5), wBop = wHappy * Math.sin((t - 58) * 2 * Math.PI + 1)
     const wArm = (sd) => {
@@ -1295,7 +1295,7 @@ scene(38, 60, (root) => {
       if (sd < 0 && wWave > 0) return [lerp(base[0], -52 + 24 * Math.sin(t * 12), wWave), lerp(base[1], 6 + 16 * Math.sin(t * 12 - 1.2), wWave)]
       return base
     }
-    wheat({
+    beet({
       s: t < 43.12 ? 0 : 0.12 + 0.88 * E.out3(wGrown), dx: 0,
       sy: (t < 44.4 ? kf(t, [[43.12, 0.6], [43.37, 1.26], [43.7, 1.1], [43.85, 0.9], [44.0, 1.06], [44.17, 0.97], [44.35, 1]]) : 1) + cheerSquash(t, 0.06),
       y: -46 * hop(t, 0.06),
@@ -1309,7 +1309,7 @@ scene(38, 60, (root) => {
       joy: t >= 58.5 || (t >= 44.5 && t < 45.0), browL: 8 * life(t, 43.2, 44.0, 0.1, 0.3) + 6 * wHappy, browA: 16 * wWorry,
       mouth: t >= 57.95 ? [27, 8, 24 + 3 * Math.sin(t * 12), 0.15] : wWorry > 0.3 ? [12, -4, 0] : t >= 43.75 ? [24, 9, 11, 0.15] : [20, 4, 22, 0.5],
     })
-    puffGrowW(t, 43.12, WHEAT_X, GROUND - 4, 130, 0.6, 20); flyClods(clodsW, t, 43.12, WHEAT_X, 190)
+    puffGrowW(t, 43.12, BEET_X, GROUND - 4, 130, 0.6, 20); flyClods(clodsW, t, 43.12, BEET_X, 190)
 
     // ---- the corn: grows normally, falls ill, recovers when the parcel lands
     const grown = prog(t, 46.85, 47.4), tw = Math.max(0, t - 47.4), cSpring = t > 47.4 ? 1 : 0
