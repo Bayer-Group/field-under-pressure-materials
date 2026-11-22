@@ -1,0 +1,8 @@
+# Field Under Pressure — Python dependencies (Python 3.11+)
+#   pip install -r requirements.txt          everything (what start.sh installs)
+#   pip install -r requirements.lock         the exact versions the app was tested with
+# By component: requirements/base.txt (platform + data), engine.txt, assistant.txt (each includes base).
+# No GPU? Install the CPU build of torch first (~1 GB instead of ~6 GB):
+#   pip install torch==2.15.0 --index-url https://download.pytorch.org/whl/cpu
+-r requirements/engine.txt
+-r requirements/assistant.txt

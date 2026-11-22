@@ -1,0 +1,17 @@
+# Platform and data handling: what every component needs.
+
+# --- Platform (Szymek + Janek) ---
+Django>=5.2,<6.0
+djangorestframework>=3.16
+drf-spectacular>=0.28        # OpenAPI schema + docs page at /api/docs/
+psycopg[binary]>=3.2         # Postgres driver
+python-dotenv>=1.0           # loads .env
+whitenoise>=6.6              # static files with DEBUG off
+
+# --- Data handling (import, engine) ---
+pandas>=2.0
+pyarrow>=14.0
+duckdb>=1.0
+h3>=4.0                      # soil is indexed with H3 level 10
+shapely>=2.0                 # field polygons -> grid cells / H3 cells
+openpyxl>=3.1                # reading ryzyka_zebrane.xlsx

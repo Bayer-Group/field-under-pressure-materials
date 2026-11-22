@@ -1,0 +1,21 @@
+# AI assistant (Ola): RAG over the guides and the LLM clients. Needs Python 3.11+ (pymupdf 2.1).
+# torch is the big one: on a machine without a GPU install the CPU build first (README → First-time setup):
+#   pip install torch==2.15.0 --index-url https://download.pytorch.org/whl/cpu
+-r base.txt
+
+# --- AI assistant (Ola) ---
+# RAG over the guides: assistant/rag (README_RAG.md). Needs Python 3.11+ (pymupdf 2.1).
+# Heavy: torch + the embedding model (~1 GB download on first run).
+pymupdf==2.1                 # PDF text, fonts and tables
+sentence-transformers==6.3.0 # embeddings: sdadas/mmlw-retrieval-roberta-base
+transformers==5.23.0
+torch==2.15.0
+qdrant-client==1.20.0        # vector store (docker compose service "qdrant")
+rank-bm25==0.2.2
+pystempel==2.0.0             # Polish stemmer for BM25
+rapidfuzz==3.14.6            # fuzzy matching of TOC headings and threat names
+pyyaml>=6.0                  # eval questions
+# Assistant: LLM, tools, MCP
+openai==3.57.0               # one client for Gemini + Groq (OpenAI-compatible endpoints)
+mcp==2.3.0                   # MCP server (python manage.py mcp_server)
+pydantic==2.14.4             # tool input/output schemas

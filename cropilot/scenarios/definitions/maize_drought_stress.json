@@ -1,0 +1,80 @@
+{
+  "title": "Upały i presja w uprawie kukurydzy (lipiec)",
+  "description": "Fala upałów w lipcu, zróżnicowany płodozmian po kukurydzy oraz zgłoszenie z sąsiedniego pola.",
+  "region": "Opolskie",
+  "window": {
+    "season": 2025,
+    "season_start": "2024-09-01",
+    "season_end": "2025-08-31",
+    "clock_today": "2025-07-10",
+    "include_previous_season": true
+  },
+  "fields": [
+    {
+      "name": "Pole Zachodnie (Kukurydza)",
+      "crop_code": 1130,
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [17.6272, 50.3468],
+            [17.6318, 50.3447],
+            [17.6369, 50.3456],
+            [17.6378, 50.3484],
+            [17.6354, 50.3514],
+            [17.6312, 50.3506],
+            [17.6279, 50.3492],
+            [17.6272, 50.3468]
+          ]
+        ]
+      },
+      "crop_history": {
+        "2022": { "1130": 1.0 },
+        "2023": { "1130": 1.0 },
+        "2024": { "1130": 1.0 }
+      }
+    },
+    {
+      "name": "Pole Północne (Pszenica)",
+      "crop_code": 1110,
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [17.6388, 50.3662],
+            [17.6435, 50.3646],
+            [17.6484, 50.3654],
+            [17.6492, 50.3679],
+            [17.6476, 50.3704],
+            [17.6428, 50.3698],
+            [17.6394, 50.3683],
+            [17.6388, 50.3662]
+          ]
+        ]
+      }
+    }
+  ],
+  "weather_overrides": [
+    {
+      "start_date": "2025-07-02",
+      "end_date": "2025-07-10",
+      "values": {
+        "max_temperature": 33.5,
+        "avg_temperature": 26.8,
+        "avg_relative_humidity": 46.0,
+        "imerg_total_precipitation": 0.0
+      }
+    }
+  ],
+  "observations": [
+    {
+      "kind": "neighbour",
+      "observed_on": "2025-07-08",
+      "field_name": "Pole Zachodnie (Kukurydza)",
+      "category": "pest",
+      "severity": 0.65,
+      "distance_m": 450.0,
+      "text": "Sąsiad zgłasza żerowanie szkodników w kukurydzy 450 m na wschód."
+    }
+  ]
+}

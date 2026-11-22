@@ -1,0 +1,32 @@
+{% load static %}
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Cropilot</title>
+  <link rel="icon" type="image/svg+xml" href="{% static 'frontend/favicon.svg' %}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="{% static 'frontend/dist/main.css' %}">
+  <link rel="stylesheet" href="{% static 'frontend/style.css' %}">
+  <script type="module" src="{% static 'frontend/dist/main.js' %}"></script>
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <img class="logo" src="{% static 'frontend/cropilot-mark.svg' %}" alt="" width="32" height="32">
+      <h1><span class="brand-crop">Crop</span><span class="brand-ilot">ilot</span></h1>
+    </div>
+    <p id="platform-status" class="platform-status" role="status">Sprawdzanie platformy…</p>
+    <div id="date-control" class="date-control" role="group" aria-label="Data demo"></div>
+  </header>
+  <main id="app-main" class="app-main">
+    <section id="map" class="map-area" aria-label="Mapa pól"></section>
+    <aside id="chat" class="chat-area" aria-label="Asystent"></aside>
+  </main>
+  <noscript><p class="page-error">Ta strona potrzebuje JavaScriptu.</p></noscript>
+</body>
+</html>

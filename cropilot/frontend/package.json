@@ -1,0 +1,28 @@
+{
+  "name": "field-under-pressure-frontend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "npm run api:check && npm run typecheck && npm run bundle",
+    "bundle": "esbuild src/main.ts --bundle --minify --splitting --format=esm --sourcemap --target=es2020 --loader:.png=file --loader:.svg=file --chunk-names=chunks/[name]-[hash] --asset-names=assets/[name]-[hash] --outdir=static/frontend/dist",
+    "watch": "npm run bundle -- --watch",
+    "typecheck": "tsc --noEmit",
+    "api:types": "openapi-typescript openapi.yml -o src/api/schema.d.ts",
+    "api:check": "node scripts/check-api-types.mjs"
+  },
+  "dependencies": {
+    "dompurify": "^3.4.18",
+    "leaflet": "^1.9.4",
+    "marked": "^18.2.1",
+    "vega": "^6.4.0",
+    "vega-embed": "^7.4.0",
+    "vega-lite": "^6.5.0"
+  },
+  "devDependencies": {
+    "@types/geojson": "^7946.0.14",
+    "@types/leaflet": "^1.9.22",
+    "esbuild": "^0.28.2",
+    "openapi-typescript": "^6.7.6",
+    "typescript": "^7.0.2"
+  }
+}

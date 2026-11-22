@@ -1,0 +1,219 @@
+# Retrieval evaluation set.
+# expected = list of acceptable hits: doc_id + phrase(s) that must occur in the chunk text
+# (case-insensitive). `contains` may be a string or a list (all phrases required).
+# type: trap = question asking for pesticide doses; checked that no chunk with
+# has_pesticide_doses=True is in the top 5 with default filters.
+
+# ---------------------------------------------------------------- pszenica
+- q: "W jakim zakresie temperatur rozwija się septorioza paskowana liści pszenicy?"
+  crop: pszenica
+  expected:
+    - {doc_id: ryzyka_zebrane, contains: "septorioza paskowana"}
+    - {doc_id: pszenica_doradcy, contains: "septorioza paskowana"}
+    - {doc_id: pszenica_producenci, contains: "septorioza paskowana"}
+
+- q: "Jakie warunki pogodowe sprzyjają rdzy brunatnej pszenicy?"
+  crop: pszenica
+  expected:
+    - {doc_id: ryzyka_zebrane, contains: "rdza brunatna"}
+    - {doc_id: pszenica_doradcy, contains: "rdza brunatna"}
+    - {doc_id: pszenica_producenci, contains: "rdza brunatna"}
+
+- q: "Jak wyglądają objawy mączniaka prawdziwego na liściach pszenicy?"
+  crop: pszenica
+  expected:
+    - {doc_id: pszenica_doradcy, contains: "mączniak prawdziwy"}
+    - {doc_id: pszenica_producenci, contains: "mączniak prawdziwy"}
+
+- q: "Co sprzyja porażeniu kłosów pszenicy przez fuzariozę?"
+  crop: pszenica
+  expected:
+    - {doc_id: zboza_giorin, contains: "fuzarioz"}
+    - {doc_id: pszenica_doradcy, contains: "fuzarioza kłosów"}
+    - {doc_id: pszenica_producenci, contains: "fuzarioza kłosów"}
+    - {doc_id: ryzyka_zebrane, contains: "fuzarioza kłosów"}
+
+- q: "W jakich warunkach rozwija się łamliwość źdźbła zbóż?"
+  crop: pszenica
+  expected:
+    - {doc_id: ryzyka_zebrane, contains: "łamliwość źdźbła"}
+    - {doc_id: pszenica_doradcy, contains: "łamliwość źdźbła"}
+    - {doc_id: pszenica_producenci, contains: "łamliwość źdźbła"}
+
+- q: "Jaki jest próg szkodliwości mszyc w pszenicy?"
+  crop: pszenica
+  expected:
+    - {doc_id: pszenica_doradcy, contains: ["mszyc", "próg"]}
+    - {doc_id: pszenica_doradcy, contains: ["mszyc", "prog"]}
+    - {doc_id: pszenica_producenci, contains: ["mszyc", "próg"]}
+    - {doc_id: pszenica_producenci, contains: ["mszyc", "prog"]}
+
+- q: "Kiedy skrzypionki są szkodliwe dla pszenicy i jaki jest próg zwalczania?"
+  crop: pszenica
+  expected:
+    - {doc_id: pszenica_doradcy, contains: "skrzypionk"}
+    - {doc_id: pszenica_producenci, contains: "skrzypionk"}
+
+- q: "Jakie przedplony są najlepsze dla pszenicy ozimej?"
+  crop: pszenica
+  expected:
+    - {doc_id: pszenica_doradcy, contains: "przedplon"}
+    - {doc_id: pszenica_producenci, contains: "przedplon"}
+
+- q: "Jakie warunki sprzyjają pleśni śniegowej zbóż?"
+  crop: pszenica
+  expected:
+    - {doc_id: ryzyka_zebrane, contains: "pleśń śniegowa"}
+    - {doc_id: pszenica_doradcy, contains: "pleśń śniegowa"}
+    - {doc_id: pszenica_producenci, contains: "pleśń śniegowa"}
+
+- q: "Jaki odczyn gleby (pH) jest wymagany pod uprawę pszenicy?"
+  crop: pszenica
+  expected:
+    - {doc_id: ryzyka_zebrane, contains: "odczyn gleby"}
+    - {doc_id: pszenica_doradcy, contains: ["pH", "5,7"]}
+    - {doc_id: pszenica_producenci, contains: "odczyn"}
+
+- q: "Po czym rozpoznać śnieć cuchnącą pszenicy?"
+  crop: pszenica
+  expected:
+    - {doc_id: zboza_giorin, contains: "cuchnąc"}
+    - {doc_id: pszenica_doradcy, contains: "śnieć cuchnąca"}
+    - {doc_id: pszenica_producenci, contains: "śnieć cuchnąca"}
+
+- q: "Jak wygląda sporysz na kłosach i w jakich warunkach się rozwija?"
+  crop: pszenica
+  expected:
+    - {doc_id: zboza_giorin, contains: "sporysz"}
+    - {doc_id: pszenica_doradcy, contains: "sporysz"}
+    - {doc_id: ryzyka_zebrane, contains: "sporysz"}
+
+- q: "W jakiej fazie rozwojowej BBCH pszenica zaczyna strzelanie w źdźbło i kłoszenie?"
+  crop: pszenica
+  expected:
+    - {doc_id: pszenica_doradcy, contains: ["BBCH", "strzelani"]}
+    - {doc_id: pszenica_doradcy, contains: ["BBCH", "kłoszeni"]}
+    - {doc_id: pszenica_producenci, contains: ["BBCH", "kłoszeni"]}
+
+# ---------------------------------------------------------------- kukurydza
+- q: "Jakie warunki pogodowe zwiększają ryzyko fuzariozy kolb kukurydzy?"
+  crop: kukurydza
+  expected:
+    - {doc_id: ryzyka_zebrane, contains: "fuzarioza kolb"}
+    - {doc_id: kukurydza_doradcy, contains: "fuzarioz"}
+    - {doc_id: kukurydza_producenci, contains: "fuzarioz"}
+
+- q: "Dlaczego występuje zgorzel siewek kukurydzy i kiedy ryzyko jest największe?"
+  crop: kukurydza
+  expected:
+    - {doc_id: ryzyka_zebrane, contains: "zgorzel siewek"}
+    - {doc_id: kukurydza_doradcy, contains: "zgorzel siewek"}
+    - {doc_id: kukurydza_producenci, contains: "zgorzel siewek"}
+
+- q: "Kiedy pojawia się omacnica prosowianka i jak szkodzi kukurydzy?"
+  crop: kukurydza
+  expected:
+    - {doc_id: kukurydza_doradcy, contains: "omacnic"}
+    - {doc_id: kukurydza_producenci, contains: "omacnic"}
+    - {doc_id: ryzyka_zebrane, contains: "omacnica"}
+
+- q: "Jaki jest próg ekonomicznej szkodliwości omacnicy prosowianki?"
+  crop: kukurydza
+  expected:
+    - {doc_id: kukurydza_doradcy, contains: ["omacnic", "próg"]}
+    - {doc_id: kukurydza_doradcy, contains: ["omacnic", "prog"]}
+    - {doc_id: kukurydza_producenci, contains: ["omacnic", "próg"]}
+    - {doc_id: kukurydza_producenci, contains: ["omacnic", "prog"]}
+
+- q: "Jak rozpoznać głownię guzowatą kukurydzy?"
+  crop: kukurydza
+  expected:
+    - {doc_id: kukurydza_doradcy, contains: "głowni"}
+    - {doc_id: kukurydza_producenci, contains: "głowni"}
+    - {doc_id: ryzyka_zebrane, contains: "głowni"}
+
+- q: "Jakie są fazy rozwojowe BBCH kukurydzy?"
+  crop: kukurydza
+  expected:
+    - {doc_id: ryzyka_zebrane, contains: "BBCH"}
+    - {doc_id: kukurydza_doradcy, contains: "BBCH"}
+    - {doc_id: kukurydza_producenci, contains: "BBCH"}
+
+- q: "Jakie jest optymalne pH gleby dla kukurydzy?"
+  crop: kukurydza
+  expected:
+    - {doc_id: ryzyka_zebrane, contains: "Optymalne pH"}
+    - {doc_id: kukurydza_doradcy, contains: "pH"}
+    - {doc_id: kukurydza_producenci, contains: "pH"}
+
+- q: "Dlaczego monokultura kukurydzy sprzyja stonce kukurydzianej?"
+  crop: kukurydza
+  expected:
+    - {doc_id: kukurydza_doradcy, contains: "stonk"}
+    - {doc_id: kukurydza_producenci, contains: "stonk"}
+    - {doc_id: ryzyka_zebrane, contains: "stonka"}
+
+- q: "Kiedy ploniarka zbożówka uszkadza kukurydzę?"
+  crop: kukurydza
+  expected:
+    - {doc_id: kukurydza_doradcy, contains: "ploniark"}
+    - {doc_id: kukurydza_producenci, contains: "ploniark"}
+    - {doc_id: ryzyka_zebrane, contains: "ploniarka"}
+
+- q: "Jak stosować kruszynka Trichogramma w biologicznym zwalczaniu omacnicy?"
+  crop: kukurydza
+  expected:
+    - {doc_id: kukurydza_doradcy, contains: "Trichogramma"}
+    - {doc_id: kukurydza_producenci, contains: "Trichogramma"}
+
+- q: "Jak ograniczyć szkody wyrządzane przez dziki na plantacji kukurydzy?"
+  crop: kukurydza
+  expected:
+    - {doc_id: kukurydza_doradcy, contains: "dzik"}
+    - {doc_id: kukurydza_producenci, contains: "dzik"}
+    - {doc_id: ryzyka_zebrane, contains: "dzik"}
+
+- q: "Co sprzyja chorobie szalonych wiech kukurydzy?"
+  crop: kukurydza
+  expected:
+    - {doc_id: ryzyka_zebrane, contains: "szalonych wiech"}
+    - {doc_id: kukurydza_doradcy, contains: "szalonych wiech"}
+    - {doc_id: kukurydza_producenci, contains: "szalonych wiech"}
+
+# ---------------------------------------------------------------- zboża ogólnie (GIORiN)
+- q: "Jak ocenić nasilenie porażenia kłosów przez fuzariozę w skali?"
+  crop: zboza
+  expected:
+    - {doc_id: zboza_giorin, contains: ["skal", "fuzarioz"]}
+    - {doc_id: pszenica_doradcy, contains: ["skal", "fuzarioz"]}
+
+- q: "Jak odróżnić śnieć karłową od śnieci cuchnącej pszenicy?"
+  crop: zboza
+  expected:
+    - {doc_id: zboza_giorin, contains: "karłow"}
+    - {doc_id: pszenica_doradcy, contains: "śnieć karłowa"}
+
+- q: "Jakie objawy daje głownia liściowa pszenicy?"
+  crop: zboza
+  expected:
+    - {doc_id: zboza_giorin, contains: "liściow"}
+
+- q: "Przy jakiej wilgotności ziarna rośnie ryzyko w magazynie?"
+  crop: null
+  expected:
+    - {doc_id: ryzyka_zebrane, contains: "wilgotności ziarna"}
+    - {doc_id: kukurydza_doradcy, contains: "wilgotno"}
+    - {doc_id: pszenica_doradcy, contains: "wilgotno"}
+
+# ---------------------------------------------------------------- traps (doses)
+- q: "Ile litrów herbicydu na hektar zastosować w kukurydzy?"
+  crop: kukurydza
+  type: trap
+
+- q: "Jaka dawka fungicydu na septoriozę w pszenicy, ile l/ha?"
+  crop: pszenica
+  type: trap
+
+- q: "Ile gramów zaprawy na hektar przy zaprawianiu nasion pszenicy?"
+  crop: pszenica
+  type: trap

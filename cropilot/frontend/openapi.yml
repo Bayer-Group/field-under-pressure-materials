@@ -1,0 +1,903 @@
+openapi: 3.0.3
+info:
+  title: Cropilot API
+  version: 0.1.0
+  description: Platform API used by the frontend, the map and the assistant.
+paths:
+  /api/chat/:
+    post:
+      operationId: chat_create
+      description: Send a message; returns the assistant's answer (saved, with citations).
+      tags:
+      - chat
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatIn'
+        required: true
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatReply'
+          description: ''
+  /api/chat/conversations/:
+    get:
+      operationId: chat_conversations_list
+      tags:
+      - chat
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ConversationItem'
+          description: ''
+  /api/chat/conversations/{id}/:
+    get:
+      operationId: chat_conversations_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - chat
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationDetail'
+          description: ''
+  /api/clock/:
+    get:
+      operationId: clock_get
+      description: The demo's date. Moving it recomputes the risks of the days that
+        change (engine.clock_moved).
+      tags:
+      - clock
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Clock'
+          description: ''
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+    put:
+      operationId: clock_put
+      description: The demo's date. Moving it recomputes the risks of the days that
+        change (engine.clock_moved).
+      tags:
+      - clock
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClockUpdate'
+        required: true
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Clock'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+  /api/fields/:
+    get:
+      operationId: fields_list
+      description: Every field as a GeoJSON FeatureCollection (EPSG:4326, coordinates
+        [lon, lat]).
+      tags:
+      - fields
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FieldFeatureCollection'
+          description: ''
+  /api/fields/{id}/:
+    get:
+      operationId: field_get
+      description: 'One field: crop, area, centroid, crop history per year and the
+        average soil.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - fields
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FieldDetail'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+  /api/fields/{id}/risks/:
+    get:
+      operationId: field_risks_series
+      description: One field's risk per threat over time (the season chart). `to`
+        never passes today + 7.
+      parameters:
+      - in: query
+        name: from
+        schema:
+          type: string
+          format: date
+        description: Default 1 September of the year before the demo's year.
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: to
+        schema:
+          type: string
+          format: date
+        description: Default and maximum today + 7 (cut off, not an error).
+      tags:
+      - fields
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FieldRiskSeries'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+  /api/fields/{id}/risks/{date}/:
+    get:
+      operationId: field_risks_day
+      description: One field's risks on one day, highest first, each with its explanation
+        (the "why" panel).
+      parameters:
+      - in: path
+        name: date
+        schema:
+          type: string
+          format: date
+        description: At most today + 7.
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - fields
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FieldDayRisks'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+  /api/health/:
+    get:
+      operationId: health_retrieve
+      description: |-
+        Reports whether the platform is up and can reach the database, whether the demo date is set, and whether
+        the chat can answer (assistant.available: an LLM is configured; rag: the guides index is there).
+      tags:
+      - health
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+          description: ''
+  /api/risks/:
+    get:
+      operationId: risks_day
+      description: Every field's risk per threat on one day, for colouring the map.
+      parameters:
+      - in: query
+        name: date
+        schema:
+          type: string
+          format: date
+        description: Default today; at most today + 7 (else 400).
+      tags:
+      - risks
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DayRisks'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+  /api/threats/:
+    get:
+      operationId: threats_list
+      description: Every threat, ordered by crop, then code.
+      tags:
+      - threats
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Threat'
+          description: ''
+components:
+  schemas:
+    AssistantHealth:
+      type: object
+      properties:
+        available:
+          type: boolean
+        llm:
+          type: boolean
+        rag:
+          type: boolean
+        reason:
+          type: string
+          nullable: true
+      required:
+      - available
+      - llm
+      - rag
+      - reason
+    ChatIn:
+      type: object
+      properties:
+        conversation_id:
+          type: integer
+          nullable: true
+        message:
+          type: string
+          maxLength: 4000
+        field_id:
+          type: integer
+          nullable: true
+      required:
+      - message
+    ChatMessage:
+      type: object
+      properties:
+        id:
+          type: integer
+        role:
+          type: string
+        text:
+          type: string
+        citations:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        focus_field_id:
+          type: integer
+          nullable: true
+        updated_field_ids:
+          type: array
+          items:
+            type: integer
+        chart:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          description: Vega-Lite v5 spec, data inline; null when none
+        pending_action:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          description: 'e.g. {"type": "confirm_observation", "draft": {"draft_id",
+            "field_id", …}}; null when none'
+        created_at:
+          type: string
+          format: date-time
+      required:
+      - chart
+      - citations
+      - created_at
+      - focus_field_id
+      - id
+      - pending_action
+      - role
+      - text
+      - updated_field_ids
+    ChatReply:
+      type: object
+      properties:
+        message:
+          $ref: '#/components/schemas/ChatMessage'
+        conversation_id:
+          type: integer
+      required:
+      - conversation_id
+      - message
+    Clock:
+      type: object
+      properties:
+        today:
+          type: string
+          format: date
+        forecast_days:
+          type: integer
+        min_date:
+          type: string
+          format: date
+          nullable: true
+          description: 'First demo date PUT accepts (null: no limit).'
+        max_date:
+          type: string
+          format: date
+          nullable: true
+          description: 'Last demo date PUT accepts (null: no limit).'
+      required:
+      - forecast_days
+      - max_date
+      - min_date
+      - today
+    ClockUpdate:
+      type: object
+      properties:
+        today:
+          type: string
+          format: date
+      required:
+      - today
+    ConversationDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        messages:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+      required:
+      - id
+      - messages
+      - title
+    ConversationItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        updated_at:
+          type: string
+          format: date-time
+      required:
+      - id
+      - title
+      - updated_at
+    CropRef:
+      type: object
+      properties:
+        code:
+          type: integer
+        name:
+          type: string
+      required:
+      - code
+      - name
+    CropShare:
+      type: object
+      properties:
+        code:
+          type: integer
+        name:
+          type: string
+        share:
+          type: number
+          format: double
+          description: '[fraction 0-1]'
+      required:
+      - code
+      - name
+      - share
+    CropYear:
+      type: object
+      properties:
+        year:
+          type: integer
+        classes:
+          type: array
+          items:
+            $ref: '#/components/schemas/CropShare'
+          description: By share, largest first.
+      required:
+      - classes
+      - year
+    DayRisk:
+      type: object
+      properties:
+        field_id:
+          type: integer
+        threat_code:
+          type: string
+        score:
+          type: number
+          format: double
+          description: '[0-1] risk index, not a probability'
+        level:
+          allOf:
+          - $ref: '#/components/schemas/RiskLevel'
+          description: |-
+            explanation.level (colour by this)
+
+            * `low` - low
+            * `medium` - medium
+            * `high` - high
+      required:
+      - field_id
+      - level
+      - score
+      - threat_code
+    DayRisks:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        risks:
+          type: array
+          items:
+            $ref: '#/components/schemas/DayRisk'
+      required:
+      - date
+      - risks
+    Error:
+      type: object
+      properties:
+        detail:
+          type: string
+      required:
+      - detail
+    FieldDayRisk:
+      type: object
+      properties:
+        threat:
+          $ref: '#/components/schemas/ThreatRef'
+        score:
+          type: number
+          format: double
+        explanation:
+          type: object
+          additionalProperties: {}
+          description: Explanation version 1, as the engine wrote it.
+      required:
+      - explanation
+      - score
+      - threat
+    FieldDayRisks:
+      type: object
+      properties:
+        field_id:
+          type: integer
+        date:
+          type: string
+          format: date
+        risks:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldDayRisk'
+          description: Highest score first.
+      required:
+      - date
+      - field_id
+      - risks
+    FieldDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        crop:
+          $ref: '#/components/schemas/CropRef'
+        area_ha:
+          type: number
+          format: double
+        centroid:
+          $ref: '#/components/schemas/LatLon'
+        weather_grid_id:
+          type: string
+        crop_history:
+          type: array
+          items:
+            $ref: '#/components/schemas/CropYear'
+          description: One entry per year, oldest first.
+        soil:
+          allOf:
+          - $ref: '#/components/schemas/Soil'
+          nullable: true
+          description: null when the field has no soil cells.
+      required:
+      - area_ha
+      - centroid
+      - crop
+      - crop_history
+      - id
+      - name
+      - soil
+      - weather_grid_id
+    FieldFeature:
+      type: object
+      properties:
+        type:
+          $ref: '#/components/schemas/FieldFeatureTypeEnum'
+        id:
+          type: integer
+        geometry:
+          oneOf:
+          - type: object
+            properties:
+              type:
+                type: string
+                enum:
+                - Polygon
+              coordinates:
+                type: array
+                items:
+                  type: array
+                  items:
+                    type: array
+                    items:
+                      type: number
+                    minItems: 2
+                    description: '[lon, lat]'
+            required:
+            - type
+            - coordinates
+          - type: object
+            properties:
+              type:
+                type: string
+                enum:
+                - MultiPolygon
+              coordinates:
+                type: array
+                items:
+                  type: array
+                  items:
+                    type: array
+                    items:
+                      type: array
+                      items:
+                        type: number
+                      minItems: 2
+                      description: '[lon, lat]'
+            required:
+            - type
+            - coordinates
+          description: GeoJSON Polygon or MultiPolygon, EPSG:4326, coordinates [lon,
+            lat].
+        properties:
+          $ref: '#/components/schemas/FieldProperties'
+      required:
+      - geometry
+      - id
+      - properties
+      - type
+    FieldFeatureCollection:
+      type: object
+      properties:
+        type:
+          $ref: '#/components/schemas/FieldFeatureCollectionTypeEnum'
+        features:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldFeature'
+      required:
+      - features
+      - type
+    FieldFeatureCollectionTypeEnum:
+      enum:
+      - FeatureCollection
+      type: string
+      description: '* `FeatureCollection` - FeatureCollection'
+    FieldFeatureTypeEnum:
+      enum:
+      - Feature
+      type: string
+      description: '* `Feature` - Feature'
+    FieldProperties:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        crop:
+          $ref: '#/components/schemas/CropRef'
+        area_ha:
+          type: number
+          format: double
+      required:
+      - area_ha
+      - crop
+      - id
+      - name
+    FieldRiskSeries:
+      type: object
+      properties:
+        field_id:
+          type: integer
+        from:
+          type: string
+          format: date
+          description: The first day actually used.
+        to:
+          type: string
+          format: date
+          description: The last day actually used (at most today + 7).
+        threats:
+          type: array
+          items:
+            $ref: '#/components/schemas/ThreatSeries'
+          description: By threat code.
+      required:
+      - field_id
+      - from
+      - threats
+      - to
+    Health:
+      type: object
+      properties:
+        status:
+          type: string
+        database:
+          type: boolean
+        clock:
+          type: boolean
+          description: The demo date is set.
+        assistant:
+          allOf:
+          - $ref: '#/components/schemas/AssistantHealth'
+          nullable: true
+      required:
+      - assistant
+      - clock
+      - database
+      - status
+    LatLon:
+      type: object
+      properties:
+        lat:
+          type: number
+          format: double
+        lon:
+          type: number
+          format: double
+      required:
+      - lat
+      - lon
+    RiskLevel:
+      enum:
+      - low
+      - medium
+      - high
+      type: string
+      description: |-
+        * `low` - low
+        * `medium` - medium
+        * `high` - high
+    RiskPoint:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        score:
+          type: number
+          format: double
+      required:
+      - date
+      - score
+    Soil:
+      type: object
+      description: Root-zone columns of SoilCell, averaged over the field's cells,
+        in the database's units.
+      properties:
+        ph:
+          type: number
+          format: double
+          nullable: true
+          description: '[pH] root zone to 15 cm'
+        soil_texture:
+          type: string
+          nullable: true
+          description: 'USDA texture class: the most common one'
+        clay:
+          type: number
+          format: double
+          nullable: true
+          description: '[fraction 0-1]'
+        sand:
+          type: number
+          format: double
+          nullable: true
+          description: '[fraction 0-1]'
+        silt:
+          type: number
+          format: double
+          nullable: true
+          description: '[fraction 0-1]'
+        om:
+          type: number
+          format: double
+          nullable: true
+          description: '[g/kg] organic matter'
+        cec:
+          type: number
+          format: double
+          nullable: true
+          description: '[cmol(c)/kg]'
+        bulk_density:
+          type: number
+          format: double
+          nullable: true
+          description: '[kg/dm³]'
+      required:
+      - bulk_density
+      - cec
+      - clay
+      - om
+      - ph
+      - sand
+      - silt
+      - soil_texture
+    Threat:
+      type: object
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        crop:
+          $ref: '#/components/schemas/CropRef'
+        category:
+          $ref: '#/components/schemas/ThreatCategory'
+      required:
+      - category
+      - code
+      - crop
+      - name
+    ThreatCategory:
+      enum:
+      - fungal
+      - bacterial
+      - viral
+      - pest
+      type: string
+      description: |-
+        * `fungal` - Fungal
+        * `bacterial` - Bacterial
+        * `viral` - Viral
+        * `pest` - Pest
+    ThreatRef:
+      type: object
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        category:
+          $ref: '#/components/schemas/ThreatCategory'
+      required:
+      - category
+      - code
+      - name
+    ThreatSeries:
+      type: object
+      properties:
+        threat_code:
+          type: string
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskPoint'
+          description: By date.
+      required:
+      - points
+      - threat_code

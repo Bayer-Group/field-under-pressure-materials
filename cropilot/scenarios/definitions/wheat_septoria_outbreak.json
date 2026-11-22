@@ -1,0 +1,103 @@
+{
+  "title": "Presja septoriozy paskowanej liści pszenicy (koniec maja)",
+  "description": "Wysoka wilgotność i opady w drugiej połowie maja oraz potwierdzone objawy septoriozy na Polu Północnym.",
+  "region": "Opolskie",
+  "window": {
+    "season": 2025,
+    "season_start": "2024-09-01",
+    "season_end": "2025-07-31",
+    "clock_today": "2025-05-27",
+    "include_previous_season": true
+  },
+  "fields": [
+    {
+      "name": "Pole Północne (Pszenica)",
+      "crop_code": 1110,
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [17.6388, 50.3662],
+            [17.6435, 50.3646],
+            [17.6484, 50.3654],
+            [17.6492, 50.3679],
+            [17.6476, 50.3704],
+            [17.6428, 50.3698],
+            [17.6394, 50.3683],
+            [17.6388, 50.3662]
+          ]
+        ]
+      },
+      "crop_history": {
+        "2022": { "1130": 1.0 },
+        "2023": { "1430": 1.0 },
+        "2024": { "1110": 1.0 }
+      }
+    },
+    {
+      "name": "Pole Południowe (Pszenica)",
+      "crop_code": 1110,
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [17.6502, 50.3554],
+            [17.6556, 50.3536],
+            [17.6604, 50.3551],
+            [17.6591, 50.3583],
+            [17.6548, 50.3596],
+            [17.6511, 50.3581],
+            [17.6502, 50.3554]
+          ]
+        ]
+      }
+    },
+    {
+      "name": "Pole Zachodnie (Kukurydza)",
+      "crop_code": 1130,
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [17.6272, 50.3468],
+            [17.6318, 50.3447],
+            [17.6369, 50.3456],
+            [17.6378, 50.3484],
+            [17.6354, 50.3514],
+            [17.6312, 50.3506],
+            [17.6279, 50.3492],
+            [17.6272, 50.3468]
+          ]
+        ]
+      }
+    }
+  ],
+  "weather_overrides": [
+    {
+      "start_date": "2025-05-18",
+      "end_date": "2025-05-24",
+      "values": {
+        "avg_temperature": 15.5,
+        "avg_relative_humidity": 91.0,
+        "imerg_total_precipitation": 14.5
+      }
+    }
+  ],
+  "observations": [
+    {
+      "kind": "symptoms",
+      "observed_on": "2025-05-25",
+      "field_name": "Pole Północne (Pszenica)",
+      "category": "disease",
+      "threat_code": "wheat.septoria_leaf_blotch",
+      "severity": 0.85,
+      "text": "Liczne podłużne brunatne plamy z piknidiami na liściu podflagowym."
+    },
+    {
+      "kind": "absence",
+      "observed_on": "2025-05-26",
+      "field_name": "Pole Zachodnie (Kukurydza)",
+      "text": "Lustracja kukurydzy — brak objawów chorób i szkodników."
+    }
+  ]
+}

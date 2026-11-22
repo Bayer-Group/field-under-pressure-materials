@@ -1,0 +1,44 @@
+# Local development services. Django runs in your venv; only the databases run in Docker:
+#   db      Postgres 16 (+ pgvector): all platform data
+#   qdrant  vector store for the assistant's guide search (RAG index, see assistant/README_RAG.md)
+# Values come from .env (copy .env.example), with the defaults below as fallback.
+#
+#   docker compose up -d          start everything in the background
+#   docker compose up -d db       only Postgres (if you don't work on the assistant)
+#   docker compose ps             check it is running
+#   docker compose stop           stop (data is kept)
+#   docker compose down -v        stop and wipe all data (the RAG index too: rebuild with `python manage.py rag_ingest`)
+
+services:
+  db:
+    # Plain Postgres 16 with the pgvector extension available (optional, for the assistant's RAG index).
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-fieldpressure}
+      POSTGRES_USER: ${POSTGRES_USER:-fieldpressure}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fieldpressure}
+    ports:
+      # Host port 5433, so it does not clash with a locally installed Postgres on 5432.
+      # Bound to 127.0.0.1 only: the database is not reachable from the venue Wi-Fi.
+      - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  qdrant:
+    # Vector store for the assistant (Ola). Pinned to match qdrant-client in requirements.txt.
+    # Dashboard: http://localhost:6333/dashboard
+    image: qdrant/qdrant:v1.20.2
+    ports:
+      # REST API only, bound to 127.0.0.1 like the database.
+      - "127.0.0.1:${QDRANT_PORT:-6333}:6333"
+    volumes:
+      - qdrant_storage:/qdrant/storage
+
+volumes:
+  pgdata:
+  qdrant_storage:
