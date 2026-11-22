@@ -13,7 +13,13 @@
   CANDIDATES=("${BACKUP_DIR}/${DB_NAME}_"*.archive.gz)
   shopt -u nullglob
 
-  if [[ ${#CANDIDATES[@]} -gt 0 ]]; then
+  if [[ -n "${SAGE_DB_BACKUP_ARCHIVE:-}" ]]; then
+    if [[ "${SAGE_DB_BACKUP_ARCHIVE}" == */* || ! -f "${BACKUP_DIR}/${SAGE_DB_BACKUP_ARCHIVE}" ]]; then
+      echo "[init-restore] The selected archive is missing from ${BACKUP_DIR}." >&2
+      exit 1
+    fi
+    ARCHIVE_FILE="${BACKUP_DIR}/${SAGE_DB_BACKUP_ARCHIVE}"
+  elif [[ ${#CANDIDATES[@]} -gt 0 ]]; then
     ARCHIVE_FILE="${CANDIDATES[$(( ${#CANDIDATES[@]} - 1 ))]}"
   elif [[ -f "${BACKUP_DIR}/${DB_NAME}.archive.gz" ]]; then
     ARCHIVE_FILE="${BACKUP_DIR}/${DB_NAME}.archive.gz"
@@ -42,5 +48,8 @@
   fi
 
   mongorestore "${RESTORE_ARGS[@]}" < "${ARCHIVE_FILE}"
+  if [[ -n "${SAGE_DB_BACKUP_ARCHIVE:-}" ]]; then
+    touch "/data/db/.sage-restored-${SAGE_DB_BACKUP_ARCHIVE}"
+  fi
   echo "[init-restore] Done."
 )

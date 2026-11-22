@@ -72,6 +72,30 @@ PY
 printf 'Connected to Earth Engine.\n'
 
 compose=(docker compose -f docker-compose.yml -f docker-compose.gee.yml)
+backup=$("${compose[@]}" config --format json | "$venv_python" -c '
+import hashlib
+import json
+from pathlib import Path
+import sys
+
+environment = json.load(sys.stdin)["services"]["mongodb"]["environment"]
+database = environment["MONGO_INITDB_DATABASE"]
+directory = Path("db/backups")
+archives = sorted(directory.glob(f"{database}_*.archive.gz"))
+archive = archives[-1] if archives else directory / f"{database}.archive.gz"
+if not archive.is_file():
+    sys.exit(f"No MongoDB backup found for {database} in {directory}.")
+with archive.open("rb") as contents:
+    digest = hashlib.sha256()
+    for chunk in iter(lambda: contents.read(1024 * 1024), b""):
+        digest.update(chunk)
+print(f"{archive.name}\t{digest.hexdigest()[:16]}")
+')
+IFS=$'\t' read -r SAGE_DB_BACKUP_ARCHIVE backup_revision <<< "${backup%$'\r'}"
+export SAGE_DB_BACKUP_ARCHIVE
+export SAGE_DB_BACKUP_SUFFIX="_${backup_revision}"
+printf 'Using MongoDB backup %s.\n' "$SAGE_DB_BACKUP_ARCHIVE"
+
 "${compose[@]}" config --quiet
 "${compose[@]}" up "${up_args[@]}"
 "${compose[@]}" ps

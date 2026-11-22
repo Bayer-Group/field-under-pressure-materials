@@ -48,10 +48,11 @@ services:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:-admin}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-admin123}
       MONGO_INITDB_DATABASE: ${MONGO_DB:-field_under_pressure}
+      SAGE_DB_BACKUP_ARCHIVE: ${SAGE_DB_BACKUP_ARCHIVE:-}
     volumes:
       - mongodb_data:/data/db
     healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      test: ["CMD-SHELL", "{ [ -z \"$$SAGE_DB_BACKUP_ARCHIVE\" ] || [ -f \"/data/db/.sage-restored-$$SAGE_DB_BACKUP_ARCHIVE\" ]; } && mongosh --quiet --eval \"db.adminCommand('ping').ok\""]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -60,3 +61,4 @@ services:
 
 volumes:
   mongodb_data:
+    name: "${COMPOSE_PROJECT_NAME}_mongodb_data${SAGE_DB_BACKUP_SUFFIX:-}"
