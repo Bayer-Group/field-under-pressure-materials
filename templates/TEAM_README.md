@@ -6,11 +6,11 @@
 ## Team
 | Name | Role | Contact |
 |------|------|---------|
-|Natalia Ławreszuk||tashy444|
-|Bartosz Krzyczkowski|Fields|mleczu|
-|Krzysztof Wroniak|Soils|Cr0wek|
-|Jakub Załuga|Meteo & Satelite Data|kuba_zezolek|
-|Mateusz Woźniak|Backend developer|mateusz2180|
+| Natalia Ławreszuk | Team Leader; Product Manager | tashy444 |
+| Bartosz Krzyczkowski | Geospatial Analyst | mleczu |
+| Krzysztof Wroniak | Soil and Meteorological Data Analyst | Cr0wek |
+| Jakub Załuga | EO Data Engineer | kuba_zezolek |
+| Mateusz Woźniak | Full-Stack Developer | mateusz2180 |
 
 ## One-liner
 What grower decision does this help? (spray / treat / harvest / wait)
