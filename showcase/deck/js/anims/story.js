@@ -1,4 +1,4 @@
-// Animations for the story slides: title, problem, goal, data, future.
+// Animations for the story slides: title, problem, goal, data, already done, future.
 // Every builder follows engine.js: return a timeline, add labels step1, step2, ... for clicks.
 ;(function () {
   'use strict'
@@ -47,6 +47,9 @@
     spray: '<path d="M7 11h6.5v10H7z"/><path d="M8.3 11V7.5h4V11M12.3 8.5h3.2l1-2"/><circle cx="19.2" cy="8" r=".9"/><circle cx="20.5" cy="11" r=".9"/><circle cx="20.8" cy="5" r=".9"/><circle cx="18.6" cy="3" r=".9"/>',
     balance: '<path d="M12 6v15M8 21h8"/><circle cx="12" cy="4.4" r="1.4"/><g class="beam"><path d="M4 6.5h16"/><path d="M4 6.5l-2.6 6.2h5.2zM20 6.5l-2.6 6.2h5.2z"/></g>',
     flask: '<path d="M9 3h6M10 3v6.2L4.8 19a1.5 1.5 0 0 0 1.3 2.1h11.8a1.5 1.5 0 0 0 1.3-2.1L14 9.2V3"/><path d="M7.3 15h9.4"/><circle cx="10.5" cy="18" r=".9"/><circle cx="13.8" cy="17.2" r=".7"/>',
+    microbe: '<ellipse cx="12" cy="12" rx="7.5" ry="5" transform="rotate(-30 12 12)"/><circle cx="10" cy="12.5" r="1.2"/><circle cx="13.6" cy="10.6" r=".9"/><path d="M17.6 7.4l2.4-2.4M6.4 16.6L4 19M18.8 11.2l2.4.6M5.2 12.8l-2.4-.6"/>',
+    soil: '<path d="M3 7.5h18M3 12.5h18M3 17.5h18"/><path d="M12 7.5V3M12 3l-2 1.8M12 3l2 1.8"/><circle cx="7" cy="10" r=".8"/><circle cx="15.5" cy="15" r=".8"/><circle cx="9.5" cy="20" r=".8"/><circle cx="18" cy="10" r=".8"/>',
+    risk: '<path d="M12 3.2L21.5 20H2.5z"/><path d="M12 9.5v5"/><circle cx="12" cy="17.2" r=".9"/>',
     leaf: '<path d="M5 19C5 10 11 5 20 5c0 9-5.2 14.5-14 14.5"/><path d="M5 19.5L13.5 11"/><path d="M9.5 12.5h3.5v-3.5"/>',
   }
   const iconSvg = (name) =>
@@ -614,7 +617,26 @@
   })
 
   // ===================================================================================
-  // 5 · Future: a road with two milestones.
+  // 5 · What's already done: four app features, one per click, each ticked off.
+  // Steps: 1 soil microbes · 2 soil characteristics · 3 crop disease risk · 4 treatment
+  // ===================================================================================
+  Deck.anim('done', (slide) => {
+    const feats = slide.querySelectorAll('.feat')
+    const tl = headIn(gsap.timeline({ defaults: { ease: 'power3.out' } }), slide)
+    tl.set(feats, { autoAlpha: 0.12 }, 0)
+    feats.forEach((f, i) => {
+      tl.addLabel(`step${i + 1}`)
+        .to(f, { autoAlpha: 1, duration: 0.3 })
+        .from(f, { y: 70, duration: 0.7, ease: 'back.out(1.5)' }, '<')
+        .from(f.querySelector('.ic'), { scale: 0, rotation: -90, duration: 0.7, ease: 'back.out(2)' }, '<0.1')
+        .from(f.querySelectorAll('b, span'), { y: 24, autoAlpha: 0, duration: 0.5, stagger: 0.08 }, '<0.2')
+        .from(f.querySelector('.ok'), { scale: 0, rotation: -45, duration: 0.5, ease: 'back.out(3)' }, '<0.3')
+    })
+    return tl
+  })
+
+  // ===================================================================================
+  // 6 · Future: a road with two milestones.
   // Steps: 1 agro-chemical branch · 2 EU sustainability
   // ===================================================================================
   Deck.anim('future', (slide, D) => {

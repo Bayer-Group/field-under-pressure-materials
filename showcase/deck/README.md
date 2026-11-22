@@ -71,7 +71,8 @@ To get a PDF, open `http://127.0.0.1:8090/deck/?print-pdf` in Chromium and print
 | 2 | Goal | `goal` (sowing, fertilization, spraying → biological balance) · `timeline` (history → now → future) |
 | 3 | Data | `stack` (shotgun sequencing, NDVI, geochemistry, qPCR) |
 | 4 | Demo | `reel`: a short break that plays `../terranos-showcase.mp4` full screen |
-| 5 | Future | `future` (agro-chemical branch, EU sustainability) |
+| 5 | Already done | `done` (soil microbes, soil characteristics, crop disease risk, treatment) |
+| 6 | Future | `future` (agro-chemical branch, EU sustainability) |
 | | Outro | `finale` |
 
 ## How a slide animates
