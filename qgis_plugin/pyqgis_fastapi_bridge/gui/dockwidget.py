@@ -26,7 +26,8 @@ from qgis.core import Qgis, QgsMessageLog
 from PyQt5.QtCore import Qt, QDate, QTimer
 
 from ..core import farmer_fields, serve_api
-from ..core.serve_layers import LAYER_PROPERTY, add_crop_area_layer, add_grid_layer, add_history_table
+from ..core.serve_layers import (
+    LAYER_PROPERTY, add_crop_area_layer, add_grid_layer, add_history_table, add_spray_window_layer)
 from ..core.farmer_layers import add_farmer_layers
 
 LOG_TAG = "Field Under Pressure"
@@ -97,7 +98,7 @@ class ServeTask(QgsTask):
     def __init__(self, description, kind, base_url, file_path, date, token, on_done, limit=None):
         super().__init__(description, QgsTask.CanCancel)
         self.limit = limit        # None or (QgsGeometry in EPSG:4326, bbox tuple, label)
-        self.kind = kind          # "crop_areas" or "grid"
+        self.kind = kind          # "crop_areas", "grid" or "spray_window"
         self.base_url = base_url
         self.file_path = file_path
         self.date = date
@@ -118,10 +119,14 @@ class ServeTask(QgsTask):
                 if self.kind == "crop_areas":
                     payload = serve_api.fetch(self.base_url, serve_api.CROP_AREA_PATH, {"bbox": bbox},
                                               token=self.token)
+                elif self.kind == "spray_window":       # no bbox in this endpoint; the limit is applied below
+                    payload = serve_api.fetch(self.base_url, serve_api.SPRAY_WINDOW_PATH, {}, token=self.token,
+                                              timeout=60)
                 else:
                     payload = serve_api.fetch(self.base_url, serve_api.GRID_RISK_PATH,
                                               {"date": self.date, "bbox": bbox}, token=self.token, timeout=60)
-            parse = serve_api.parse_crop_areas if self.kind == "crop_areas" else serve_api.parse_grid_risk
+            parse = {"crop_areas": serve_api.parse_crop_areas,
+                     "spray_window": serve_api.parse_spray_window}.get(self.kind, serve_api.parse_grid_risk)
             self.data = parse(payload)
             if self.limit:
                 serve_api.keep_rows(self.data, _intersects(self.limit[0]), self.limit[2])
@@ -365,6 +370,8 @@ class PyQgisBridgeDockWidget(QDockWidget, FORM_CLASS):
         surface, cells = "grid_surface" in ids, "grid_cells" in ids
         if surface or cells:
             self._start_serve("grid", False, surface=surface, cells=cells)
+        if "spray_window" in ids:
+            self._start_serve("spray_window", False)
 
     def _base_url(self):
         return self.txtFarmerUrl.text().strip() or serve_api.DEFAULT_BASE_URL
@@ -488,7 +495,7 @@ class PyQgisBridgeDockWidget(QDockWidget, FORM_CLASS):
         return area, (box.xMinimum(), box.yMinimum(), box.xMaximum(), box.yMaximum()), label
 
     def _start_serve(self, kind, from_file, surface=True, cells=True):
-        label = "crop areas" if kind == "crop_areas" else "voivodeship grid"
+        label = {"crop_areas": "crop areas", "spray_window": "spray window"}.get(kind, "voivodeship grid")
         base_url = self._base_url()
         token = self.txtToken.text().strip()
         path = None
@@ -501,8 +508,9 @@ class PyQgisBridgeDockWidget(QDockWidget, FORM_CLASS):
             self._risk_msg("Start a sandbox or log in first (the API needs a token).")
             return
         date = self.dateGrid.date().toString("yyyy-MM-dd")
-        source = path or base_url + (serve_api.CROP_AREA_PATH if kind == "crop_areas"
-                                     else f"{serve_api.GRID_RISK_PATH}?date={date}")
+        source = path or base_url + {"crop_areas": serve_api.CROP_AREA_PATH,
+                                     "spray_window": serve_api.SPRAY_WINDOW_PATH}.get(
+            kind, f"{serve_api.GRID_RISK_PATH}?date={date}")
         self._serve_source = source
         self.log(f"\nLoading {label} from {source} ...")
         self._set_risk_busy(True)
@@ -525,7 +533,7 @@ class PyQgisBridgeDockWidget(QDockWidget, FORM_CLASS):
             self._bg_tasks.remove(task)
         self._set_risk_busy(False)
         bar = self.iface.messageBar()
-        label = "Crop areas" if task.kind == "crop_areas" else "Voivodeship grid"
+        label = {"crop_areas": "Crop areas", "spray_window": "Spray window"}.get(task.kind, "Voivodeship grid")
         if task.error is not None:
             self._risk_msg("Error: " + task.error.message)
             self.log(f"ERROR loading {label.lower()}: " + task.error.describe())
@@ -546,6 +554,8 @@ class PyQgisBridgeDockWidget(QDockWidget, FORM_CLASS):
             return
         if task.kind == "crop_areas":
             layer = add_crop_area_layer(data, getattr(task, "source", self._serve_source))
+        elif task.kind == "spray_window":
+            layer = add_spray_window_layer(data, getattr(task, "source", self._serve_source))
         else:
             options = task.grid_options
             layer = add_grid_layer(data, getattr(task, "source", self._serve_source),
@@ -559,10 +569,13 @@ class PyQgisBridgeDockWidget(QDockWidget, FORM_CLASS):
             attrs = row["attributes"]
             if task.kind == "crop_areas" and attrs.get("status") not in ("ok", "uncertain"):
                 key = attrs.get("status") or "no assessment today"
+            elif task.kind == "spray_window":
+                key = (attrs.get("spray_window_status") or "not assessed").replace("_", " ")
             else:
                 key = attrs.get("risk_class") or "not assessed"
             counts[key] = counts.get(key, 0) + 1
-        order = ["high", "medium", "low"]
+        order = ["window now", "window later", "no window", "no forecast", "no signal"] \
+            if task.kind == "spray_window" else ["high", "medium", "low"]
         parts = [f"{counts[k]} {k}" for k in order if k in counts]
         parts += [f"{v} {k}" for k, v in sorted(counts.items()) if k not in order]
         text = f"{label}: {len(data.rows)} features ({', '.join(parts)})"
