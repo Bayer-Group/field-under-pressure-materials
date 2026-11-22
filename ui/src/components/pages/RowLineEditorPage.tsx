@@ -41,6 +41,7 @@ import {
   type CanvasBackdropMode,
   type EditorToolMode,
 } from '../editor/RowLineEditorCanvas';
+import { Dropdown } from '../common/Dropdown';
 import { readPagePref, writePagePref } from '../../utils/pagePrefs';
 
 function sameRowGeometry(saved: OrchardRowDoc, draft: DraftRow): boolean {
@@ -851,20 +852,19 @@ export function RowLineEditorPage() {
 
                       {isSel && (
                         <div className="row-item-controls" onClick={(e) => e.stopPropagation()}>
-                          <label className="row-inline-control">
+                          <div className="row-inline-control">
                             <span>{t.rowEditor.rowSpeciesShort}</span>
-                            <select
+                            <Dropdown
+                              variant="compact"
                               value={calc.row.species}
-                              onChange={(e) => handlePaintRow(calc.row.id, e.target.value)}
-                              className="row-inline-select"
-                            >
-                              {cropPrefs.map((c) => (
-                                <option key={c._id} value={c._id}>
-                                  {language === 'pl' ? c.namePl : c.nameEn} ({c.variety})
-                                </option>
-                              ))}
-                            </select>
-                          </label>
+                              onChange={(nextSpecies) => handlePaintRow(calc.row.id, nextSpecies)}
+                              ariaLabel={t.rowEditor.rowSpeciesShort}
+                              options={cropPrefs.map((c) => ({
+                                value: c._id,
+                                label: `${language === 'pl' ? c.namePl : c.nameEn} (${c.variety})`,
+                              }))}
+                            />
+                          </div>
 
                           <label className="row-inline-control">
                             <span>{t.rowEditor.rowSpacingShort}</span>

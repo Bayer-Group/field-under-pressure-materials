@@ -26,6 +26,7 @@ import {
 import { ApiError } from '../../api/httpClient';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { readPagePref, writePagePref } from '../../utils/pagePrefs';
+import { Dropdown } from '../common/Dropdown';
 
 interface DevColorToken {
   solid: string;
@@ -440,25 +441,23 @@ export function CalendarPage() {
                     <ChevronLeft size={16} />
                   </button>
 
-                  <select
-                    className="calendar-month-select"
+                  <Dropdown
+                    variant="calendar"
+                    className="calendar-month-dropdown"
                     value={`${selectedYear}-${monthIndex}`}
-                    onChange={(e) => {
-                      const [yrStr, moStr] = e.target.value.split('-');
+                    onChange={(nextValue) => {
+                      const [yrStr, moStr] = nextValue.split('-');
                       handleNavigate(Number(yrStr), Number(moStr));
                     }}
-                    aria-label={t.calendar.title}
-                  >
-                    {sortedYears.map((yr) => (
-                      <optgroup key={yr} label={String(yr)}>
-                        {t.calendar.months.map((label, idx) => (
-                          <option key={`${yr}-${idx}`} value={`${yr}-${idx}`}>
-                            {label} {yr}
-                          </option>
-                        ))}
-                      </optgroup>
-                    ))}
-                  </select>
+                    ariaLabel={t.calendar.title}
+                    groups={sortedYears.map((yr) => ({
+                      label: String(yr),
+                      options: t.calendar.months.map((label, idx) => ({
+                        value: `${yr}-${idx}`,
+                        label: `${label} ${yr}`,
+                      })),
+                    }))}
+                  />
 
                   <button
                     type="button"

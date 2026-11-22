@@ -1,8 +1,9 @@
-import { ChevronDown, Globe, Monitor, Moon, Sun, Trees } from 'lucide-react';
+import { Globe, Monitor, Moon, Sun, Trees } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useOrchard } from '../../contexts/OrchardContext';
 import { useTheme, type ThemePreference } from '../../contexts/ThemeContext';
 import type { Language } from '../../i18n/translations';
+import { Dropdown } from '../common/Dropdown';
 import type { NavSectionId } from './Sidebar';
 
 interface TopBarProps {
@@ -44,22 +45,18 @@ export function TopBar({ activeSection }: TopBarProps) {
       </div>
 
       <div className="topbar-right">
-        <div className="orchard-select-wrap" title={t.topbar.orchardLabel}>
-          <Trees size={14} strokeWidth={1.9} className="orchard-select-icon" aria-hidden="true" />
-          <select
-            value={selectedOrchardId}
-            onChange={(e) => setSelectedOrchardId(e.target.value)}
-            className="orchard-select"
-            aria-label={t.topbar.orchardLabel}
-          >
-            {orchards.map((orchard) => (
-              <option key={orchard._id} value={orchard._id}>
-                {orchard.name} ({orchard.areaHectares.toFixed(2)} ha)
-              </option>
-            ))}
-          </select>
-          <ChevronDown size={13} className="orchard-select-chevron" aria-hidden="true" />
-        </div>
+        <Dropdown
+          value={selectedOrchardId}
+          onChange={setSelectedOrchardId}
+          options={orchards.map((orchard) => ({
+            value: orchard._id,
+            label: `${orchard.name} (${orchard.areaHectares.toFixed(2)} ha)`,
+          }))}
+          variant="topbar"
+          icon={<Trees size={14} strokeWidth={1.9} />}
+          ariaLabel={t.topbar.orchardLabel}
+          title={t.topbar.orchardLabel}
+        />
 
         <div className="segmented-control" role="group" aria-label={t.topbar.themeLabel}>
           {themeOptions.map((option) => {

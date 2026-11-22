@@ -9,6 +9,7 @@ import { ApiError } from '../../api/httpClient';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { analyticsCopy, USDA_TEXTURE } from '../../i18n/analytics';
 import { readPagePref, writePagePref } from '../../utils/pagePrefs';
+import { Dropdown } from '../common/Dropdown';
 import { SoilMoisturePage } from './SoilMoisturePage';
 
 const FieldMap = lazy(() => import('./SoilRasterMap'));
@@ -278,13 +279,18 @@ function TreeTable({ trees, selected, onSelect }: { trees: AnalysisTree[]; selec
     <section className="card analytics-tree-panel" aria-labelledby="analytics-trees">
       <div className="analytics-row analytics-spread">
         <div className="analytics-row"><TreeDeciduous size={19} aria-hidden="true" /><h2 id="analytics-trees">{copy.riskTrees}</h2></div>
-        <label className="soil-input">
+        <div className="soil-input">
           <span>{copy.filter}</span>
-          <select value={filter} onChange={(event) => setFilter(event.currentTarget.value as RiskStatus | 'all')}>
-            <option value="all">{copy.allTrees}</option>
-            {TREE_ORDER.map((status) => <option key={status} value={status}>{copy.statuses[status]}</option>)}
-          </select>
-        </label>
+          <Dropdown
+            value={filter}
+            onChange={(nextValue) => setFilter(nextValue as RiskStatus | 'all')}
+            ariaLabel={copy.filter}
+            options={[
+              { value: 'all', label: copy.allTrees },
+              ...TREE_ORDER.map((status) => ({ value: status, label: copy.statuses[status] })),
+            ]}
+          />
+        </div>
       </div>
       {highlighted ? (
         <>
@@ -478,17 +484,21 @@ export function AnalyticsPage({ active }: { active: boolean }) {
         <h1 className="page-title">{copy.title}</h1>
       </div>
       <form className="card analytics-toolbar" onSubmit={loadField} aria-describedby="analytics-field-status">
-        <label className="soil-input">
+        <div className="soil-input">
           <span>{copy.analysisDate}</span>
-          <select value={day} onChange={(event) => setDay(event.currentTarget.value)}>
-            <option value="">{copy.satelliteObservation}</option>
-            {dates.map((date, offset) => (
-              <option key={date} value={date}>
-                {offset ? `+${offset} · ` : `${copy.today} · `}{dayFormat.format(new Date(date))}
-              </option>
-            ))}
-          </select>
-        </label>
+          <Dropdown
+            value={day}
+            onChange={setDay}
+            ariaLabel={copy.analysisDate}
+            options={[
+              { value: '', label: copy.satelliteObservation },
+              ...dates.map((date, offset) => ({
+                value: date,
+                label: `${offset ? `+${offset} · ` : `${copy.today} · `}${dayFormat.format(new Date(date))}`,
+              })),
+            ]}
+          />
+        </div>
         <button type="submit" className="primary-btn soil-action analytics-load" disabled={!fieldId || busy}>
           {busy ? <LoaderCircle size={16} className="analytics-spinner" aria-hidden="true" /> : <Download size={16} aria-hidden="true" />}
           {day ? (forecastLoading ? copy.forecastLoading : copy.loadForecast) : loading ? copy.downloadingField : copy.loadField}

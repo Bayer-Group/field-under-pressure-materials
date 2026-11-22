@@ -3060,3 +3060,206 @@ input {
     padding: 6px 5px;
   }
 }
+
+
+/* ==========================================================================
+   Unified Custom Dropdowns (Theme-aware, always opens cleanly downward)
+   ========================================================================== */
+
+.sage-dropdown-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  padding: 0 11px;
+  min-height: 38px;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.sage-dropdown-trigger:hover:not(:disabled) {
+  border-color: var(--border-strong);
+}
+
+.sage-dropdown-trigger:focus-visible,
+.sage-dropdown-trigger.is-open {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.sage-dropdown-trigger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sage-dropdown-trigger.is-default {
+  width: 100%;
+  min-width: 10rem;
+  border-color: var(--border-strong);
+}
+
+.sage-dropdown-trigger.is-topbar {
+  min-height: 34px;
+  height: 34px;
+  padding: 0 10px;
+  font-size: 12px;
+  min-width: 162px;
+  max-width: 240px;
+  background-color: var(--bg-surface-muted);
+}
+
+.sage-dropdown-trigger.is-calendar {
+  min-height: 36px;
+  height: 36px;
+  padding: 0 12px;
+  min-width: 172px;
+  font-size: 14.5px;
+  font-weight: 650;
+  border-radius: 9px;
+  background-color: var(--bg-surface-muted);
+}
+
+.sage-dropdown-trigger.is-compact {
+  min-height: 30px;
+  height: 30px;
+  width: 100%;
+  padding: 0 9px;
+  font-size: 12px;
+  font-weight: 550;
+  border-radius: 7px;
+  background-color: var(--bg-surface);
+}
+
+.sage-dropdown-icon {
+  display: inline-flex;
+  align-items: center;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.sage-dropdown-value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sage-dropdown-chevron {
+  color: var(--text-muted);
+  flex-shrink: 0;
+  transition: transform 0.16s ease, color 0.15s ease;
+}
+
+.sage-dropdown-trigger.is-open .sage-dropdown-chevron {
+  transform: rotate(180deg);
+  color: var(--accent);
+}
+
+.sage-dropdown-menu {
+  position: fixed;
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  border-radius: 12px;
+  border: 1px solid var(--border-strong);
+  background-color: var(--bg-surface);
+  box-shadow: var(--shadow-overlay);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  animation: sage-dropdown-in 0.13s ease-out;
+  transform-origin: top center;
+}
+
+.sage-dropdown-menu.is-upward {
+  transform-origin: bottom center;
+}
+
+@keyframes sage-dropdown-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.sage-dropdown-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sage-dropdown-group + .sage-dropdown-group {
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.sage-dropdown-group-label {
+  padding: 4px 10px 3px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  user-select: none;
+}
+
+.sage-dropdown-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.3;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.1s ease, color 0.1s ease;
+}
+
+.sage-dropdown-option:hover,
+.sage-dropdown-option.is-active {
+  background-color: var(--bg-surface-muted);
+}
+
+.sage-dropdown-option.is-selected {
+  background-color: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 650;
+}
+
+.sage-dropdown-option-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sage-dropdown-check {
+  color: var(--accent);
+  flex-shrink: 0;
+}

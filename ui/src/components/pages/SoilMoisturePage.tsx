@@ -18,6 +18,7 @@ import {
 } from '../../api/soilMoistureApi';
 import { apiConfig } from '../../config/apiConfig';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { Dropdown } from '../common/Dropdown';
 
 const TERMINAL_STATES = new Set(['COMPLETED', 'FAILED', 'CANCELLED', 'UNKNOWN']);
 const TASK_POLL_INTERVAL_MS = 5_000;
@@ -152,14 +153,18 @@ function RasterPanel({ taskId, hasPendingRaster }: { taskId?: string; hasPending
         </div>
       )}
       {files && files.length > 1 && (
-        <label className="soil-input">
+        <div className="soil-input">
           <span>{labels.choosePart}</span>
-          <select value={raster?.id ?? ''} onChange={(event) => setSelectedRaster(event.currentTarget.value)}>
-            {files.map((file, index) => (
-              <option key={file.id} value={file.id}>{labels.part} {index + 1}</option>
-            ))}
-          </select>
-        </label>
+          <Dropdown
+            value={raster?.id ?? ''}
+            onChange={setSelectedRaster}
+            ariaLabel={labels.choosePart}
+            options={files.map((file, index) => ({
+              value: file.id,
+              label: `${labels.part} ${index + 1}`,
+            }))}
+          />
+        </div>
       )}
       <label className="soil-input soil-raster-file">
         <span>{labels.open}</span>
@@ -253,14 +258,18 @@ function ForecastPanel() {
             <div><dt>{labels.issuedAt}</dt><dd>{timeFormat.format(new Date(forecast.issued_at_utc))}</dd></div>
           </dl>
           {forecast.fields.length > 0 && (
-            <label className="soil-input">
+            <div className="soil-input">
               <span>{labels.selectField}</span>
-              <select value={selectedId ?? ''} onChange={(event) => setSelectedId(Number(event.target.value))}>
-                {forecast.fields.map((item) => (
-                  <option key={item.field_id} value={item.field_id}>{labels.field} {item.field_id}</option>
-                ))}
-              </select>
-            </label>
+              <Dropdown
+                value={selectedId !== null ? String(selectedId) : ''}
+                onChange={(nextValue) => setSelectedId(Number(nextValue))}
+                ariaLabel={labels.selectField}
+                options={forecast.fields.map((item) => ({
+                  value: String(item.field_id),
+                  label: `${labels.field} ${item.field_id}`,
+                }))}
+              />
+            </div>
           )}
           {field && field.sar_moisture_m3_m3 !== null && (
             <p className="soil-feedback">{labels.sarMoisture} <strong>{percent.format(field.sar_moisture_m3_m3)}</strong></p>
