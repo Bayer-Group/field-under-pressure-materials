@@ -1,0 +1,76 @@
+name: Map
+
+on:
+  schedule:
+    - cron: "37 3 * * *"
+  workflow_dispatch:
+  push:
+    branches: [main, "team/Misiaki"]
+    paths: ["mapa/**", "rolnik/**", "skrypty/**", ".github/workflows/**"]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  budowa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: team/Misiaki
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Instalacja bibliotek
+        run: pip install -r requirements.txt
+
+      - name: Gleba - pamięć podręczna
+        id: gleba
+        uses: actions/cache@v5
+        with:
+          path: _cache_gleba
+          key: gleba-soilgrids-${{ hashFiles('skrypty/gleba_mapa.py', 'skrypty/siatka.py') }}
+
+      - name: Gleba (SoilGrids)
+        if: steps.gleba.outputs.cache-hit != 'true'
+        run: python skrypty/gleba_mapa.py --wyjscie _cache_gleba
+
+      - name: Landsat 8/9 - NDVI, GNDVI, OSAVI, NDWI, NDDI, NNI, temperatura powierzchni
+        run: python skrypty/landsat_mapa.py --wyjscie _dane --chmury 10 --dni 90
+
+      - name: ERA5-Land - temperatura i wilgotność gleby, opady
+        run: python skrypty/era5_mapa.py --wyjscie _dane
+
+      - name: Analiza wielokryterialna (Final analysis)
+        run: |
+          cp _cache_gleba/* _dane/
+          python skrypty/analiza_mapa.py --dane _dane
+
+      - name: Złożenie strony (eksport qgis2web + dodatek + dane)
+        run: |
+          python skrypty/siatka.py --polacz _dane
+          python skrypty/strona.py --mapa mapa --dane _dane --wyjscie _site
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+
+  publikacja:
+    needs: budowa
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

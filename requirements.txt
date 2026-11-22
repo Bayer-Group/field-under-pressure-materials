@@ -28,3 +28,5 @@ earthengine-api>=1.1
 geemap>=0.32
 # Uncomment if you Export.*.toCloudStorage and need to list/download GCS objects in Python:
 # google-cloud-storage>=2.14
+pillow>=10
+planetary-computer>=1.0
