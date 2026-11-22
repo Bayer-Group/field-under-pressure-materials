@@ -4,8 +4,23 @@ import { fetchTemperatureSeries } from '../../api/orchardApi';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useOrchard } from '../../contexts/OrchardContext';
 import type { TemperaturePoint, TemperatureSeriesResponse, TimeRange } from '../../types/orchard';
+import { readPagePref, writePagePref } from '../../utils/pagePrefs';
 
 const TIME_RANGES: TimeRange[] = ['24h', '7d', '30d', '90d'];
+
+interface TemperaturePrefs {
+  range: TimeRange;
+  windowPercent: number;
+}
+
+const DEFAULT_TEMP_PREFS: TemperaturePrefs = { range: '30d', windowPercent: 100 };
+
+function readTemperaturePrefs(): TemperaturePrefs {
+  const saved = readPagePref<Partial<TemperaturePrefs>>('dashboard.temperature', DEFAULT_TEMP_PREFS);
+  const range = saved && TIME_RANGES.includes(saved.range as TimeRange) ? (saved.range as TimeRange) : '30d';
+  const rawPct = typeof saved?.windowPercent === 'number' && Number.isFinite(saved.windowPercent) ? saved.windowPercent : 100;
+  return { range, windowPercent: Math.max(20, Math.min(100, Math.round(rawPct))) };
+}
 
 function buildPath(coords: Array<{ x: number; y: number }>): string {
   if (coords.length === 0) return '';
@@ -20,12 +35,16 @@ function pointHourlyTemp(p: TemperaturePoint): number {
 export function TemperatureChartCard() {
   const { t } = useLanguage();
   const { selectedOrchardId } = useOrchard();
-  const [range, setRange] = useState<TimeRange>('30d');
-  const [windowPercent, setWindowPercent] = useState<number>(100);
+  const initialPrefs = useMemo(readTemperaturePrefs, []);
+  const [range, setRange] = useState<TimeRange>(initialPrefs.range);
+  const [windowPercent, setWindowPercent] = useState<number>(initialPrefs.windowPercent);
   const [series, setSeries] = useState<TemperatureSeriesResponse | null>(null);
-  const [endpoint, setEndpoint] = useState<string>('');
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
+
+  useEffect(() => {
+    writePagePref('dashboard.temperature', { range, windowPercent });
+  }, [range, windowPercent]);
 
   const isHourlyMode = range === '24h';
 
@@ -34,7 +53,6 @@ export function TemperatureChartCard() {
     fetchTemperatureSeries(range, selectedOrchardId, controller.signal)
       .then((res) => {
         setSeries(res.data);
-        setEndpoint(res.endpoint);
         setHoverIndex(null);
       })
       .catch((err) => {
@@ -429,7 +447,6 @@ export function TemperatureChartCard() {
             </span>
           )}
         </div>
-        <code className="endpoint-tag">GET {endpoint}</code>
       </div>
     </section>
   );

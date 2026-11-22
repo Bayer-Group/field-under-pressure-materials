@@ -38,6 +38,8 @@ export interface AnalystFieldOption {
 
 export interface AnalysisTree {
   id: string;
+  rowLabel?: string | null;
+  indexInRow?: number | null;
   species: string | null;
   coordinates: [number, number] | null;
   risk: Risk;

@@ -918,8 +918,7 @@ export function RowLineEditorCanvas({
               <span className="hovered-tree-hud">
                 <span className="species-dot-sm" style={{ backgroundColor: sp?.colorHex ?? '#16a34a' }} />
                 <strong>#{hoveredTree.indexInRow + 1}</strong> · {spName} ·{' '}
-                {hoveredTree.coordinates.lat.toFixed(5)}, {hoveredTree.coordinates.lng.toFixed(5)} ·{' '}
-                <code>healthIndex: null</code>
+                {hoveredTree.coordinates.lat.toFixed(5)}, {hoveredTree.coordinates.lng.toFixed(5)}
               </span>
             );
           })()

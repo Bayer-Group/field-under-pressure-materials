@@ -3,7 +3,7 @@ export const USDA_TEXTURE = ['Cl', 'SiCl', 'SaCl', 'ClLo', 'SiClLo', 'SaClLo', '
 export const analyticsCopy = {
   pl: {
     title: 'Analityka pól', subtitle: 'Porównaj dane satelitarne, warunki gleby i ryzyko dla drzew.',
-    field: 'Pole', noFields: 'Brak pól w bazie.', connection: 'Nie udało się pobrać listy pól.', retry: 'Odśwież listę pól',
+    field: 'Pole', noFields: 'Brak dostępnych pól.', connection: 'Nie udało się pobrać listy pól.', retry: 'Odśwież listę pól',
     catalogLoading: 'Pobieranie listy pól…', loadField: 'Pobierz dane pola', downloadingField: 'Pobieranie…',
     fieldLoading: 'Pobieranie danych i geometrii pola…', fieldLoaded: 'Dane i geometria pola zostały wczytane.',
     fieldError: 'Nie udało się pobrać danych i geometrii pola. Spróbuj ponownie.',
@@ -27,7 +27,7 @@ export const analyticsCopy = {
     row: 'wiersz', column: 'kolumna',
     noSample: 'Brak odczytu wilgotności',
     sampleStatuses: { sampled: 'Odczytano wilgotność', forecasted: 'Wilgotność prognozowana', no_forecast: 'Brak prognozy wilgotności dla piksela', no_soil_data: 'Piksel bez danych o wilgotności', outside_raster: 'Poza zasięgiem rastra wilgotności', outside_orchard: 'Drzewo poza granicą pola', invalid_coordinates: 'Brak prawidłowych współrzędnych drzewa' },
-    jobStages: { preparing: 'Przygotowywanie eksportów Earth Engine…', exporting: 'Eksportowanie GeoTIFF-ów', downloading: 'Pobieranie GeoTIFF-ów z Dysku Google', saving: 'Obliczanie wyników pola i drzew oraz zapis w MongoDB…' },
+    jobStages: { preparing: 'Przygotowywanie analizy satelitarnej…', exporting: 'Eksportowanie warstw mapy', downloading: 'Pobieranie warstw mapy', saving: 'Obliczanie i zapisywanie wyników pola i drzew…' },
     loading: 'Wczytywanie danych pola…', missing: 'Brak danych', risk: 'Ryzyko dla pola', method: 'Model orientacyjny',
     threshold: 'Próg zagrożenia: 60/100', coverage: 'Pokrycie danych', treeExposure: 'Drzewa zagrożone',
     evaluated: 'oceniono', factors: 'Czynniki i wagi', severity: 'Ocena czynnika', cultivation: 'Mapa pola',
@@ -44,7 +44,7 @@ export const analyticsCopy = {
   },
   en: {
     title: 'Field analytics', subtitle: 'Compare satellite observations, soil conditions and tree risk.',
-    field: 'Field', noFields: 'The database has no fields.', connection: 'Could not load the list of fields.', retry: 'Refresh field list',
+    field: 'Field', noFields: 'No fields available.', connection: 'Could not load the list of fields.', retry: 'Refresh field list',
     catalogLoading: 'Loading the field list…', loadField: 'Load field data', downloadingField: 'Loading…',
     fieldLoading: 'Loading field data and geometry…', fieldLoaded: 'Field data and geometry are ready.',
     fieldError: 'Could not load the field data and geometry. Try again.',
@@ -68,7 +68,7 @@ export const analyticsCopy = {
     row: 'row', column: 'column',
     noSample: 'No soil moisture reading',
     sampleStatuses: { sampled: 'Moisture sampled', forecasted: 'Forecast soil moisture', no_forecast: 'No moisture forecast for this pixel', no_soil_data: 'No moisture data in this pixel', outside_raster: 'Outside the moisture raster', outside_orchard: 'Tree outside the field boundary', invalid_coordinates: 'Invalid or missing tree coordinates' },
-    jobStages: { preparing: 'Preparing Earth Engine exports…', exporting: 'Exporting GeoTIFFs', downloading: 'Downloading GeoTIFFs from Google Drive', saving: 'Calculating field and tree results and saving them to MongoDB…' },
+    jobStages: { preparing: 'Preparing satellite analysis…', exporting: 'Exporting map layers', downloading: 'Downloading map layers', saving: 'Calculating and saving field and tree results…' },
     loading: 'Loading field data…', missing: 'No data', risk: 'Field risk', method: 'Indicative model',
     threshold: 'High-risk threshold: 60/100', coverage: 'Data coverage', treeExposure: 'Trees at risk',
     evaluated: 'assessed', factors: 'Factors and weights', severity: 'Factor severity', cultivation: 'Field map',

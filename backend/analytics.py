@@ -169,8 +169,14 @@ def field_details(database, orchard, *, analysis=None, dated=None):
     trees, profiles, forecasts_by_pixel = [], [], {}
     active_trees = trees_in_layout(database, orchard)
     health = tree_health(database, orchard, active_trees)
+    placements = {
+        str(identifier): (row.get("label") or row.get("id"), index)
+        for row in orchard.get("rows") or []
+        for index, identifier in enumerate(row.get("treeIds") or [], start=1)
+    }
     for tree in active_trees:
         tree_id = str(tree["_id"])
+        row_label, index_in_row = placements.get(tree_id, (None, None))
         row = observations.get(tree_id, {})
         pixel = (row.get("pixel") or {}) if moisture else {}
         layers = row.get("layers") or {}
@@ -210,6 +216,8 @@ def field_details(database, orchard, *, analysis=None, dated=None):
         trees.append(
             {
                 "id": tree_id,
+                "rowLabel": row_label,
+                "indexInRow": index_in_row,
                 "species": crop.get("species")
                 or (
                     tree.get("species")

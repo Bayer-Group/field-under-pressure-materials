@@ -11,6 +11,7 @@ export interface Translations {
     dashboard: string;
     rowEditor: string;
     analytics: string;
+    calendar: string;
     layers: string;
     settings: string;
     placeholderHint: string;
@@ -214,6 +215,39 @@ export interface Translations {
     payloadPreviewTitle: string;
     payloadPreviewSubtitle: string;
   };
+  calendar: {
+    title: string;
+    today: string;
+    prevMonth: string;
+    nextMonth: string;
+    weekdaysShort: [string, string, string, string, string, string, string];
+    months: [
+      string, string, string, string, string, string,
+      string, string, string, string, string, string,
+    ];
+    loading: string;
+    loadError: string;
+    saveError: string;
+    tasksDotLegend: string;
+    notesDotLegend: string;
+    developmentTitle: string;
+    developmentEmpty: string;
+    dayPanelTitle: string;
+    tasksTitle: string;
+    tasksEmpty: string;
+    taskPlaceholder: string;
+    addTask: string;
+    deleteTask: string;
+    notesTitle: string;
+    notesEmpty: string;
+    notePlaceholder: string;
+    addNote: string;
+    deleteNote: string;
+    suggestionsTitle: string;
+    suggestionsEmpty: string;
+    assignToDay: string;
+    assignedBadge: string;
+  };
 }
 
 export const TRANSLATIONS: Record<Language, Translations> = {
@@ -228,8 +262,9 @@ export const TRANSLATIONS: Record<Language, Translations> = {
       dashboard: 'Dashboard',
       rowEditor: 'Edytor linii rzędów',
       analytics: 'Analityka',
+      calendar: 'Kalendarz',
       layers: 'Warstwy i skany',
-      settings: 'Ustawienia (placeholder)',
+      settings: 'Ustawienia',
       placeholderHint: 'Ikony tymczasowe',
     },
     topbar: {
@@ -404,8 +439,8 @@ export const TRANSLATIONS: Record<Language, Translations> = {
       previewPayload: 'Podgląd MongoDB',
       saveLayout: 'Zapisz układ',
       saving: 'Zapisywanie...',
-      saveSuccessTitle: 'Wysłano układ do endpointu',
-      saveBackendNote: 'healthIndex zostanie obliczony po stronie backendu',
+      saveSuccessTitle: 'Zapisano układ sadu',
+      saveBackendNote: 'kondycja drzew zostanie wyliczona automatycznie',
       toolsLabel: 'Narzędzia rysowania',
       toolDraw: 'Rysuj rząd',
       toolSelect: 'Zaznacz / Edytuj',
@@ -422,7 +457,7 @@ export const TRANSLATIONS: Record<Language, Translations> = {
       hintDrawMode: 'Kliknij punkt początkowy rzędu · {mod} + Scroll: zoom · PPM: przesuwanie',
       hintFinishLine: 'Kliknij punkt końcowy rzędu · Esc lub PPM: anuluj · Shift: przyciąganie kąta',
       hintSelectMode: 'Kliknij rząd, aby przesuwać punkty A/B, lub kliknij drzewo, aby zmienić jego gatunek',
-      hintPaintMode: 'Kliknij rząd albo przeciągnij po drzewach, aby przypisać aktywny gatunek (CropPref)',
+      hintPaintMode: 'Kliknij rząd albo przeciągnij po drzewach, aby przypisać aktywny gatunek',
       rowsCountLabel: 'Rzędy',
       treesCountLabel: 'Drzewa w rzędach',
       activeSpeciesLabel: 'Aktywny gatunek',
@@ -438,7 +473,7 @@ export const TRANSLATIONS: Record<Language, Translations> = {
       edgeMarginLabel: 'Margines granicy',
       selectedTreeTitle: 'Wybrane drzewo',
       computedByBackend: 'liczy backend',
-      changeTreeSpecies: 'Zmień gatunek (CropPref ObjectId)',
+      changeTreeSpecies: 'Zmień gatunek',
       rowsListTitle: 'Narysowane rzędy',
       emptyRowsList: 'Brak rzędów. Narysuj pierwszą prostą linię na obszarze sadu, aby automatycznie wyliczyć drzewa.',
       deleteRow: 'Usuń rząd',
@@ -447,6 +482,39 @@ export const TRANSLATIONS: Record<Language, Translations> = {
       payloadPreviewTitle: 'Podgląd dokumentów do zapisu w MongoDB',
       payloadPreviewSubtitle:
         'Orchard.rows przechowuje punkty start/end oraz uporządkowane ObjectId drzew; Tree zawiera coordinates, healthIndex: null oraz species (CropPref ObjectId).',
+    },
+    calendar: {
+      title: 'Kalendarz Sadu',
+      today: 'Dzisiaj',
+      prevMonth: 'Poprzedni miesiąc',
+      nextMonth: 'Następny miesiąc',
+      weekdaysShort: ['Pon', 'Wt', 'Śr', 'Czw', 'Pt', 'Sob', 'Nie'],
+      months: [
+        'Styczeń', 'Luty', 'Marzec', 'Kwiecień', 'Maj', 'Czerwiec',
+        'Lipiec', 'Sierpień', 'Wrzesień', 'Październik', 'Listopad', 'Grudzień',
+      ],
+      loading: 'Wczytywanie kalendarza…',
+      loadError: 'Nie udało się wczytać kalendarza.',
+      saveError: 'Nie udało się zapisać zmian w kalendarzu.',
+      tasksDotLegend: 'Zadania',
+      notesDotLegend: 'Notatki',
+      developmentTitle: 'Rozwój roślin',
+      developmentEmpty: 'Brak aktywnych faz rozwoju w tym miesiącu (okres spoczynku).',
+      dayPanelTitle: 'Wybrany dzień',
+      tasksTitle: 'Zadania na ten dzień',
+      tasksEmpty: 'Brak zadań na wybrany dzień.',
+      taskPlaceholder: 'Dodaj zadanie do wykonania…',
+      addTask: 'Dodaj',
+      deleteTask: 'Usuń zadanie',
+      notesTitle: 'Notatki',
+      notesEmpty: 'Brak notatek na wybrany dzień.',
+      notePlaceholder: 'Zapisz notatkę z sadu…',
+      addNote: 'Dodaj notatkę',
+      deleteNote: 'Usuń notatkę',
+      suggestionsTitle: 'Sugerowane zadania na ten miesiąc',
+      suggestionsEmpty: 'Brak sugestii dla tego miesiąca.',
+      assignToDay: 'Dodaj na',
+      assignedBadge: 'Dodano',
     },
   },
   en: {
@@ -460,8 +528,9 @@ export const TRANSLATIONS: Record<Language, Translations> = {
       dashboard: 'Dashboard',
       rowEditor: 'Row Line Editor',
       analytics: 'Analytics',
+      calendar: 'Calendar',
       layers: 'Layers & Scans',
-      settings: 'Settings (placeholder)',
+      settings: 'Settings',
       placeholderHint: 'Placeholder icons',
     },
     topbar: {
@@ -636,8 +705,8 @@ export const TRANSLATIONS: Record<Language, Translations> = {
       previewPayload: 'MongoDB Payload',
       saveLayout: 'Save layout',
       saving: 'Saving...',
-      saveSuccessTitle: 'Layout sent to endpoint',
-      saveBackendNote: 'healthIndex will be computed by the backend',
+      saveSuccessTitle: 'Orchard layout saved',
+      saveBackendNote: 'tree health will be computed automatically',
       toolsLabel: 'Drawing tools',
       toolDraw: 'Draw row',
       toolSelect: 'Select / Edit',
@@ -654,7 +723,7 @@ export const TRANSLATIONS: Record<Language, Translations> = {
       hintDrawMode: 'Click row start point · {mod} + Scroll: zoom · Right-drag: pan',
       hintFinishLine: 'Click row end point · Esc or right-click: cancel · Shift: angle snap',
       hintSelectMode: 'Click a row to drag A/B handles, or click a tree to change its species',
-      hintPaintMode: 'Click a row or drag across trees to assign the active species (CropPref)',
+      hintPaintMode: 'Click a row or drag across trees to assign the active species',
       rowsCountLabel: 'Rows',
       treesCountLabel: 'Trees in rows',
       activeSpeciesLabel: 'Active species',
@@ -670,7 +739,7 @@ export const TRANSLATIONS: Record<Language, Translations> = {
       edgeMarginLabel: 'Border margin',
       selectedTreeTitle: 'Selected Tree',
       computedByBackend: 'backend computed',
-      changeTreeSpecies: 'Change species (CropPref ObjectId)',
+      changeTreeSpecies: 'Change species',
       rowsListTitle: 'Drawn Rows',
       emptyRowsList: 'No rows yet. Draw a straight line across the orchard shape to generate tree coordinates.',
       deleteRow: 'Delete row',
@@ -679,6 +748,39 @@ export const TRANSLATIONS: Record<Language, Translations> = {
       payloadPreviewTitle: 'MongoDB Persistence Payload Preview',
       payloadPreviewSubtitle:
         'Orchard.rows stores start/end coordinates and ordered Tree ObjectIds; Tree stores coordinates, healthIndex: null, and species (CropPref ObjectId).',
+    },
+    calendar: {
+      title: 'Orchard Calendar',
+      today: 'Today',
+      prevMonth: 'Previous month',
+      nextMonth: 'Next month',
+      weekdaysShort: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+      months: [
+        'January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December',
+      ],
+      loading: 'Loading calendar…',
+      loadError: 'Could not load the calendar.',
+      saveError: 'Could not save calendar changes.',
+      tasksDotLegend: 'Tasks',
+      notesDotLegend: 'Notes',
+      developmentTitle: 'Plant Development',
+      developmentEmpty: 'No active plant development phases this month (dormancy period).',
+      dayPanelTitle: 'Selected Day',
+      tasksTitle: 'Tasks for this day',
+      tasksEmpty: 'No tasks scheduled for this day.',
+      taskPlaceholder: 'Add a task to complete…',
+      addTask: 'Add',
+      deleteTask: 'Delete task',
+      notesTitle: 'Notes',
+      notesEmpty: 'No notes for this day.',
+      notePlaceholder: 'Write an orchard note…',
+      addNote: 'Add note',
+      deleteNote: 'Delete note',
+      suggestionsTitle: 'Suggested Tasks for This Month',
+      suggestionsEmpty: 'No suggestions for this month.',
+      assignToDay: 'Add to',
+      assignedBadge: 'Added',
     },
   },
 };

@@ -1,6 +1,5 @@
 import { useOrchard } from '../../contexts/OrchardContext';
-import { HEALTH_PALETTE, HEALTH_STATUS_ORDER, UNRATED_HEALTH_TOKEN } from '../../constants/healthPalette';
-import { Activity, CloudSun, Download, Droplets, FlaskConical, Layers3, Leaf, LoaderCircle, RefreshCw, Sun, TreeDeciduous } from 'lucide-react';
+import { Activity, CloudSun, Download, Droplets, FlaskConical, Layers3, Leaf, LoaderCircle, Sun, TreeDeciduous } from 'lucide-react';
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import {
   fetchAnalystField, fetchAnalystFields, fetchAnalystForecast, fetchAnalystRaster, fetchFieldJob, RASTER_KINDS, startFieldJob,
@@ -9,6 +8,7 @@ import {
 import { ApiError } from '../../api/httpClient';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { analyticsCopy, USDA_TEXTURE } from '../../i18n/analytics';
+import { readPagePref, writePagePref } from '../../utils/pagePrefs';
 import { SoilMoisturePage } from './SoilMoisturePage';
 
 const FieldMap = lazy(() => import('./SoilRasterMap'));
@@ -32,6 +32,10 @@ function useCopy() {
 
 function rasterLabel(copy: ReturnType<typeof useCopy>['copy'], kind: RasterKind) {
   return kind === 'moisture' ? copy.soilMoisture : copy[kind];
+}
+
+function treeSlotLabel(tree: AnalysisTree) {
+  return tree.rowLabel && tree.indexInRow != null ? `${tree.rowLabel} · #${tree.indexInRow}` : tree.id.slice(-6);
 }
 
 function RiskBadge({ status }: { status: RiskStatus }) {
@@ -69,10 +73,8 @@ function ScoreCard({ risk, trees, metrics }: { risk: Risk; trees: AnalysisTree[]
         <div className="analytics-factor-list">
           {risk.factors.map((factor) => {
             const measurement = factor.id === 'ph' || factor.id === 'texture' ? soilReadings[factor.id] : null;
-            const detail = factor.severity != null ? `${copy.severity} ${factor.severity}/100` :
-              measurement == null ? copy.missing : copy.noSpeciesRange;
             return (
-              <div key={factor.id} className="analytics-factor" title={detail}>
+              <div key={factor.id} className="analytics-factor">
                 <span>{factor.id === 'temperature' ? copy.weather : copy.weights[factor.id]}{measurement != null &&
                   <small className="analytics-factor-reading">{measurement}{factor.severity == null && ` · ${copy.noSpeciesRange}`}</small>}</span>
                 <span className="analytics-weight">{factor.weight}%</span>
@@ -150,12 +152,22 @@ type LayerFocus = { kind: RasterKind };
 function FieldMapSection({ field, selected, onSelectTree, focus }: { field: AnalystField; selected: string; onSelectTree: (id: string) => void; focus: LayerFocus | null }) {
   const { copy, language } = useCopy();
   const { t } = useLanguage();
-  const [colorBy, setColorBy] = useState<'health' | 'risk'>('health');
-  const [kind, setKind] = useState<RasterKind>(() =>
-    focus?.kind ?? RASTER_KINDS.find((layer) => field.metrics[layer]?.raster) ?? 'moisture');
+  const [kind, setKind] = useState<RasterKind>(() => {
+    const saved = readPagePref<string>('analytics.mapKind', '');
+    if (RASTER_KINDS.includes(saved as RasterKind)) return saved as RasterKind;
+    return focus?.kind ?? RASTER_KINDS.find((layer) => field.metrics[layer]?.raster) ?? 'moisture';
+  });
+  const handleSelectKind = (nextKind: RasterKind) => {
+    setKind(nextKind);
+    writePagePref('analytics.mapKind', nextKind);
+  };
   const [uploads, setUploads] = useState<Partial<Record<RasterKind, File>>>({});
   const [downloads, setDownloads] = useState<Partial<Record<RasterKind, File>>>({});
   const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [resetMap, setResetMap] = useState<(() => void) | null>(null);
+  const handleResetReady = useCallback((fn: (() => void) | null) => {
+    setResetMap(() => fn);
+  }, []);
   const filename = field.metrics[kind]?.raster;
   const day = field.forecast_day;
   const manual = uploads[kind];
@@ -186,11 +198,11 @@ function FieldMapSection({ field, selected, onSelectTree, focus }: { field: Anal
   return (
     <section className="card analytics-map-panel" aria-labelledby="analytics-map-heading">
       <div className="analytics-map-header">
-        <h2 id="analytics-map-heading">{copy.cultivation}</h2>
+        <h2 id="analytics-map-heading">{copy.cultivation} - {copy.risk}</h2>
         <div className="analytics-map-actions">
           <div className="analytics-segment">
             {RASTER_KINDS.map((layer) => (
-              <button key={layer} type="button" aria-pressed={kind === layer} onClick={() => setKind(layer)}>
+              <button key={layer} type="button" aria-pressed={kind === layer} onClick={() => handleSelectKind(layer)}>
                 {layer === 'moisture' && day ? copy.forecastMoisture : rasterLabel(copy, layer)}
               </button>
             ))}
@@ -203,28 +215,21 @@ function FieldMapSection({ field, selected, onSelectTree, focus }: { field: Anal
               event.currentTarget.value = '';
             }} />
           </label>
+          <button type="button" className="soil-map-reset" onClick={() => resetMap?.()} disabled={!resetMap}>
+            {t.soilMoisture.raster.reset}
+          </button>
         </div>
       </div>
       {status !== 'idle' && <p className="analytics-muted" role="status">{status === 'loading' ? copy.rasterLoading : copy.rasterError}</p>}
       {status === 'idle' && !file && !filename && <p className="analytics-muted">{copy.rasterEmpty}</p>}
-      <div className="analytics-segment">
-        <button type="button" aria-pressed={colorBy === 'health'} onClick={() => setColorBy('health')}>{t.health.title}</button>
-        <button type="button" aria-pressed={colorBy === 'risk'} onClick={() => setColorBy('risk')}>{copy.risk}</button>
-      </div>
       <Suspense fallback={<p role="status" className="analytics-muted">{copy.loading}</p>}>
-        <FieldMap kind={kind} file={file} field={field} onSelectTree={onSelectTree} colorBy={colorBy} />
+        <FieldMap kind={kind} file={file} field={field} selectedTreeId={selected} onSelectTree={onSelectTree} colorBy="risk" hideResetBar onResetReady={handleResetReady} />
       </Suspense>
       <div className="analytics-tree-legend" aria-label={copy.legend}>
-        {colorBy === 'risk'
-          ? TREE_ORDER.map((status) => <span key={status} data-risk={status}>{copy.statuses[status]}</span>)
-          : [...HEALTH_STATUS_ORDER, 'unrated' as const].map((status) => (
-            <span key={status} style={{ color: status === 'unrated' ? UNRATED_HEALTH_TOKEN.hex : HEALTH_PALETTE[status].hex }}>
-              {t.health.statuses[status]}
-            </span>
-          ))}
+        {TREE_ORDER.map((status) => <span key={status} data-risk={status}>{copy.statuses[status]}</span>)}
       </div>
       {tree && <div className="analytics-tree-selection" aria-live="polite">
-        <strong>{tree.species ?? copy.tree} · {tree.id.slice(-6)}</strong><RiskBadge status={tree.risk.status} />
+        <strong>{tree.species ?? copy.tree} · {treeSlotLabel(tree)}</strong><RiskBadge status={tree.risk.status} />
         <span>{tree.healthStatus ? `${t.health.statuses[tree.healthStatus]} (${tree.healthScore}/100)` : t.health.statuses.unrated}</span>
         {tree.healthSource === 'estimate' && <span>{language === 'pl' ? 'Szacunek ML' : 'ML estimate'} · {tree.healthCoverage}%</span>}
       </div>}
@@ -243,7 +248,7 @@ function TreePixelDetails({ tree }: { tree: AnalysisTree }) {
       <p>
         {analysis.status ? copy.sampleStatuses[analysis.status] : copy.noSample}
         {pixel?.row != null && pixel.column != null &&
-          <> · {copy.treePixel} · {copy.row} {pixel.row}, {copy.column} {pixel.column}{pixel.crs && ` · ${pixel.crs}`}</>}
+          <> · {copy.treePixel} · {copy.row} {pixel.row}, {copy.column} {pixel.column}</>}
       </p>
       <dl>
         <div><dt>{copy.soilMoisture}</dt><dd>{analysis.moisture_m3_m3 == null ? '—' : percent.format(analysis.moisture_m3_m3)}</dd></div>
@@ -258,7 +263,14 @@ function TreePixelDetails({ tree }: { tree: AnalysisTree }) {
 
 function TreeTable({ trees, selected, onSelect }: { trees: AnalysisTree[]; selected: string; onSelect: (id: string) => void }) {
   const { copy } = useCopy();
-  const [filter, setFilter] = useState<RiskStatus | 'all'>('all');
+  const { t } = useLanguage();
+  const [filter, setFilter] = useState<RiskStatus | 'all'>(() => {
+    const saved = readPagePref<string>('analytics.treeFilter', 'all');
+    return saved === 'all' || TREE_ORDER.includes(saved as RiskStatus) ? (saved as RiskStatus | 'all') : 'all';
+  });
+  useEffect(() => {
+    writePagePref('analytics.treeFilter', filter);
+  }, [filter]);
   const displayed = trees.filter((tree) => filter === 'all' || tree.risk.status === filter)
     .sort((a, b) => (b.risk.score ?? -1) - (a.risk.score ?? -1));
   const highlighted = trees.find((tree) => tree.id === selected);
@@ -277,7 +289,7 @@ function TreeTable({ trees, selected, onSelect }: { trees: AnalysisTree[]; selec
       {highlighted ? (
         <>
           <div className="analytics-tree-selection">
-            <strong>{highlighted.species ?? copy.tree} · {highlighted.id.slice(-6)}</strong>
+            <strong>{highlighted.species ?? copy.tree} · {treeSlotLabel(highlighted)}</strong>
             <RiskBadge status={highlighted.risk.status} />
           </div>
           <TreePixelDetails tree={highlighted} />
@@ -286,14 +298,14 @@ function TreeTable({ trees, selected, onSelect }: { trees: AnalysisTree[]; selec
       {!displayed.length ? <p className="analytics-muted">{trees.length ? copy.noTrees : copy.noAssignedTrees}</p> : (
         <div className="soil-table-scroll">
           <table className="soil-table">
-            <thead><tr><th>{copy.tree}</th><th>{copy.species}</th><th>{copy.status}</th><th>{copy.drivers}</th></tr></thead>
+            <thead><tr><th>{copy.tree} ({t.orchard3d.inspectorRow})</th><th>{copy.species}</th><th>{copy.status}</th><th>{copy.drivers}</th></tr></thead>
             <tbody>{displayed.map((tree) => {
               const signals = tree.risk.factors.filter((factor) => (factor.severity ?? 0) >= 30)
                 .sort((a, b) => b.severity! * b.weight - a.severity! * a.weight)
                 .slice(0, 3).map((factor) => copy.weights[factor.id]).join(', ');
               return (
                 <tr key={tree.id} data-selected={selected === tree.id}>
-                  <th scope="row"><button type="button" title={tree.id} aria-pressed={selected === tree.id} onClick={() => onSelect(tree.id)}>{tree.id.slice(-6)}</button></th>
+                  <th scope="row"><button type="button" aria-pressed={selected === tree.id} onClick={() => onSelect(tree.id)}>{treeSlotLabel(tree)}</button></th>
                   <td>{tree.species ?? '—'}</td>
                   <td><RiskBadge status={tree.risk.status} /> <strong>{tree.risk.score ?? '—'}</strong></td>
                   <td>{signals || '—'}</td>
@@ -332,11 +344,16 @@ export function AnalyticsPage({ active }: { active: boolean }) {
   const { selectedOrchardId: fieldId } = useOrchard();
   const [fieldLoad, setFieldLoad] = useState<FieldLoad | null>(null);
   const [viewer, setViewer] = useState<{ field: AnalystField; focus: LayerFocus | null } | null>(null);
-  const [day, setDay] = useState('');
+  const [day, setDay] = useState(() => {
+    const saved = readPagePref<string>('analytics.day', '');
+    return saved === '' || localForecastDates().includes(saved) ? saved : '';
+  });
+  useEffect(() => {
+    writePagePref('analytics.day', day);
+  }, [day]);
   const [forecastRefresh, setForecastRefresh] = useState(0);
   const [forecastLoad, setForecastLoad] = useState<{ key: string; field?: AnalystField; error?: string } | null>(null);
   const [tree, setTree] = useState('');
-  const [refresh, setRefresh] = useState(0);
   const [catalog, setCatalog] = useState<'loading' | 'ready' | 'error'>('loading');
   const [jobsOpened, setJobsOpened] = useState(false);
   const pending = useRef<AbortController | null>(null);
@@ -353,7 +370,7 @@ export function AnalyticsPage({ active }: { active: boolean }) {
       if (!controller.signal.aborted) setCatalog('error');
     });
     return () => controller.abort();
-  }, [active, refresh]);
+  }, [active]);
 
   const watchField = useCallback(async (identity: string, start: boolean) => {
     pending.current?.abort();
@@ -458,8 +475,7 @@ export function AnalyticsPage({ active }: { active: boolean }) {
   return (
     <div className="dashboard-page analytics-page">
       <div className="analytics-intro">
-        <div><h1 className="page-title">{copy.title}</h1><p className="page-subtitle">{copy.subtitle}</p></div>
-        <button type="button" className="soil-map-reset analytics-refresh" onClick={() => setRefresh((value) => value + 1)}><RefreshCw size={15} />{copy.retry}</button>
+        <h1 className="page-title">{copy.title}</h1>
       </div>
       <form className="card analytics-toolbar" onSubmit={loadField} aria-describedby="analytics-field-status">
         <label className="soil-input">

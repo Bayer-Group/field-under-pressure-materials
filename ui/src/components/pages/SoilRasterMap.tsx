@@ -12,8 +12,8 @@ import { fromLonLat, transform, transformExtent } from 'ol/proj.js';
 import GeoTIFF from 'ol/source/GeoTIFF.js';
 import OSM from 'ol/source/OSM.js';
 import VectorSource from 'ol/source/Vector.js';
-import { Circle as CircleStyle, Fill, Stroke, Style } from 'ol/style.js';
-import { useEffect, useId, useRef, useState } from 'react';
+import { Circle as CircleStyle, Fill, Stroke, Style, Text } from 'ol/style.js';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { AnalystField, RasterKind, RiskStatus } from '../../api/analyticsApi';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { analyticsCopy, USDA_TEXTURE } from '../../i18n/analytics';
@@ -46,13 +46,50 @@ interface RasterMapProps {
   file: File | null;
   kind?: RasterKind;
   field?: AnalystField;
+  selectedTreeId?: string;
   onSelectTree?: (treeId: string) => void;
+  hideResetBar?: boolean;
+  onResetReady?: (reset: (() => void) | null) => void;
 }
 
-export default function SoilRasterMap({ file, kind = 'moisture', field, onSelectTree, colorBy = 'health' }: RasterMapProps) {
+function buildSelectedTreeStyles(label: string) {
+  return [
+    new Style({
+      image: new CircleStyle({
+        radius: 17,
+        fill: new Fill({ color: 'rgba(250, 204, 21, 0.28)' }),
+        stroke: new Stroke({ color: '#0f172a', width: 2.5 }),
+      }),
+      zIndex: 100,
+    }),
+    new Style({
+      image: new CircleStyle({
+        radius: 11,
+        fill: new Fill({ color: 'rgba(250, 204, 21, 0.12)' }),
+        stroke: new Stroke({ color: '#facc15', width: 3.5 }),
+      }),
+      text: new Text({
+        text: label,
+        offsetY: -24,
+        font: '600 12px system-ui, -apple-system, sans-serif',
+        fill: new Fill({ color: '#ffffff' }),
+        backgroundFill: new Fill({ color: 'rgba(15, 23, 42, 0.9)' }),
+        backgroundStroke: new Stroke({ color: '#facc15', width: 1.5 }),
+        padding: [3, 6, 3, 6],
+      }),
+      zIndex: 101,
+    }),
+  ];
+}
+
+export default function SoilRasterMap({ file, kind = 'moisture', field, selectedTreeId, onSelectTree, colorBy = 'health', hideResetBar = false, onResetReady }: RasterMapProps) {
   const { language, t: { soilMoisture: { raster: labels } } } = useLanguage();
   const target = useRef<HTMLDivElement>(null);
   const resetView = useRef<(() => void) | null>(null);
+  const selectionSourceRef = useRef<VectorSource | null>(null);
+  const mapViewRef = useRef<View | null>(null);
+  const selectedTreeIdRef = useRef<string | undefined>(selectedTreeId);
+  selectedTreeIdRef.current = selectedTreeId;
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [selection, setSelection] = useState<number | 'empty' | 'error' | null>(null);
   const readingId = useId();
@@ -65,6 +102,30 @@ export default function SoilRasterMap({ file, kind = 'moisture', field, onSelect
     ? projected ? analyticsCopy[language].forecastMoisture : labels.legend
     : analyticsCopy[language][kind];
 
+  const syncSelection = useCallback((treeId: string | undefined, animateCenter: boolean) => {
+    const source = selectionSourceRef.current;
+    if (!source) return;
+    source.clear();
+    if (!treeId || !field) return;
+    const selected = field.trees.find((entry) => entry.id === treeId);
+    if (!selected?.coordinates) return;
+    const coord = fromLonLat(selected.coordinates);
+    const slotLabel = selected.rowLabel && selected.indexInRow != null
+      ? `${selected.rowLabel} · #${selected.indexInRow}`
+      : selected.id.slice(-6);
+    const marker = new Feature({ geometry: new Point(coord), treeId: selected.id });
+    marker.setStyle(buildSelectedTreeStyles(slotLabel));
+    source.addFeature(marker);
+    if (animateCenter && mapViewRef.current) {
+      const view = mapViewRef.current;
+      view.animate({ center: coord, zoom: Math.max(view.getZoom() ?? 17, 17), duration: 280 });
+    }
+  }, [field]);
+
+  useEffect(() => {
+    syncSelection(selectedTreeId, true);
+  }, [selectedTreeId, syncSelection]);
+
   useEffect(() => {
     const controller = new AbortController();
     const { signal } = controller;
@@ -74,6 +135,7 @@ export default function SoilRasterMap({ file, kind = 'moisture', field, onSelect
     let selectionId = 0;
     setStatus('loading');
     setSelection(null);
+    onResetReady?.(null);
 
     async function prepareRaster(rasterFile: File) {
       const tiff = await fromBlob(rasterFile, signal);
@@ -136,16 +198,22 @@ export default function SoilRasterMap({ file, kind = 'moisture', field, onSelect
         });
         layers.push(new VectorLayer({ source: boundary, style: FIELD_STYLE }));
         layers.push(new VectorLayer({ source: new VectorSource({ features: points }) }));
+        const selectionSource = new VectorSource();
+        selectionSourceRef.current = selectionSource;
+        layers.push(new VectorLayer({ source: selectionSource, zIndex: 100 }));
         const extent = boundary.getExtent();
         if (extent && !isEmpty(extent)) mapExtent = extent;
       }
 
       const view = new View({ projection: MAP_PROJECTION, maxZoom: 22 });
+      mapViewRef.current = view;
       map = new Map({ target: mapTarget, view, layers });
+      syncSelection(selectedTreeIdRef.current, false);
       const extent = mapExtent;
       resetView.current = () => {
         if (extent) view.fit(extent, { padding: [32, 32, 32, 32], maxZoom: 19 });
       };
+      onResetReady?.(() => resetView.current?.());
       if (mapTarget.clientWidth && mapTarget.clientHeight) resetView.current();
       else {
         observer = new ResizeObserver(() => {
@@ -206,18 +274,27 @@ export default function SoilRasterMap({ file, kind = 'moisture', field, onSelect
       controller.abort();
       observer?.disconnect();
       resetView.current = null;
+      selectionSourceRef.current = null;
+      mapViewRef.current = null;
+      onResetReady?.(null);
       map?.dispose();
       overlay?.dispose();
     };
-  }, [file, kind, field, onSelectTree, stops, colorBy]);
+  }, [file, kind, field, onSelectTree, stops, colorBy, onResetReady, syncSelection]);
+
+  useEffect(() => {
+    onResetReady?.(status === 'loading' || !resetView.current ? null : () => resetView.current?.());
+  }, [status, onResetReady]);
 
   return (
     <div className="soil-raster">
-      <div className="soil-raster-bar">
-        <button type="button" className="soil-map-reset" onClick={() => resetView.current?.()} disabled={status === 'loading' || !resetView.current}>
-          {labels.reset}
-        </button>
-      </div>
+      {!hideResetBar && (
+        <div className="soil-raster-bar">
+          <button type="button" className="soil-map-reset" onClick={() => resetView.current?.()} disabled={status === 'loading' || !resetView.current}>
+            {labels.reset}
+          </button>
+        </div>
+      )}
       <div ref={target} className="soil-raster-map" role="region" aria-label={file ? label : labels.title} aria-describedby={status === 'error' || file ? readingId : undefined} tabIndex={0} />
       {status === 'error' ? (
         <p className="soil-feedback soil-error" id={readingId} role="alert">{labels.error}</p>

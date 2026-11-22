@@ -12,6 +12,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pymongo.database import Database
 
+from .calendar_api import create_calendar_router
 from .orchard_api import create_orchard_router
 
 _UTC = timezone.utc
@@ -99,6 +100,7 @@ def create_app(db: Database, *, lifespan=None) -> FastAPI:
         allow_headers=["Content-Type", "Accept"],
     )
     app.include_router(create_orchard_router(db))
+    app.include_router(create_calendar_router(db))
     app.include_router(analytics_router)
     app.include_router(soil_router)
 
