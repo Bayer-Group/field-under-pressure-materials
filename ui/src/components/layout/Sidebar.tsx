@@ -49,6 +49,7 @@ export function Sidebar({ activeSection, onSelectSection }: SidebarProps) {
               aria-current={isActive ? 'page' : undefined}
             >
               <Icon size={20} strokeWidth={1.75} />
+              <span className="sidebar-btn-label">{item.label}</span>
             </button>
           );
         })}

@@ -40,6 +40,7 @@ interface MenuCoords {
   top: number;
   left: number;
   minWidth: number;
+  maxWidth: number;
   maxHeight: number;
   openUpward: boolean;
 }
@@ -88,12 +89,13 @@ export function Dropdown({
     const spaceAbove = rect.top - gap - 12;
     const openUpward = spaceBelow < 140 && spaceAbove > spaceBelow;
     const maxHeight = Math.max(120, Math.min(300, openUpward ? spaceAbove : spaceBelow));
-    const minWidth = Math.max(rect.width, variant === 'compact' ? 150 : 168);
+    const maxWidth = Math.max(140, viewportW - 20);
+    const minWidth = Math.min(Math.max(rect.width, variant === 'compact' ? 150 : 168), maxWidth);
     const maxLeft = Math.max(10, viewportW - minWidth - 10);
     const left = Math.min(Math.max(10, rect.left), maxLeft);
     const top = openUpward ? rect.top - gap : rect.bottom + gap;
 
-    setCoords({ top, left, minWidth, maxHeight, openUpward });
+    setCoords({ top, left, minWidth, maxWidth, maxHeight, openUpward });
   }, [variant]);
 
   useLayoutEffect(() => {
@@ -222,6 +224,7 @@ export function Dropdown({
               bottom: coords.openUpward ? `${window.innerHeight - coords.top}px` : undefined,
               left: `${coords.left}px`,
               minWidth: `${coords.minWidth}px`,
+              maxWidth: `${coords.maxWidth}px`,
               maxHeight: `${coords.maxHeight}px`,
             }}
           >
