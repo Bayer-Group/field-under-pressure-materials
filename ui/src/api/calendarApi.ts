@@ -3,11 +3,13 @@ import { httpClient } from './httpClient';
 export interface CalendarSuggestion {
   id: string;
   text: string;
+  textEn?: string;
 }
 
 export interface CalendarDevelopment {
   id: string;
   text: string;
+  textEn?: string;
   startDate: string; // YYYY-MM-DD
   endDate: string;   // YYYY-MM-DD
 }

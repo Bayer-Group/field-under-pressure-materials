@@ -83,13 +83,18 @@ def _serialize_calendar(doc: dict, available_years: list[int] | None = None) -> 
                 "monthIndex": int(month["monthIndex"]),
                 "name": month["name"],
                 "suggestions": [
-                    {"id": str(item["id"]), "text": item["text"]}
+                    {
+                        "id": str(item["id"]),
+                        "text": item["text"],
+                        "textEn": item.get("textEn") or item["text"],
+                    }
                     for item in month.get("suggestions") or []
                 ],
                 "development": [
                     {
                         "id": str(item["id"]),
                         "text": item["text"],
+                        "textEn": item.get("textEn") or item["text"],
                         "startDate": item["startDate"],
                         "endDate": item["endDate"],
                     }

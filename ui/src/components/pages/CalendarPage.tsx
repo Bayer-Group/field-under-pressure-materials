@@ -98,6 +98,10 @@ function formatShortRange(startIso: string, endIso: string): string {
   return `${fmt(startIso)} – ${fmt(endIso)}`;
 }
 
+function localizedItemText(item: { text: string; textEn?: string }, language: 'pl' | 'en'): string {
+  return language === 'en' ? (item.textEn ?? item.text) : item.text;
+}
+
 export function CalendarPage() {
   const { t, language } = useLanguage();
   const now = useMemo(() => new Date(), []);
@@ -614,7 +618,7 @@ export function CalendarPage() {
                           <span className="calendar-dev-range">
                             {formatShortRange(item.startDate, item.endDate)}
                           </span>
-                          <p className="calendar-dev-text">{item.text}</p>
+                          <p className="calendar-dev-text">{localizedItemText(item, language)}</p>
                         </div>
                       </li>
                     ))}
@@ -779,14 +783,15 @@ export function CalendarPage() {
                 {activeMonth.suggestions.map((suggestion) => {
                   const alreadyOnDay = assignedSuggestionIds.has(suggestion.id);
                   const isAdding = busyKey === `sug-${suggestion.id}`;
+                  const displayText = localizedItemText(suggestion, language);
                   return (
                     <div key={suggestion.id} className="calendar-suggestion-item">
-                      <p className="calendar-suggestion-text">{suggestion.text}</p>
+                      <p className="calendar-suggestion-text">{displayText}</p>
                       <button
                         type="button"
                         className={`calendar-suggestion-btn${alreadyOnDay ? ' is-assigned' : ''}`}
                         disabled={alreadyOnDay || Boolean(busyKey)}
-                        onClick={() => void handleAssignSuggestion(suggestion.id, suggestion.text)}
+                        onClick={() => void handleAssignSuggestion(suggestion.id, displayText)}
                       >
                         {alreadyOnDay ? (
                           <>
