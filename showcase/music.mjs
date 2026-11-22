@@ -9,7 +9,7 @@ import { writeFileSync } from 'node:fs'
 
 const SR = 44100, BPM = 120, BEAT = 60 / BPM, BAR = 4 * BEAT
 // Keep in step with video.html: the video starts at scene time START and freezes for d seconds at each hold.
-const START = 4, HOLDS = [[8.0, 2], [12.6, 2], [16.8, 2], [23.0, 2], [36.5, 2]]
+const START = 4, HOLDS = [[7.0, 2], [12.6, 2], [16.8, 2], [23.0, 2], [34.55, 2]]
 /** Scene time -> video time. */
 const V = (s) => s - START + HOLDS.reduce((a, [h, d]) => a + (s > h ? d : 0), 0)
 // Wipes between scenes (scene time): each gets a whoosh into it.

@@ -157,7 +157,7 @@ const FPS = 30, SW = 2400, SH = 1350  // screenshot size in px
 // (the end of the story). At each HOLD [scene time, seconds] the frame freezes so a fully loaded app view can be read.
 // Holds are whole bars (2 s at 120 bpm), so music.mjs can map its sections and effects the same way.
 const START = 4, END = 60
-const HOLDS = [[8.0, 2], [12.6, 2], [16.8, 2], [23.0, 2], [36.5, 2]]
+const HOLDS = [[7.0, 2], [12.6, 2], [16.8, 2], [23.0, 2], [34.55, 2]]
 const DURATION = END - START + HOLDS.reduce((a, h) => a + h[1], 0)
 /** Video time -> scene time. */
 function sceneTime(v) {

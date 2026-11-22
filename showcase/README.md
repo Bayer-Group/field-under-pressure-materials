@@ -18,14 +18,14 @@ node showcase/render.mjs                         # ~3–4 min
 node showcase/render.mjs --stills 5,10.5,20      # quick PNG checks in showcase/stills/
 ```
 
-Storyboard (all app screens are plot STER_010). There are no logo cards: the video opens on the app and ends on the story. Each app section freezes for 2 s once its view is fully loaded, so it can be read; `HOLDS` in `video.html` (and the same list in `music.mjs`) sets where.
+Storyboard (all app screens are plot STER_010). There are no logo cards: the video opens on the app and ends on the story. Each app section freezes for 2 s once its view is fully loaded and before the video's own highlights (glows, rings, pills) start, so it can be read; `HOLDS` in `video.html` (and the same list in `music.mjs`) sets where.
 
 | Time | Scene |
 |---|---|
-| 0–6 s | 01 Plot selection: zoom the map to North Sterling, hover a plot in the list (it lights up on the map; hold), open it |
+| 0–6 s | 01 Plot selection: zoom the map to North Sterling, hover a plot in the list (it lights up on the map; hold), then the link and pill point it out and it opens |
 | 6–12.6 s | 02 Soil microbes, taxonomy: phylum bar and table (hold on the table) |
 | 12.6–18.8 s | 02 Soil microbes, roles: role classes, then the role tree, pest suppressors vs. plant pathogens (hold) |
 | 18.8–28 s | 03 Soil characteristics: the cards fly out of the window, status tags glow (hold) |
 | 28–36 s | Break: a DNA double helix (biological data) and stacked map layers (geoinformatic data) stream into the Terranos globe; out come the app's five tabs |
-| 36–44 s | 04 Crop disease risk: the crop names, then the heatmap fills in, this plot's row and its corn cell (hold on the heatmap) |
+| 36–44 s | 04 Crop disease risk: the crop names, then the heatmap fills in, this plot's row and its corn cell (hold on the filled heatmap, before the highlights) |
 | 44–66 s | Break, two neighbours: one checks the crop disease risk on his phone (corn higher risk, sugar beet lower risk; a cartoon card, not real STER_010 numbers) and plants (white) sugar beet, which pops up at once and startles him; the other shrugs and plants corn anyway; the camera dives into the soil, where an angry fungus and grumpy bacteria attack the roots and turn them red; back up, red veins climb the corn from its foot and it falls ill (thermometer); his neighbour shows him the app, a light bulb goes on, he opens the Treatment plan and taps "Buy now"; the parcel lands, the corn recovers and everyone jumps for joy |
