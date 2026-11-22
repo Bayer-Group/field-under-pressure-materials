@@ -34,6 +34,12 @@ export function TopBar({ activeSection }: TopBarProps) {
     <header className="topbar">
       <div className="topbar-left">
         <div className="topbar-title-group">
+          <img
+            src="/SAGE_logo_kwadrat.png"
+            alt=""
+            aria-hidden="true"
+            className="topbar-mobile-logo"
+          />
           <span className="topbar-app-name" title={`${t.app.name} — ${t.app.subtitle}`}>
             {t.app.name}
           </span>
