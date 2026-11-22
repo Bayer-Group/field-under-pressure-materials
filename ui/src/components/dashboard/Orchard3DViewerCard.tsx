@@ -21,7 +21,35 @@ import { useTheme } from '../../contexts/ThemeContext';
 import type { GeoCoord, OrchardSceneResponse, OrchardTree3D } from '../../types/orchard';
 import { geoToLasSceneXZ, wgs84ToEpsg2180 } from '../../utils/crs2180';
 import { parseLasArrayBuffer, type LasColorMode, type ParsedLasCloud } from '../../utils/lasParser';
+import { readPagePref, writePagePref } from '../../utils/pagePrefs';
 import { getZoomModifierLabel } from '../../utils/platform';
+
+const VALID_COLOR_MODES: LasColorMode[] = ['rgb', 'elevation', 'classification', 'intensity'];
+const VALID_RELIEF_SCALES = [1, 1.8, 2.8] as const;
+
+interface Viewer3DPrefs {
+  colorMode: LasColorMode;
+  verticalExaggeration: number;
+  layers: LayerVisibility;
+}
+
+function readViewer3DPrefs(): Viewer3DPrefs {
+  const saved = readPagePref<Partial<Viewer3DPrefs>>('dashboard.viewer3d', {});
+  const colorMode = VALID_COLOR_MODES.includes(saved?.colorMode as LasColorMode)
+    ? (saved.colorMode as LasColorMode)
+    : 'rgb';
+  const verticalExaggeration = VALID_RELIEF_SCALES.includes(saved?.verticalExaggeration as 1 | 1.8 | 2.8)
+    ? (saved.verticalExaggeration as number)
+    : 1.8;
+  const rawLayers = saved?.layers;
+  const layers: LayerVisibility = {
+    pointCloud: typeof rawLayers?.pointCloud === 'boolean' ? rawLayers.pointCloud : true,
+    trees: typeof rawLayers?.trees === 'boolean' ? rawLayers.trees : true,
+    rowLines: typeof rawLayers?.rowLines === 'boolean' ? rawLayers.rowLines : true,
+    boundary: typeof rawLayers?.boundary === 'boolean' ? rawLayers.boundary : true,
+  };
+  return { colorMode, verticalExaggeration, layers };
+}
 
 interface LayerVisibility {
   pointCloud: boolean;
@@ -85,17 +113,17 @@ export function Orchard3DViewerCard() {
   const [parsedLas, setParsedLas] = useState<ParsedLasCloud | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  const [colorMode, setColorMode] = useState<LasColorMode>('rgb');
-  const [verticalExaggeration, setVerticalExaggeration] = useState<number>(1.8);
+  const [initialPrefs] = useState<Viewer3DPrefs>(readViewer3DPrefs);
+  const [colorMode, setColorMode] = useState<LasColorMode>(initialPrefs.colorMode);
+  const [verticalExaggeration, setVerticalExaggeration] = useState<number>(initialPrefs.verticalExaggeration);
   const [selectedTree, setSelectedTree] = useState<OrchardTree3D | null>(null);
   const [showZoomHint, setShowZoomHint] = useState<boolean>(false);
   const zoomHintTimerRef = useRef<number | null>(null);
-  const [layers, setLayers] = useState<LayerVisibility>({
-    pointCloud: true,
-    trees: true,
-    rowLines: true,
-    boundary: true,
-  });
+  const [layers, setLayers] = useState<LayerVisibility>(initialPrefs.layers);
+
+  useEffect(() => {
+    writePagePref('dashboard.viewer3d', { colorMode, verticalExaggeration, layers });
+  }, [colorMode, verticalExaggeration, layers]);
 
   const mountRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -126,7 +154,7 @@ export function Orchard3DViewerCard() {
           try {
             const parsed = parseLasArrayBuffer(lasRes.data, { maxPoints: 180_000, filterNoise: true });
             setParsedLas(parsed);
-            setColorMode(parsed.header.hasRgb ? 'rgb' : 'elevation');
+            setColorMode((current) => (current === 'rgb' && !parsed.header.hasRgb ? 'elevation' : current));
           } catch (parseErr) {
             console.warn('LAS parse failed, falling back to geometric orchard render:', parseErr);
             setParsedLas(null);

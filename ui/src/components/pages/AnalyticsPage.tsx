@@ -8,6 +8,7 @@ import {
 import { ApiError } from '../../api/httpClient';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { analyticsCopy, USDA_TEXTURE } from '../../i18n/analytics';
+import { readPagePref, writePagePref } from '../../utils/pagePrefs';
 import { SoilMoisturePage } from './SoilMoisturePage';
 
 const FieldMap = lazy(() => import('./SoilRasterMap'));
@@ -151,8 +152,15 @@ type LayerFocus = { kind: RasterKind };
 function FieldMapSection({ field, selected, onSelectTree, focus }: { field: AnalystField; selected: string; onSelectTree: (id: string) => void; focus: LayerFocus | null }) {
   const { copy, language } = useCopy();
   const { t } = useLanguage();
-  const [kind, setKind] = useState<RasterKind>(() =>
-    focus?.kind ?? RASTER_KINDS.find((layer) => field.metrics[layer]?.raster) ?? 'moisture');
+  const [kind, setKind] = useState<RasterKind>(() => {
+    const saved = readPagePref<string>('analytics.mapKind', '');
+    if (RASTER_KINDS.includes(saved as RasterKind)) return saved as RasterKind;
+    return focus?.kind ?? RASTER_KINDS.find((layer) => field.metrics[layer]?.raster) ?? 'moisture';
+  });
+  const handleSelectKind = (nextKind: RasterKind) => {
+    setKind(nextKind);
+    writePagePref('analytics.mapKind', nextKind);
+  };
   const [uploads, setUploads] = useState<Partial<Record<RasterKind, File>>>({});
   const [downloads, setDownloads] = useState<Partial<Record<RasterKind, File>>>({});
   const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle');
@@ -194,7 +202,7 @@ function FieldMapSection({ field, selected, onSelectTree, focus }: { field: Anal
         <div className="analytics-map-actions">
           <div className="analytics-segment">
             {RASTER_KINDS.map((layer) => (
-              <button key={layer} type="button" aria-pressed={kind === layer} onClick={() => setKind(layer)}>
+              <button key={layer} type="button" aria-pressed={kind === layer} onClick={() => handleSelectKind(layer)}>
                 {layer === 'moisture' && day ? copy.forecastMoisture : rasterLabel(copy, layer)}
               </button>
             ))}
@@ -256,7 +264,13 @@ function TreePixelDetails({ tree }: { tree: AnalysisTree }) {
 function TreeTable({ trees, selected, onSelect }: { trees: AnalysisTree[]; selected: string; onSelect: (id: string) => void }) {
   const { copy } = useCopy();
   const { t } = useLanguage();
-  const [filter, setFilter] = useState<RiskStatus | 'all'>('all');
+  const [filter, setFilter] = useState<RiskStatus | 'all'>(() => {
+    const saved = readPagePref<string>('analytics.treeFilter', 'all');
+    return saved === 'all' || TREE_ORDER.includes(saved as RiskStatus) ? (saved as RiskStatus | 'all') : 'all';
+  });
+  useEffect(() => {
+    writePagePref('analytics.treeFilter', filter);
+  }, [filter]);
   const displayed = trees.filter((tree) => filter === 'all' || tree.risk.status === filter)
     .sort((a, b) => (b.risk.score ?? -1) - (a.risk.score ?? -1));
   const highlighted = trees.find((tree) => tree.id === selected);
@@ -330,7 +344,13 @@ export function AnalyticsPage({ active }: { active: boolean }) {
   const { selectedOrchardId: fieldId } = useOrchard();
   const [fieldLoad, setFieldLoad] = useState<FieldLoad | null>(null);
   const [viewer, setViewer] = useState<{ field: AnalystField; focus: LayerFocus | null } | null>(null);
-  const [day, setDay] = useState('');
+  const [day, setDay] = useState(() => {
+    const saved = readPagePref<string>('analytics.day', '');
+    return saved === '' || localForecastDates().includes(saved) ? saved : '';
+  });
+  useEffect(() => {
+    writePagePref('analytics.day', day);
+  }, [day]);
   const [forecastRefresh, setForecastRefresh] = useState(0);
   const [forecastLoad, setForecastLoad] = useState<{ key: string; field?: AnalystField; error?: string } | null>(null);
   const [tree, setTree] = useState('');

@@ -25,6 +25,7 @@ import {
 } from '../../api/calendarApi';
 import { ApiError } from '../../api/httpClient';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { readPagePref, writePagePref } from '../../utils/pagePrefs';
 
 interface DevColorToken {
   solid: string;
@@ -103,16 +104,38 @@ export function CalendarPage() {
   const todayMonthIndex = now.getMonth();
   const todayDay = now.getDate();
 
-  const [selectedYear, setSelectedYear] = useState<number>(todayYear);
+  const initialCalPrefs = useMemo(() => {
+    const saved = readPagePref<{ year?: unknown; monthIndex?: unknown; selectedDay?: unknown }>('calendar', {});
+    const savedYear =
+      typeof saved?.year === 'number' && Number.isInteger(saved.year) && saved.year >= 2000 && saved.year <= 2100
+        ? saved.year
+        : todayYear;
+    const savedMonth =
+      typeof saved?.monthIndex === 'number' && Number.isInteger(saved.monthIndex) && saved.monthIndex >= 0 && saved.monthIndex <= 11
+        ? saved.monthIndex
+        : todayMonthIndex;
+    const maxDay = daysInMonth(savedYear, savedMonth);
+    const savedDay =
+      typeof saved?.selectedDay === 'number' && Number.isInteger(saved.selectedDay) && saved.selectedDay >= 1
+        ? Math.min(saved.selectedDay, maxDay)
+        : Math.min(todayDay, maxDay);
+    return { year: savedYear, monthIndex: savedMonth, selectedDay: savedDay };
+  }, [todayYear, todayMonthIndex, todayDay]);
+
+  const [selectedYear, setSelectedYear] = useState<number>(initialCalPrefs.year);
   const [docsByYear, setDocsByYear] = useState<Record<number, CalendarDocument>>({});
-  const [availableYears, setAvailableYears] = useState<number[]>([todayYear]);
+  const [availableYears, setAvailableYears] = useState<number[]>([initialCalPrefs.year]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const [monthIndex, setMonthIndex] = useState<number>(todayMonthIndex);
-  const [selectedDay, setSelectedDay] = useState<number>(todayDay);
+  const [monthIndex, setMonthIndex] = useState<number>(initialCalPrefs.monthIndex);
+  const [selectedDay, setSelectedDay] = useState<number>(initialCalPrefs.selectedDay);
   const [hoveredDevId, setHoveredDevId] = useState<string | null>(null);
+
+  useEffect(() => {
+    writePagePref('calendar', { year: selectedYear, monthIndex, selectedDay });
+  }, [selectedYear, monthIndex, selectedDay]);
 
   const [newTaskText, setNewTaskText] = useState('');
   const [newNoteText, setNewNoteText] = useState('');
@@ -155,6 +178,10 @@ export function CalendarPage() {
       })
       .catch((err) => {
         if (controller.signal.aborted) return;
+        if (err instanceof ApiError && err.status === 404 && selectedYear !== todayYear) {
+          setSelectedYear(todayYear);
+          return;
+        }
         setLoadError(err instanceof ApiError ? err.message : t.calendar.loadError);
         setLoading(false);
       });

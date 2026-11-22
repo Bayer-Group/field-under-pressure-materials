@@ -41,6 +41,7 @@ import {
   type CanvasBackdropMode,
   type EditorToolMode,
 } from '../editor/RowLineEditorCanvas';
+import { readPagePref, writePagePref } from '../../utils/pagePrefs';
 
 function sameRowGeometry(saved: OrchardRowDoc, draft: DraftRow): boolean {
   return saved.start.lat === draft.start.lat && saved.start.lng === draft.start.lng
@@ -50,6 +51,37 @@ function sameRowGeometry(saved: OrchardRowDoc, draft: DraftRow): boolean {
 
 const DEFAULT_EDGE_MARGIN_METERS = 1;
 
+interface RowEditorPrefs {
+  backdropMode: CanvasBackdropMode;
+  toolMode: EditorToolMode;
+  angleSnap: boolean;
+  activeSpeciesId: ObjectIdString;
+  averageSpacingMeters: number;
+  parallelOffsetMeters: number;
+  edgeMarginMeters: number;
+}
+
+function readRowEditorPrefs(): RowEditorPrefs {
+  const saved = readPagePref<Partial<RowEditorPrefs>>('row-editor', {});
+  const backdropMode: CanvasBackdropMode =
+    saved?.backdropMode === 'blank' || saved?.backdropMode === 'satellite' ? saved.backdropMode : 'satellite';
+  const toolMode: EditorToolMode =
+    saved?.toolMode === 'draw' || saved?.toolMode === 'select' || saved?.toolMode === 'paint'
+      ? saved.toolMode
+      : 'draw';
+  const clampNum = (val: unknown, min: number, max: number, fallback: number) =>
+    typeof val === 'number' && Number.isFinite(val) ? Math.max(min, Math.min(max, val)) : fallback;
+  return {
+    backdropMode,
+    toolMode,
+    angleSnap: typeof saved?.angleSnap === 'boolean' ? saved.angleSnap : true,
+    activeSpeciesId: typeof saved?.activeSpeciesId === 'string' ? saved.activeSpeciesId : '',
+    averageSpacingMeters: clampNum(saved?.averageSpacingMeters, 0.8, 15, 3.5),
+    parallelOffsetMeters: clampNum(saved?.parallelOffsetMeters, 2, 10, 4.5),
+    edgeMarginMeters: clampNum(saved?.edgeMarginMeters, 0, 5, DEFAULT_EDGE_MARGIN_METERS),
+  };
+}
+
 export function RowLineEditorPage() {
   const { t, language } = useLanguage();
   const { selectedOrchardId } = useOrchard();
@@ -58,15 +90,28 @@ export function RowLineEditorPage() {
   const [cropPrefs, setCropPrefs] = useState<CropPrefDoc[]>([]);
   const [storedTrees, setStoredTrees] = useState<TreeDoc[]>([]);
 
-  // Drawing configuration & tools
-  const [backdropMode, setBackdropMode] = useState<CanvasBackdropMode>('satellite');
-  const [toolMode, setToolMode] = useState<EditorToolMode>('draw');
-  const [angleSnap, setAngleSnap] = useState<boolean>(true);
-  const [activeSpeciesId, setActiveSpeciesId] = useState<ObjectIdString>('');
-  const [averageSpacingMeters, setAverageSpacingMeters] = useState<number>(3.5);
-  const [parallelOffsetMeters, setParallelOffsetMeters] = useState<number>(4.5);
-  const [edgeMarginMeters, setEdgeMarginMeters] = useState(DEFAULT_EDGE_MARGIN_METERS);
-  const [savedEdgeMarginMeters, setSavedEdgeMarginMeters] = useState(DEFAULT_EDGE_MARGIN_METERS);
+  // Drawing configuration & tools (persisted per page in browser storage)
+  const [initialPrefs] = useState<RowEditorPrefs>(readRowEditorPrefs);
+  const [backdropMode, setBackdropMode] = useState<CanvasBackdropMode>(initialPrefs.backdropMode);
+  const [toolMode, setToolMode] = useState<EditorToolMode>(initialPrefs.toolMode);
+  const [angleSnap, setAngleSnap] = useState<boolean>(initialPrefs.angleSnap);
+  const [activeSpeciesId, setActiveSpeciesId] = useState<ObjectIdString>(initialPrefs.activeSpeciesId);
+  const [averageSpacingMeters, setAverageSpacingMeters] = useState<number>(initialPrefs.averageSpacingMeters);
+  const [parallelOffsetMeters, setParallelOffsetMeters] = useState<number>(initialPrefs.parallelOffsetMeters);
+  const [edgeMarginMeters, setEdgeMarginMeters] = useState(initialPrefs.edgeMarginMeters);
+  const [savedEdgeMarginMeters, setSavedEdgeMarginMeters] = useState(initialPrefs.edgeMarginMeters);
+
+  useEffect(() => {
+    writePagePref('row-editor', {
+      backdropMode,
+      toolMode,
+      angleSnap,
+      activeSpeciesId,
+      averageSpacingMeters,
+      parallelOffsetMeters,
+      edgeMarginMeters,
+    });
+  }, [backdropMode, toolMode, angleSnap, activeSpeciesId, averageSpacingMeters, parallelOffsetMeters, edgeMarginMeters]);
 
   // Drawn rows (starts empty for first-time user!) + undo stack
   const [rows, setRows] = useState<DraftRow[]>([]);
@@ -87,8 +132,6 @@ export function RowLineEditorPage() {
     setSelectedRowId(null);
     setSelectedTreeKey(null);
     setSaveBanner(null);
-    setEdgeMarginMeters(DEFAULT_EDGE_MARGIN_METERS);
-    setSavedEdgeMarginMeters(DEFAULT_EDGE_MARGIN_METERS);
 
     Promise.all([
       fetchOrchardBoundary(selectedOrchardId, controller.signal),
@@ -111,7 +154,9 @@ export function RowLineEditorPage() {
         setCropPrefs(cropsRes.data);
 
         if (cropsRes.data.length > 0) {
-          setActiveSpeciesId((prev) => prev || cropsRes.data[0]._id);
+          setActiveSpeciesId((prev) =>
+            prev && cropsRes.data.some((crop) => crop._id === prev) ? prev : cropsRes.data[0]._id,
+          );
           setAverageSpacingMeters((prev) => prev || cropsRes.data[0].recommendedSpacingMeters);
         }
 
