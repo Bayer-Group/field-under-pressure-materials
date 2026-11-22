@@ -25,7 +25,7 @@ The demo break plays the video with sound. It starts by itself when you arrive o
 
 | Key | Action |
 |---|---|
-| → / Space | Next step or slide |
+| → / Space | Next slide |
 | ← | Back |
 | R | Replay the current slide's animation |
 | S | Speaker view (notes, timer, next slide) |
@@ -79,9 +79,9 @@ To get a PDF, open `http://127.0.0.1:8090/deck/?print-pdf` in Chromium and print
 
 1. Give the slide `data-anim="<name>"`.
 2. Register a builder: `Deck.anim('<name>', (slide, Deck) => timeline)`. It runs every time the slide is entered. Everything it animates is reset after you leave, so each visit starts fresh.
-3. For click-by-click steps, add one empty `<i class="fragment step"></i>` per click, and put the labels `step1`, `step2`, … into the timeline. Entering the slide plays up to `step1`, and each click plays to the next label. Going back rewinds.
+3. Entering a slide plays its whole timeline, so one press of → shows the finished slide. Going back to a slide jumps straight to its end state.
 
-Plain reveal.js fragments (`class="fragment fade-up"`) still work alongside these steps.
+Click-by-click steps are still supported by the engine but no slide uses them: add one empty `<i class="fragment step"></i>` per click and the labels `step1`, `step2`, … to the timeline, and entering the slide stops at `step1`. Plain reveal.js fragments (`class="fragment fade-up"`) work too.
 
 ### Reusable slide types
 

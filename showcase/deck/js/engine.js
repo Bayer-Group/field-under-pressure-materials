@@ -8,7 +8,7 @@
 // Steps: put empty  <i class="fragment step"></i>  markers in the slide (one per click) and add
 // labels "step1", "step2", ... to the timeline. Entering the slide plays from 0 to "step1";
 // each click plays to the next label (the last one plays to the end); going back rewinds.
-// A slide without step markers simply plays its whole timeline on entry.
+// A slide without step markers plays its whole timeline on entry; its step labels are then ignored.
 //
 // Extra keys: R replays the current slide's animation.
 ;(function () {
@@ -88,14 +88,16 @@
 
   // ---------- step navigation ----------
   const stepsShown = (slide) => slide.querySelectorAll('.fragment.step.visible').length
-  function stepTime(tl, shown) {
-    const t = tl.labels[`step${shown + 1}`]
+  // Without step markers the step labels are only stage names: play straight to the end.
+  function stepTime(tl, slide) {
+    if (!slide.querySelector('.fragment.step')) return tl.duration()
+    const t = tl.labels[`step${stepsShown(slide) + 1}`]
     return t === undefined ? tl.duration() : t
   }
   function seekStep(instant = false) {
     if (!active?.tl) return
     const { tl, slide } = active
-    const target = stepTime(tl, stepsShown(slide))
+    const target = stepTime(tl, slide)
     active.nav?.kill()
     if (instant || reduced) {
       tl.pause(target)

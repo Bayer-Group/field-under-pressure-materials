@@ -1,5 +1,6 @@
 // Animations for the story slides: title, problem, goal, data, already done, future.
-// Every builder follows engine.js: return a timeline, add labels step1, step2, ... for clicks.
+// Every builder follows engine.js: return a timeline. It plays in full when the slide is entered; the labels
+// step1, step2, ... mark its stages (they only pause if the slide has click-step markers).
 ;(function () {
   'use strict'
   const NS = 'http://www.w3.org/2000/svg'
@@ -162,7 +163,7 @@
 
   // ===================================================================================
   // 1a · Geoinformatic data sees the surface → GENOMICS reads the soil
-  // Steps: 1 geoinformatic data · 2 arrow into the soil, GENOMICS
+  // Stages: 1 geoinformatic data · 2 arrow into the soil, GENOMICS
   // ===================================================================================
   Deck.anim('genomics', (slide, D) => {
     const ground = slide.querySelector('.ground')
@@ -195,7 +196,7 @@
 
   // ===================================================================================
   // 1c · Sequencing cost (log) and papers per year, two panels on one year axis.
-  // Steps: 1 cost line · 2 paper bars
+  // Stages: 1 cost line · 2 paper bars
   // ===================================================================================
   Deck.anim('trend', (slide) => {
     const svg = slide.querySelector('svg.trend')
@@ -261,7 +262,7 @@
 
   // ===================================================================================
   // 1b · What is metagenomics: soil sample → all its DNA → who lives there
-  // Steps: 1 DNA reads fly out of the soil · 2 composition bar
+  // Stages: 1 DNA reads fly out of the soil · 2 composition bar
   // ===================================================================================
   Deck.anim('meta', (slide, D) => {
     const soil = slide.querySelector('.soilbox'), reads = slide.querySelector('.reads'), comp = slide.querySelector('.comp')
@@ -328,7 +329,7 @@
 
   // ===================================================================================
   // 1d · Metagenomics + Geoinformation: two map layers slide together, pins go through both.
-  // Steps: 1 layers merge and pins drop
+  // Stages: 1 layers merge and pins drop
   // ===================================================================================
   Deck.anim('merge', (slide, D) => {
     const geo = slide.querySelector('.slab.geo'), bio = slide.querySelector('.slab.bio')
@@ -386,7 +387,7 @@
 
   // ===================================================================================
   // 2a · Goal: geo + metagenomics → analysis → sowing / fertilization / spraying → biological order
-  // Steps: 1 analysis · 2 actions · 3 balance
+  // Stages: 1 analysis · 2 actions · 3 balance
   // ===================================================================================
   Deck.anim('goal', (slide, D) => {
     const flow = slide.querySelector('.flow'), svg = flow.querySelector('svg')
@@ -430,7 +431,7 @@
 
   // ===================================================================================
   // 2b · History → now → future: past readings, a "?" at now, the future branches and one wins.
-  // Steps: 1 history and now · 2 futures
+  // Stages: 1 history and now · 2 futures
   // ===================================================================================
   Deck.anim('timeline', (slide, D) => {
     const svg = slide.querySelector('svg.tl')
@@ -493,7 +494,7 @@
 
   // ===================================================================================
   // 3 · Data: four tiles, each with a small live visual.
-  // Steps: 1 shotgun sequencing · 2 NDVI · 3 geochemistry · 4 qPCR
+  // Stages: 1 shotgun sequencing · 2 NDVI · 3 geochemistry · 4 qPCR
   // ===================================================================================
   function buildShotgun(svg, r) {
     let s = '<path class="strand" d="'
@@ -625,7 +626,7 @@
 
   // ===================================================================================
   // 5 · What's already done: four app features, one per click, each ticked off.
-  // Steps: 1 soil microbes · 2 soil characteristics · 3 crop disease risk · 4 treatment
+  // Stages: 1 soil microbes · 2 soil characteristics · 3 crop disease risk · 4 treatment
   // ===================================================================================
   Deck.anim('done', (slide) => {
     const feats = slide.querySelectorAll('.feat')
