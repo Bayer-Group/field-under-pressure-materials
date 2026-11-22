@@ -6,6 +6,11 @@ The PostGIS database runs in Docker on the virtual machine `fup-vm` in the GCP p
 The commands below always pass `--project geo-earth-junction --zone europe-central2-a` explicitly,
 so nothing has to be configured in `gcloud` beforehand.
 
+> **Team guide:** a step-by-step setup of `gcloud` for the project and your account, everyday commands, how to deploy a fix yourself
+> (alone or with an agent) and what not to do: [`../docs/VM_ACCESS_GUIDE.md`](../docs/VM_ACCESS_GUIDE.md).
+> **The VM now also runs the backend API and the public demo: do not stop it.** Its external IP, and with it the address of the API
+> (`https://<ip>.nip.io`), changes after a stop and start.
+
 ## What you need
 
 1. **A regular Google account** (e.g. Gmail). You do not need to create a separate "GCP account" or enter a card.
@@ -31,11 +36,12 @@ gcloud compute instances start fup-vm --zone europe-central2-a --project geo-ear
 # SSH into the machine (a regular shell; the first time it creates an SSH key, the key passphrase can stay empty)
 gcloud compute ssh fup-vm --zone europe-central2-a --project geo-earth-junction
 
-# stop the machine when you are not working (saves credits; data on the disk stays)
+# stop the machine (saves credits; data on the disk stays). NOT while the API or the demo is in use: ask the owner first
 gcloud compute instances stop fup-vm --zone europe-central2-a --project geo-earth-junction
 ```
 
-A stopped machine means the database is unavailable. `start` before you work, `stop` afterwards (if nobody else is using it).
+A stopped machine means the database and the API are unavailable and the address of the API changes when it starts again. Stop it
+only when the owner agreed that nobody needs it.
 
 ## The database starts with the machine
 
