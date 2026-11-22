@@ -1,32 +1,32 @@
 // The soundtrack, synthesized in code: 120 bpm (one bar = 2 s), sections following video.html's storyboard.
 // writeSoundtrack(path, seconds) writes a 16-bit stereo WAV. Run directly to write showcase/soundtrack.wav.
-//    0 –  4  intro: pad, logo shimmer, riser            24 – 32  data break: half-time, sparkling 16ths, riser
-//    4 – 24  groove (Am F C G) under the app tour       32 – 38  groove again (crop disease risk)
-//   38 – 48  two neighbours, playful (C G Am F, oom-pah)  48 – 52  sad (Am Dm): a soil pathogen makes the corn ill
-//   52 – 58  hopeful (F G): he listens, "ding" on the purchase   58 – 60  happy fanfare (C)
-//   60 – 66  outro: impact and closing chord
+// Effects are written in the video's scene time and placed with V(), the same map as video.html (START, HOLDS).
+//    0 – 28  groove (Am F C G) under the app tour          28 – 36  data break: half-time, sparkling 16ths, riser
+//   36 – 44  groove again (crop disease risk)              44 – 54  two neighbours, playful (C G Am F, oom-pah)
+//   54 – 58  sad (Am Dm): a soil pathogen makes the corn ill  58 – 64  hopeful (F G): he listens, "ding" on the purchase
+//   64 – 66  happy fanfare (C)
 import { writeFileSync } from 'node:fs'
 
 const SR = 44100, BPM = 120, BEAT = 60 / BPM, BAR = 4 * BEAT
-// Wipes between scenes (seconds): each gets a whoosh into it.
-const CUTS = [4, 24, 32, 38, 60]
+// Keep in step with video.html: the video starts at scene time START and freezes for d seconds at each hold.
+const START = 4, HOLDS = [[8.0, 2], [12.6, 2], [16.8, 2], [23.0, 2], [36.5, 2]]
+/** Scene time -> video time. */
+const V = (s) => s - START + HOLDS.reduce((a, [h, d]) => a + (s > h ? d : 0), 0)
+// Wipes between scenes (scene time): each gets a whoosh into it.
+const CUTS = [24, 32, 38]
 const N = { A2: 110, D3: 146.83, E3: 164.81, F2: 87.31, G2: 98, C3: 130.81, A3: 220, C4: 261.63, D4: 293.66, E4: 329.63, F3: 174.61, F4: 349.23, G3: 196, G4: 392, A4: 440, B3: 246.94, C5: 523.25, E5: 659.25, G5: 783.99 }
 const CH = {
   Am: [N.A2, [N.A3, N.C4, N.E4]], F: [N.F2, [N.F3, N.A3, N.C4]], C: [N.C3, [N.C4, N.E4, N.G4]], G: [N.G2, [N.G3, N.B3, N.D4]],
   Dm: [73.42, [N.F3, N.A3, N.D4]],
 }
-/** Section and chord of each 2-second bar. */
+// Sections in video time: [name, from, to, chords]. Boundaries are whole bars.
+const SECTIONS = [['groove', 0, V(24), ['Am', 'F', 'C', 'G']], ['data', V(24), V(32), ['Am', 'F', 'C', 'G']], ['groove', V(32), V(38), ['Am', 'F', 'G']],
+  ['play', V(38), V(48), ['C', 'G', 'Am', 'F']], ['sad', V(48), V(52), ['Am', 'Dm']], ['hope', V(52), V(58), ['F', 'G']], ['happy', V(58), Infinity, ['C']]]
+/** Section, chord and bar number within the section of each 2-second bar. */
 function bar(b) {
-  const t = b * BAR
-  if (t < 4) return { sec: 'intro', ch: ['Am', 'F'][b % 2] }
-  if (t < 24) return { sec: 'groove', ch: ['Am', 'F', 'C', 'G'][(b - 2) % 4] }
-  if (t < 32) return { sec: 'data', ch: ['Am', 'F', 'C', 'G'][(b - 12) % 4] }
-  if (t < 38) return { sec: 'groove', ch: ['Am', 'F', 'G'][(b - 16) % 3] }
-  if (t < 48) return { sec: 'play', ch: ['C', 'G', 'Am', 'F'][(b - 19) % 4] }
-  if (t < 52) return { sec: 'sad', ch: ['Am', 'Dm'][(b - 24) % 2] }
-  if (t < 58) return { sec: 'hope', ch: ['F', 'G'][(b - 26) % 2] }
-  if (t < 60) return { sec: 'happy', ch: 'C' }
-  return { sec: 'outro', ch: ['Am', 'F', 'C'][(b - 30) % 3] }
+  const t = b * BAR, [sec, from, , chords] = SECTIONS.find(([, a, z]) => t >= a && t < z)
+  const k = Math.round((t - from) / BAR)
+  return { sec, ch: chords[k % chords.length], k }
 }
 
 export function writeSoundtrack(path, seconds = 66) {
@@ -90,10 +90,10 @@ export function writeSoundtrack(path, seconds = 66) {
 
   const bars = Math.ceil(seconds / BAR)
   for (let b = 0; b < bars; b++) {
-    const t0 = b * BAR, { sec, ch } = bar(b), [bass, chord] = CH[ch]
+    const t0 = b * BAR, { sec, ch, k } = bar(b), [bass, chord] = CH[ch]
     // pad
-    const padGain = { intro: 0.05, groove: 0.03, data: 0.045, play: 0.03, sad: 0.07, hope: 0.05, happy: 0.035, outro: 0.05 }[sec]
-    const padCut = sec === 'intro' ? 900 + 300 * b : sec === 'data' ? 700 + 1600 * ((b - 12) / 4) : sec === 'sad' ? 800 : 1400
+    const padGain = { groove: 0.03, data: 0.045, play: 0.03, sad: 0.07, hope: 0.05, happy: 0.035 }[sec]
+    const padCut = sec === 'data' ? 700 + 1600 * (k / 4) : sec === 'sad' ? 800 : 1400
     for (const [i, f] of chord.entries()) voice(t0, BAR, f, { type: 'saw', gain: padGain, a: 0.3, r: 0.6, cutoff: padCut, detune: 0.006, pan: (i - 1) * 0.5 })
 
     if (sec === 'groove' || sec === 'happy') {
@@ -140,40 +140,34 @@ export function writeSoundtrack(path, seconds = 66) {
       }
     }
   }
-  // intro: logo shimmer and a riser into the first cut
-  whoosh(4, 1.6, 0.25)
-  for (let i = 0; i < 6; i++) voice(0.25 + i * 0.12, 0.25, [659.25, 783.99, 880, 987.77, 1174.66, 1318.51][i], { type: 'sine', gain: 0.05, a: 0.005, r: 0.6, pan: i % 2 ? 0.5 : -0.5 })
-  for (const c of CUTS) whoosh(c)
-  whoosh(32, 2.0, 0.22) // build out of the data break
+  for (const c of CUTS) whoosh(V(c))
+  whoosh(V(32), 2.0, 0.22) // build out of the data break
   // two-neighbours story effects
-  voice(39.45, 0.12, 800, { type: 'sine', gain: 0.08, to: 1200, r: 0.05 })           // the risk card pops up
-  bell(40.0, 659.25, 0.06); bell(40.45, 987.77, 0.08); bell(40.7, 1318.51, 0.08)      // corn high, wheat low, tick
-  noiseHit(41.6, 0.25, { gain: 0.12, lp: 1500, decay: 12 })                          // "pfft": the neighbour shrugs it off
-  voice(42.25, 0.35, 500, { type: 'sine', gain: 0.08, to: 300, r: 0.05 })            // wheat seed toss
-  voice(42.64, 0.12, 600, { type: 'sine', gain: 0.12, to: 1300, r: 0.05 })           // wheat sprout pop
-  voice(43.12, 0.9, 180, { type: 'sine', gain: 0.14, to: 900, vib: 0.04, r: 0.1 })   // boing: the wheat shoots up
-  voice(43.37, 0.35, 700, { type: 'triangle', gain: 0.08, to: 1400, r: 0.05 })      // the farmer's surprise
-  noiseHit(43.37, 0.15, { gain: 0.15, hp: 2000, decay: 25 })
-  voice(45.77, 0.35, 500, { type: 'sine', gain: 0.08, to: 300, r: 0.05 })            // corn seed toss
-  voice(46.16, 0.12, 600, { type: 'sine', gain: 0.12, to: 1300, r: 0.05 })           // corn sprout pop
-  voice(46.85, 0.6, 220, { type: 'sine', gain: 0.1, to: 700, r: 0.1 })               // the corn grows
-  voice(47.98, 0.3, 520, { type: 'triangle', gain: 0.07, to: 380, r: 0.05 })       // "uh-oh": the corn looks down
-  whoosh(48.4, 0.45, 0.24)                                                          // dive into the soil
-  for (let i = 0; i < 4; i++) voice(48.85 + i * 0.13, 0.09, 196 - i * 12, { type: 'saw', gain: 0.09, cutoff: 1100, a: 0.005, r: 0.06 })  // the fungus cackles
-  voice(48.95, 0.65, 330, { type: 'square', gain: 0.03, to: 520, cutoff: 1400, r: 0.1 }) // the infection creeps up the roots
-  whoosh(49.8, 0.4, 0.2)                                                            // back up to the field
+  voice(V(39.45), 0.12, 800, { type: 'sine', gain: 0.08, to: 1200, r: 0.05 })           // the risk card pops up
+  bell(V(40.0), 659.25, 0.06); bell(V(40.45), 987.77, 0.08); bell(V(40.7), 1318.51, 0.08)      // corn high, beet low, tick
+  noiseHit(V(41.6), 0.25, { gain: 0.12, lp: 1500, decay: 12 })                          // "pfft": the neighbour shrugs it off
+  voice(V(42.25), 0.35, 500, { type: 'sine', gain: 0.08, to: 300, r: 0.05 })            // beet seed toss
+  voice(V(42.64), 0.12, 600, { type: 'sine', gain: 0.12, to: 1300, r: 0.05 })           // beet sprout pop
+  voice(V(43.12), 0.9, 180, { type: 'sine', gain: 0.14, to: 900, vib: 0.04, r: 0.1 })   // boing: the beet shoots up
+  voice(V(43.37), 0.35, 700, { type: 'triangle', gain: 0.08, to: 1400, r: 0.05 })      // the farmer's surprise
+  noiseHit(V(43.37), 0.15, { gain: 0.15, hp: 2000, decay: 25 })
+  voice(V(45.77), 0.35, 500, { type: 'sine', gain: 0.08, to: 300, r: 0.05 })            // corn seed toss
+  voice(V(46.16), 0.12, 600, { type: 'sine', gain: 0.12, to: 1300, r: 0.05 })           // corn sprout pop
+  voice(V(46.85), 0.6, 220, { type: 'sine', gain: 0.1, to: 700, r: 0.1 })               // the corn grows
+  voice(V(47.98), 0.3, 520, { type: 'triangle', gain: 0.07, to: 380, r: 0.05 })       // "uh-oh": the corn looks down
+  whoosh(V(48.4), 0.45, 0.24)                                                          // dive into the soil
+  for (let i = 0; i < 4; i++) voice(V(48.85) + i * 0.13, 0.09, 196 - i * 12, { type: 'saw', gain: 0.09, cutoff: 1100, a: 0.005, r: 0.06 })  // the fungus cackles
+  voice(V(48.95), 0.65, 330, { type: 'square', gain: 0.03, to: 520, cutoff: 1400, r: 0.1 }) // the infection creeps up the roots
+  whoosh(V(49.8), 0.4, 0.2)                                                            // back up to the field
   for (const [i, f] of [392, 370, 349.23, 311.13].entries())                         // wah-wah: the corn falls ill
-    voice(49.85 + i * 0.3, i === 3 ? 0.7 : 0.24, f, { type: 'saw', gain: 0.07, cutoff: 900, a: 0.02, r: 0.1, vib: i === 3 ? 0.02 : 0, to: i === 3 ? f * 0.94 : null })
-  voice(50.4, 0.6, 600, { type: 'sine', gain: 0.04, to: 1400, r: 0.05 })             // the fever rises
-  noiseHit(51.0, 0.15, { gain: 0.15, hp: 2000, decay: 25 })                          // the neighbour's shock
-  bell(53.45, 1567.98, 0.1)                                                          // light bulb: he listens
-  bell(55.85, 1318.51, 0.14); bell(55.97, 1975.53, 0.1)                              // "ding": order placed
-  kick(57.75, 0.8); noiseHit(57.75, 0.2, { gain: 0.2, lp: 1500, decay: 20 })          // the parcel lands
-  for (let i = 0; i < 8; i++) voice(57.7 + i * 0.07, 0.2, [N.C5, N.E5, N.G5, 1046.5, 1318.51, 1567.98, 2093, 2637][i], { type: 'sine', gain: 0.05, a: 0.003, r: 0.4, pan: i % 2 ? 0.5 : -0.5 })
-  for (const f of [N.C4, N.E4, N.G4, N.C5]) voice(58, 1.8, f, { type: 'saw', gain: 0.03, a: 0.02, r: 0.3, cutoff: 2600, detune: 0.004 })
-  // end card: impact and a closing chord
-  kick(60, 1.1); noiseHit(60, 1.6, { gain: 0.22, hp: 3000, decay: 2.5 })
-  for (const f of [110, 220, 261.63, 329.63, 440]) voice(63.5, 2.0, f, { type: 'saw', gain: 0.04, a: 0.02, r: 0.4, cutoff: 1800, detune: 0.005 })
+    voice(V(49.85) + i * 0.3, i === 3 ? 0.7 : 0.24, f, { type: 'saw', gain: 0.07, cutoff: 900, a: 0.02, r: 0.1, vib: i === 3 ? 0.02 : 0, to: i === 3 ? f * 0.94 : null })
+  voice(V(50.4), 0.6, 600, { type: 'sine', gain: 0.04, to: 1400, r: 0.05 })             // the fever rises
+  noiseHit(V(51.0), 0.15, { gain: 0.15, hp: 2000, decay: 25 })                          // the neighbour's shock
+  bell(V(53.45), 1567.98, 0.1)                                                          // light bulb: he listens
+  bell(V(55.85), 1318.51, 0.14); bell(V(55.97), 1975.53, 0.1)                              // "ding": order placed
+  kick(V(57.75), 0.8); noiseHit(V(57.75), 0.2, { gain: 0.2, lp: 1500, decay: 20 })          // the parcel lands
+  for (let i = 0; i < 8; i++) voice(V(57.7) + i * 0.07, 0.2, [N.C5, N.E5, N.G5, 1046.5, 1318.51, 1567.98, 2093, 2637][i], { type: 'sine', gain: 0.05, a: 0.003, r: 0.4, pan: i % 2 ? 0.5 : -0.5 })
+  for (const f of [N.C4, N.E4, N.G4, N.C5]) voice(V(58), 1.8, f, { type: 'saw', gain: 0.03, a: 0.02, r: 0.3, cutoff: 2600, detune: 0.004 })
 
   // master: soft clip, normalise to -1 dBFS, fade the last second
   let peak = 0

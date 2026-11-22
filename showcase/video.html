@@ -1,22 +1,20 @@
 <!doctype html>
 <!--
-  Terranos: 66-second showcase video, written as code.
+  Terranos: 66-second showcase video, written as code. No logo cards: it opens on the app and ends on the story.
   Every frame is a pure function of time: seek(t) lays out the whole stage for second t.
   - Open this file in a browser to watch it play (Space pauses, arrow keys step, click the bar to scrub, ?t=12 starts at 12 s).
   - showcase/render.mjs calls seek() frame by frame and pipes screenshots into ffmpeg.
   The app screens are real captures of the GUI (showcase/capture.mjs), with element positions in shots/rects.js.
 
-  Storyboard
-     0 –  4  title card
-     4 – 10  01 plot selection: list and map
-    10 – 18  02 soil microbes: taxonomy, then roles
-    18 – 24  03 soil characteristics
-    24 – 32  break: soil DNA (double helix) and map layers flow through Terranos into the app's outputs
-    32 – 38  04 crop disease risk
-    38 – 60  break: two neighbours. One checks the crop disease risk (corn high, sugar beet low) and plants beet, which shoots up;
+  Storyboard (video time; the scenes are written in scene time = video time + 4, plus the holds before them)
+     0 –  6  01 plot selection: list and map (2 s hold on the hovered plot)
+     6 – 16  02 soil microbes: taxonomy, then roles (2 s holds on the table and on the role tree)
+    16 – 24  03 soil characteristics (2 s hold on the cards)
+    24 – 28  hold ends; break: soil DNA (double helix) and map layers flow through Terranos into the app's outputs (to 36)
+    36 – 44  04 crop disease risk (2 s hold on the heatmap)
+    44 – 66  break: two neighbours. One checks the crop disease risk (corn high, sugar beet low) and plants beet, which shoots up;
              the other plants corn anyway; a soil pathogen infects its roots (close-up under the ground), red veins climb the stalk and it falls ill;
              he finally listens and buys from the treatment plan; everyone is happy
-    60 – 66  end card
 -->
 <html lang="en">
 <head>
@@ -148,14 +146,25 @@
   body.render #ui { display: none; }
 </style>
 <script src="shots/rects.js"></script>
-<script src="brand/logo.js"></script>
 </head>
 <body>
 <div id="fit"><div id="stage"></div></div>
 <div id="ui"><span id="time">0.00 s</span><div class="track" id="track"><b id="bar"></b></div><span>Space: play/pause · ←/→: step</span></div>
 <script>
 'use strict'
-const DURATION = 66, FPS = 30, SW = 2400, SH = 1350  // screenshot size in px
+const FPS = 30, SW = 2400, SH = 1350  // screenshot size in px
+// Scenes are written in "scene time". The video starts at scene time 4 (straight into the app tour) and ends at 60
+// (the end of the story). At each HOLD [scene time, seconds] the frame freezes so a fully loaded app view can be read.
+// Holds are whole bars (2 s at 120 bpm), so music.mjs can map its sections and effects the same way.
+const START = 4, END = 60
+const HOLDS = [[8.0, 2], [12.6, 2], [16.8, 2], [23.0, 2], [36.5, 2]]
+const DURATION = END - START + HOLDS.reduce((a, h) => a + h[1], 0)
+/** Video time -> scene time. */
+function sceneTime(v) {
+  let s = v + START
+  for (const [h, d] of HOLDS) { if (s < h) break; if (s < h + d) return h; s -= d }
+  return s
+}
 const R = window.RECTS
 const stage = document.getElementById('stage')
 
@@ -327,42 +336,6 @@ function scene(start, end, build) {
   const update = build(root)
   scenes.push({ start, end, root, update })
 }
-
-// Brand mark: the Terranos wordmark as two images (letters, globe) so the globe can roll into the "o".
-// Globe position comes from brand/logo.js (scripts/make_brand_assets.py).
-function lockup(parent, width) {
-  const L = window.LOGO
-  const box = el('div', 'abs', parent); css(box, { width: width + 'px', height: width * L.aspect + 'px' })
-  const letters = el('img', 'abs', box); letters.src = 'brand/terranos-dark-letters.png'; css(letters, { width: '100%', height: '100%' })
-  const globe = el('img', 'abs', box); globe.src = 'brand/terranos-globe.png'
-  const d = L.d * width
-  css(globe, { width: d + 'px', height: d + 'px', left: L.x * width - d / 2 + 'px', top: L.y * width * L.aspect - d / 2 + 'px' })
-  const ROLL = 640 * width / 1100, TURNS = ROLL / (Math.PI * d)
-  /** p: 0..1 letters wipe; g: 0..1 globe roll (may overshoot with outBack). */
-  const set = (p, g) => {
-    letters.style.clipPath = `inset(0 ${(1 - clamp(p)) * 100}% 0 0)`
-    globe.style.opacity = clamp(g * 4)
-    globe.style.transform = `translateX(${(1 - g) * ROLL}px) rotate(${(1 - g) * TURNS * 360}deg)`
-  }
-  return { box, set, width, height: width * L.aspect }
-}
-
-// =====================================================================================
-// 0-4 s  Title card
-// =====================================================================================
-scene(0, 4, (root) => {
-  const logo = lockup(root, 1100)
-  const sub = el('div', 'sub abs center', root, 'Your fields, <b style="color:#b5f26b;font-weight:700">from orbit to the microbe.</b>')
-  css(sub, { fontSize: '38px' })
-  return (t) => {
-    const out = E.in3(prog(t, 3.55, 3.95))
-    logo.set(E.inout3(prog(t, 0.1, 0.9)), E.outBack(prog(t, 0.25, 1.2)))
-    place(logo.box, 960 - logo.width / 2, 520 - logo.height - out * 40)
-    logo.box.style.opacity = 1 - out
-    const sp = E.out3(prog(t, 1.0, 1.5))
-    sub.style.opacity = sp * (1 - out); place(sub, 0, 610 + (1 - sp) * 30 - out * 40)
-  }
-})
 
 // =====================================================================================
 // 4-24 s  App tour in one window: plot selection, soil microbes (taxonomy, roles), soil characteristics
@@ -754,6 +727,13 @@ function makeFarmer(parent, L = {}) {
   const legB = limb(sq, 34, DENIM_D), bootB = boot(), legF = limb(sq, 34, DENIM), bootF = boot()
   const up = S('g', {}, sq)
   const armB = limb(up, 28, SHIRT_D)
+  // the far hand and what it holds sit behind the torso, like the far arm
+  const handB = S('g', {}, up)
+  const bag = S('g', {}, handB)
+  S('path', { d: 'M-20,-4 Q-30,38 -20,50 L20,50 Q30,38 20,-4 Q0,6 -20,-4Z', fill: '#e2cb97', ...OUT, 'stroke-width': 4 }, bag)
+  S('path', { d: 'M-14,-6 Q0,-22 14,-6', fill: '#e2cb97', ...OUT, 'stroke-width': 4 }, bag)
+  S('path', { d: 'M0,16 C10,22 10,36 0,40 C-10,36 -10,22 0,16Z', fill: SEED, stroke: INK, 'stroke-width': 3 }, bag)
+  S('circle', { r: 16, fill: SKIN, ...OUT, 'stroke-width': 4.5 }, handB)
   // torso: shirt, dungarees with a bib, straps, pocket
   S('path', { d: 'M-58,-232 C-70,-252 -40,-264 0,-264 C40,-264 70,-252 58,-232 C80,-180 86,-130 62,-108 C30,-96 -30,-96 -62,-108 C-86,-130 -80,-180 -58,-232Z', fill: SHIRT, ...OUT }, up)
   S('path', { d: 'M-52,-226 L-38,-262 M48,-226 L52,-258', stroke: INK, 'stroke-width': 21, 'stroke-linecap': 'round', fill: 'none' }, up)
@@ -784,13 +764,7 @@ function makeFarmer(parent, L = {}) {
   S('path', { d: 'M-59,-12 C-30,-2 30,-2 59,-12 L59,-32 C30,-22 -30,-22 -60,-32Z', fill: BAND, ...OUT, 'stroke-width': 4 }, hat)
   S('path', { d: 'M-40,-52 q8,-6 16,0 M6,-62 q8,-6 16,0 M-86,2 q10,6 22,6 M60,8 q12,0 22,-5', fill: 'none', stroke: '#d9ac3a', 'stroke-width': 4, 'stroke-linecap': 'round' }, hat)
   const brows = [14, 52].map((x) => S('path', { d: 'M-13,0 Q0,-5 13,0', fill: 'none', stroke: INK, 'stroke-width': 6.5, 'stroke-linecap': 'round' }, S('g', { transform: `translate(${x},-97)` }, head)))
-  // hands, the things they hold, and the near arm
-  const handB = S('g', {}, up)
-  const bag = S('g', {}, handB)
-  S('path', { d: 'M-20,-4 Q-30,38 -20,50 L20,50 Q30,38 20,-4 Q0,6 -20,-4Z', fill: '#e2cb97', ...OUT, 'stroke-width': 4 }, bag)
-  S('path', { d: 'M-14,-6 Q0,-22 14,-6', fill: '#e2cb97', ...OUT, 'stroke-width': 4 }, bag)
-  S('path', { d: 'M0,16 C10,22 10,36 0,40 C-10,36 -10,22 0,16Z', fill: SEED, stroke: INK, 'stroke-width': 3 }, bag)
-  S('circle', { r: 16, fill: SKIN, ...OUT, 'stroke-width': 4.5 }, handB)
+  // the near arm and hand, in front of everything
   const armF = limb(up, 28, SHIRT)
   const handF = S('g', {}, up)
   const phone = S('g', {}, handF)
@@ -920,7 +894,7 @@ function makeCorn(parent) {
   }
 }
 
-/** The sugar beet: a round magenta root with a face, under a crown of big leaves on pink stems; the outer two leaves are its arms.
+/** The sugar beet: a white, tapering root with a face, under a crown of big leaves on pink stems; the outer two leaves are its arms.
  *  Origin at the ground under the root. Pose as the corn's, with `awn` for the leaves' flutter. */
 function makeBeet(parent) {
   const root = S('g', {}, parent)
@@ -928,8 +902,8 @@ function makeBeet(parent) {
   const lean = S('g', {}, root), grow = S('g', {}, lean), body = S('g', {}, grow)
   const leaf = (par, len, wid, fill) => {
     const g = S('g', {}, par)
-    const stem = limb(g, 9, '#d63a76')
-    const blade = S('path', { fill, ...OUT }, g), rib = S('path', { fill: 'none', stroke: '#e0588a', 'stroke-width': 4, 'stroke-linecap': 'round', opacity: 0.8 }, g)
+    const stem = limb(g, 9, '#8cc44c')
+    const blade = S('path', { fill, ...OUT }, g), rib = S('path', { fill: 'none', stroke: '#a9d97a', 'stroke-width': 4, 'stroke-linecap': 'round', opacity: 0.8 }, g)
     return (x, y, side, ang, bend) => {
       tf(g, `translate(${x},${y}) scale(${side},1) rotate(${ang})`)
       const s0 = len * 0.32
@@ -943,18 +917,18 @@ function makeBeet(parent) {
   const inner = [[-24, 230, 60, '#4f9e3f'], [0, 260, 66, '#5cb84a'], [24, 230, 60, '#4f9e3f']].map(([a, len, wid, fill]) => ({ a, f: leaf(crown, len, wid, fill) }))
   const arms = [leaf(body, 200, 56, '#5cb84a'), leaf(body, 200, 56, '#4aa942')]
   // the root
-  const BULB = 'M0,-206 C74,-206 116,-152 110,-92 C104,-34 58,2 0,4 C-58,2 -104,-34 -110,-92 C-116,-152 -74,-206 0,-206Z'
+  const BULB = 'M0,-206 C76,-206 112,-168 108,-118 C104,-68 54,-16 0,6 C-54,-16 -104,-68 -108,-118 C-112,-168 -76,-206 0,-206Z'
   S('path', { d: 'M8,0 C14,26 2,40 22,56', fill: 'none', stroke: INK, 'stroke-width': 11, 'stroke-linecap': 'round' }, body)
-  S('path', { d: 'M8,0 C14,26 2,40 22,56', fill: 'none', stroke: '#8c1a44', 'stroke-width': 5, 'stroke-linecap': 'round' }, body)
-  S('path', { d: BULB, fill: '#a3214f', ...OUT }, body)
-  S('path', { d: 'M-80,-150 C-96,-110 -92,-70 -70,-40 M80,-150 C96,-110 92,-70 70,-40 M-40,-190 C-56,-150 -58,-80 -36,-24 M40,-190 C56,-150 58,-80 36,-24',
-    fill: 'none', stroke: '#c4396f', 'stroke-width': 5, 'stroke-linecap': 'round', opacity: 0.7 }, body)
-  S('path', { d: 'M-70,-170 C-90,-140 -96,-110 -92,-84', fill: 'none', stroke: '#fff', 'stroke-width': 10, 'stroke-linecap': 'round', opacity: 0.3 }, body)
-  S('ellipse', { cx: 0, cy: -202, rx: 28, ry: 9, fill: '#7d1239', stroke: INK, 'stroke-width': 4 }, body)
-  for (const x of [-64, 64]) S('ellipse', { cx: x, cy: -78, rx: 17, ry: 10, fill: '#ff8fb0', opacity: 0.6 }, body)
+  S('path', { d: 'M8,0 C14,26 2,40 22,56', fill: 'none', stroke: '#e6dcc0', 'stroke-width': 5, 'stroke-linecap': 'round' }, body)
+  S('path', { d: BULB, fill: '#f6f0de', ...OUT }, body)
+  S('path', { d: 'M-84,-156 C-96,-120 -86,-90 -62,-58 M84,-156 C96,-120 86,-90 62,-58 M-40,-190 C-54,-150 -50,-90 -26,-30 M40,-190 C54,-150 50,-90 26,-30',
+    fill: 'none', stroke: '#ddd0ad', 'stroke-width': 5, 'stroke-linecap': 'round', opacity: 0.8 }, body)
+  S('path', { d: 'M-70,-170 C-90,-140 -96,-110 -92,-84', fill: 'none', stroke: '#fff', 'stroke-width': 10, 'stroke-linecap': 'round', opacity: 0.7 }, body)
+  S('ellipse', { cx: 0, cy: -202, rx: 34, ry: 10, fill: '#a9b86a', stroke: INK, 'stroke-width': 4 }, body)
+  for (const x of [-64, 64]) S('ellipse', { cx: x, cy: -78, rx: 17, ry: 10, fill: '#ff9a8a', opacity: 0.55 }, body)
   const eyes = [makeEye(body, -34, -116, 19, 23, 9.5), makeEye(body, 34, -116, 19, 23, 9.5)]
   const brows = [-34, 34].map((x) => S('path', { d: 'M-14,0 Q0,-6 14,0', fill: 'none', stroke: INK, 'stroke-width': 6, 'stroke-linecap': 'round' }, S('g', { transform: `translate(${x},-154)` }, body)))
-  const mouth = S('path', { fill: '#5a0f24', ...OUT, 'stroke-width': 4.5 }, S('g', { transform: 'translate(0,-64)' }, body))
+  const mouth = S('path', { fill: '#8a2f2a', ...OUT, 'stroke-width': 4.5 }, S('g', { transform: 'translate(0,-64)' }, body))
 
   return (p) => {
     tf(root, `translate(${BEET_X + p.dx},${GROUND})`)
@@ -997,7 +971,7 @@ function makeSprout(parent, kernel) {
 // the other plants high-risk corn anyway, it falls ill, and he finally opens the Treatment plan.
 const BEET_X = 560, FENCE_X = 960
 const SMART = { shirt: '#2f9e5a', shirtD: '#25804a', denim: '#8a6240', denimD: '#74512f', pocket: '#5e4126', hair: '#6b4a2b', mou: '#6b4a2b',
-  band: '#1f6f43', seed: '#a3214f', glasses: true }
+  band: '#1f6f43', seed: '#c9a66b', glasses: true }
 /** Default farmer pose; scenes override what they animate. */
 const POSE = { y: 0, sy: 1, walk: 0, ph: 0, lean: 0, hf: [-42, -124], hb: [54, -126], bag: false, phone: false, head: 0, look: [0.6, 0], blink: 0,
   eye: 1, joy: false, browL: 0, browA: 0, mouth: [16, 9, 0], mou: 0, hatY: 0, hatR: 0 }
@@ -1060,7 +1034,7 @@ scene(38, 60, (root) => {
   S('radialGradient', { id: 'infect' }, S('defs', {}, svg)).innerHTML = '<stop offset="0" stop-color="#dc2626" stop-opacity=".75"/><stop offset=".6" stop-color="#dc2626" stop-opacity=".3"/><stop offset="1" stop-color="#dc2626" stop-opacity="0"/>'
   const footGlow = S('ellipse', { cx: CORN_X, cy: GROUND + 4, rx: 150, ry: 34, fill: 'url(#infect)' }, mid)
   const beet = makeBeet(mid), corn = makeCorn(mid)
-  const sproutW = makeSprout(mid, '#c4396f'), sproutC = makeSprout(mid, '#ffd84a')
+  const sproutW = makeSprout(mid, '#f6f0de'), sproutC = makeSprout(mid, '#ffd84a')
   // the parcel
   const BOX_X = 1100
   const box = S('g', {}, mid), boxIn = S('g', {}, box)
@@ -1072,7 +1046,7 @@ scene(38, 60, (root) => {
   const flaps = [-1, 1].map(() => { const g = S('g', {}, boxIn); S('rect', { x: 0, y: -7, width: 58, height: 12, rx: 4, fill: '#e3b983', ...OUT, 'stroke-width': 4 }, g); return g })
   const smart = makeFarmer(mid, SMART), neigh = makeFarmer(mid)
   const seedShape = (fill) => S('path', { d: 'M0,-11 C10,-9 12,6 0,11 C-12,6 -10,-9 0,-11Z', fill, ...OUT, 'stroke-width': 3.5 }, mid)
-  const seedW = seedShape('#a3214f'), seedC = seedShape('#ffc93c')
+  const seedW = seedShape('#c9a66b'), seedC = seedShape('#ffc93c')
   const puff = (n, c) => makePuff(mid, n, c)
   const puffSeedW = puff(6, '#b98a5e'), puffSeedC = puff(6, '#b98a5e'), puffGrowW = puff(9, '#b98a5e'), puffGrowC = puff(9, '#b98a5e')
   const puffBox = puff(10, '#e9dcc4')
@@ -1151,7 +1125,7 @@ scene(38, 60, (root) => {
   const cornIcon = `<svg width="54" height="64" viewBox="-27 -34 54 64"><path d="M-16,26 C-30,6 -26,-22 0,-32 C26,-22 30,6 16,26Z" fill="#ffd84a" stroke="${INK}" stroke-width="3.5"/>
     <path d="M-20,28 C-30,10 -26,-6 -20,-14 C-16,4 -8,18 2,28Z M20,28 C30,10 26,-6 20,-14 C16,4 8,18 -2,28Z" fill="#58b043" stroke="${INK}" stroke-width="3.5" stroke-linejoin="round"/></svg>`
   const beetIcon = `<svg width="54" height="64" viewBox="-27 -34 54 64"><path d="M-4,-12 C-16,-24 -18,-34 -8,-38 C0,-34 0,-22 -4,-12Z M4,-12 C14,-26 22,-32 26,-26 C22,-16 12,-12 4,-12Z M0,-12 C-2,-26 2,-38 8,-40" fill="#5cb84a" stroke="${INK}" stroke-width="2.5" stroke-linejoin="round"/>
-    <path d="M0,-14 C18,-14 24,0 20,12 C16,22 6,26 2,32 C-2,26 -14,22 -18,12 C-22,0 -18,-14 0,-14Z" fill="#a3214f" stroke="${INK}" stroke-width="3" stroke-linejoin="round"/></svg>`
+    <path d="M0,-14 C18,-14 22,-2 18,10 C14,20 6,26 1,34 C-4,26 -14,20 -18,10 C-22,-2 -18,-14 0,-14Z" fill="#f6f0de" stroke="${INK}" stroke-width="3" stroke-linejoin="round"/></svg>`
   const rcard = el('div', 'rcard', root, `<div class="hd"><img src="brand/terranos.png"><b>Crop disease risk</b></div>
     <div class="lab">Your plot · soil fungi scored for each crop</div>
     <div class="row bad"><span class="ic">${cornIcon}</span><span class="nm">Corn</span><span class="cell">Higher risk</span><i class="ring"></i></div>
@@ -1444,36 +1418,6 @@ scene(38, 60, (root) => {
   }
 })
 
-// =====================================================================================
-// 60-66 s  End card
-// =====================================================================================
-scene(60, 66, (root) => {
-  const logo = lockup(root, 1000)
-  const tag = el('div', 'sub abs center', root, 'Your fields, <b style="color:#b5f26b;font-weight:700">from orbit to the microbe.</b>')
-  css(tag, { fontSize: '40px' })
-  const feats = [['#60a5fa', 'Plot selection'], ['#fbbf24', 'Soil microbes'], ['#b5f26b', 'Soil characteristics'], ['#ef4444', 'Crop disease risk'], ['#3fae6a', 'Treatment plan']]
-    .map(([c, l]) => el('div', 'tag', root, `<span class="dot" style="background:${c}"></span>${l}`))
-  const facts = el('div', 'abs center', root, '29 plots &nbsp;·&nbsp; 2 NEON farm sites &nbsp;·&nbsp; soil DNA + satellites &nbsp;·&nbsp; one map')
-  css(facts, { fontSize: '26px', letterSpacing: '.12em', textTransform: 'uppercase', color: '#8fb09c', fontWeight: 500 })
-  const fade = el('div', 'abs', root); css(fade, { width: '1920px', height: '1080px', background: '#000' })
-  let widths = null
-  return (t) => {
-    logo.set(E.inout3(prog(t, 60.05, 60.8)), E.outBack(prog(t, 60.15, 61)))
-    place(logo.box, 960 - logo.width / 2, 300)
-    const sp = E.out3(prog(t, 60.6, 61.1)); tag.style.opacity = sp; place(tag, 0, 525 + (1 - sp) * 20)
-    widths ??= feats.map((f) => f.offsetWidth)
-    const total = widths.reduce((a, b) => a + b, 0) + 16 * (feats.length - 1)
-    let x = 960 - total / 2
-    feats.forEach((f, i) => {
-      const p = E.outBack(prog(t, 61 + i * 0.12, 61.45 + i * 0.12))
-      f.style.opacity = clamp(p); place(f, x, 650 + (1 - p) * 40, `scale(${0.7 + 0.3 * p})`)
-      x += widths[i] + 16
-    })
-    const fp = E.out3(prog(t, 61.9, 62.4)); facts.style.opacity = fp; place(facts, 0, 790 + (1 - fp) * 15)
-    fade.style.opacity = E.in3(prog(t, 65, 66))
-  }
-})
-
 // ---------- overlays shared by all scenes ----------
 const cur = el('div', '', stage); cur.id = 'cursor'
 cur.innerHTML = '<svg viewBox="0 0 24 24" width="44" height="44"><path d="M4 2l15 11-7 1 4 8-3 1.5-4-8-5 5z" fill="#fff" stroke="#0b1a12" stroke-width="1.5" stroke-linejoin="round"/></svg>'
@@ -1495,18 +1439,20 @@ function cursor(t, path, a, b, clicks = []) {
 }
 
 const wipe = el('div', '', stage); wipe.id = 'wipe'; el('div', 'edge', wipe)
-const WIPES = [[4, '#1f6f43'], [24, '#14532d'], [32, '#1e3a5f'], [38, '#7cc25b'], [60, '#1f6f43']]
+const WIPES = [[24, '#14532d'], [32, '#1e3a5f'], [38, '#7cc25b']]  // in scene time
+const fadeOut = el('div', '', stage); css(fadeOut, { position: 'absolute', inset: '0', background: '#000', zIndex: 95, pointerEvents: 'none' })
 const progress = el('div', '', stage); progress.id = 'progress'
 
 // ---------- frame ----------
-function seek(t) {
-  t = clamp(t, 0, DURATION - 1e-6)
-  // background drift
-  place(blobA, -200 + Math.sin(t * 0.35) * 220, -300 + Math.cos(t * 0.27) * 160)
-  place(blobB, 1300 + Math.cos(t * 0.31) * 200, 500 + Math.sin(t * 0.4) * 160)
-  dots.style.transform = `translate(${(-t * 18) % 44}px, ${(-t * 9) % 44}px)`
-  // beat pulse on the dot grid (120 bpm once the drums are in)
-  dots.style.opacity = 0.6 + (t >= 4 && t < 60 ? 0.4 * (1 - prog((t - 4) % 0.5, 0, 0.3)) : 0)
+function seek(v) {
+  v = clamp(v, 0, DURATION - 1e-6)
+  const t = sceneTime(v)
+  // background drift and the beat pulse on the dot grid run on video time, so they keep moving during a hold
+  place(blobA, -200 + Math.sin(v * 0.35) * 220, -300 + Math.cos(v * 0.27) * 160)
+  place(blobB, 1300 + Math.cos(v * 0.31) * 200, 500 + Math.sin(v * 0.4) * 160)
+  dots.style.transform = `translate(${(-v * 18) % 44}px, ${(-v * 9) % 44}px)`
+  dots.style.opacity = 0.6 + 0.4 * (1 - prog(v % 0.5, 0, 0.3))
+  fadeOut.style.opacity = 1 - E.out3(prog(v, 0, 0.35)) + E.in3(prog(v, DURATION - 0.8, DURATION))
 
   cursorSet = false
   css(rip, { display: 'none' })
@@ -1524,7 +1470,7 @@ function seek(t) {
     css(wipe, { display: 'block', background: w[1] })
     wipe.style.transform = `translateX(${lerp(-2900, 2100, p)}px) skewX(-14deg)`
   } else wipe.style.display = 'none'
-  progress.style.width = (t / DURATION) * 1920 + 'px'
+  progress.style.width = (v / DURATION) * 1920 + 'px'
 }
 window.seek = seek
 window.DURATION = DURATION
