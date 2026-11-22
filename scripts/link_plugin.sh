@@ -3,7 +3,7 @@ set -e
 
 PLUGIN_NAME="pyqgis_fastapi_bridge"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SOURCE_DIR="${SCRIPT_DIR}/qgis_plugin/${PLUGIN_NAME}"
+SOURCE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)/qgis_plugin/${PLUGIN_NAME}"   # this script lives in scripts/
 
 if [[ "$OSTYPE" == "darwin"* ]]; then
     TARGET_DIR="${HOME}/Library/Application Support/QGIS/QGIS3/profiles/default/python/plugins/${PLUGIN_NAME}"

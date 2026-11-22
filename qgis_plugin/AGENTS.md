@@ -42,10 +42,10 @@ qgis_plugin/
    * No network request (`urllib.request`, `http`) or heavy geometry operation **may** be executed directly in button handler methods (`clicked`).
    * Always use the `QgsTask` multithreading pattern (as in `SessionTask`). The network query is done in the `run()` method and the GUI update in the `finished()` method.
 2. **Dynamic loading of UI views (`loadUiType`):**
-   * The `dockwidget.ui` view file is edited in Qt Designer (with `open_designer.bat`).
+   * The `dockwidget.ui` view file is edited in Qt Designer (with `scripts/open_designer.bat`).
    * **Never compile the `.ui` file to `.py`** with `pyuic5`. The `.ui` file is loaded dynamically on the fly by `PyQt5.uic.loadUiType()`.
 3. **Paths and links:**
    * All references to files (e.g. `dockwidget.ui`, `icon.png`) must be built relatively with `os.path.join(os.path.dirname(__file__), ...)`.
-   * The plugin is linked into the QGIS profile through a junction/symlink (`deploy.py`). Do not copy files manually into the `%APPDATA%` directory.
+   * The plugin is linked into the QGIS profile through a junction/symlink (`scripts/deploy.py`). Do not copy files manually into the `%APPDATA%` directory.
 4. **Geometry safety:**
    * Always check that the layer is valid (`layer.isValid()`) and that the geometry is not empty (`not geom.isEmpty()`) before trying to compute a centroid or transform the coordinate system.

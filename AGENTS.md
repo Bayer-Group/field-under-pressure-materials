@@ -39,9 +39,10 @@ The repository is organized as a modular architecture. Every subdirectory has it
 | **Backend** | [`backend/`](backend/AGENTS.md) | FastAPI server, `/api/v1` routing, open API connectors (ULDK, IMGW) | [backend/AGENTS.md](backend/AGENTS.md) |
 | **QGIS Plugin** | [`qgis_plugin/`](qgis_plugin/AGENTS.md) | PyQGIS plugin with a docked panel and `QgsTask` multithreading | [qgis_plugin/AGENTS.md](qgis_plugin/AGENTS.md) |
 | **Web** | [`web/`](web/AGENTS.md) | Lightweight MapLibre GL JS map viewer | [web/AGENTS.md](web/AGENTS.md) |
-| **Docs** | [`docs/`](docs/AGENTS.md) | Public data registries, surveying and environmental compendium | [docs/AGENTS.md](docs/AGENTS.md) |
+| **Docs** | [`docs/`](docs/AGENTS.md) | Project documentation (GitHub Pages), contracts, public data registries | [docs/AGENTS.md](docs/AGENTS.md) |
 | **Docker** | [`docker/`](docker/AGENTS.md) | Auxiliary container configuration (PostGIS, MinIO, TiTiler) | [docker/AGENTS.md](docker/AGENTS.md) |
 | **Tests** | [`tests/`](tests/AGENTS.md) | Automated unit tests and Human-First Testing rules | [tests/AGENTS.md](tests/AGENTS.md) |
+| **Organizer materials** | [`bayer/`](bayer/README.md) | The organizer's original hackathon materials, kept unchanged (read-only: do not edit) | none |
 
 ---
 

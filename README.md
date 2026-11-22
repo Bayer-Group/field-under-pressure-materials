@@ -1,113 +1,80 @@
-> **GeoEarth Junction project:** See [PROJECT.md](PROJECT.md) for our product requirements, first iteration, team and open decisions. The merged bridge setup and its current limitations are in [README2.md](README2.md). See the [mock API guide](MOCK_API_GUIDE.md) for frontend and backend integration. The organizer materials below are retained for reference.
+# Field Under Pressure · GeoEarth Junction
 
-# field-under-pressure-materials
+Weather-driven crop disease risk and spray windows for farmers, built at the
+[Field Under Pressure](https://geo-hackathon.g.location360.ag/) hackathon (20–22 November 2026).
 
-Near-real-time crop risk map · [Field Under Pressure](https://geo-hackathon.g.location360.ag/)
+The prototype shows a farmer when the weather has favoured **septoria in winter wheat** on their fields, and when the next hours
+may be a suitable window to **consider** a treatment. It states conditions, not a diagnosis, and never tells anyone to spray:
+the decision stays with the farmer or agronomist.
 
-**When / where:** 20-22 Nov 2026 · University of Warsaw, Faculty of Geology, detailed schedule on the website.
+**Live demo:** <https://fup-web-1039876972059.europe-central2.run.app> · **Documentation:** <https://geoearth-junction.github.io/field-under-pressure-materials/> (source in [`docs/`](docs/index.md))
 
-**What you will build:**
-- weather-driven risk detection
-- crop disease & pest detection
-- yield & soil analytics
-- output as a platform / dashboard
+## What it does
 
-**Data and source documentation for the hackathon**
+- **Septoria risk** per crop area and day, from wet hours, the estimated growth stage and recorded sprays, with the reason
+  behind every level.
+- **Risk heatmap** of the voivodeship on the 4 km weather grid.
+- **Spray window:** up to three weather windows in the next 72 hours (wind, gusts, temperature, rain), ranked by margin.
+- **Farmer input:** parcels from GUGiK ULDK, crop areas drawn on the map, sowing dates and sprays, with a no-login sandbox.
+- **Two clients, one API:** a web map (MapLibre GL JS) for farmers and a QGIS plugin for analysts.
 
-The hackathon datasets are hosted in S3 cloud storage. Links will be provided short before the event and will expire after the event.
+Demo data: the real weather of 2024 in Mazowieckie, replayed so that it looks current. See [Risk models](docs/risk-models.md)
+for the rules, the origin of every threshold and the limits of the prototype.
 
-**No AWS account is required.**
-
----
-
-## Getting started
-
-This repo is both the **materials hub** and a **starting point for your team’s work**. Clone it, keep organizer docs as-is, and build your prototype here (or in a fork).
-
-1. **Clone the repo** (one shared repo per team).
-   ```bash
-   git clone https://github.com/Bayer-Group/field-under-pressure-materials.git
-   cd field-under-pressure-materials
-   ```
-2. **Create your team’s branch** and do all work there (do not commit on `main`):
-   ```bash
-   git checkout -b team/<your-team-name>
-   ```
-3. **Create a Python environment** (3.10+) and install starters:
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate          # Windows: .venv\Scripts\activate
-   pip install -r requirements.txt
-   ```
-4. **Skim the challenge** on the [event site](https://geo-hackathon.g.location360.ag/). Full brief + agenda at the opening ceremony.
-5. **Pick a track** and fill in [`templates/TEAM_README.md`](templates/TEAM_README.md) (team, one-liner, scope, data checklist).
-6. **Read the data docs** in [`data/`](data/) — choose only the AOIs / sources you need (disk space adds up).
-7. **Download data** when organizers share links (see [How to get the data](#how-to-get-the-data)). Keep large files **outside git** (ignored by `.gitignore`) or on a shared drive / cloud.
-8. **Run a starter notebook** under [`notebooks/`](notebooks/) (e.g. Sentinel-2 Earth Search) to confirm your setup.
-9. **Work in the cloud if you prefer** (Colab, Kaggle, Codespaces, or Google Earth Engine with a personal account) — same idea: don’t commit big downloads; document paths in the team README.
-10. **Commit code and docs only** — not Parquet/GeoTIFF dumps, `.env`, or credentials.
-11. **When your work is ready, push your team branch to origin:**
-    ```bash
-    git push -u origin team/<your-team-name>
-    ```
-12. **Before Sunday submission:** update the team README with how to run your demo and what to show.
-
-> More challenge detail at kickoff. Questions on data links → organizers.
-
-## How to get the data
-
-Depending on your planned work and your goal you can work locally or in a cloud.
-
-**Local work:**
-
-1. Use the download links shared by the organizers.
-2. Download each needed package locally (or into your team’s shared drive, cloud storage).
-3. Work from the local copy.
-
-   **Note:** Due to the amount of data make sure you have enough space for the datasets needed. Choose and download AOI datasets.
-
-**Cloud work:**
-
-If you consider cloud work with bigger datasets or with additional datasets available in the cloud, you may review the following solutions.
- 
-| Platform	| Best For	| Key Perks & Verification |
-|-----------|-----------|--------------------------|
-| Google Colab |	Training models and running Python notebooks	| Gives free access to cloud GPUs and TPUs in your browser. Works with any regular Google account, so no special .edu email verification is needed. |
-| Hugging Face Spaces |	Hosting live AI demos and class projects	| Lets you host interactive machine learning web apps using Gradio or Streamlit for free. Gives your class project a shareable public URL without managing servers. |
-| Kaggle Notebooks |	Data science projects and heavy datasets	| Provides up to 30 hours per week of free GPU quota and pre-installed AI libraries. Requires only a standard account and phone verification. |
-| GitHub Student Developer Pack |	Unlocking extra AI and hosting credits	| Unlocks free access to GitHub Codespaces, Copilot, and partner cloud credits. Accepts custom school emails when you upload a photo of your student ID or enrollment proof. |
-
-
-### Data formats
-
-You will find different data formats. You should be familiar with most of them.
-Please check however if you know how to work with .parquet files. Additionally, some datasets have H3 index assigned (level 10). If you haven't worked with H3 indexes we encourage you to learn about the solution.
-
-More details in the datasets documentation.
-
-### After download
+## Quick start
 
 ```bash
-# Example: inspect a Parquet file (Python)
-# pip install pyarrow pandas
-python -c "import pandas as pd; print(pd.read_parquet('Dolnośląskie_daily_2020.parquet').head())"
+# web map (talks to the deployed demo API)
+cd web && python -m http.server 5500          # open http://localhost:5500
+
+# backend (needs DATABASE_URL, see the documentation)
+pip install -r backend/requirements.txt
+python -m uvicorn backend.app.main:app --reload --port 8000
+
+# tests (no database, no network)
+python -m unittest discover -s tests -p "test_*.py" -v
 ```
 
-## Dataset overview
+Details, including the database tunnel and the QGIS plugin: [Getting started](docs/getting-started.md).
 
-You will find the information in the data [README.md](data/README.md)
+## Repository layout
 
-## Datasets in detail
+| Path | Contents |
+| --- | --- |
+| [`backend/`](backend/) | FastAPI application: endpoints, services, domain rules, connectors to public APIs |
+| [`web/`](web/) | the farmer's web map (static HTML and JavaScript, no build step) |
+| [`qgis_plugin/`](qgis_plugin/) | the QGIS plugin for analysts |
+| [`shared/`](shared/) | Pydantic schemas and CRS constants shared by the backend and the plugin |
+| [`config/`](config/) | thresholds of the risk models (TOML) |
+| [`docker/`](docker/) | PostGIS schema, migrations, Docker Compose and VM notes |
+| [`scripts/`](scripts/) | data loading and curation, VM provisioning, plugin packaging, test runners |
+| [`tests/`](tests/) | unit tests |
+| [`docs/`](docs/) | documentation (GitHub Pages) and the agreed contracts |
+| [`bayer/`](bayer/) | the organizer's original hackathon materials, unchanged |
 
-You will find the details in the [data directory](data)
+## Documentation
 
-## Licensing & usage
+| | |
+| --- | --- |
+| [Architecture](docs/architecture.md) | data flow from organizer files to the map, database layers, demo clock |
+| [Risk models](docs/risk-models.md) | septoria and spray window rules |
+| [API](docs/api.md) | endpoints, authentication, sandbox |
+| [Deployment](docs/deployment.md) | the VM, migrations, deploying the backend and the web map (Cloud Run) |
+| [Data sources](docs/data-sources.md) | organizer datasets and public registers |
+| [Project requirements](docs/PROJECT.md) | goals, first iteration, open decisions |
 
-1. Data is for hackathon use only unless stated otherwise.
-2. Download via the provided links only; links expire after the event.
-3. Cite sources as listed in each dataset section.
+## Contributing
 
-## Tools usage
+Work starts from an issue, on a branch, through a pull request to `team/geoearth-junction`. The conventions for branches,
+commits and AI assistants are in [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`AGENTS.md`](AGENTS.md).
 
-1. Some tools and platforms are suggested as examples. 
-2. The students need to make sure that they are using tools according to the respective agreements.
+## Team
+
+Michał (QGIS and spatial analysis), Wiktor (UX and project management), Maciek (backend) and Olaf (database and SQL). See
+[Team](docs/team.md).
+
+## Licence and acknowledgements
+
+The code is released under the [MIT licence](LICENSE). The hackathon materials in [`bayer/`](bayer/) (dataset descriptions,
+crop-protection methodologies, starter notebook) were provided by the organizers and keep their terms. Public data comes from
+GUGiK, IMGW and Copernicus under the terms of each publisher.

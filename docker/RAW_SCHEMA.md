@@ -49,7 +49,7 @@ contract must use `raw.<table>`; until the rename is applied, `fup.<table>` is t
 The grid has cell centres only, no polygons. Step ≈ 0.044° in both axes (a regular lattice in degrees).
 
 ### `raw.weather_hourly`: hourly weather (loaded)
-Columns as in [`README.md`](README.md) and [`../data/weather.md`](../data/weather.md); `date` is the local calendar date,
+Columns as in [`README.md`](README.md) and [`bayer/data/weather.md`](../bayer/data/weather.md); `date` is the local calendar date,
 `utc_time` timestamptz, `local_time` timestamp (no zone). Measured for the scope: **no NULLs**, temperature 0.3…35.5 °C,
 relative humidity 18…100 %, hourly precipitation 0…23.6 mm.
 - `precipitation` comes from **IMERG hourly**, joined on `(grid_id, utc_time)` at load time (the weather files have no precipitation column).
@@ -57,7 +57,7 @@ relative humidity 18…100 %, hourly precipitation 0…23.6 mm.
 
 ### `raw.weather_daily`: daily weather (loaded)
 Key `(grid_id, date)`; `date` is the local calendar date. The file has 50 columns: the key, `elevation` (constant per
-cell, stored in `grid_cell` instead) and 47 measured columns (units as in `data/weather.md`):
+cell, stored in `grid_cell` instead) and 47 measured columns (units as in `bayer/data/weather.md`):
 `min/max/avg/midpoint_temperature` · `min/max/avg_dew_point_temperature` · `min/max/avg_atmospheric_pressure` ·
 `total/max_downward_solar_radiation` · `total/max_net_solar_radiation` · `avg_total_cloud_cover` · `avg_snow_depth` · `avg_snow_density` ·
 `min/max/avg_wind_speed` · `avg_wind_direction` · `max_wind_gust` · `min/max/avg_wind_speed_2m` · `min/max/avg_relative_humidity` ·
@@ -77,8 +77,8 @@ One row per H3 cell: `h3_index_10` text PK (15 characters), `hid` bigint (partit
 - **geometry:** `geom_point` (Point 4326) and `geom` (hexagon, Polygon 4326), both supplied in the source as WKB.
 
 Measured: about 0.6 % of cells have NULL values (no soil data); textures are mostly Sandy Loam and Loamy Sand.
-**Units to verify:** `data/soil.md` says sand/silt/clay are in `g/100g (%)`, but the root-zone `clay`, `sand`, `silt`
-values are **fractions 0.04…0.92**. `data/soil.md` also lists `band_*` as floats while the data has text, and names the
+**Units to verify:** `bayer/data/soil.md` says sand/silt/clay are in `g/100g (%)`, but the root-zone `clay`, `sand`, `silt`
+values are **fractions 0.04…0.92**. `bayer/data/soil.md` also lists `band_*` as floats while the data has text, and names the
 texture column `soil_texture` while the file has `soilTexture`. The table keeps the **file's values**; column names are
 lower-cased (`band_om`, `band_cec`, `band_ph`) and `soilTexture` is stored as `soil_texture`.
 

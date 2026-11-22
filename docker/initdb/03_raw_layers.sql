@@ -4,7 +4,7 @@
 SET search_path = raw, public;
 
 -- 1. Daily weather (daily_table). The source also has `elevation`; it is constant per cell and lives in grid_cell.
---    Units as in data/weather.md. The daily file has no precipitation: daily precipitation is imerg_daily.
+--    Units as in bayer/data/weather.md. The daily file has no precipitation: daily precipitation is imerg_daily.
 CREATE TABLE IF NOT EXISTS weather_daily (
     grid_id                          text NOT NULL REFERENCES grid_cell (grid_id),
     date                             date NOT NULL,          -- local calendar date
@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS imerg_daily (
 
 -- 3. ISRIC SoilGrids (static, 250 m, H3 level 10). Names as in the file, lower-cased; soilTexture -> soil_texture.
 --    Layered columns are <property>_<depth>_mean with depths 0_5cm, 5_15cm, 15_30cm, 30_60cm, 60_100cm, 100_200cm.
---    Values are kept as in the file (root-zone clay/sand/silt are fractions 0-1, not percent as data/soil.md says).
+--    Values are kept as in the file (root-zone clay/sand/silt are fractions 0-1, not percent as bayer/data/soil.md says).
 CREATE TABLE IF NOT EXISTS soil_h3 (
     h3_index_10            text PRIMARY KEY,
     hid                    bigint,

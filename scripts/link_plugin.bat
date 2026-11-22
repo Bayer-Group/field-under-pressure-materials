@@ -5,7 +5,7 @@ echo   Podlinkowanie wtyczki QGIS (PyQGIS FastAPI Bridge)
 echo ========================================================
 
 set TARGET_DIR=%APPDATA%\QGIS\QGIS3\profiles\default\python\plugins\pyqgis_fastapi_bridge
-set SOURCE_DIR=%~dp0qgis_plugin\pyqgis_fastapi_bridge
+set SOURCE_DIR=%~dp0..\qgis_plugin\pyqgis_fastapi_bridge
 
 if not exist "%APPDATA%\QGIS\QGIS3\profiles\default\python\plugins" (
     mkdir "%APPDATA%\QGIS\QGIS3\profiles\default\python\plugins"

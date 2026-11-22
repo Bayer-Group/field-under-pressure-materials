@@ -191,7 +191,7 @@ The row with `class_code = 0` is real "No cropland". Padding zeros were removed 
 
 **Transformation.** Soil: intersect the polygon with `raw.soil_h3.geom`; weight = intersection area in EPSG:2180; mean over cells with non-NULL values. NULL when no cell has a value (not 0). About 0.6 % of cells have no soil data. Layered depth columns are not used in v1 (**PROPOSAL**: only root-zone aggregates).
 
-**Units.** `raw.soil_h3` root-zone `clay`/`sand`/`silt` are **fractions (0.04 to 0.92)**, while `data/soil.md` says `g/100g (%)`. The contract keeps the file's values; converting to percent is a presentation step.
+**Units.** `raw.soil_h3` root-zone `clay`/`sand`/`silt` are **fractions (0.04 to 0.92)**, while `bayer/data/soil.md` says `g/100g (%)`. The contract keeps the file's values; converting to percent is a presentation step.
 
 **Refresh.** When a farmer saves a crop area (single polygon).
 
