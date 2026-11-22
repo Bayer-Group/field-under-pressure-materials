@@ -67,12 +67,11 @@ To get a PDF, open `http://127.0.0.1:8090/deck/?print-pdf` in Chromium and print
 | # | Section | Slides (`data-anim`) |
 |---|---|---|
 | 0 | Title | `collide`: Geoinformatics ⇒ Terranos ⇐ Bioinformatics |
-| 1 | The problem | `genomics` · `trend` (cost per genome vs papers) · `meta` (what is metagenomics) · `merge` (metagenomics + geoinformation) |
+| 1 | The problem | `genomics` (geoinformatic data → genomics) · `meta` (what is metagenomics) · `trend` (cost per genome vs papers) · `merge` (metagenomics + geoinformation) |
 | 2 | Goal | `goal` (sowing, fertilization, spraying → biological balance) · `timeline` (history → now → future) |
 | 3 | Data | `stack` (shotgun sequencing, NDVI, geochemistry, qPCR) |
 | 4 | Demo | `reel`: a short break that plays `../terranos-showcase.mp4` full screen |
-| 5 | Business value | `value` (personalized soil analysis = fertilizer savings) |
-| 6 | Future | `future` (agro-chemical branch, EU sustainability) |
+| 5 | Future | `future` (agro-chemical branch, EU sustainability) |
 | | Outro | `finale` |
 
 ## How a slide animates
