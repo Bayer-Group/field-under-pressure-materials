@@ -2,7 +2,7 @@
 // writeSoundtrack(path, seconds) writes a 16-bit stereo WAV. Run directly to write showcase/soundtrack.wav.
 //    0 –  4  intro: pad, logo shimmer, riser            24 – 32  data break: half-time, sparkling 16ths, riser
 //    4 – 24  groove (Am F C G) under the app tour       32 – 38  groove again (crop disease risk)
-//   38 – 48  two neighbours, playful (C G Am F, oom-pah)  48 – 52  sad (Am Dm), the corn falls ill
+//   38 – 48  two neighbours, playful (C G Am F, oom-pah)  48 – 52  sad (Am Dm): a soil pathogen makes the corn ill
 //   52 – 58  hopeful (F G): he listens, "ding" on the purchase   58 – 60  happy fanfare (C)
 //   60 – 66  outro: impact and closing chord
 import { writeFileSync } from 'node:fs'
@@ -157,10 +157,15 @@ export function writeSoundtrack(path, seconds = 66) {
   voice(45.77, 0.35, 500, { type: 'sine', gain: 0.08, to: 300, r: 0.05 })            // corn seed toss
   voice(46.16, 0.12, 600, { type: 'sine', gain: 0.12, to: 1300, r: 0.05 })           // corn sprout pop
   voice(46.85, 0.6, 220, { type: 'sine', gain: 0.1, to: 700, r: 0.1 })               // the corn grows
+  voice(47.98, 0.3, 520, { type: 'triangle', gain: 0.07, to: 380, r: 0.05 })       // "uh-oh": the corn looks down
+  whoosh(48.4, 0.45, 0.24)                                                          // dive into the soil
+  for (let i = 0; i < 4; i++) voice(48.85 + i * 0.13, 0.09, 196 - i * 12, { type: 'saw', gain: 0.09, cutoff: 1100, a: 0.005, r: 0.06 })  // the fungus cackles
+  voice(48.95, 0.65, 330, { type: 'square', gain: 0.03, to: 520, cutoff: 1400, r: 0.1 }) // the infection creeps up the roots
+  whoosh(49.8, 0.4, 0.2)                                                            // back up to the field
   for (const [i, f] of [392, 370, 349.23, 311.13].entries())                         // wah-wah: the corn falls ill
-    voice(48.0 + i * 0.32, i === 3 ? 0.8 : 0.26, f, { type: 'saw', gain: 0.07, cutoff: 900, a: 0.02, r: 0.1, vib: i === 3 ? 0.02 : 0, to: i === 3 ? f * 0.94 : null })
-  voice(49.4, 1.4, 600, { type: 'sine', gain: 0.04, to: 1400, r: 0.05 })             // the fever rises
-  noiseHit(50.8, 0.15, { gain: 0.15, hp: 2000, decay: 25 })                          // the neighbour's shock
+    voice(49.85 + i * 0.3, i === 3 ? 0.7 : 0.24, f, { type: 'saw', gain: 0.07, cutoff: 900, a: 0.02, r: 0.1, vib: i === 3 ? 0.02 : 0, to: i === 3 ? f * 0.94 : null })
+  voice(50.4, 0.6, 600, { type: 'sine', gain: 0.04, to: 1400, r: 0.05 })             // the fever rises
+  noiseHit(51.0, 0.15, { gain: 0.15, hp: 2000, decay: 25 })                          // the neighbour's shock
   bell(53.45, 1567.98, 0.1)                                                          // light bulb: he listens
   bell(55.85, 1318.51, 0.14); bell(55.97, 1975.53, 0.1)                              // "ding": order placed
   kick(57.75, 0.8); noiseHit(57.75, 0.2, { gain: 0.2, lp: 1500, decay: 20 })          // the parcel lands

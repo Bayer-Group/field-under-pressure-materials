@@ -14,7 +14,8 @@
     24 – 32  break: soil DNA (double helix) and map layers flow through Terranos into the app's outputs
     32 – 38  04 crop disease risk
     38 – 60  break: two neighbours. One checks the crop disease risk (corn high, wheat low) and plants wheat, which shoots up;
-             the other plants corn anyway, it falls ill, and he finally listens and buys from the treatment plan; everyone is happy
+             the other plants corn anyway; a soil pathogen infects its roots (close-up under the ground), red veins climb the stalk and it falls ill;
+             he finally listens and buys from the treatment plan; everyone is happy
     60 – 66  end card
 -->
 <html lang="en">
@@ -844,6 +845,7 @@ function makeCorn(parent) {
     leaf(grow, 0, -120, -1, 104, 22, '#4aa942', '#b0a94c'), leaf(grow, 0, -120, 1, 104, 22, '#3f9a3c', '#a39d45')]
   green(S('path', { d: 'M-16,2 C-13,-80 -15,-150 -13,-232 L13,-232 C15,-150 13,-80 16,2Z', ...OUT }, grow), '#5cb84a', '#b9b356')
   S('path', { d: 'M-13,-78 Q0,-72 13,-78 M-13,-156 Q0,-150 13,-156', fill: 'none', stroke: INK, 'stroke-width': 3, opacity: 0.5 }, grow)
+  const stalkV = S('g', {}, grow)
   const cob = S('g', {}, grow)
   const arms = [leaf(cob, -90, -118, -1, 172, 32, '#4aa942', '#b0a94c'), leaf(cob, 90, -118, 1, 172, 32, '#4aa942', '#b0a94c')]
   const silk = [-22, -11, 0, 11, 22].map((x, i) => S('path', { fill: 'none', stroke: i % 2 ? '#c98a2b' : '#e8ab45', 'stroke-width': 6, 'stroke-linecap': 'round' }, cob))
@@ -872,6 +874,12 @@ function makeCorn(parent) {
     green(S('path', { d: 'M74,12 C124,-40 122,-118 96,-176 C80,-112 50,-40 -4,24 C30,28 56,24 74,12Z', ...OUT }, cob), '#58b043', '#aca750')]
   const spots = S('g', { fill: '#8a6a2f' }, cob)
   for (const [x, y, r] of [[-86, -70, 9], [-70, -30, 6], [84, -92, 8], [66, -22, 7], [92, -52, 5]]) S('circle', { cx: x, cy: y, r }, spots)
+  // red veins: the infection climbs out of the soil, up the stalk and into the cob (p.vein 0..1)
+  const vein = (par, d, w) => [S('path', { d, fill: 'none', stroke: '#ff6b6b', 'stroke-width': w + 9, 'stroke-linecap': 'round', opacity: 0.35, pathLength: 1 }, par),
+    S('path', { d, fill: 'none', stroke: '#c0262d', 'stroke-width': w, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', pathLength: 1 }, par)]
+  const stalkVeins = ['M-5,2 C-10,-50 3,-100 -4,-160 C-8,-196 1,-218 -3,-236', 'M6,2 C11,-60 -2,-120 5,-176 C8,-204 2,-222 4,-236'].map((d) => vein(stalkV, d, 4))
+  const cobVeins = ['M-8,26 C-30,-10 -44,-50 -60,-110 M-44,-50 C-62,-58 -72,-70 -84,-96', 'M10,26 C28,-14 40,-54 62,-104 M36,-40 C54,-48 70,-64 82,-90',
+    'M0,26 C4,-20 -4,-60 2,-112'].map((d) => vein(cob, d, 5))
 
   return (p) => {
     tf(root, `translate(${CORN_X + p.dx},${GROUND})`)
@@ -892,6 +900,11 @@ function makeCorn(parent) {
     cobFill.setAttribute('fill', mix('#ffd84a', '#d6d294', p.sick))
     kern.setAttribute('opacity', 0.5 - 0.25 * p.sick)
     at(spots, { opacity: p.sick * 0.55 }); at(bags, { opacity: p.sick })
+    const v = p.vein ?? 0
+    for (const [veins, a, b] of [[stalkVeins, 0, 0.5], [cobVeins, 0.4, 1]]) {
+      const r = prog(v, a, b)
+      for (const pair of veins) for (const e of pair) at(e, { 'stroke-dasharray': `${r} 1`, visibility: r > 0 ? 'visible' : 'hidden' })
+    }
     cheeks.forEach((c) => at(c, { opacity: 0.55 * (1 - p.sick) + p.blush, fill: p.blush ? '#ef5a4a' : '#ff8a65' }))
     eyes.forEach((e) => e(p.look, p.blink, p.eye, p.joy))
     brows.forEach((b, i) => tf(b, `translate(0,${-p.browL}) rotate(${(i ? 1 : -1) * p.browA})`))
@@ -991,9 +1004,6 @@ const POSE = { y: 0, sy: 1, walk: 0, ph: 0, lean: 0, hf: [-42, -124], hb: [54, -
 scene(38, 60, (root) => {
   const full = { width: '1920px', height: '1080px' }
   css(el('div', 'abs', root), { ...full, background: 'linear-gradient(#74c3f4 0%, #bfe6fb 46%, #fdf3cf 74%)' })
-  // the gloom only falls on the corn's side of the fence
-  const grey = css(el('div', 'abs', root), { ...full, background: 'linear-gradient(#6f7b88, #aab3b8 55%, #c6c4b4)',
-    webkitMaskImage: 'linear-gradient(90deg, transparent 30%, #000 58%)', maskImage: 'linear-gradient(90deg, transparent 30%, #000 58%)' })
   const svg = svgLayer(root), far = S('g', {}, svg), mid = S('g', {}, svg)
 
   // ---- far layer (moves less than the rest): sun, clouds, hills, a barn on each side
@@ -1006,7 +1016,6 @@ scene(38, 60, (root) => {
     return { g, x, y, s }
   }
   const clouds = [cloud(260, 360, 0.8), cloud(900, 330, 0.7), cloud(1900, 330, 0.9), cloud(2500, 280, 1.1), cloud(-300, 380, 0.8)]
-  const storm = cloud(0, 0, 1.9)
   const rays = S('g', { fill: '#fff8c4' }, far)
   for (let i = 0; i < 12; i++) S('path', { d: 'M0,0 L-60,-900 L60,-900Z', transform: `rotate(${i * 30})` }, rays)
   S('path', { d: 'M-900,760 C-500,600 -100,650 300,700 C700,750 1000,610 1500,650 C2000,690 2400,620 3000,720 L3000,1300 L-900,1300Z', fill: '#a9dcae' }, far)
@@ -1047,6 +1056,8 @@ scene(38, 60, (root) => {
   }
   const moundW = mound(WHEAT_X), moundC = mound(CORN_X)
   const fallLeaf = S('path', { d: leafD(62, 15, 8), fill: '#c4ae4a', ...OUT, 'stroke-width': 4 }, mid)
+  S('radialGradient', { id: 'infect' }, S('defs', {}, svg)).innerHTML = '<stop offset="0" stop-color="#dc2626" stop-opacity=".75"/><stop offset=".6" stop-color="#dc2626" stop-opacity=".3"/><stop offset="1" stop-color="#dc2626" stop-opacity="0"/>'
+  const footGlow = S('ellipse', { cx: CORN_X, cy: GROUND + 4, rx: 150, ry: 34, fill: 'url(#infect)' }, mid)
   const wheat = makeWheat(mid), corn = makeCorn(mid)
   const sproutW = makeSprout(mid, '#f2cf6b'), sproutC = makeSprout(mid, '#ffd84a')
   // the parcel
@@ -1075,6 +1086,63 @@ scene(38, 60, (root) => {
   S('path', { d: 'M-46,-34 l-18,-12 M0,-62 v-22 M46,-34 l18,-12 M-58,8 h-20 M58,8 h20', stroke: '#f0a81c', 'stroke-width': 6, 'stroke-linecap': 'round', fill: 'none' }, bulbG)
   S('path', { d: 'M-12,34 C-12,20 -34,14 -34,-10 A34,34 0 1 1 34,-10 C34,14 12,20 12,34Z', fill: '#ffe066', ...OUT, 'stroke-width': 4 }, bulbG)
   S('rect', { x: -12, y: 34, width: 24, height: 16, rx: 4, fill: '#9aa3ad', ...OUT, 'stroke-width': 4 }, bulbG)
+
+  // ---- beat 4: under the corn. A plant-pathogenic fungus and its bacterial friends attack the roots
+  const soil = svgLayer(root)
+  soil.innerHTML = `<defs><linearGradient id="soilV" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7a5232"/><stop offset=".5" stop-color="#4f3320"/>
+    <stop offset="1" stop-color="#2a1a0f"/></linearGradient><radialGradient id="evilGlow"><stop offset="0" stop-color="#c084fc" stop-opacity=".55"/>
+    <stop offset="1" stop-color="#c084fc" stop-opacity="0"/></radialGradient></defs>`
+  const sw = S('g', {}, soil)
+  S('rect', { x: -400, y: -300, width: 2720, height: 1680, fill: 'url(#soilV)' }, sw)
+  S('path', { d: 'M-400,-300 H2320 V70 Q1600,92 960,78 Q300,64 -400,86Z', fill: '#a8744a' }, sw)
+  S('path', { d: 'M-400,86 Q300,64 960,78 Q1600,92 2320,70', fill: 'none', stroke: INK, 'stroke-width': 6, opacity: 0.5 }, sw)
+  for (let i = 0; i < 70; i++) S('ellipse', { cx: -300 + hash(i + 300) * 2520, cy: 130 + hash(i + 400) * 1100, rx: 6 + hash(i + 500) * 20, ry: 4 + hash(i + 600) * 12,
+    fill: i % 3 ? '#6b4a30' : '#8a6a4a', opacity: 0.8 }, sw)
+  // the corn's roots, base to tip; a second copy, tip to base, carries the infection upwards
+  const smooth = (pts) => pts.reduce((d, p, i) => (i === 0 ? `M${p[0]},${p[1]}` : i === pts.length - 1 ? d + ` ${p[0]},${p[1]}`
+    : d + ` Q${p[0]},${p[1]} ${(p[0] + pts[i + 1][0]) / 2},${(p[1] + pts[i + 1][1]) / 2}`), '').replace(/^(M[^ ]+) (\d)/, '$1 L$2')
+  const ROOTS = [[[960, 70], [900, 220], [820, 380], [760, 560], [730, 730], 17], [[960, 70], [1010, 240], [1100, 400], [1180, 560], [1240, 690], 17],
+    [[960, 70], [955, 300], [970, 520], [960, 760], 15], [[960, 70], [870, 170], [700, 260], [540, 320], 13], [[960, 70], [1060, 170], [1230, 250], [1390, 300], 13],
+    [[820, 380], [700, 430], [610, 530], 9], [[1100, 400], [1220, 420], [1330, 480], 9], [[970, 520], [1060, 600], [1120, 700], 9], [[760, 560], [660, 640], 7]]
+  const roots = ROOTS.map((r) => { const w = r.pop(); return { pts: r, w } })
+  for (const r of roots) S('path', { d: smooth(r.pts), fill: 'none', stroke: INK, 'stroke-width': r.w + 7, 'stroke-linecap': 'round' }, sw)
+  for (const r of roots) S('path', { d: smooth(r.pts), fill: 'none', stroke: '#f1e3b8', 'stroke-width': r.w, 'stroke-linecap': 'round' }, sw)
+  const sickRoots = roots.map((r) => S('path', { d: smooth([...r.pts].reverse()), fill: 'none', stroke: '#dc2626', 'stroke-width': Math.max(4, r.w - 6), 'stroke-linecap': 'round', pathLength: 1 }, sw))
+  S('rect', { x: 942, y: -300, width: 36, height: 380, rx: 10, fill: '#5cb84a', stroke: INK, 'stroke-width': 6 }, sw)
+  // the fungus: hyphae, a lumpy purple body, an evil face
+  const FX = 1330, FY = 820
+  const glow = S('circle', { cx: FX, cy: FY, r: 360, fill: 'url(#evilGlow)' }, sw)
+  const HY = [[1240, 690], [1120, 700], [1330, 480], [960, 760], [1500, 700], [1560, 900], [1180, 980], [1450, 1000], [1600, 780]]
+  const hyphae = HY.map(([x, y], i) => {
+    const mx = (FX + x) / 2 + (hash(i + 70) - 0.5) * 140, my = (FY + y) / 2 + (hash(i + 80) - 0.5) * 140
+    return S('path', { d: `M${FX},${FY} Q${mx},${my} ${x},${y}`, fill: 'none', stroke: '#d8b4fe', 'stroke-width': 5, 'stroke-linecap': 'round', pathLength: 1 }, sw)
+  })
+  const fung = S('g', {}, sw)
+  let blob = ''
+  for (let k = 0; k <= 48; k++) { const a = (k / 48) * 2 * Math.PI, r = 104 + 12 * Math.sin(a * 7) + 6 * Math.sin(a * 3 + 1); blob += (k ? 'L' : 'M') + (Math.cos(a) * r).toFixed(1) + ',' + (Math.sin(a) * r).toFixed(1) }
+  S('path', { d: blob + 'Z', fill: '#8b5cf6', stroke: INK, 'stroke-width': 7, 'stroke-linejoin': 'round' }, fung)
+  for (const [x, y, r] of [[-62, -40, 12], [58, 52, 15], [-40, 64, 9], [70, -58, 8], [8, 84, 7]]) S('circle', { cx: x, cy: y, r, fill: '#6d3fd1' }, fung)
+  const fEyes = [-34, 34].map((x) => {
+    const g = S('g', { transform: `translate(${x},-18)` }, fung)
+    S('ellipse', { rx: 24, ry: 17, fill: '#fff', stroke: INK, 'stroke-width': 5 }, g)
+    const pupil = S('circle', { r: 8.5, fill: '#ef4444', stroke: INK, 'stroke-width': 2.5 }, g)
+    S('path', { d: x < 0 ? 'M-30,-26 L26,-6' : 'M30,-26 L-26,-6', stroke: INK, 'stroke-width': 11, 'stroke-linecap': 'round' }, g)
+    return pupil
+  })
+  const fMouth = S('g', { transform: 'translate(0,34)' }, fung)
+  const jaw = S('path', { fill: '#2a0f12', stroke: INK, 'stroke-width': 5, 'stroke-linejoin': 'round' }, fMouth)
+  const teeth = S('path', { fill: '#fff', stroke: INK, 'stroke-width': 2.5, 'stroke-linejoin': 'round' }, fMouth)
+  // grumpy rod-shaped bacteria with whipping tails
+  const bact = [[640, 680, 20], [1580, 560, -25], [470, 430, 35], [1040, 980, -10], [760, 920, 15]].map(([x, y, r], i) => {
+    const g = S('g', {}, sw)
+    const tail = S('path', { fill: 'none', stroke: INK, 'stroke-width': 4, 'stroke-linecap': 'round' }, g)
+    S('rect', { x: -40, y: -19, width: 80, height: 38, rx: 19, fill: i % 2 ? '#ea580c' : '#c2410c', stroke: INK, 'stroke-width': 5 }, g)
+    S('path', { d: 'M-16,-10 L-4,-4 M16,-10 L4,-4', stroke: INK, 'stroke-width': 4, 'stroke-linecap': 'round' }, g)
+    for (const ex of [-10, 10]) S('circle', { cx: ex, cy: 2, r: 4, fill: INK }, g)
+    S('path', { d: 'M-8,12 Q0,7 8,12', fill: 'none', stroke: INK, 'stroke-width': 3.5, 'stroke-linecap': 'round' }, g)
+    return { g, tail, x, y, r, i }
+  })
+  const spores = Array.from({ length: 14 }, (_, i) => ({ e: S('circle', { r: 5 + hash(i + 900) * 5, fill: '#c4b5fd', stroke: INK, 'stroke-width': 2 }, sw), i }))
 
   const frost = css(el('div', 'abs', root), { ...full, background: '#eef6ef' })
 
@@ -1132,32 +1200,29 @@ scene(38, 60, (root) => {
 
   return (t) => {
     // ---- mood and camera
-    const sick = kf(t, [[48.0, 0], [49.2, 1], [57.92, 1], [58.45, 0]])
-    const gloom = kf(t, [[48.0, 0], [49.2, 1], [52.0, 1], [52.6, 0.7], [57.8, 0.7], [58.4, 0]])
+    const sick = kf(t, [[49.8, 0], [50.5, 1], [57.92, 1], [58.45, 0]])
     const [cx, cy, z] = kf(t, [[38, [960, 600, 1.05]], [38.9, [960, 600, 1]], [39.05, [960, 600, 1]], [39.6, [550, 615, 1.32]], [41.3, [550, 615, 1.32]],
-      [41.8, [960, 590, 1]], [42.15, [960, 590, 1]], [42.65, [440, 620, 1.25]], [45.05, [440, 620, 1.25]], [45.6, [1440, 610, 1.2]], [47.9, [1440, 610, 1.2]],
-      [48.4, [1420, 600, 1.25]], [51.3, [1420, 600, 1.25]], [51.8, [1090, 590, 1]], [57.3, [1090, 590, 1]], [57.7, [1080, 570, 1]], [60, [1080, 565, 1.06]]])
+      [41.8, [960, 590, 1]], [42.15, [960, 590, 1]], [42.65, [440, 620, 1.25]], [45.05, [440, 620, 1.25]], [45.6, [1440, 610, 1.2]], [48.05, [1440, 610, 1.2]],
+      [48.45, [1300, 935, 3.4]], [49.55, [1300, 935, 3.4]], [50.0, [1420, 600, 1.25]], [51.3, [1420, 600, 1.25]], [51.8, [1090, 590, 1]], [57.3, [1090, 590, 1]], [57.7, [1080, 570, 1]], [60, [1080, 565, 1.06]]])
     tf(mid, `translate(960,540) scale(${z}) translate(${-cx},${-cy})`)
     const PAR = 0.3
     const zf = 1 + (z - 1) * PAR, cxf = 960 + (cx - 960) * PAR, cyf = 540 + (cy - 540) * PAR
     tf(far, `translate(960,540) scale(${zf}) translate(${-cxf},${-cyf})`)
     const toScreen = (x, y) => [960 + (x - cx) * z, 540 + (y - cy) * z]
     const toFar = (x, y) => { const [sx, sy] = toScreen(x, y); return [(sx - 960) / zf + cxf, (sy - 540) / zf + cyf] }
-    grey.style.opacity = gloom * 0.9
-    for (const c of clouds) { tf(c.g, `translate(${c.x + (t - 38) * 9},${c.y}) scale(${c.s})`); c.g.setAttribute('fill', mix('#ffffff', '#a3acb3', gloom * 0.5)) }
-    tf(storm.g, `translate(${lerp(3000, toFar(CORN_X + 60, 0)[0], E.out3(gloom))},240) scale(${storm.s})`); storm.g.setAttribute('fill', '#7d8892')
+    for (const c of clouds) { tf(c.g, `translate(${c.x + (t - 38) * 9},${c.y}) scale(${c.s})`); c.g.setAttribute('fill', '#fff') }
 
     // ---- the careful neighbour (A): walks in, checks the risk on his phone, plants wheat, is amazed, later shows the app across the fence
     const aWalk = Math.max(1 - prog(t, 38.85, 38.98), life(t, 51.4, 52.4, 0.08, 0.1))
     const ax = kf(t, [[38, -60], [38.95, 300], [51.4, 300], [52.4, 860]], E.lin), aph = ax / 20, aSwing = 26 * Math.sin(aph) * aWalk
-    const aSur = life(t, 43.37, 44.4, 0.08, 0.3), aLaugh = t >= 43.95 && t < 44.8, aConcern = life(t, 48.6, 51.5, 0.4, 0.3)
+    const aSur = life(t, 43.37, 44.4, 0.08, 0.3), aLaugh = t >= 43.95 && t < 44.8, aConcern = life(t, 50.0, 51.5, 0.4, 0.3)
     const aCheer = prog(t, 57.95, 58.15), aJump = hop(t, 0.1), aTalk = t >= 52.5 && t < 53.4
     const aWave = life(t, 44.45, 45.0, 0.12, 0.12)
     const aHf = kf(t, [[38, [-42, -124]], [39.05, [-42, -124]], [39.4, [62, -252]], [41.3, [62, -252]], [41.6, [-42, -124]], [43.32, [-42, -124]], [43.48, [-118, -318]],
       [43.92, [-110, -300]], [44.32, [-42, -130]], [52.2, [-42, -130]], [52.5, [124, -296]], [53.45, [124, -296]], [53.75, [-42, -124]], [57.9, [-42, -124]], [58.1, [-78, -338]]])
     const aHb = kf(t, [[38, [66, -150]], [42.05, [66, -150]], [42.18, [100, -318]], [42.3, [134, -232]], [42.5, [54, -126]], [43.32, [54, -126]], [43.48, [128, -310]],
       [43.92, [120, -296]], [44.32, [54, -126]], [44.45, [54, -126]], [44.6, [106, -322]], [44.9, [106, -322]], [45.05, [54, -126]], [57.9, [54, -126]], [58.1, [106, -338]]])
-    const aMouth = t >= 57.95 ? [20, 5, 20, 0.2] : aTalk ? [12, 4, 6 + 10 * Math.abs(Math.sin(t * 13)), 0.3] : t >= 48.6 && t < 51.5 ? [11, -5, 0]
+    const aMouth = t >= 57.95 ? [20, 5, 20, 0.2] : aTalk ? [12, 4, 6 + 10 * Math.abs(Math.sin(t * 13)), 0.3] : t >= 50.0 && t < 51.5 ? [11, -5, 0]
       : t >= 44.8 ? [15, 7, 0] : aLaugh ? [18, 6, 13 + 5 * Math.sin(t * 22), 0.25] : t >= 43.37 ? [11, 0, 25, 1] : [16, 9, 0]
     const aHand = smart({ ...POSE,
       x: ax, face: 1, walk: aWalk, ph: aph,
@@ -1169,7 +1234,7 @@ scene(38, 60, (root) => {
       bag: t < 42.32, phone: true,
       head: kf(t, [[38, 0], [39.4, 8], [40.8, 8], [40.95, 16], [41.1, 4], [41.3, 8], [41.6, 0], [43.32, 0], [43.44, -14], [44.6, -10], [45.0, 0], [52.5, -4]]) + 4 * Math.sin(t * 13) * aCheer,
       look: kf(t, [[38, [0.6, 0]], [39.4, [0.8, 0.6]], [41.3, [0.8, 0.6]], [41.6, [0.6, 0.1]], [42.3, [0.8, 0.5]], [43.37, [0.6, -0.6]], [44.4, [0.6, -0.5]], [45.2, [0.8, 0]],
-        [48.3, [0.9, 0.1]], [52.5, [0.9, -0.1]], [57.9, [0.9, 0.1]], [58.2, [0.6, -0.5]]]),
+        [50.0, [0.9, 0.1]], [52.5, [0.9, -0.1]], [57.9, [0.9, 0.1]], [58.2, [0.6, -0.5]]]),
       blink: Math.max(blinkAt(t, 0.9), 0.25 * aConcern), eye: 1 + 0.35 * aSur + 0.1 * life(t, 57.76, 58.1, 0.06, 0.2),
       joy: aLaugh || (t >= 40.92 && t < 41.25), browL: 12 * aSur + 6 * aCheer + 4 * aConcern, browA: 14 * aConcern,
       mouth: aMouth, mou: 9 * Math.sin(t * 34) * life(t, 43.37, 44.1, 0.05, 0.4),
@@ -1180,27 +1245,27 @@ scene(38, 60, (root) => {
     // ---- the other neighbour (B), facing left: shrugs the app off, plants corn, worries, finally listens and buys
     const bWalk = 1 - prog(t, 38.85, 38.98)
     const bx = kf(t, [[38, 1840], [38.95, 1600]], E.lin), bph = bx / 20, bSwing = 26 * Math.sin(bph) * bWalk
-    const shrug = life(t, 41.5, 42.35, 0.15, 0.15), bWorried = Math.max(life(t, 48.6, 53.42, 0.4, 0.05), 0.5 * life(t, 54.1, 55.85, 0.2, 0.1))
-    const bShock = life(t, 50.8, 51.35, 0.08, 0.2), bCheer = prog(t, 57.95, 58.15), bJump = hop(t)
+    const shrug = life(t, 41.5, 42.35, 0.15, 0.15), bWorried = Math.max(life(t, 50.0, 53.42, 0.4, 0.05), 0.5 * life(t, 54.1, 55.85, 0.2, 0.1))
+    const bShock = life(t, 51.0, 51.4, 0.08, 0.2), bCheer = prog(t, 57.95, 58.15), bJump = hop(t)
     const bTremble = bWorried * (1 - bShock) * Math.sin(t * 34) * 2
-    const bHf = kf(t, [[38, [-42, -124]], [41.5, [-42, -124]], [41.68, [-96, -262]], [42.15, [-96, -262]], [42.35, [-42, -124]], [48.6, [-42, -130]], [49.3, [14, -204]],
-      [50.78, [14, -204]], [50.9, [-14, -284]], [51.3, [-14, -284]], [53.3, [-42, -130]], [53.5, [-58, -342]], [53.9, [-58, -342]], [54.08, [-8, -160]], [54.36, [70, -262]],
+    const bHf = kf(t, [[38, [-42, -124]], [41.5, [-42, -124]], [41.68, [-96, -262]], [42.15, [-96, -262]], [42.35, [-42, -124]], [50.0, [-42, -130]], [50.6, [14, -204]],
+      [50.98, [14, -204]], [51.1, [-14, -284]], [51.4, [-14, -284]], [53.3, [-42, -130]], [53.5, [-58, -342]], [53.9, [-58, -342]], [54.08, [-8, -160]], [54.36, [70, -262]],
       [56.95, [70, -262]], [57.25, [-42, -124]], [57.5, [-42, -124]], [57.8, [-72, -300]], [58.1, [-78, -338]]])
     const bHb = kf(t, [[38, [66, -150]], [41.5, [66, -150]], [41.68, [112, -262]], [42.15, [112, -262]], [42.35, [66, -150]], [45.55, [66, -150]], [45.68, [100, -318]],
-      [45.8, [134, -232]], [46.0, [54, -126]], [48.6, [54, -126]], [49.3, [36, -208]], [50.78, [36, -208]], [50.9, [72, -286]], [51.3, [72, -286]], [51.5, [54, -140]],
+      [45.8, [134, -232]], [46.0, [54, -126]], [50.0, [54, -126]], [50.6, [36, -208]], [50.98, [36, -208]], [51.1, [72, -286]], [51.4, [72, -286]], [51.6, [54, -140]],
       [55.3, [54, -140]], [55.7, [96, -246]], [55.85, [84, -262]], [56.0, [96, -244]], [56.3, [54, -126]], [57.5, [54, -126]], [57.8, [112, -296]], [58.1, [106, -338]]])
     const bMouth = t >= 57.95 ? [20, 5, 20, 0.2] : t >= 57.45 ? [8, 0, 11, 1] : t >= 55.9 ? [17, 8, 9, 0.2] : t >= 54.1 ? [9, 2, 0] : t >= 53.45 ? [17, 6, 13, 0.25]
-      : t >= 51.35 ? [13, -8, 0] : t >= 50.8 ? [10, 0, 18, 1] : t >= 48.6 ? [13, -8, 0] : t >= 47.3 ? [18, 7, 0] : t >= 42.35 ? [16, 9, 0]
+      : t >= 51.4 ? [13, -8, 0] : t >= 51.0 ? [10, 0, 18, 1] : t >= 50.0 ? [13, -8, 0] : t >= 47.3 ? [18, 7, 0] : t >= 42.35 ? [16, 9, 0]
       : t >= 41.5 ? [9, 0, 7 + 3 * Math.sin(t * 30), 1] : [16, 9, 0]
     const handPos = neigh({ ...POSE,
       x: bx, face: -1, walk: bWalk, ph: bph,
-      y: -26 * bump(t, 50.82, 0.25) - 36 * bump(t, 57.78, 0.26) - 78 * bJump,
+      y: -26 * bump(t, 51.02, 0.25) - 36 * bump(t, 57.78, 0.26) - 78 * bJump,
       sy: 1 - 0.1 * bump(t, 58.04, 0.16) + cheerSquash(t, 0),
-      lean: kf(t, [[38, 4], [38.95, 0], [41.5, 0], [41.68, -6], [42.15, -6], [42.35, 0], [45.55, 0], [45.68, -12], [45.82, 16], [46.05, 4], [46.3, 0], [48.6, 0],
-        [49.3, 6], [51.4, 6], [51.6, 0], [53.4, 0], [53.6, -6], [53.9, 0], [57.4, 0], [57.6, -6], [57.9, 0]]),
+      lean: kf(t, [[38, 4], [38.95, 0], [41.5, 0], [41.68, -6], [42.15, -6], [42.35, 0], [45.55, 0], [45.68, -12], [45.82, 16], [46.05, 4], [46.3, 0], [50.0, 0],
+        [50.6, 6], [51.4, 6], [51.6, 0], [53.4, 0], [53.6, -6], [53.9, 0], [57.4, 0], [57.6, -6], [57.9, 0]]),
       hf: [bHf[0] - bSwing, bHf[1] + bTremble], hb: [bHb[0] + bSwing * 0.5 + 8 * Math.sin(t * 13) * bCheer, bHb[1] - bTremble],
       bag: t < 45.84, phone: t >= 54.1 && t < 57.2,
-      head: kf(t, [[38, 0], [41.5, 0], [41.68, -8], [42.25, -8], [42.45, 0], [45.9, 12], [46.3, 0], [47.3, -6], [48.6, 0], [49.3, -10], [51.6, -8], [52.4, 0],
+      head: kf(t, [[38, 0], [41.5, 0], [41.68, -8], [42.25, -8], [42.45, 0], [45.9, 12], [46.3, 0], [47.3, -6], [50.0, 0], [50.6, -10], [51.6, -8], [52.4, 0],
         [53.3, -4], [53.5, -14], [53.9, -8], [54.3, 6], [56.2, 6], [56.5, -8], [57.3, -8], [57.5, -18], [57.72, -18], [57.85, 8], [58.1, -6]])
         + 11 * Math.sin(t * 24) * shrug + 4 * Math.sin(t * 13) * bCheer,
       look: kf(t, [[38, [0.6, 0.1]], [41.4, [0.6, 0.1]], [41.6, [0.2, -0.5]], [42.3, [0.2, -0.5]], [42.5, [0.9, 0]], [45.2, [0.9, 0]], [45.5, [0.7, 0.5]], [46.3, [0.8, 0.7]],
@@ -1211,7 +1276,7 @@ scene(38, 60, (root) => {
       mouth: bMouth, hatY: -(190 * bump(t, 58.62, 0.86) + 26 * hop(t, 0.07) * (t < 58.6 || t > 59.5 ? 1 : 0) + 20 * bump(t, 57.82, 0.3)) - 4 * Math.abs(Math.sin(bph - 0.6)) * bWalk,
       hatR: 360 * E.inout3(prog(t, 58.66, 59.44)),
     })
-    at(shockB, { opacity: life(t, 50.82, 51.3, 0.06, 0.2) }); tf(shockB, `translate(${bx - 6},${GROUND - 500}) scale(${0.7 + 0.5 * E.out3(prog(t, 50.82, 51.0))})`)
+    at(shockB, { opacity: life(t, 51.02, 51.45, 0.06, 0.2) }); tf(shockB, `translate(${bx - 6},${GROUND - 500}) scale(${0.7 + 0.5 * E.out3(prog(t, 51.02, 51.2))})`)
     const bl = life(t, 53.45, 54.1, 0.25, 0.15, E.outBack)
     at(bulbG, { opacity: clamp(bl * 3) }); tf(bulbG, `translate(${bx - 14},${GROUND - 510}) scale(${Math.max(0, bl) * 0.9}) rotate(${4 * Math.sin(t * 12)})`)
 
@@ -1222,7 +1287,7 @@ scene(38, 60, (root) => {
 
     // ---- the wheat: shoots up at once, waves at its farmer, worries for the corn, cheers at the end
     const wGrown = prog(t, 43.12, 43.7), wtw = Math.max(0, t - 43.7), wSpring = t > 43.7 ? 1 : 0
-    const wWave = life(t, 44.2, 45.1, 0.2, 0.25), wWorry = life(t, 48.6, 51.6, 0.4, 0.3), wHappy = prog(t, 58.1, 58.5), wBop = wHappy * Math.sin((t - 58) * 2 * Math.PI + 1)
+    const wWave = life(t, 44.2, 45.1, 0.2, 0.25), wWorry = life(t, 50.0, 51.6, 0.4, 0.3), wHappy = prog(t, 58.1, 58.5), wBop = wHappy * Math.sin((t - 58) * 2 * Math.PI + 1)
     const wArm = (sd) => {
       if (t < 44.15) return kf(t, [[43.12, [86, 44]], [43.4, [-64, -16]], [43.7, [-20, 30]], [43.9, [40, 10]], [44.15, [28, 18]]])
       if (t >= 57.75) { const k = E.outBack(prog(t, 57.95, 58.4)); return [lerp(28, -56 + 16 * Math.sin((t - 58) * 4 * Math.PI + sd + 1), k), lerp(18, -4 + 14 * Math.sin((t - 58) * 4 * Math.PI + sd), k)] }
@@ -1238,7 +1303,7 @@ scene(38, 60, (root) => {
       head: 6 * Math.exp(-3 * wtw) * Math.sin(15 * wtw - 1) * wSpring - 7 * wWave + 6 * wBop + 6 * wWorry,
       sway: 3 * Math.sin(t * 2.3) + 10 * wBop, armL: wArm(-1), armR: wArm(1),
       awn: 6 * Math.sin(t * 2.6) + 40 * Math.exp(-3 * wtw) * Math.sin(13 * wtw) * wSpring - 26 * (1 - wGrown) + 16 * Math.sin((t - 58.1) * 2 * Math.PI) * wHappy,
-      look: kf(t, [[43.7, [0, -0.3]], [44.0, [-0.7, 0.4]], [45.2, [-0.7, 0.4]], [45.6, [0.7, 0.2]], [48.6, [0.75, 0.3]], [52.4, [0.75, 0.3]], [52.7, [0.6, -0.2]], [57.5, [0.6, -0.2]],
+      look: kf(t, [[43.7, [0, -0.3]], [44.0, [-0.7, 0.4]], [45.2, [-0.7, 0.4]], [45.6, [0.7, 0.2]], [50.0, [0.75, 0.3]], [52.4, [0.75, 0.3]], [52.7, [0.6, -0.2]], [57.5, [0.6, -0.2]],
         [57.7, [0.7, -0.7]], [58.1, [0.2, 0.3]]]),
       blink: blinkAt(t, 0.5), eye: 1 + 0.15 * life(t, 43.2, 44.0, 0.1, 0.3),
       joy: t >= 58.5 || (t >= 44.5 && t < 45.0), browL: 8 * life(t, 43.2, 44.0, 0.1, 0.3) + 6 * wHappy, browA: 16 * wWorry,
@@ -1249,7 +1314,7 @@ scene(38, 60, (root) => {
     // ---- the corn: grows normally, falls ill, recovers when the parcel lands
     const grown = prog(t, 46.85, 47.4), tw = Math.max(0, t - 47.4), cSpring = t > 47.4 ? 1 : 0
     const happy = prog(t, 58.1, 58.5)
-    const shiver = sick * (0.35 + 0.65 * bump((t - 49.2) % 1.3, 0, 0.7)) * (t > 49.2 && t < 57.75 ? 1 : 0)
+    const shiver = sick * (0.35 + 0.65 * bump((t - 50.5) % 1.3, 0, 0.7)) * (t > 50.5 && t < 57.75 ? 1 : 0)
     const cJump = hop(t, 0.03), bop = happy * Math.sin((t - 58) * 2 * Math.PI)
     const armPose = (sd) => {
       if (t < 47.65) return kf(t, [[46.85, [86, 44]], [47.1, [-64, -16]], [47.35, [-20, 30]], [47.5, [40, 10]], [47.65, [28, 18]]])
@@ -1266,20 +1331,20 @@ scene(38, 60, (root) => {
       head: -13 * sick + 4 * Math.exp(-3 * tw) * Math.sin(15 * tw - 1) * cSpring + 6 * bop + 2 * Math.sin(t * 1.7 - 0.8) * sick,
       sick, sway: 3 * Math.sin(t * 2.1) + 10 * bop, armL: armPose(-1), armR: armPose(1),
       silk: 9 * Math.sin(t * 2.3) + 36 * Math.exp(-3 * tw) * Math.sin(13 * tw) * cSpring - 30 * (1 - grown) + 22 * Math.sin((t - 58.1) * 2 * Math.PI) * happy,
-      look: kf(t, [[47.4, [0, -0.2]], [47.7, [0.65, 0.5]], [48.6, [0.2, 0.8]], [52.3, [0.2, 0.8]], [52.6, [-0.7, 0.3]], [54.0, [-0.7, 0.3]], [54.3, [0.7, 0.45]],
+      look: kf(t, [[47.4, [0, -0.2]], [47.7, [0.65, 0.5]], [47.95, [0.65, 0.5]], [48.05, [0, 0.95]], [50.0, [0, 0.95]], [50.4, [0.2, 0.8]], [52.3, [0.2, 0.8]], [52.6, [-0.7, 0.3]], [54.0, [-0.7, 0.3]], [54.3, [0.7, 0.45]],
         [57.3, [0.7, 0.45]], [57.5, [-0.5, -0.8]], [57.72, [-0.5, -0.8]], [57.8, [-0.8, 0.7]], [58.1, [0, 0.3]]]),
       blink: Math.max(blinkAt(t, 0), 0.48 * sick * (1 - bump(t, 57.76, 0.3))), eye: 1 + 0.2 * bump(t, 57.76, 0.4) + 0.12 * life(t, 46.9, 47.6, 0.1, 0.3),
       joy: t >= 58.5 || (t >= 47.45 && t < 47.95), browL: 6 * life(t, 46.9, 47.6, 0.1, 0.3) + 6 * happy - 2 * sick, browA: 20 * sick,
-      mouth: t >= 57.95 ? [27, 8, 24 + 3 * Math.sin(t * 12), 0.15] : t >= 57.76 ? [9, 0, 12, 1] : t >= 48.6 ? [11, -4, 0] : t >= 48.0 ? [15, -9, 0]
+      mouth: t >= 57.95 ? [27, 8, 24 + 3 * Math.sin(t * 12), 0.15] : t >= 57.76 ? [9, 0, 12, 1] : t >= 50.4 ? [11, -4, 0] : t >= 47.98 ? [15, -9, 0]
         : t >= 47.4 ? [24, 9, 11, 0.15] : [20, 4, 22, 0.5],
-      blush: 0.5 * life(t, 50.8, 57.9, 0.2, 0.3),
-      thermo: t >= 48.6 && t < 58.45 ? 1 - E.in3(prog(t, 58.2, 58.45)) : 0, merc: E.inout3(prog(t, 49.4, 50.8)), hot: life(t, 50.8, 51.6, 0.15, 0.3, E.outBack),
+      blush: 0.5 * life(t, 51.0, 57.9, 0.2, 0.3), vein: prog(t, 49.8, 50.7) * (1 - prog(t, 57.92, 58.4)),
+      thermo: t >= 50.25 && t < 58.45 ? 1 - E.in3(prog(t, 58.2, 58.45)) : 0, merc: E.inout3(prog(t, 50.4, 51.0)), hot: life(t, 51.0, 51.6, 0.15, 0.3, E.outBack),
       thermoAt: [430 * tp, -150 * Math.sin(Math.PI * tp * 0.8) + 260 * tp * tp + 3 * shiver * Math.sin(t * 40), 520 * tp],
     })
     puffGrowC(t, 46.85, CORN_X, GROUND - 4, 110, 0.6, 18); flyClods(clodsC, t, 46.85, CORN_X, 150)
     // a leaf lets go
-    const lf = prog(t, 49.7, 51.1)
-    at(fallLeaf, { opacity: t >= 49.7 ? 1 - prog(t, 57.95, 58.3) : 0 })
+    const lf = prog(t, 50.6, 51.9)
+    at(fallLeaf, { opacity: t >= 50.6 ? 1 - prog(t, 57.95, 58.3) : 0 })
     tf(fallLeaf, `translate(${CORN_X - 96 - 70 * lf + 34 * Math.sin(lf * 9) * (1 - lf)},${lerp(GROUND - 170, GROUND + 22, E.in3(lf) * 0.4 + lf * 0.6)}) rotate(${150 + 40 * Math.sin(lf * 9) * (1 - lf) + 30 * lf})`)
 
     // ---- the parcel and what is in it
@@ -1304,6 +1369,37 @@ scene(38, 60, (root) => {
       at(s, { opacity: p > 0 ? 1 : 0 })
       tf(s, `translate(${CORN_X + Math.cos(a) * rx * E.out3(p)},${GROUND - 330 + Math.sin(a) * ry * E.out3(p) - 14 * (t - born)}) rotate(${t * 40 + i * 30}) scale(${E.outBack(p) * tw2 * (0.9 + hash(i + 40) * 0.9)})`)
     })
+
+    // ---- under the corn: fade in as the camera dives, the fungus wakes up, the roots turn red, fade out as it pulls back
+    const sIn = E.out3(prog(t, 48.2, 48.45)), sOut = E.in3(prog(t, 49.55, 49.8))
+    if (show(soil, t >= 48.2 && t < 49.8)) {
+      soil.style.opacity = sIn * (1 - sOut)
+      tf(sw, `translate(960,540) scale(${(1.3 - 0.3 * E.out3(prog(t, 48.2, 48.8))) * (1 - 0.25 * sOut)}) translate(-960,-540)`)
+      const fp = E.outBack(prog(t, 48.45, 48.8)), laugh = life(t, 48.85, 49.35, 0.08, 0.15)
+      tf(fung, `translate(${FX + 4 * Math.sin(t * 40) * laugh},${FY}) scale(${Math.max(0.01, fp) * 1.45 * (1 + 0.04 * Math.sin(t * 6))}) rotate(${6 * Math.sin(t * 3)})`)
+      at(glow, { opacity: clamp(fp) * (0.7 + 0.3 * Math.sin(t * 9)) })
+      const look = t < 48.9 ? [-0.5, -0.5] : [-0.7, -0.3]
+      fEyes.forEach((e) => at(e, { cx: look[0] * 11, cy: look[1] * 6 }))
+      const o = 10 + 22 * laugh * (0.6 + 0.4 * Math.abs(Math.sin(t * 22))), W = 50
+      jaw.setAttribute('d', `M${-W},-6 Q0,${6 + o} ${W},-6 Q0,${4 + o * 0.2} ${-W},-6Z`)
+      let tt = `M${-W + 4},-5`
+      for (let k = 0; k < 6; k++) { const x0 = -W + 4 + k * ((2 * W - 8) / 6), x1 = x0 + (2 * W - 8) / 6; tt += ` L${(x0 + x1) / 2},${6 + o * 0.25} L${x1},-4` }
+      teeth.setAttribute('d', tt + 'Z')
+      const hp = E.inout3(prog(t, 48.6, 49.1))
+      hyphae.forEach((h, i) => at(h, { 'stroke-dasharray': `${clamp(hp * 1.3 - i * 0.04)} 1` }))
+      const rp = E.inout3(prog(t, 48.95, 49.6))
+      sickRoots.forEach((e, i) => at(e, { 'stroke-dasharray': `${clamp(rp * 1.25 - (i % 3) * 0.08)} 1`, visibility: rp > 0 ? 'visible' : 'hidden' }))
+      for (const b of bact) {
+        const p = E.outBack(prog(t, 48.5 + b.i * 0.07, 48.85 + b.i * 0.07)), w = t * 7 + b.i
+        tf(b.g, `translate(${b.x + 14 * Math.sin(t * 2 + b.i)},${b.y + 10 * Math.cos(t * 2.4 + b.i)}) rotate(${b.r + 8 * Math.sin(t * 5 + b.i)}) scale(${Math.max(0.01, p) * 1.6})`)
+        b.tail.setAttribute('d', `M40,0 C60,${18 * Math.sin(w)} 74,${-18 * Math.sin(w)} 96,${14 * Math.sin(w + 1)}`)
+      }
+      for (const sp of spores) {
+        const q = ((t - 48.5) * 0.6 + hash(sp.i + 950)) % 1, a = hash(sp.i + 960) * 2 * Math.PI
+        at(sp.e, { cx: FX + Math.cos(a) * 90 + (lerp(FX, 960, q) - FX) * 0.9, cy: FY + Math.sin(a) * 70 + (lerp(FY, 400, q) - FY) * 0.9, opacity: t > 48.6 ? 0.85 * (1 - q) : 0 })
+      }
+    }
+    at(footGlow, { opacity: prog(t, 49.8, 50.3) * (1 - prog(t, 57.92, 58.3)) * (0.65 + 0.35 * Math.sin(t * 7)) })
 
     // ---- the risk card, linked to the careful neighbour's phone
     const rIn = E.outBack(prog(t, 39.45, 39.95)), rOut = E.in3(prog(t, 41.1, 41.4))
