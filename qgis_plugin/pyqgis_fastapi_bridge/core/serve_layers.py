@@ -31,6 +31,17 @@ LAYER_PROPERTY = "pyqgis_bridge/serve_layer"
 COLORS = {"low": "#4f9a76", "medium": "#f0a830", "high": "#d73027", "none": "#bdbdbd"}
 NOT_ASSESSED = "not assessed"
 ABSTRACT_NOTE = "The risk class describes conditions favourable to the disease, never an instruction to spray."
+SPRAY_NOTE = ("The spray window is an assessment of the weather, never an instruction or a consent to spray; "
+              "the product, its label and its approval are not checked.")
+
+# Spray window statuses (GET /me/spray-window): blue shades are used so they are not read as the disease risk colours.
+SPRAY_STATUSES = [
+    ("window_now", "#1f78b4", "window now (good weather starts now)", False),
+    ("window_later", "#74add1", "window later (within 72 h)", False),
+    ("no_window", "#8c6bb1", "no window in the next 72 h", False),
+    ("no_forecast", "#d9d9d9", "no forecast for the hours", True),
+    ("no_signal", "#bdbdbd", "no signal (no window proposed)", False),
+]
 
 _QTYPES = {
     "text": QVariant.String, "date": QVariant.Date, "int": QVariant.Int,
@@ -80,6 +91,22 @@ def add_crop_area_layer(data, source_label):
     settings.isExpression = True
     layer.setLabeling(QgsVectorLayerSimpleLabeling(settings))
     layer.setLabelsEnabled(True)
+    QgsProject.instance().addMapLayer(layer)
+    return layer
+
+
+def add_spray_window_layer(data, source_label):
+    """Crop areas coloured by the spray window status now; the best window is in the attribute table."""
+    remove_serve_layers("spray_window")
+    when = f" {data.assessed_at[:16].replace('T', ' ')}" if data.assessed_at else ""
+    mock = " (MOCK)" if data.data_status == "mock" else ""
+    layer = _build(data, "MultiPolygon", source_label, f"Spray window (weather assessment){when}{mock}")
+    categories = []
+    for status, color, label, hatch in SPRAY_STATUSES:
+        categories.append(QgsRendererCategory(status, _fill(color, hatch=hatch), label))
+    layer.setRenderer(QgsCategorizedSymbolRenderer("spray_window_status", categories))
+    layer.setAbstract(f"Source: {source_label}. {SPRAY_NOTE}")
+    layer.setLabelsEnabled(False)       # no labels: they make the map unreadable (the details are in the table)
     QgsProject.instance().addMapLayer(layer)
     return layer
 

@@ -38,6 +38,7 @@ CROP_AREA_RISK_PATH = "/crop-areas/{id}/risk"
 CROP_AREA_CHANGES_PATH = "/crop-areas/{id}/changes"
 GRID_RISK_PATH = "/grid/risk"
 GRID_SURFACE_PATH = "/grid/risk/surface"
+SPRAY_WINDOW_PATH = "/me/spray-window"
 
 RISK_CLASSES = ("low", "medium", "high")
 
@@ -48,6 +49,7 @@ API_LAYERS = [
     ("crop_areas", "Crop areas with today's risk", "GET /me/crop-areas + /crop-areas/{id} (soil)", None, True),
     ("grid_surface", "Septoria weather conditions: heatmap (date)", "GET /grid/risk, smoothed raster of wet-run hours H", "analyst", True),
     ("grid_cells", "Septoria weather conditions: 4 km cells (date)", "GET /grid/risk, exact values per cell", "analyst", True),
+    ("spray_window", "Spray window now (weather assessment)", "GET /me/spray-window, status per crop area", None, True),
 ]
 DEFAULT_LAYERS = ("crop_areas",)
 
@@ -103,6 +105,30 @@ GRID_FIELDS = [
     ("coverage", "real"),
 ]
 
+# GET /me/spray-window: the weather assessment "is now a good window to consider a spray?" (never an instruction to spray)
+SPRAY_WINDOW_FIELDS = [
+    ("crop_area_id", "text"),
+    ("field_id", "text"),
+    ("field_name", "text"),
+    ("farmer_crop_id", "text"),
+    ("risk_class", "text"),
+    ("status", "text"),
+    ("spray_window_status", "text"),
+    ("signal", "bool"),
+    ("signal_reason", "text"),
+    ("weather_ok_now", "bool"),
+    ("next_window_start", "text"),
+    ("next_window_end", "text"),
+    ("windows_found", "int"),
+    ("best_window_start", "text"),
+    ("best_window_end", "text"),
+    ("best_window_latest_start", "text"),
+    ("best_window_hours", "real"),
+    ("best_window_margin_ms", "real"),
+    ("best_window_confidence", "text"),
+    ("forecast_coverage", "real"),
+]
+
 # serve.risk_daily (GET /crop-areas/{id}/risk), one row per day
 RISK_DAY_FIELDS = [
     ("date", "date"),
@@ -126,7 +152,8 @@ class ServeData:
     """Parsed answer: rows (GeoJSON geometry + attributes), warnings and the data label."""
 
     def __init__(self, kind, fields):
-        self.kind = kind            # "crop_areas" or "grid"
+        self.kind = kind            # "crop_areas", "grid" or "spray_window"
+        self.assessed_at = None     # the time of the spray window assessment (ISO, shown local time)
         self.fields = list(fields)
         self.rows = []
         self.warnings = []
@@ -353,6 +380,12 @@ def fetch_history(base_url, token, crop_area_id, date_from=None, date_to=None):
 
 
 # ----- grid -----
+
+def parse_spray_window(payload):
+    data = _parse(payload, "spray_window", SPRAY_WINDOW_FIELDS, ("Polygon", "MultiPolygon"), "crop_area_id")
+    data.assessed_at = payload.get("assessed_at")
+    return data
+
 
 def parse_grid_risk(payload):
     # The API sends 4 km squares (Polygon); the early mock used cell centres (Point). Both are read.
