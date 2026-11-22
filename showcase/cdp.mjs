@@ -1,13 +1,26 @@
 // Minimal Chrome DevTools Protocol client: launches headless Chromium and drives one page.
 // No dependencies (Node >= 22 has a global WebSocket).
 import { spawn } from 'node:child_process'
-import { mkdtempSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { existsSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
+// $CHROME wins; otherwise the first of chromium / google-chrome on PATH, then the usual macOS app bundles.
+function findBrowser() {
+  if (process.env.CHROME) return process.env.CHROME
+  for (const name of ['chromium', 'chromium-browser', 'google-chrome']) {
+    try { execFileSync('which', [name], { stdio: 'ignore' }); return name } catch { /* not on PATH */ }
+  }
+  for (const app of ['Chromium.app/Contents/MacOS/Chromium', 'Google Chrome.app/Contents/MacOS/Google Chrome']) {
+    if (existsSync('/Applications/' + app)) return '/Applications/' + app
+  }
+  throw new Error('No Chromium or Chrome found. Install one or set CHROME=/path/to/browser')
+}
+
 export async function launch({ width = 1920, height = 1080, scale = 1 } = {}) {
   const profile = mkdtempSync(join(tmpdir(), 'cdp-'))
-  const proc = spawn('chromium', [
+  const proc = spawn(findBrowser(), [
     '--headless=new', '--disable-gpu', '--hide-scrollbars', '--mute-audio', '--no-first-run',
     '--remote-debugging-port=0', `--user-data-dir=${profile}`, `--window-size=${width},${height}`, 'about:blank',
   ], { stdio: ['ignore', 'ignore', 'pipe'] })

@@ -2,14 +2,14 @@
 // writeSoundtrack(path, seconds) writes a 16-bit stereo WAV. Run directly to write showcase/soundtrack.wav.
 //    0 –  4  intro: pad, logo shimmer, riser            24 – 32  data break: half-time, sparkling 16ths, riser
 //    4 – 24  groove (Am F C G) under the app tour       32 – 38  groove again (crop disease risk)
-//   38 – 46  corn story, playful (C G Am F, oom-pah)    46 – 50  sad (Am Dm), after the greenness drop
-//   50 – 54  hopeful (F G), "ding" on the purchase      54 – 56  happy fanfare (C)
-//   56 – 62  outro: impact and closing chord
+//   38 – 48  two neighbours, playful (C G Am F, oom-pah)  48 – 52  sad (Am Dm), the corn falls ill
+//   52 – 58  hopeful (F G): he listens, "ding" on the purchase   58 – 60  happy fanfare (C)
+//   60 – 66  outro: impact and closing chord
 import { writeFileSync } from 'node:fs'
 
 const SR = 44100, BPM = 120, BEAT = 60 / BPM, BAR = 4 * BEAT
 // Wipes between scenes (seconds): each gets a whoosh into it.
-const CUTS = [4, 24, 32, 38, 56]
+const CUTS = [4, 24, 32, 38, 60]
 const N = { A2: 110, D3: 146.83, E3: 164.81, F2: 87.31, G2: 98, C3: 130.81, A3: 220, C4: 261.63, D4: 293.66, E4: 329.63, F3: 174.61, F4: 349.23, G3: 196, G4: 392, A4: 440, B3: 246.94, C5: 523.25, E5: 659.25, G5: 783.99 }
 const CH = {
   Am: [N.A2, [N.A3, N.C4, N.E4]], F: [N.F2, [N.F3, N.A3, N.C4]], C: [N.C3, [N.C4, N.E4, N.G4]], G: [N.G2, [N.G3, N.B3, N.D4]],
@@ -22,14 +22,14 @@ function bar(b) {
   if (t < 24) return { sec: 'groove', ch: ['Am', 'F', 'C', 'G'][(b - 2) % 4] }
   if (t < 32) return { sec: 'data', ch: ['Am', 'F', 'C', 'G'][(b - 12) % 4] }
   if (t < 38) return { sec: 'groove', ch: ['Am', 'F', 'G'][(b - 16) % 3] }
-  if (t < 46) return { sec: 'play', ch: ['C', 'G', 'Am', 'F'][(b - 19) % 4] }
-  if (t < 50) return { sec: 'sad', ch: ['Am', 'Dm'][(b - 23) % 2] }
-  if (t < 54) return { sec: 'hope', ch: ['F', 'G'][(b - 25) % 2] }
-  if (t < 56) return { sec: 'happy', ch: 'C' }
-  return { sec: 'outro', ch: ['Am', 'F', 'C'][(b - 28) % 3] }
+  if (t < 48) return { sec: 'play', ch: ['C', 'G', 'Am', 'F'][(b - 19) % 4] }
+  if (t < 52) return { sec: 'sad', ch: ['Am', 'Dm'][(b - 24) % 2] }
+  if (t < 58) return { sec: 'hope', ch: ['F', 'G'][(b - 26) % 2] }
+  if (t < 60) return { sec: 'happy', ch: 'C' }
+  return { sec: 'outro', ch: ['Am', 'F', 'C'][(b - 30) % 3] }
 }
 
-export function writeSoundtrack(path, seconds = 62) {
+export function writeSoundtrack(path, seconds = 66) {
   const n = Math.round(seconds * SR)
   const L = new Float32Array(n), R = new Float32Array(n)
   let seed = 12345
@@ -145,21 +145,30 @@ export function writeSoundtrack(path, seconds = 62) {
   for (let i = 0; i < 6; i++) voice(0.25 + i * 0.12, 0.25, [659.25, 783.99, 880, 987.77, 1174.66, 1318.51][i], { type: 'sine', gain: 0.05, a: 0.005, r: 0.6, pan: i % 2 ? 0.5 : -0.5 })
   for (const c of CUTS) whoosh(c)
   whoosh(32, 2.0, 0.22) // build out of the data break
-  // corn story effects
-  voice(39.45, 0.35, 500, { type: 'sine', gain: 0.08, to: 300, r: 0.05 })            // seed toss
-  voice(40.25, 0.12, 600, { type: 'sine', gain: 0.12, to: 1300, r: 0.05 })           // sprout pop
-  voice(41.3, 0.9, 180, { type: 'sine', gain: 0.14, to: 900, vib: 0.04, r: 0.1 })    // boing: the corn shoots up
-  voice(41.55, 0.35, 700, { type: 'triangle', gain: 0.08, to: 1400, r: 0.05 })      // the farmer's surprise
-  noiseHit(41.55, 0.15, { gain: 0.15, hp: 2000, decay: 25 })
-  for (const [i, f] of [392, 370, 349.23, 311.13].entries())                         // wah-wah: the greenness drop
-    voice(45.3 + i * 0.32, i === 3 ? 0.8 : 0.26, f, { type: 'saw', gain: 0.07, cutoff: 900, a: 0.02, r: 0.1, vib: i === 3 ? 0.02 : 0, to: i === 3 ? f * 0.94 : null })
-  bell(51.85, 1318.51, 0.14); bell(51.97, 1975.53, 0.1)                              // "ding": order placed
-  kick(53.75, 0.8); noiseHit(53.75, 0.2, { gain: 0.2, lp: 1500, decay: 20 })          // the parcel lands
-  for (let i = 0; i < 8; i++) voice(53.7 + i * 0.07, 0.2, [N.C5, N.E5, N.G5, 1046.5, 1318.51, 1567.98, 2093, 2637][i], { type: 'sine', gain: 0.05, a: 0.003, r: 0.4, pan: i % 2 ? 0.5 : -0.5 })
-  for (const f of [N.C4, N.E4, N.G4, N.C5]) voice(54, 1.8, f, { type: 'saw', gain: 0.03, a: 0.02, r: 0.3, cutoff: 2600, detune: 0.004 })
+  // two-neighbours story effects
+  voice(39.45, 0.12, 800, { type: 'sine', gain: 0.08, to: 1200, r: 0.05 })           // the risk card pops up
+  bell(40.0, 659.25, 0.06); bell(40.45, 987.77, 0.08); bell(40.7, 1318.51, 0.08)      // corn high, wheat low, tick
+  noiseHit(41.6, 0.25, { gain: 0.12, lp: 1500, decay: 12 })                          // "pfft": the neighbour shrugs it off
+  voice(42.25, 0.35, 500, { type: 'sine', gain: 0.08, to: 300, r: 0.05 })            // wheat seed toss
+  voice(42.64, 0.12, 600, { type: 'sine', gain: 0.12, to: 1300, r: 0.05 })           // wheat sprout pop
+  voice(43.12, 0.9, 180, { type: 'sine', gain: 0.14, to: 900, vib: 0.04, r: 0.1 })   // boing: the wheat shoots up
+  voice(43.37, 0.35, 700, { type: 'triangle', gain: 0.08, to: 1400, r: 0.05 })      // the farmer's surprise
+  noiseHit(43.37, 0.15, { gain: 0.15, hp: 2000, decay: 25 })
+  voice(45.77, 0.35, 500, { type: 'sine', gain: 0.08, to: 300, r: 0.05 })            // corn seed toss
+  voice(46.16, 0.12, 600, { type: 'sine', gain: 0.12, to: 1300, r: 0.05 })           // corn sprout pop
+  voice(46.85, 0.6, 220, { type: 'sine', gain: 0.1, to: 700, r: 0.1 })               // the corn grows
+  for (const [i, f] of [392, 370, 349.23, 311.13].entries())                         // wah-wah: the corn falls ill
+    voice(48.0 + i * 0.32, i === 3 ? 0.8 : 0.26, f, { type: 'saw', gain: 0.07, cutoff: 900, a: 0.02, r: 0.1, vib: i === 3 ? 0.02 : 0, to: i === 3 ? f * 0.94 : null })
+  voice(49.4, 1.4, 600, { type: 'sine', gain: 0.04, to: 1400, r: 0.05 })             // the fever rises
+  noiseHit(50.8, 0.15, { gain: 0.15, hp: 2000, decay: 25 })                          // the neighbour's shock
+  bell(53.45, 1567.98, 0.1)                                                          // light bulb: he listens
+  bell(55.85, 1318.51, 0.14); bell(55.97, 1975.53, 0.1)                              // "ding": order placed
+  kick(57.75, 0.8); noiseHit(57.75, 0.2, { gain: 0.2, lp: 1500, decay: 20 })          // the parcel lands
+  for (let i = 0; i < 8; i++) voice(57.7 + i * 0.07, 0.2, [N.C5, N.E5, N.G5, 1046.5, 1318.51, 1567.98, 2093, 2637][i], { type: 'sine', gain: 0.05, a: 0.003, r: 0.4, pan: i % 2 ? 0.5 : -0.5 })
+  for (const f of [N.C4, N.E4, N.G4, N.C5]) voice(58, 1.8, f, { type: 'saw', gain: 0.03, a: 0.02, r: 0.3, cutoff: 2600, detune: 0.004 })
   // end card: impact and a closing chord
-  kick(56, 1.1); noiseHit(56, 1.6, { gain: 0.22, hp: 3000, decay: 2.5 })
-  for (const f of [110, 220, 261.63, 329.63, 440]) voice(59.5, 2.0, f, { type: 'saw', gain: 0.04, a: 0.02, r: 0.4, cutoff: 1800, detune: 0.005 })
+  kick(60, 1.1); noiseHit(60, 1.6, { gain: 0.22, hp: 3000, decay: 2.5 })
+  for (const f of [110, 220, 261.63, 329.63, 440]) voice(63.5, 2.0, f, { type: 'saw', gain: 0.04, a: 0.02, r: 0.4, cutoff: 1800, detune: 0.005 })
 
   // master: soft clip, normalise to -1 dBFS, fade the last second
   let peak = 0

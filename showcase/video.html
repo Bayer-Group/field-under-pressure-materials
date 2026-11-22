@@ -1,6 +1,6 @@
 <!doctype html>
 <!--
-  Terranos: 62-second showcase video, written as code.
+  Terranos: 66-second showcase video, written as code.
   Every frame is a pure function of time: seek(t) lays out the whole stage for second t.
   - Open this file in a browser to watch it play (Space pauses, arrow keys step, click the bar to scrub, ?t=12 starts at 12 s).
   - showcase/render.mjs calls seek() frame by frame and pipes screenshots into ffmpeg.
@@ -13,8 +13,9 @@
     18 – 24  03 soil characteristics
     24 – 32  break: soil DNA (double helix) and map layers flow through Terranos into the app's outputs
     32 – 38  04 crop disease risk
-    38 – 56  break: the corn story (plant, grow, greenness drop, sick, buy from the treatment plan, happy)
-    56 – 62  end card
+    38 – 60  break: two neighbours. One checks the crop disease risk (corn high, wheat low) and plants wheat, which shoots up;
+             the other plants corn anyway, it falls ill, and he finally listens and buys from the treatment plan; everyone is happy
+    60 – 66  end card
 -->
 <html lang="en">
 <head>
@@ -100,28 +101,23 @@
   .label-block .kicker { font-size: 20px; }
   .label-block .sub { font-size: 22px; margin-top: 6px; }
 
-  /* corn story */
-  .story-cap { color: #10281a; text-shadow: 0 2px 0 rgba(255,255,255,.6); }
-  .story-cap .hl { color: #1f7a45; }
-  .gcard { position: absolute; left: 0; top: 0; width: 1300px; height: 790px; border-radius: 28px; background: #fff; color: #16231b;
-    box-shadow: 0 40px 120px rgba(11,26,18,.4); transform-origin: 50% 50%; }
-  .gcard .hd { position: absolute; left: 36px; right: 36px; top: 0; height: 96px; display: flex; align-items: center; gap: 26px; white-space: nowrap; }
-  .gcard .hd img { height: 44px; }
-  .gcard .hd b { font-size: 25px; color: #1f6f43; border-bottom: 4px solid #1f6f43; padding: 6px 0; }
-  .gcard .hd span { margin-left: auto; font-size: 20px; color: #5f6f66; }
-  .gcard .map { position: absolute; left: 36px; top: 104px; width: 640px; height: 650px; border-radius: 16px; overflow: hidden; background: #d9b36c; }
-  .gcard .legend { position: absolute; left: 14px; bottom: 14px; width: 290px; padding: 12px 16px 10px; border-radius: 10px; background: #fff; box-shadow: 0 4px 14px rgba(0,0,0,.25); }
-  .gcard .lab { font-size: 15px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #5f6f66; white-space: nowrap; }
-  .gcard .legend i { display: block; height: 12px; border-radius: 3px; margin-top: 8px;
-    background: linear-gradient(to right, #a6763e, #d9b36c 20%, #e9e08a 40%, #8cc45a 60%, #2f8f3a 80%, #0b5a24); }
-  .gcard .legend span { display: flex; justify-content: space-between; font-size: 15px; color: #16231b; margin-top: 4px; }
-  .gcard .plot-tag { position: absolute; left: 0; top: 0; padding: 6px 14px; border-radius: 999px; background: #16231b; color: #fde047; font-size: 19px; font-weight: 800; white-space: nowrap; }
-  .gcard .side { position: absolute; left: 712px; top: 108px; width: 552px; }
-  .gcard .side .lab { font-size: 18px; }
-  .gcard .val { font-size: 104px; font-weight: 900; letter-spacing: -.03em; line-height: 1; margin-top: 8px; font-variant-numeric: tabular-nums; }
-  .gcard .alert { position: absolute; right: 0; top: 52px; padding: 14px 26px; border-radius: 999px; background: #dc2626; color: #fff; font-weight: 800; font-size: 28px; white-space: nowrap;
-    box-shadow: 0 10px 26px rgba(220,38,38,.4); }
-  .gcard svg text { font-size: 20px; fill: #5f6f66; font-family: inherit; }
+  /* two-neighbours story */
+  .rcard { position: absolute; left: 0; top: 0; width: 780px; padding: 30px 36px 26px; border-radius: 28px; background: #fff; color: #16231b;
+    box-shadow: 0 40px 120px rgba(11,26,18,.4); transform-origin: 0 50%; }
+  .rcard .hd { display: flex; align-items: center; gap: 24px; white-space: nowrap; }
+  .rcard .hd img { height: 42px; }
+  .rcard .hd b { font-size: 26px; color: #1f6f43; border-bottom: 4px solid #1f6f43; padding: 6px 0; }
+  .rcard .lab { margin-top: 20px; font-size: 17px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #5f6f66; white-space: nowrap; }
+  .rcard .row { position: relative; display: flex; align-items: center; gap: 22px; margin-top: 18px; padding: 14px 18px 14px 22px; border-radius: 18px; background: #f4f7f3; }
+  .rcard .ic svg { display: block; overflow: visible; }
+  .rcard .nm { flex: 1; font-size: 44px; font-weight: 900; letter-spacing: -.02em; }
+  .rcard .cell { padding: 16px 28px; border-radius: 12px; font-size: 28px; font-weight: 800; color: #fff; white-space: nowrap; }
+  .rcard .bad .cell { background: #c0262d; } .rcard .good .cell { background: #1f7a45; }
+  .rcard .ring { position: absolute; inset: -7px; border-radius: 24px; border: 5px solid; opacity: 0; }
+  .rcard .tick { position: absolute; right: -20px; top: -20px; width: 54px; height: 54px; border-radius: 50%; background: #1f7a45; color: #fff;
+    font-size: 30px; font-weight: 900; display: grid; place-items: center; box-shadow: 0 0 0 5px #fff, 0 8px 20px rgba(0,0,0,.25); opacity: 0; }
+  .rcard .key { display: flex; align-items: center; gap: 10px; margin-top: 18px; font-size: 19px; color: #5f6f66; white-space: nowrap; }
+  .rcard .key i { width: 16px; height: 16px; border-radius: 4px; display: inline-block; }
   .phone { position: absolute; left: 0; top: 0; width: 540px; height: 880px; border-radius: 64px; background: #15181c;
     box-shadow: 0 50px 120px rgba(11,26,18,.5), inset 0 0 0 3px #30353c; transform-origin: 100% 0; }
   .phone .screen { position: absolute; left: 14px; top: 14px; right: 14px; bottom: 14px; border-radius: 50px; overflow: hidden; background: #f4f7f3; color: #16231b; }
@@ -158,7 +154,7 @@
 <div id="ui"><span id="time">0.00 s</span><div class="track" id="track"><b id="bar"></b></div><span>Space: play/pause · ←/→: step</span></div>
 <script>
 'use strict'
-const DURATION = 62, FPS = 30, SW = 2400, SH = 1350  // screenshot size in px
+const DURATION = 66, FPS = 30, SW = 2400, SH = 1350  // screenshot size in px
 const R = window.RECTS
 const stage = document.getElementById('stage')
 
@@ -390,7 +386,7 @@ scene(4, 24, (root) => {
   const lines = svgLayer(root)
   // --- 01 plot selection
   const OV = R['overview-hot']
-  const zoomBtn = center(R['overview-site'].zoomSite[1]), plotBtn = center(OV.hotBtn[0]), plotDot = [1615, 956]
+  const zoomBtn = center(R['overview-site'].zoomSite.at(-1)) /* North Sterling's card is the last one */, plotBtn = center(OV.hotBtn[0]), plotDot = [1615, 956]
   const link = S('line', { stroke: '#b5f26b', 'stroke-width': 5, 'stroke-dasharray': '14 10', 'stroke-linecap': 'round' }, lines)
   const rings = [0, 1, 2].map(() => el('div', 'ring', root))
   const plotChips = [chip(root, '29', 'sampled plots', '#3fae6a'), chip(root, '2', 'farm sites<br>Kansas · Colorado', '#60a5fa')]
@@ -647,9 +643,12 @@ scene(32, 38, (root) => {
   const cells = RK.heatCell.map((r, i) => ({ r, row: Math.floor(i / 10), col: i % 10 })).filter((c) => c.col < 8)
     .map((c) => ({ ...c, e: tile(w.layer, 'risk', c.r, 1) }))
   for (const c of cells) css(c.e, { borderRadius: '3px', boxShadow: 'none' })
+  // the crop names above the visible columns, so the grid reads as plots x crops
+  const cols = RK.heatCol.slice(0, 8).map((r, col) => ({ r, col, e: tile(w.layer, 'risk', r, 1) }))
+  for (const c of cols) css(c.e, { borderRadius: '3px', boxShadow: 'none' })
   const corn = RK.heatCell[10] // STER_010 (second row) x corn (first column)
   const rowGlow = el('div', 'glow', root), cellRings = [0, 1, 2].map(() => el('div', 'ring', root))
-  const chips = [chip(root, '10', 'crops scored<br>for every plot', '#3fae6a'), chip(root, '1.94', 'corn on this plot<br>red = higher risk', '#ef4444'),
+  const chips = [chip(root, '10', 'crops scored<br>for every plot', '#3fae6a'), chip(root, '1.72', 'corn on this plot<br>red = higher risk', '#ef4444'),
     chip(root, 'ITS', 'fungal DNA<br>behind the score', '#fbbf24')]
   return (t) => {
     up(t, 32.05, 37.9)
@@ -666,6 +665,13 @@ scene(32, 38, (root) => {
       c.e.style.opacity = clamp(p * 2)
       place(c.e, x - (c.r[2] * k) / 2, y - (c.r[3] * k) / 2, `scale(${k})`)
     }
+    for (const c of cols) {
+      const a = 32.85 + c.col * 0.05, p = E.out3(prog(t, a, a + 0.3))
+      if (!show(c.e, t >= a)) continue
+      const [x, y] = w.toVp(c.r[0], c.r[1])
+      c.e.style.opacity = clamp(p * 1.5)
+      place(c.e, x, y - (1 - p) * 12 * s, `scale(${s})`)
+    }
     glowAt(rowGlow, t, 34.7, 36.9, w.rectStage([33, corn[1] - 3, 1325, corn[3] + 6]), '#b5f26b', 6)
     const [rx, ry] = w.toStage(...center(corn))
     cellRings.forEach((r, i) => {
@@ -679,11 +685,11 @@ scene(32, 38, (root) => {
 })
 
 // =====================================================================================
-// 38-56 s  Break: the corn story
+// 38-60 s  Break: two neighbours, wheat and corn
 // =====================================================================================
 // A small cartoon in one SVG "world" behind a camera. The two characters are rigs: a build function draws the parts once
 // and returns pose(p), which only sets transforms and a few path strings.
-const GROUND = 880, CORN_X = 1200, INK = '#3b2a20'
+const GROUND = 880, CORN_X = 1300, INK = '#3b2a20'
 const OUT = { stroke: INK, 'stroke-width': 5, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }
 const tf = (e, s) => e.setAttribute('transform', s)
 /** A bump of height 1 between a and a + d. */
@@ -730,9 +736,11 @@ function makePuff(parent, n, color) {
   })
 }
 
-/** The farmer: straw hat, moustache, dungarees. Origin at the feet, facing right. */
-function makeFarmer(parent) {
-  const SKIN = '#f6c9a2', SHIRT = '#e2573f', DENIM = '#3f6fb3', STRAW = '#f6d262'
+/** The farmer: straw hat, moustache, dungarees. Origin at the feet, facing right.
+ *  L recolours him (shirt, dungarees, hair, hat band, seed on the bag) and can give him glasses. */
+function makeFarmer(parent, L = {}) {
+  const SKIN = '#f6c9a2', SHIRT = L.shirt ?? '#e2573f', SHIRT_D = L.shirtD ?? '#c94a36', DENIM = L.denim ?? '#3f6fb3', DENIM_D = L.denimD ?? '#35609c'
+  const POCKET = L.pocket ?? '#2c4f85', STRAW = '#f6d262', HAIR = L.hair ?? '#e9e6dc', MOU = L.mou ?? '#f4f1e8', BAND = L.band ?? SHIRT, SEED = L.seed ?? '#ffc93c'
   const root = S('g', {}, parent)
   const shadow = S('ellipse', { cy: 3, rx: 92, ry: 13, fill: '#1b140e', opacity: 0.2 }, root)
   const flip = S('g', {}, root), sq = S('g', {}, flip)
@@ -742,32 +750,37 @@ function makeFarmer(parent) {
     S('path', { d: 'M-18,-8 L42,-8', stroke: INK, 'stroke-width': 4, fill: 'none' }, g)
     return g
   }
-  const legB = limb(sq, 34, '#35609c'), bootB = boot(), legF = limb(sq, 34, DENIM), bootF = boot()
+  const legB = limb(sq, 34, DENIM_D), bootB = boot(), legF = limb(sq, 34, DENIM), bootF = boot()
   const up = S('g', {}, sq)
-  const armB = limb(up, 28, '#c94a36')
+  const armB = limb(up, 28, SHIRT_D)
   // torso: shirt, dungarees with a bib, straps, pocket
   S('path', { d: 'M-58,-232 C-70,-252 -40,-264 0,-264 C40,-264 70,-252 58,-232 C80,-180 86,-130 62,-108 C30,-96 -30,-96 -62,-108 C-86,-130 -80,-180 -58,-232Z', fill: SHIRT, ...OUT }, up)
   S('path', { d: 'M-52,-226 L-38,-262 M48,-226 L52,-258', stroke: INK, 'stroke-width': 21, 'stroke-linecap': 'round', fill: 'none' }, up)
   S('path', { d: 'M-52,-226 L-38,-262 M48,-226 L52,-258', stroke: DENIM, 'stroke-width': 12, 'stroke-linecap': 'round', fill: 'none' }, up)
   S('path', { d: 'M-79,-172 C-86,-134 -80,-118 -62,-106 C-30,-94 30,-94 62,-106 C80,-118 86,-134 79,-172 L50,-176 L50,-228 L-54,-228 L-54,-176Z', fill: DENIM, ...OUT }, up)
-  S('rect', { x: -22, y: -210, width: 40, height: 30, rx: 6, fill: 'none', stroke: '#2c4f85', 'stroke-width': 4 }, up)
+  S('rect', { x: -22, y: -210, width: 40, height: 30, rx: 6, fill: 'none', stroke: POCKET, 'stroke-width': 4 }, up)
   for (const x of [-42, 38]) S('circle', { cx: x, cy: -217, r: 6, fill: '#ffd84a', stroke: INK, 'stroke-width': 3 }, up)
   // head
   const head = S('g', {}, up)
-  S('path', { d: 'M-48,-20 C-70,-30 -72,-70 -50,-86 L-30,-60Z', fill: '#e9e6dc', ...OUT }, head)
+  S('path', { d: 'M-48,-20 C-70,-30 -72,-70 -50,-86 L-30,-60Z', fill: HAIR, ...OUT }, head)
   S('ellipse', { cx: 4, cy: -50, rx: 60, ry: 63, fill: SKIN, ...OUT }, head)
   S('path', { d: 'M-52,-58 C-66,-62 -68,-36 -52,-36', fill: SKIN, ...OUT }, head)
-  S('path', { d: 'M-46,-78 C-52,-60 -44,-44 -34,-38', fill: 'none', stroke: '#e9e6dc', 'stroke-width': 12, 'stroke-linecap': 'round' }, head)
+  S('path', { d: 'M-46,-78 C-52,-60 -44,-44 -34,-38', fill: 'none', stroke: HAIR, 'stroke-width': 12, 'stroke-linecap': 'round' }, head)
   S('ellipse', { cx: -8, cy: -30, rx: 13, ry: 9, fill: '#f08a7b', opacity: 0.45 }, head)
   const eyes = [makeEye(head, 14, -66, 13, 17, 6.5), makeEye(head, 52, -66, 12, 17, 6.5)]
+  if (L.glasses) {
+    const gl = S('g', { fill: 'rgba(255,255,255,.18)', stroke: INK, 'stroke-width': 5, 'stroke-linecap': 'round' }, head)
+    S('circle', { cx: 14, cy: -66, r: 21 }, gl); S('circle', { cx: 53, cy: -66, r: 19 }, gl)
+    S('path', { d: 'M33,-70 Q34,-76 35,-70 M-7,-70 L-46,-62', fill: 'none' }, gl)
+  }
   const mouth = S('path', { fill: '#7a2e2a', ...OUT, 'stroke-width': 4.5 }, S('g', { transform: 'translate(36,-6)' }, head))
   const mou = S('g', {}, head)
-  S('path', { d: 'M36,-33 C18,-42 0,-32 -8,-12 C8,-10 26,-13 36,-22 C46,-13 64,-10 80,-12 C72,-32 54,-42 36,-33Z', fill: '#f4f1e8', ...OUT, 'stroke-width': 4.5 }, mou)
+  S('path', { d: 'M36,-33 C18,-42 0,-32 -8,-12 C8,-10 26,-13 36,-22 C46,-13 64,-10 80,-12 C72,-32 54,-42 36,-33Z', fill: MOU, ...OUT, 'stroke-width': 4.5 }, mou)
   S('ellipse', { cx: 37, cy: -44, rx: 17, ry: 15, fill: '#eda482', ...OUT, 'stroke-width': 4.5 }, head)
   const hat = S('g', {}, head)
   S('ellipse', { rx: 106, ry: 21, fill: STRAW, ...OUT }, hat)
   S('path', { d: 'M-58,-4 C-62,-72 -30,-86 0,-86 C30,-86 62,-72 58,-4 C30,6 -30,6 -58,-4Z', fill: STRAW, ...OUT }, hat)
-  S('path', { d: 'M-59,-12 C-30,-2 30,-2 59,-12 L59,-32 C30,-22 -30,-22 -60,-32Z', fill: SHIRT, ...OUT, 'stroke-width': 4 }, hat)
+  S('path', { d: 'M-59,-12 C-30,-2 30,-2 59,-12 L59,-32 C30,-22 -30,-22 -60,-32Z', fill: BAND, ...OUT, 'stroke-width': 4 }, hat)
   S('path', { d: 'M-40,-52 q8,-6 16,0 M6,-62 q8,-6 16,0 M-86,2 q10,6 22,6 M60,8 q12,0 22,-5', fill: 'none', stroke: '#d9ac3a', 'stroke-width': 4, 'stroke-linecap': 'round' }, hat)
   const brows = [14, 52].map((x) => S('path', { d: 'M-13,0 Q0,-5 13,0', fill: 'none', stroke: INK, 'stroke-width': 6.5, 'stroke-linecap': 'round' }, S('g', { transform: `translate(${x},-97)` }, head)))
   // hands, the things they hold, and the near arm
@@ -775,7 +788,7 @@ function makeFarmer(parent) {
   const bag = S('g', {}, handB)
   S('path', { d: 'M-20,-4 Q-30,38 -20,50 L20,50 Q30,38 20,-4 Q0,6 -20,-4Z', fill: '#e2cb97', ...OUT, 'stroke-width': 4 }, bag)
   S('path', { d: 'M-14,-6 Q0,-22 14,-6', fill: '#e2cb97', ...OUT, 'stroke-width': 4 }, bag)
-  S('path', { d: 'M0,16 C10,22 10,36 0,40 C-10,36 -10,22 0,16Z', fill: '#ffc93c', stroke: INK, 'stroke-width': 3 }, bag)
+  S('path', { d: 'M0,16 C10,22 10,36 0,40 C-10,36 -10,22 0,16Z', fill: SEED, stroke: INK, 'stroke-width': 3 }, bag)
   S('circle', { r: 16, fill: SKIN, ...OUT, 'stroke-width': 4.5 }, handB)
   const armF = limb(up, 28, SHIRT)
   const handF = S('g', {}, up)
@@ -894,14 +907,97 @@ function makeCorn(parent) {
   }
 }
 
-scene(38, 56, (root) => {
+/** The wheat: a golden ear with awns on a thin stalk, with a face and leaf arms. Origin at the foot of the stalk. */
+function makeWheat(parent) {
+  const root = S('g', {}, parent)
+  const shadow = S('ellipse', { cy: 3, rx: 100, ry: 14, fill: '#1b140e', opacity: 0.2 }, root)
+  const lean = S('g', {}, root), grow = S('g', {}, lean)
+  const leaf = (par, x, y, side, len, wid, fill) => {
+    const g = S('g', {}, par), e = S('path', { fill, ...OUT }, g)
+    return (ang, bend) => { tf(g, `translate(${x},${y}) scale(${side},1) rotate(${ang})`); e.setAttribute('d', leafD(len, wid, bend)) }
+  }
+  const baseL = [leaf(grow, 0, -24, -1, 170, 18, '#7fb843'), leaf(grow, 0, -24, 1, 170, 18, '#8cc44c'),
+    leaf(grow, 0, -110, -1, 120, 14, '#8cc44c'), leaf(grow, 0, -110, 1, 120, 14, '#7fb843')]
+  S('path', { d: 'M-10,2 C-8,-80 -10,-160 -8,-236 L8,-236 C10,-160 8,-80 10,2Z', fill: '#a9cf55', ...OUT }, grow)
+  S('path', { d: 'M-9,-80 Q0,-75 9,-80 M-9,-160 Q0,-155 9,-160', fill: 'none', stroke: INK, 'stroke-width': 3, opacity: 0.5 }, grow)
+  const ear = S('g', {}, grow)
+  const arms = [leaf(ear, -50, -96, -1, 140, 20, '#8cc44c'), leaf(ear, 50, -96, 1, 140, 20, '#7fb843')]
+  const awns = Array.from({ length: 11 }, () => S('path', { fill: 'none', stroke: '#c9962e', 'stroke-width': 5, 'stroke-linecap': 'round' }, ear))
+  const EAR = 'M-52,8 C-78,-60 -72,-196 -30,-268 C-14,-292 14,-292 30,-268 C72,-196 78,-60 52,8 C28,22 -28,22 -52,8Z'
+  S('path', { d: EAR, fill: '#f2cf6b', ...OUT }, ear)
+  const clip = S('clipPath', { id: 'wheatclip' }, ear); S('path', { d: EAR }, clip)
+  const kern = S('g', { 'clip-path': 'url(#wheatclip)', fill: '#dba640', opacity: 0.55 }, ear)
+  for (let y = -276; y < 20; y += 34) for (const sd of [-1, 1]) {
+    const cx = sd * 36, cy = y + (sd > 0 ? 17 : 0)
+    S('ellipse', { cx, cy, rx: 27, ry: 14, transform: `rotate(${sd * -30} ${cx} ${cy})` }, kern)
+  }
+  S('path', { d: 'M-40,-214 C-54,-170 -58,-120 -52,-80', fill: 'none', stroke: '#fff', 'stroke-width': 9, 'stroke-linecap': 'round', opacity: 0.4 }, ear)
+  const face = S('g', {}, ear)
+  for (const x of [-40, 40]) S('ellipse', { cx: x, cy: -116, rx: 14, ry: 9, fill: '#ff8a65', opacity: 0.5 }, face)
+  const eyes = [makeEye(face, -21, -152, 16, 20, 8.5), makeEye(face, 21, -152, 16, 20, 8.5)]
+  const brows = [-21, 21].map((x) => S('path', { d: 'M-13,0 Q0,-5 13,0', fill: 'none', stroke: INK, 'stroke-width': 5.5, 'stroke-linecap': 'round' }, S('g', { transform: `translate(${x},-186)` }, face)))
+  const mouth = S('path', { fill: '#8a2f2a', ...OUT, 'stroke-width': 5 }, S('g', { transform: 'translate(0,-104) scale(0.8)' }, face))
+
+  return (p) => {
+    tf(root, `translate(${WHEAT_X + p.dx},${GROUND})`)
+    show(root, p.s > 0)
+    at(shadow, { rx: 100 * p.s * (1 - 0.3 * clamp(-p.y / 100)) })
+    tf(lean, `translate(0,${p.y}) rotate(${p.lean})`)
+    tf(grow, `scale(${p.s / Math.sqrt(p.sy)},${p.s * p.sy})`)
+    baseL[0](-30 + p.sway, 40); baseL[1](-30 - p.sway, 40); baseL[2](-38 - p.sway, 28); baseL[3](-38 + p.sway, 28)
+    tf(ear, `translate(0,-228) rotate(${p.head})`)
+    arms[0](...p.armL); arms[1](...p.armR)
+    awns.forEach((e, i) => {
+      const k = i - 5, sx = k * 9, sy = -266 + Math.abs(k) * 15, a = (k * 13 * Math.PI) / 180, len = 74 + (5 - Math.abs(k)) * 7
+      const ex = sx + Math.sin(a) * len + p.awn * (0.6 + Math.abs(k) * 0.1), ey = sy - Math.cos(a) * len
+      e.setAttribute('d', `M${sx},${sy} Q${(sx + ex) / 2 + p.awn * 0.3},${(sy + ey) / 2} ${ex.toFixed(1)},${ey.toFixed(1)}`)
+    })
+    eyes.forEach((e) => e(p.look, p.blink, p.eye, p.joy))
+    brows.forEach((b, i) => tf(b, `translate(0,${-p.browL}) rotate(${(i ? 1 : -1) * p.browA})`))
+    mouth.setAttribute('d', mouthD(...p.mouth))
+  }
+}
+
+/** A sprout: a kernel with two leaves and a face. play(t, t0, d, x, lookX) pops it up at t0 and lets it go after d seconds. */
+function makeSprout(parent, kernel) {
+  const sprout = S('g', {}, parent), sproutIn = S('g', {}, sprout)
+  S('path', { d: 'M0,2 C-3,-12 3,-22 0,-34', fill: 'none', stroke: INK, 'stroke-width': 13, 'stroke-linecap': 'round' }, sproutIn)
+  S('path', { d: 'M0,2 C-3,-12 3,-22 0,-34', fill: 'none', stroke: '#5cb84a', 'stroke-width': 6, 'stroke-linecap': 'round' }, sproutIn)
+  const head = S('g', { transform: 'translate(0,-52)' }, sproutIn)
+  const leaves = [-1, 1].map((sd) => S('path', { d: leafD(40, 13, 6), fill: sd < 0 ? '#4aa942' : '#5cb84a', ...OUT, 'stroke-width': 4 }, S('g', {}, head)))
+  S('path', { d: 'M0,-26 C24,-26 30,4 20,20 C10,30 -10,30 -20,20 C-30,4 -24,-26 0,-26Z', fill: kernel, ...OUT, 'stroke-width': 4 }, head)
+  const eyes = [makeEye(head, -9, -2, 6.5, 8, 4), makeEye(head, 9, -2, 6.5, 8, 4)]
+  S('path', { d: 'M-6,12 Q0,18 6,12', fill: 'none', stroke: INK, 'stroke-width': 3, 'stroke-linecap': 'round' }, head)
+  // timed in "sprout seconds": 0 pop, 0.55 looks at its farmer, 0.77 squashes down, 1.07 gone (the plant takes over)
+  return (t, t0, d, x, lookX) => {
+    const u = (t - t0) * (1.07 / d)
+    if (!show(sprout, u >= 0 && u < 1.07)) return
+    const s = E.outElastic(prog(u, 0, 0.6)), sy = kf(u, [[0, 1.5], [0.25, 1], [0.77, 1], [1.05, 0.5]]), rot = 7 * Math.sin(u * 7) * (1 - prog(u, 0.75, 0.95))
+    tf(sprout, `translate(${x},${GROUND - 4})`); tf(sproutIn, `rotate(${rot}) scale(${s / Math.sqrt(sy)},${s * sy})`)
+    leaves.forEach((l, i) => tf(l.parentNode, `translate(0,-22) scale(${i ? 1 : -1},1) rotate(${-38 + 10 * Math.sin(u * 7 + i) - 30 * prog(u, 0.77, 1.05)})`))
+    eyes.forEach((e) => e(u < 0.55 ? [0, -0.3] : [lookX, -0.2], Math.max(bump(u, 0.53, 0.14), bump(u, 0.85, 0.3)), 1))
+  }
+}
+
+// Two neighbours, one fence. The careful one (glasses, green shirt) checks Terranos and plants low-risk wheat;
+// the other plants high-risk corn anyway, it falls ill, and he finally opens the Treatment plan.
+const WHEAT_X = 560, FENCE_X = 960
+const SMART = { shirt: '#2f9e5a', shirtD: '#25804a', denim: '#8a6240', denimD: '#74512f', pocket: '#5e4126', hair: '#6b4a2b', mou: '#6b4a2b',
+  band: '#1f6f43', seed: '#e0b04a', glasses: true }
+/** Default farmer pose; scenes override what they animate. */
+const POSE = { y: 0, sy: 1, walk: 0, ph: 0, lean: 0, hf: [-42, -124], hb: [54, -126], bag: false, phone: false, head: 0, look: [0.6, 0], blink: 0,
+  eye: 1, joy: false, browL: 0, browA: 0, mouth: [16, 9, 0], mou: 0, hatY: 0, hatR: 0 }
+
+scene(38, 60, (root) => {
   const full = { width: '1920px', height: '1080px' }
   css(el('div', 'abs', root), { ...full, background: 'linear-gradient(#74c3f4 0%, #bfe6fb 46%, #fdf3cf 74%)' })
-  const grey = css(el('div', 'abs', root), { ...full, background: 'linear-gradient(#6f7b88, #aab3b8 55%, #c6c4b4)' })
+  // the gloom only falls on the corn's side of the fence
+  const grey = css(el('div', 'abs', root), { ...full, background: 'linear-gradient(#6f7b88, #aab3b8 55%, #c6c4b4)',
+    webkitMaskImage: 'linear-gradient(90deg, transparent 30%, #000 58%)', maskImage: 'linear-gradient(90deg, transparent 30%, #000 58%)' })
   const svg = svgLayer(root), far = S('g', {}, svg), mid = S('g', {}, svg)
 
-  // ---- far layer (moves less than the rest): sun, clouds, hills, a barn
-  const sun = S('g', { transform: 'translate(1560,300)' }, far)
+  // ---- far layer (moves less than the rest): sun, clouds, hills, a barn on each side
+  const sun = S('g', { transform: 'translate(330,290)' }, far)
   S('circle', { r: 120, fill: '#fff6c2', opacity: 0.5 }, sun); S('circle', { r: 76, fill: '#ffe066' }, sun)
   const cloud = (x, y, s) => {
     const g = S('g', {}, far)
@@ -909,20 +1005,23 @@ scene(38, 56, (root) => {
     S('rect', { x: -108, y: 0, width: 226, height: 48, rx: 24 }, g)
     return { g, x, y, s }
   }
-  const clouds = [cloud(260, 300, 1), cloud(900, 360, 0.7), cloud(1900, 330, 0.9), cloud(2500, 280, 1.1), cloud(-300, 380, 0.8)]
+  const clouds = [cloud(260, 360, 0.8), cloud(900, 330, 0.7), cloud(1900, 330, 0.9), cloud(2500, 280, 1.1), cloud(-300, 380, 0.8)]
   const storm = cloud(0, 0, 1.9)
   const rays = S('g', { fill: '#fff8c4' }, far)
   for (let i = 0; i < 12; i++) S('path', { d: 'M0,0 L-60,-900 L60,-900Z', transform: `rotate(${i * 30})` }, rays)
   S('path', { d: 'M-900,760 C-500,600 -100,650 300,700 C700,750 1000,610 1500,650 C2000,690 2400,620 3000,720 L3000,1300 L-900,1300Z', fill: '#a9dcae' }, far)
-  const barn = S('g', { transform: 'translate(430,668) scale(0.9)' }, far)
-  S('rect', { x: 96, y: -150, width: 46, height: 150, rx: 6, fill: '#d7dee6', stroke: '#5b6470', 'stroke-width': 3 }, barn)
-  S('path', { d: 'M96,-146 Q119,-186 142,-146Z', fill: '#9aa7b5', stroke: '#5b6470', 'stroke-width': 3, 'stroke-linejoin': 'round' }, barn)
-  S('path', { d: 'M-70,0 L-70,-80 L-44,-118 L44,-118 L70,-80 L70,0Z', fill: '#cf4f3c', stroke: '#6b2a22', 'stroke-width': 3, 'stroke-linejoin': 'round' }, barn)
-  S('path', { d: 'M-80,-76 L-48,-124 L48,-124 L80,-76', fill: 'none', stroke: '#6b2a22', 'stroke-width': 8, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, barn)
-  S('path', { d: 'M-22,0 V-52 H22 V0 M-22,-52 L22,0 M22,-52 L-22,0', fill: '#e9705c', stroke: '#fff3e6', 'stroke-width': 4, 'stroke-linejoin': 'round' }, barn)
+  const barn = (x, roof, wall) => {
+    const g = S('g', { transform: `translate(${x},668) scale(0.9)` }, far)
+    S('rect', { x: 96, y: -150, width: 46, height: 150, rx: 6, fill: '#d7dee6', stroke: '#5b6470', 'stroke-width': 3 }, g)
+    S('path', { d: 'M96,-146 Q119,-186 142,-146Z', fill: '#9aa7b5', stroke: '#5b6470', 'stroke-width': 3, 'stroke-linejoin': 'round' }, g)
+    S('path', { d: 'M-70,0 L-70,-80 L-44,-118 L44,-118 L70,-80 L70,0Z', fill: wall, stroke: roof, 'stroke-width': 3, 'stroke-linejoin': 'round' }, g)
+    S('path', { d: 'M-80,-76 L-48,-124 L48,-124 L80,-76', fill: 'none', stroke: roof, 'stroke-width': 8, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, g)
+    S('path', { d: 'M-22,0 V-52 H22 V0 M-22,-52 L22,0 M22,-52 L-22,0', fill: '#fff3e6', stroke: '#fff3e6', 'stroke-width': 4, 'stroke-linejoin': 'round', 'fill-opacity': 0.25 }, g)
+  }
+  barn(330, '#1d5e36', '#3f9a5c'); barn(1560, '#6b2a22', '#cf4f3c')
   S('path', { d: 'M-900,800 C-400,700 100,740 600,770 C1100,800 1600,700 2100,730 C2500,750 2800,720 3000,760 L3000,1300 L-900,1300Z', fill: '#86cc8f' }, far)
 
-  // ---- the field
+  // ---- the two fields, with a fence between them
   S('path', { d: 'M-900,786 Q960,754 3000,786 L3000,1400 L-900,1400Z', fill: '#6dbd6b' }, mid)
   S('path', { d: 'M-900,812 Q960,784 3000,812 L3000,1400 L-900,1400Z', fill: '#a8744a' }, mid)
   let rows = ''
@@ -930,44 +1029,48 @@ scene(38, 56, (root) => {
   S('path', { d: rows, fill: 'none', stroke: '#8d5d38', 'stroke-width': 12, 'stroke-linecap': 'round', opacity: 0.55 }, mid)
   let fence = ''
   for (let x = -840; x <= 2960; x += 170) fence += `M${x},806 V736 `
-  S('path', { d: fence + 'M-900,754 H3000 M-900,782 H3000', fill: 'none', stroke: '#7a5a3c', 'stroke-width': 9, 'stroke-linecap': 'round' }, mid)
-  S('path', { d: fence + 'M-900,754 H3000 M-900,782 H3000', fill: 'none', stroke: '#e3c79a', 'stroke-width': 4, 'stroke-linecap': 'round' }, mid)
+  for (const [c, w] of [['#7a5a3c', 9], ['#e3c79a', 4]]) S('path', { d: fence + 'M-900,754 H3000 M-900,782 H3000', fill: 'none', stroke: c, 'stroke-width': w, 'stroke-linecap': 'round' }, mid)
   let tufts = ''
   for (let i = 0; i < 26; i++) { const x = -800 + i * 146 + hash(i) * 60; tufts += `M${x},812 q-6,-18 -12,-22 M${x},812 q0,-22 2,-30 M${x},812 q8,-16 14,-20 ` }
   S('path', { d: tufts, fill: 'none', stroke: '#4d9f52', 'stroke-width': 5, 'stroke-linecap': 'round' }, mid)
+  // the boundary fence, running from the horizon to the front
+  let picket = ''
+  for (let k = 0; k < 6; k++) { const y = 816 + k * k * 9 + k * 14, h = 40 + k * 13; picket += `M${FENCE_X + k * k * 2.2},${y} v${-h} ` }
+  for (const [c, w] of [['#7a5a3c', 11], ['#e3c79a', 5]]) S('path', { d: picket + `M${FENCE_X},790 Q${FENCE_X + 20},${880} ${FENCE_X + 55},1000`, fill: 'none', stroke: c, 'stroke-width': w, 'stroke-linecap': 'round' }, mid)
 
   // ---- props and characters, back to front
-  const mound = S('g', {}, mid)
-  S('ellipse', { rx: 74, ry: 17, fill: '#7d4f2e', ...OUT, 'stroke-width': 4 }, mound)
-  S('ellipse', { cx: -8, cy: -5, rx: 40, ry: 6, fill: '#96633c' }, mound)
+  const mound = (x) => {
+    const g = S('g', {}, mid)
+    S('ellipse', { rx: 74, ry: 17, fill: '#7d4f2e', ...OUT, 'stroke-width': 4 }, g)
+    S('ellipse', { cx: -8, cy: -5, rx: 40, ry: 6, fill: '#96633c' }, g)
+    return (t, land, burst) => tf(g, `translate(${x},${GROUND + 2}) scale(${1 + 0.12 * bump(t, land, 0.25)},${1 - 0.25 * bump(t, land, 0.25) + 0.3 * bump(t, burst, 0.2)})`)
+  }
+  const moundW = mound(WHEAT_X), moundC = mound(CORN_X)
   const fallLeaf = S('path', { d: leafD(62, 15, 8), fill: '#c4ae4a', ...OUT, 'stroke-width': 4 }, mid)
-  const corn = makeCorn(mid)
-  // the sprout: a kernel with two leaves and a face
-  const sprout = S('g', {}, mid), sproutIn = S('g', {}, sprout)
-  S('path', { d: 'M0,2 C-3,-12 3,-22 0,-34', fill: 'none', stroke: INK, 'stroke-width': 13, 'stroke-linecap': 'round' }, sproutIn)
-  S('path', { d: 'M0,2 C-3,-12 3,-22 0,-34', fill: 'none', stroke: '#5cb84a', 'stroke-width': 6, 'stroke-linecap': 'round' }, sproutIn)
-  const sproutHead = S('g', { transform: 'translate(0,-52)' }, sproutIn)
-  const sproutLeaves = [-1, 1].map((sd) => S('path', { d: leafD(40, 13, 6), fill: sd < 0 ? '#4aa942' : '#5cb84a', ...OUT, 'stroke-width': 4 }, S('g', {}, sproutHead)))
-  S('path', { d: 'M0,-26 C24,-26 30,4 20,20 C10,30 -10,30 -20,20 C-30,4 -24,-26 0,-26Z', fill: '#ffd84a', ...OUT, 'stroke-width': 4 }, sproutHead)
-  const sproutEyes = [makeEye(sproutHead, -9, -2, 6.5, 8, 4), makeEye(sproutHead, 9, -2, 6.5, 8, 4)]
-  S('path', { d: 'M-6,12 Q0,18 6,12', fill: 'none', stroke: INK, 'stroke-width': 3, 'stroke-linecap': 'round' }, sproutHead)
+  const wheat = makeWheat(mid), corn = makeCorn(mid)
+  const sproutW = makeSprout(mid, '#f2cf6b'), sproutC = makeSprout(mid, '#ffd84a')
   // the parcel
-  const BOX_X = 1000
+  const BOX_X = 1100
   const box = S('g', {}, mid), boxIn = S('g', {}, box)
   S('rect', { x: -58, y: -88, width: 116, height: 88, rx: 6, fill: '#d9aa72', ...OUT }, boxIn)
   S('rect', { x: -58, y: -88, width: 116, height: 18, fill: '#b98a55', opacity: 0.6 }, boxIn)
   S('rect', { x: -11, y: -86, width: 22, height: 84, fill: '#8fd14f' }, boxIn)
   S('rect', { x: 18, y: -56, width: 30, height: 38, rx: 4, fill: '#fff', stroke: INK, 'stroke-width': 3 }, boxIn)
   S('path', { d: 'M24,-28 C24,-44 34,-48 42,-48 C42,-36 38,-28 24,-28Z', fill: '#34a865' }, boxIn)
-  const flaps = [-1, 1].map((sd) => { const g = S('g', {}, boxIn); S('rect', { x: 0, y: -7, width: 58, height: 12, rx: 4, fill: '#e3b983', ...OUT, 'stroke-width': 4 }, g); return g })
-  const farmer = makeFarmer(mid)
-  const seed = S('path', { d: 'M0,-11 C10,-9 12,6 0,11 C-12,6 -10,-9 0,-11Z', fill: '#ffc93c', ...OUT, 'stroke-width': 3.5 }, mid)
-  const puffSeed = makePuff(mid, 6, '#b98a5e'), puffGrow = makePuff(mid, 9, '#b98a5e'), puffLand = makePuff(mid, 6, '#e9dcc4'), puffBox = makePuff(mid, 10, '#e9dcc4')
-  const clods = Array.from({ length: 7 }, () => S('circle', { r: 8, fill: '#7d4f2e', stroke: INK, 'stroke-width': 3 }, mid))
+  const flaps = [-1, 1].map(() => { const g = S('g', {}, boxIn); S('rect', { x: 0, y: -7, width: 58, height: 12, rx: 4, fill: '#e3b983', ...OUT, 'stroke-width': 4 }, g); return g })
+  const smart = makeFarmer(mid, SMART), neigh = makeFarmer(mid)
+  const seedShape = (fill) => S('path', { d: 'M0,-11 C10,-9 12,6 0,11 C-12,6 -10,-9 0,-11Z', fill, ...OUT, 'stroke-width': 3.5 }, mid)
+  const seedW = seedShape('#e0b04a'), seedC = seedShape('#ffc93c')
+  const puff = (n, c) => makePuff(mid, n, c)
+  const puffSeedW = puff(6, '#b98a5e'), puffSeedC = puff(6, '#b98a5e'), puffGrowW = puff(9, '#b98a5e'), puffGrowC = puff(9, '#b98a5e')
+  const puffBox = puff(10, '#e9dcc4')
+  const clods = (n) => Array.from({ length: n }, () => S('circle', { r: 8, fill: '#7d4f2e', stroke: INK, 'stroke-width': 3 }, mid))
+  const clodsW = clods(7), clodsC = clods(5)
   const grains = Array.from({ length: 12 }, (_, i) => S('circle', { r: 7 + (i % 3) * 2, fill: i % 2 ? '#b5f26b' : '#e8ff9a', stroke: '#5a9a1f', 'stroke-width': 2.5 }, mid))
   const STAR = 'M0,-16 Q3,-3 16,0 Q3,3 0,16 Q-3,3 -16,0 Q-3,-3 0,-16Z'
   const stars = Array.from({ length: 16 }, (_, i) => S('path', { d: STAR, fill: i % 3 ? '#fff' : '#ffe066', stroke: '#f0a81c', 'stroke-width': 2.5, 'stroke-linejoin': 'round' }, mid))
-  const shock = S('path', { d: 'M-34,0 L-52,-22 M0,-12 L0,-42 M34,0 L52,-22', fill: 'none', stroke: INK, 'stroke-width': 7, 'stroke-linecap': 'round' }, mid)
+  const shockLines = () => S('path', { d: 'M-34,0 L-52,-22 M0,-12 L0,-42 M34,0 L52,-22', fill: 'none', stroke: INK, 'stroke-width': 7, 'stroke-linecap': 'round' }, mid)
+  const shockA = shockLines(), shockB = shockLines()
   const bulbG = S('g', {}, mid)
   S('path', { d: 'M-46,-34 l-18,-12 M0,-62 v-22 M46,-34 l18,-12 M-58,8 h-20 M58,8 h20', stroke: '#f0a81c', 'stroke-width': 6, 'stroke-linecap': 'round', fill: 'none' }, bulbG)
   S('path', { d: 'M-12,34 C-12,20 -34,14 -34,-10 A34,34 0 1 1 34,-10 C34,14 12,20 12,34Z', fill: '#ffe066', ...OUT, 'stroke-width': 4 }, bulbG)
@@ -975,45 +1078,21 @@ scene(38, 56, (root) => {
 
   const frost = css(el('div', 'abs', root), { ...full, background: '#eef6ef' })
 
-  // ---- beat 3: the app's greenness view as a card: map on the left, greenness over time on the right
-  const CARD_X = 310, CARD_Y = 168
-  const card = el('div', 'gcard', root, `<div class="hd"><img src="brand/terranos.png"><b>Greenness over time</b><span>Sentinel-2 satellite · 10 m pixels</span></div>
-    <div class="map"><div class="legend"><div class="lab">Greenness (NDVI)</div><i></i><span><b>bare soil</b><b>dense green</b></span></div></div>
-    <div class="side"><div class="lab">Your corn plot · greenness</div><div class="val">0.16</div><div class="alert">▼ Sudden drop</div></div>`)
-  const mapBox = card.querySelector('.map'), side = card.querySelector('.side'), valEl = card.querySelector('.val'), alertEl = card.querySelector('.alert')
-  const mapSvg = S('svg', { class: 'abs', width: 640, height: 650, 'shape-rendering': 'crispEdges' }); mapBox.prepend(mapSvg)
-  const CELL = 32.5, fieldCells = []
-  for (let j = 0; j < 20; j++) for (let i = 0; i < 20; i++) {
-    const k = j * 20 + i, n = (hash(k) - 0.5) * 0.1
-    const r = S('rect', { x: i * 32, y: j * CELL, width: 32.5, height: CELL + 0.5 }, mapSvg)
-    const road = i === 5 || i === 15 || j === 4 || j === 15
-    if (!road && i > 5 && i < 15 && j > 4 && j < 15) fieldCells.push({ r, n, d: Math.hypot(i - 10.5, j - 10) / 6.5 + (hash(k + 99) - 0.5) * 0.25 })
-    else {
-      const v = road ? 0.2 : i < 5 ? (j < 4 ? 0.62 : j < 15 ? 0.5 : 0.3) : i > 15 ? (j < 15 ? 0.72 : 0.46) : j < 4 ? 0.4 : 0.66
-      r.setAttribute('fill', ndviColor(v + (road ? n * 0.4 : n)))
-    }
-  }
-  S('rect', { x: 10 * 32 - 3, y: 9 * CELL - 3, width: 70, height: 71, fill: 'none', stroke: '#fde047', 'stroke-width': 6, 'shape-rendering': 'auto' }, mapSvg)
-  S('rect', { x: 10 * 32 - 6, y: 9 * CELL - 6, width: 76, height: 77, fill: 'none', stroke: '#16231b', 'stroke-width': 2, 'shape-rendering': 'auto' }, mapSvg)
-  const plotTag = el('div', 'plot-tag', mapBox, 'Your plot'); place(plotTag, 404, 296)
-  // the chart
-  const CW = 552, CH = 500, X0 = 58, X1 = 536, Y0 = 448, Y1 = 26, NPT = 30, PEAK = 18
-  const chart = S('svg', { width: CW, height: CH, style: 'display:block;margin-top:18px;overflow:visible' }); side.appendChild(chart)
-  for (const v of [0, 0.25, 0.5, 0.75, 1]) {
-    const y = lerp(Y0, Y1, v)
-    S('path', { d: `M${X0},${y} H${X1}`, stroke: v ? '#e3e8e4' : '#9aa69f', 'stroke-width': 2 }, chart)
-    S('text', { x: X0 - 12, y: y + 6, 'text-anchor': 'end' }, chart).textContent = v
-  }
-  ;['Apr', 'May', 'Jun', 'Jul', 'Aug'].forEach((m, i) => { S('text', { x: lerp(X0, X1, (i + 0.5) / 5), y: Y0 + 30, 'text-anchor': 'middle' }, chart).textContent = m })
-  const vals = Array.from({ length: NPT + 1 }, (_, i) => (i <= PEAK ? 0.16 + 0.7 * E.inout3(i / PEAK) + (hash(i + 7) - 0.5) * 0.04 : 0.86 - 0.62 * ((i - PEAK) / (NPT - PEAK))))
-  const ptX = (f) => lerp(X0 + 10, X1 - 10, f / NPT), ptY = (v) => lerp(Y0, Y1, v)
-  const valAt = (f) => { const i = Math.min(NPT - 1, Math.floor(f)); return lerp(vals[i], vals[i + 1], f - i) }
-  const lineUp = S('path', { fill: 'none', stroke: '#1f6f43', 'stroke-width': 5, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, chart)
-  const lineDown = S('path', { fill: 'none', stroke: '#dc2626', 'stroke-width': 7, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, chart)
-  const dotsC = vals.map((v, i) => S('circle', { cx: ptX(i), cy: ptY(v), r: 6.5, fill: i > PEAK ? '#dc2626' : '#1f6f43', stroke: '#fff', 'stroke-width': 2 }, chart))
-  const headDot = S('circle', { r: 13, stroke: '#fff', 'stroke-width': 4 }, chart)
+  // ---- beat 1: the careful neighbour's phone shows the crop disease risk of his soil: corn high, wheat low
+  const cornIcon = `<svg width="54" height="64" viewBox="-27 -34 54 64"><path d="M-16,26 C-30,6 -26,-22 0,-32 C26,-22 30,6 16,26Z" fill="#ffd84a" stroke="${INK}" stroke-width="3.5"/>
+    <path d="M-20,28 C-30,10 -26,-6 -20,-14 C-16,4 -8,18 2,28Z M20,28 C30,10 26,-6 20,-14 C16,4 8,18 -2,28Z" fill="#58b043" stroke="${INK}" stroke-width="3.5" stroke-linejoin="round"/></svg>`
+  const wheatIcon = `<svg width="54" height="64" viewBox="-27 -34 54 64"><path d="M0,30 V-6" stroke="#8aa63a" stroke-width="4" stroke-linecap="round"/>
+    ${[-24, -12, 0, 12].map((y, i) => `<ellipse cx="-8" cy="${y}" rx="9" ry="6" transform="rotate(-35 -8 ${y})" fill="#f2cf6b" stroke="${INK}" stroke-width="2.5"/><ellipse cx="8" cy="${y + 5}" rx="9" ry="6" transform="rotate(35 8 ${y + 5})" fill="#f2cf6b" stroke="${INK}" stroke-width="2.5"/>`).join('')}
+    <path d="M0,-30 V-40 M-6,-28 L-12,-38 M6,-28 L12,-38" stroke="#c9962e" stroke-width="2.5" stroke-linecap="round"/></svg>`
+  const rcard = el('div', 'rcard', root, `<div class="hd"><img src="brand/terranos.png"><b>Crop disease risk</b></div>
+    <div class="lab">Your plot · soil fungi scored for each crop</div>
+    <div class="row bad"><span class="ic">${cornIcon}</span><span class="nm">Corn</span><span class="cell">Higher risk</span><i class="ring"></i></div>
+    <div class="row good"><span class="ic">${wheatIcon}</span><span class="nm">Wheat</span><span class="cell">Lower risk</span><i class="ring"></i><span class="tick">✓</span></div>
+    <div class="key"><i style="background:#1f7a45"></i>lower risk <i style="background:#c0262d;margin-left:18px"></i>higher risk</div>`)
+  const [ringC, ringW] = rcard.querySelectorAll('.ring'), tick = rcard.querySelector('.tick')
+  const RC_X = 1010, RC_Y = 250
 
-  // ---- beat 5: the Treatment plan on a phone
+  // ---- beat 6: the Treatment plan on the neighbour's phone
   const PX = 1150, PY = 160, ZOOM = 1.45
   const PL = R.plan, item = PL.planItem[0], buy = PL.buyNow[0], TS = 488 / item[2], TILE_Y = 208
   const phone = el('div', 'phone', root, `<div class="screen"><div class="appbar"><img src="brand/terranos.png"></div>
@@ -1024,8 +1103,10 @@ scene(38, 56, (root) => {
   const tapRing = el('div', 'tapring', screen)
   const ordered = el('div', 'ordered', screen, 'Ordered ✓'); css(ordered, { width: BUY[2] + 8 + 'px', height: BUY[3] + 6 + 'px' })
   const toast = el('div', 'toast', screen, '<span>✓</span>Order placed · arriving today')
-  // the tapping hand, fingertip at the origin
-  const handSvg = svgLayer(root), hand = S('g', {}, handSvg), handIn = S('g', { transform: 'rotate(-30) scale(1.25)' }, hand)
+  // overlay: the link from the phone to the risk card, and the tapping hand (fingertip at the origin)
+  const over = svgLayer(root)
+  const link = S('path', { fill: 'none', stroke: '#1f6f43', 'stroke-width': 5, 'stroke-dasharray': '4 14', 'stroke-linecap': 'round' }, over)
+  const hand = S('g', {}, over), handIn = S('g', { transform: 'rotate(-30) scale(1.25)' }, hand)
   S('rect', { x: -30, y: 150, width: 104, height: 420, fill: '#e2573f', ...OUT }, handIn)
   S('rect', { x: -36, y: 136, width: 116, height: 34, rx: 12, fill: '#c94a36', ...OUT }, handIn)
   S('rect', { x: -24, y: 62, width: 92, height: 88, rx: 30, fill: '#f6c9a2', ...OUT }, handIn)
@@ -1033,28 +1114,29 @@ scene(38, 56, (root) => {
   S('path', { d: 'M-22,104 C-44,96 -46,128 -26,134', fill: '#f6c9a2', ...OUT }, handIn)
   S('path', { d: 'M22,82 q14,-6 24,2 M24,104 h40', fill: 'none', stroke: INK, 'stroke-width': 4, 'stroke-linecap': 'round' }, handIn)
 
-  const caps = [
-    [38.15, 40.95, 'A farmer plants <span class="hl">corn.</span>'],
-    [41.4, 43.95, 'It grows. <span class="hl">Fast.</span>'],
-    [44.15, 46.95, 'Then its greenness <span class="hl">plunges.</span>'],
-    [47.15, 50.15, 'The corn is <span class="hl">not</span> <span class="hl">well.</span>'],
-    [50.4, 53.4, 'Treatment plan: <span class="hl">Buy</span> <span class="hl">now.</span>'],
-    [53.9, 56.6, 'Happy corn. <span class="hl">Happy farmer.</span>'],
-  ].map(([a, b, h]) => ({ a, b, w: words(root, h, 'heading story-cap', 0, 58, true) }))
 
   const blinkAt = (t, off) => bump((t + off) % 2.7, 0, 0.16)
-  const CHEER = 54.12  // jumps land on the beats 54.5, 55.0, 55.5, 56.0
+  const CHEER = 58.12  // jumps land on the beats 58.5, 59.0, 59.5, 60.0
   const hop = (t, lag = 0) => (t >= CHEER + lag ? bump((t - CHEER - lag) % 0.5, 0, 0.38) : 0)
+  const cheerSquash = (t, lag) => (t >= CHEER + lag ? 0.08 * hop(t, lag) - 0.16 * bump((t - CHEER - lag) % 0.5, 0.38, 0.12) : 0)
+  /** A seed thrown from (x0, y0) that lands at x1 between a and b. */
+  const toss = (e, t, a, b, x0, y0, x1) => {
+    const p = prog(t, a, b)
+    at(e, { opacity: p > 0 && p < 1 ? 1 : 0 })
+    tf(e, `translate(${lerp(x0, x1, p)},${lerp(y0, GROUND - 8, p) - 150 * Math.sin(Math.PI * p)}) rotate(${p * 540}) scale(1.5)`)
+  }
+  const flyClods = (cs, t, a, x, reach) => cs.forEach((c, i) => {
+    const p = prog(t, a, a + 0.65), k = (i - (cs.length - 1) / 2) / ((cs.length - 1) / 2)
+    at(c, { cx: x + k * reach * p, cy: GROUND - 10 - (190 + hash(i) * 110) * Math.sin(Math.PI * p) * (1 - 0.3 * Math.abs(k)), r: 5 + hash(i + 5) * 6, opacity: p > 0 && p < 1 ? 1 : 0 })
+  })
 
   return (t) => {
-    for (const c of caps) c.w.update(t, c.a, c.b, 0.07)
-
     // ---- mood and camera
-    const sick = kf(t, [[45.3, 0], [46.6, 1], [53.92, 1], [54.45, 0]])
-    const gloom = kf(t, [[45.3, 0], [46.6, 1], [50.0, 1], [50.6, 0.7], [53.8, 0.7], [54.4, 0]])
-    const [cx, cy, z] = kf(t, [[38, [770, 640, 1.2]], [39.2, [1010, 655, 1.25]], [39.7, [1010, 655, 1.25]], [40.2, [1090, 680, 1.42]], [41.25, [1090, 680, 1.42]],
-      [41.65, [1000, 560, 1]], [46.9, [1000, 560, 1]], [47.6, [1050, 578, 1.2]], [50.15, [1056, 578, 1.22]], [50.8, [1470, 560, 1]], [52.95, [1470, 560, 1]],
-      [53.5, [1040, 560, 1]], [56, [1040, 552, 1.07]]])
+    const sick = kf(t, [[48.0, 0], [49.2, 1], [57.92, 1], [58.45, 0]])
+    const gloom = kf(t, [[48.0, 0], [49.2, 1], [52.0, 1], [52.6, 0.7], [57.8, 0.7], [58.4, 0]])
+    const [cx, cy, z] = kf(t, [[38, [960, 600, 1.05]], [38.9, [960, 600, 1]], [39.05, [960, 600, 1]], [39.6, [550, 615, 1.32]], [41.3, [550, 615, 1.32]],
+      [41.8, [960, 590, 1]], [42.15, [960, 590, 1]], [42.65, [440, 620, 1.25]], [45.05, [440, 620, 1.25]], [45.6, [1440, 610, 1.2]], [47.9, [1440, 610, 1.2]],
+      [48.4, [1420, 600, 1.25]], [51.3, [1420, 600, 1.25]], [51.8, [1090, 590, 1]], [57.3, [1090, 590, 1]], [57.7, [1080, 570, 1]], [60, [1080, 565, 1.06]]])
     tf(mid, `translate(960,540) scale(${z}) translate(${-cx},${-cy})`)
     const PAR = 0.3
     const zf = 1 + (z - 1) * PAR, cxf = 960 + (cx - 960) * PAR, cyf = 540 + (cy - 540) * PAR
@@ -1062,169 +1144,195 @@ scene(38, 56, (root) => {
     const toScreen = (x, y) => [960 + (x - cx) * z, 540 + (y - cy) * z]
     const toFar = (x, y) => { const [sx, sy] = toScreen(x, y); return [(sx - 960) / zf + cxf, (sy - 540) / zf + cyf] }
     grey.style.opacity = gloom * 0.9
-    svg.style.filter = gloom > 0.01 ? `saturate(${1 - 0.4 * gloom}) brightness(${1 - 0.1 * gloom})` : ''
-    at(sun, { opacity: 1 - gloom })
-    for (const c of clouds) { tf(c.g, `translate(${c.x + (t - 38) * 9},${c.y}) scale(${c.s})`); c.g.setAttribute('fill', mix('#ffffff', '#8f9aa3', gloom)) }
-    tf(storm.g, `translate(${lerp(3000, 1500, E.out3(gloom))},250) scale(${storm.s})`); storm.g.setAttribute('fill', '#7d8892')
+    for (const c of clouds) { tf(c.g, `translate(${c.x + (t - 38) * 9},${c.y}) scale(${c.s})`); c.g.setAttribute('fill', mix('#ffffff', '#a3acb3', gloom * 0.5)) }
+    tf(storm.g, `translate(${lerp(3000, toFar(CORN_X + 60, 0)[0], E.out3(gloom))},240) scale(${storm.s})`); storm.g.setAttribute('fill', '#7d8892')
 
-    // ---- farmer
-    const walking = Math.max(1 - prog(t, 38.98, 39.1), life(t, 39.75, 40.2, 0.08, 0.1), life(t, 40.84, 41.5, 0.08, 0.05), life(t, 47.3, 47.9, 0.08, 0.1))
-    const fxPos = kf(t, [[38, 470], [39.1, 860], [39.75, 860], [40.2, 985], [40.84, 985], [41.5, 860], [41.55, 860], [42.0, 790], [47.3, 790], [47.9, 850]], E.lin)
-    const face = kf(t, [[40.72, 1], [40.84, -1], [41.5, -1], [41.6, 1]], E.lin)
-    const surprise = life(t, 41.55, 42.6, 0.08, 0.3), worried = Math.max(life(t, 45.6, 49.42, 0.4, 0.05), 0.5 * life(t, 50.1, 51.85, 0.2, 0.1))
-    const shockF = life(t, 48.8, 49.35, 0.08, 0.2), cheer = prog(t, 53.95, 54.15), jump = hop(t)
-    const waveB = life(t, 43.0, 43.75, 0.15, 0.15)
-    const hf = kf(t, [[38, [-42, -124]], [39.12, [-42, -124]], [39.42, [-80, -318]], [39.56, [94, -246]], [39.8, [40, -150]], [40.15, [-6, -150]], [40.28, [-6, -150]],
-      [40.42, [-62, -330]], [40.66, [-62, -330]], [40.85, [-42, -124]], [41.5, [-42, -124]], [41.66, [-118, -318]], [42.1, [-110, -300]], [42.5, [-42, -130]],
-      [45.6, [-42, -130]], [46.4, [14, -204]], [48.78, [14, -204]], [48.9, [-14, -284]], [49.3, [-14, -284]], [49.5, [-58, -342]], [49.9, [-58, -342]],
-      [50.08, [-8, -160]], [50.36, [70, -262]], [52.95, [70, -262]], [53.25, [-42, -124]], [53.5, [-42, -124]], [53.8, [-72, -300]], [54.1, [-78, -338]]])
-    const hb = kf(t, [[38, [66, -150]], [40.0, [66, -150]], [40.15, [60, -150]], [40.28, [60, -150]], [40.42, [94, -330]], [40.66, [94, -330]], [40.85, [54, -126]],
-      [41.5, [54, -126]], [41.66, [128, -310]], [42.1, [120, -296]], [42.5, [54, -126]], [42.85, [54, -126]], [43.05, [106, -322]], [43.7, [106, -322]], [43.95, [54, -126]],
-      [45.6, [54, -126]], [46.4, [36, -208]], [48.78, [36, -208]], [48.9, [72, -286]], [49.3, [72, -286]], [49.5, [54, -140]], [51.3, [54, -140]], [51.7, [96, -246]],
-      [51.85, [84, -262]], [52.0, [96, -244]], [52.3, [54, -126]], [53.5, [54, -126]], [53.8, [112, -296]], [54.1, [106, -338]]])
-    const ph = fxPos / 20, swing = 26 * Math.sin(ph) * walking
-    const tremble = worried * (1 - shockF) * Math.sin(t * 34) * 2
-    const fy = -95 * bump(t, 41.55, 0.45) - 30 * bump(t, 40.32, 0.3) - 26 * bump(t, 48.82, 0.25) - 36 * bump(t, 53.78, 0.26) - 78 * jump
-    const fsy = 1 - 0.16 * bump(t, 41.42, 0.14) + 0.1 * bump(t, 41.56, 0.3) - 0.2 * bump(t, 42.0, 0.24) - 0.12 * bump(t, 40.62, 0.16) - 0.1 * bump(t, 54.04, 0.16)
-      + (t >= CHEER ? 0.08 * jump - 0.16 * bump((t - CHEER) % 0.5, 0.38, 0.12) : 0)
-    const hatUp = 150 * bump(t, 41.57, 0.75) + 190 * bump(t, 54.62, 0.86) + 26 * hop(t, 0.07) * (t < 54.6 || t > 55.5 ? 1 : 0) + 14 * bump(t, 40.36, 0.34) + 20 * bump(t, 53.82, 0.3)
-    const fMouth = t >= 53.95 ? [20, 5, 20, 0.2] : t >= 53.45 ? [8, 0, 11, 1] : t >= 51.9 ? [17, 8, 9, 0.2] : t >= 50.1 ? [9, 2, 0] : t >= 49.45 ? [17, 6, 13, 0.25]
-      : t >= 48.8 ? [10, 0, 18, 1] : t >= 45.6 ? [13, -8, 0] : t >= 43.95 ? [14, 5, 0] : t >= 42.7 ? [18, 6, 13 + 5 * Math.sin(t * 22), 0.25] : t >= 42.45 ? [15, 7, 0]
-      : t >= 41.55 ? [11, 0, 25, 1] : t >= 40.85 ? [6, 0, 7, 1] : t >= 40.28 ? [18, 6, 16, 0.25] : t >= 39.42 && t < 39.7 ? [10, 0, 10, 1] : [16, 9, 0]
-    const handPos = farmer({
-      x: fxPos, y: fy, face: Math.abs(face) < 0.06 ? 0.06 : face, sy: fsy, walk: walking, ph,
-      lean: kf(t, [[38, 4], [39.12, 4], [39.42, -12], [39.56, 16], [39.8, 4], [40.15, 20], [40.28, 20], [40.4, -4], [40.8, 3], [41.5, 4], [41.62, -14], [42.1, -8], [42.6, 0],
-        [47.3, 0], [47.7, 6], [49.4, 6], [49.5, -2], [50.3, 0], [53.4, 0], [53.6, -6], [53.9, 0]]),
-      hf: [hf[0] - swing, hf[1] + tremble], hb: [hb[0] + swing * 0.5 + 14 * Math.sin(t * 20) * waveB + 8 * Math.sin(t * 13) * cheer, hb[1] - tremble],
-      bag: t < 39.95, phone: t >= 50.1 && t < 53.2,
-      head: kf(t, [[38, 0], [39.9, 4], [40.12, 12], [40.28, 12], [40.4, -8], [40.7, 0], [41.5, 0], [41.62, -14], [43.9, -12], [44.3, 0], [46.6, 0], [47.2, -10], [49.9, -8], [50.3, 6],
-        [52.2, 6], [52.5, -8], [53.3, -8], [53.5, -18], [53.72, -18], [53.85, 8], [54.1, -6]]) + 4 * Math.sin(t * 13) * cheer,
-      look: kf(t, [[38, [0.6, 0.2]], [39.5, [0.7, -0.3]], [39.85, [0.8, 0.6]], [40.3, [0.8, 0.7]], [40.8, [0.4, 0]], [41.5, [0.4, 0]], [41.62, [0.6, -0.6]], [43.9, [0.6, -0.6]],
-        [44.4, [0.5, -0.3]], [47.2, [0.6, -0.5]], [50.0, [0.6, -0.5]], [50.4, [0.75, 0.2]], [52.2, [0.75, 0.2]], [52.5, [0.6, -0.5]], [53.3, [0.5, -0.5]], [53.5, [0.3, -0.9]],
-        [53.72, [0.4, -0.9]], [53.8, [0.6, 0.7]], [54.15, [0.6, -0.5]]]),
-      blink: Math.max(blinkAt(t, 0.9), 0.3 * worried), eye: 1 + 0.35 * surprise + 0.22 * shockF + 0.15 * life(t, 53.76, 54.1, 0.06, 0.2),
-      joy: (t >= 40.9 && t < 41.5) || (t >= 42.75 && t < 43.7), browL: 12 * surprise + 6 * worried + 8 * shockF + 6 * cheer, browA: 18 * worried,
-      mouth: fMouth, mou: 9 * Math.sin(t * 34) * life(t, 41.55, 42.3, 0.05, 0.4),
-      hatY: -hatUp - 4 * Math.abs(Math.sin(ph - 0.6)) * walking, hatR: 22 * Math.sin(2 * Math.PI * prog(t, 41.57, 42.32)) + 360 * E.inout3(prog(t, 54.66, 55.44)),
+    // ---- the careful neighbour (A): walks in, checks the risk on his phone, plants wheat, is amazed, later shows the app across the fence
+    const aWalk = Math.max(1 - prog(t, 38.85, 38.98), life(t, 51.4, 52.4, 0.08, 0.1))
+    const ax = kf(t, [[38, -60], [38.95, 300], [51.4, 300], [52.4, 860]], E.lin), aph = ax / 20, aSwing = 26 * Math.sin(aph) * aWalk
+    const aSur = life(t, 43.37, 44.4, 0.08, 0.3), aLaugh = t >= 43.95 && t < 44.8, aConcern = life(t, 48.6, 51.5, 0.4, 0.3)
+    const aCheer = prog(t, 57.95, 58.15), aJump = hop(t, 0.1), aTalk = t >= 52.5 && t < 53.4
+    const aWave = life(t, 44.45, 45.0, 0.12, 0.12)
+    const aHf = kf(t, [[38, [-42, -124]], [39.05, [-42, -124]], [39.4, [62, -252]], [41.3, [62, -252]], [41.6, [-42, -124]], [43.32, [-42, -124]], [43.48, [-118, -318]],
+      [43.92, [-110, -300]], [44.32, [-42, -130]], [52.2, [-42, -130]], [52.5, [124, -296]], [53.45, [124, -296]], [53.75, [-42, -124]], [57.9, [-42, -124]], [58.1, [-78, -338]]])
+    const aHb = kf(t, [[38, [66, -150]], [42.05, [66, -150]], [42.18, [100, -318]], [42.3, [134, -232]], [42.5, [54, -126]], [43.32, [54, -126]], [43.48, [128, -310]],
+      [43.92, [120, -296]], [44.32, [54, -126]], [44.45, [54, -126]], [44.6, [106, -322]], [44.9, [106, -322]], [45.05, [54, -126]], [57.9, [54, -126]], [58.1, [106, -338]]])
+    const aMouth = t >= 57.95 ? [20, 5, 20, 0.2] : aTalk ? [12, 4, 6 + 10 * Math.abs(Math.sin(t * 13)), 0.3] : t >= 48.6 && t < 51.5 ? [11, -5, 0]
+      : t >= 44.8 ? [15, 7, 0] : aLaugh ? [18, 6, 13 + 5 * Math.sin(t * 22), 0.25] : t >= 43.37 ? [11, 0, 25, 1] : [16, 9, 0]
+    const aHand = smart({ ...POSE,
+      x: ax, face: 1, walk: aWalk, ph: aph,
+      y: -95 * bump(t, 43.37, 0.45) - 78 * aJump,
+      sy: 1 - 0.16 * bump(t, 43.24, 0.14) + 0.1 * bump(t, 43.38, 0.3) - 0.2 * bump(t, 43.82, 0.24) + cheerSquash(t, 0.1),
+      lean: kf(t, [[38, 4], [38.95, 0], [39.4, 5], [41.3, 5], [41.6, 0], [42.18, -6], [42.3, 10], [42.5, 0], [43.32, 0], [43.44, -14], [43.92, -8], [44.4, 0],
+        [52.3, 0], [52.5, 8], [53.45, 8], [53.75, 0]]),
+      hf: [aHf[0] - aSwing, aHf[1]], hb: [aHb[0] + aSwing * 0.5 + 14 * Math.sin(t * 20) * aWave + 8 * Math.sin(t * 13) * aCheer, aHb[1]],
+      bag: t < 42.32, phone: true,
+      head: kf(t, [[38, 0], [39.4, 8], [40.8, 8], [40.95, 16], [41.1, 4], [41.3, 8], [41.6, 0], [43.32, 0], [43.44, -14], [44.6, -10], [45.0, 0], [52.5, -4]]) + 4 * Math.sin(t * 13) * aCheer,
+      look: kf(t, [[38, [0.6, 0]], [39.4, [0.8, 0.6]], [41.3, [0.8, 0.6]], [41.6, [0.6, 0.1]], [42.3, [0.8, 0.5]], [43.37, [0.6, -0.6]], [44.4, [0.6, -0.5]], [45.2, [0.8, 0]],
+        [48.3, [0.9, 0.1]], [52.5, [0.9, -0.1]], [57.9, [0.9, 0.1]], [58.2, [0.6, -0.5]]]),
+      blink: Math.max(blinkAt(t, 0.9), 0.25 * aConcern), eye: 1 + 0.35 * aSur + 0.1 * life(t, 57.76, 58.1, 0.06, 0.2),
+      joy: aLaugh || (t >= 40.92 && t < 41.25), browL: 12 * aSur + 6 * aCheer + 4 * aConcern, browA: 14 * aConcern,
+      mouth: aMouth, mou: 9 * Math.sin(t * 34) * life(t, 43.37, 44.1, 0.05, 0.4),
+      hatY: -(150 * bump(t, 43.39, 0.75) + 26 * aJump) - 4 * Math.abs(Math.sin(aph - 0.6)) * aWalk, hatR: 22 * Math.sin(2 * Math.PI * prog(t, 43.39, 44.14)),
     })
-    at(shock, { opacity: life(t, 41.58, 42.05, 0.06, 0.2) }); tf(shock, `translate(${fxPos + 6},${GROUND - 500 + fy * 0.4}) scale(${0.7 + 0.5 * E.out3(prog(t, 41.58, 41.8))})`)
-    const bl = life(t, 49.45, 50.1, 0.25, 0.15, E.outBack)
-    at(bulbG, { opacity: clamp(bl * 3) }); tf(bulbG, `translate(${fxPos + 14},${GROUND - 510}) scale(${Math.max(0, bl) * 0.9}) rotate(${4 * Math.sin(t * 12)})`)
+    at(shockA, { opacity: life(t, 43.4, 43.87, 0.06, 0.2) }); tf(shockA, `translate(${ax + 6},${GROUND - 500 - 95 * bump(t, 43.37, 0.45) * 0.4}) scale(${0.7 + 0.5 * E.out3(prog(t, 43.4, 43.62))})`)
 
-    // ---- seed, mound, sprout
-    const sp = prog(t, 39.48, 39.88)
-    at(seed, { opacity: sp > 0 && sp < 1 ? 1 : 0 })
-    tf(seed, `translate(${lerp(960, CORN_X, sp)},${lerp(GROUND - 250, GROUND - 8, sp) - 170 * Math.sin(Math.PI * sp)}) rotate(${sp * 540}) scale(1.5)`)
-    puffSeed(t, 39.88, CORN_X, GROUND - 6, 50, 0.4, 11)
-    tf(mound, `translate(${CORN_X},${GROUND + 2}) scale(${1 + 0.12 * bump(t, 39.88, 0.25)},${1 - 0.25 * bump(t, 39.88, 0.25) + 0.3 * bump(t, 41.15, 0.2)})`)
-    if (show(sprout, t >= 40.25 && t < 41.32)) {
-      const s = E.outElastic(prog(t, 40.25, 40.85)), sy = kf(t, [[40.25, 1.5], [40.5, 1], [41.02, 1], [41.3, 0.5]]), rot = 7 * Math.sin((t - 40.25) * 7) * (1 - prog(t, 41.0, 41.2))
-      tf(sprout, `translate(${CORN_X},${GROUND - 4})`); tf(sproutIn, `rotate(${rot}) scale(${s / Math.sqrt(sy)},${s * sy})`)
-      sproutLeaves.forEach((l, i) => tf(l.parentNode, `translate(0,-22) scale(${i ? 1 : -1},1) rotate(${-38 + 10 * Math.sin(t * 7 + i) - 30 * prog(t, 41.02, 41.3)})`))
-      const sl = t < 40.8 ? [0, -0.3] : [-0.75, -0.2]
-      sproutEyes.forEach((e) => e(sl, Math.max(bump(t, 40.78, 0.14), bump(t, 41.1, 0.3)), 1))
-    }
+    // ---- the other neighbour (B), facing left: shrugs the app off, plants corn, worries, finally listens and buys
+    const bWalk = 1 - prog(t, 38.85, 38.98)
+    const bx = kf(t, [[38, 1840], [38.95, 1600]], E.lin), bph = bx / 20, bSwing = 26 * Math.sin(bph) * bWalk
+    const shrug = life(t, 41.5, 42.35, 0.15, 0.15), bWorried = Math.max(life(t, 48.6, 53.42, 0.4, 0.05), 0.5 * life(t, 54.1, 55.85, 0.2, 0.1))
+    const bShock = life(t, 50.8, 51.35, 0.08, 0.2), bCheer = prog(t, 57.95, 58.15), bJump = hop(t)
+    const bTremble = bWorried * (1 - bShock) * Math.sin(t * 34) * 2
+    const bHf = kf(t, [[38, [-42, -124]], [41.5, [-42, -124]], [41.68, [-96, -262]], [42.15, [-96, -262]], [42.35, [-42, -124]], [48.6, [-42, -130]], [49.3, [14, -204]],
+      [50.78, [14, -204]], [50.9, [-14, -284]], [51.3, [-14, -284]], [53.3, [-42, -130]], [53.5, [-58, -342]], [53.9, [-58, -342]], [54.08, [-8, -160]], [54.36, [70, -262]],
+      [56.95, [70, -262]], [57.25, [-42, -124]], [57.5, [-42, -124]], [57.8, [-72, -300]], [58.1, [-78, -338]]])
+    const bHb = kf(t, [[38, [66, -150]], [41.5, [66, -150]], [41.68, [112, -262]], [42.15, [112, -262]], [42.35, [66, -150]], [45.55, [66, -150]], [45.68, [100, -318]],
+      [45.8, [134, -232]], [46.0, [54, -126]], [48.6, [54, -126]], [49.3, [36, -208]], [50.78, [36, -208]], [50.9, [72, -286]], [51.3, [72, -286]], [51.5, [54, -140]],
+      [55.3, [54, -140]], [55.7, [96, -246]], [55.85, [84, -262]], [56.0, [96, -244]], [56.3, [54, -126]], [57.5, [54, -126]], [57.8, [112, -296]], [58.1, [106, -338]]])
+    const bMouth = t >= 57.95 ? [20, 5, 20, 0.2] : t >= 57.45 ? [8, 0, 11, 1] : t >= 55.9 ? [17, 8, 9, 0.2] : t >= 54.1 ? [9, 2, 0] : t >= 53.45 ? [17, 6, 13, 0.25]
+      : t >= 51.35 ? [13, -8, 0] : t >= 50.8 ? [10, 0, 18, 1] : t >= 48.6 ? [13, -8, 0] : t >= 47.3 ? [18, 7, 0] : t >= 42.35 ? [16, 9, 0]
+      : t >= 41.5 ? [9, 0, 7 + 3 * Math.sin(t * 30), 1] : [16, 9, 0]
+    const handPos = neigh({ ...POSE,
+      x: bx, face: -1, walk: bWalk, ph: bph,
+      y: -26 * bump(t, 50.82, 0.25) - 36 * bump(t, 57.78, 0.26) - 78 * bJump,
+      sy: 1 - 0.1 * bump(t, 58.04, 0.16) + cheerSquash(t, 0),
+      lean: kf(t, [[38, 4], [38.95, 0], [41.5, 0], [41.68, -6], [42.15, -6], [42.35, 0], [45.55, 0], [45.68, -12], [45.82, 16], [46.05, 4], [46.3, 0], [48.6, 0],
+        [49.3, 6], [51.4, 6], [51.6, 0], [53.4, 0], [53.6, -6], [53.9, 0], [57.4, 0], [57.6, -6], [57.9, 0]]),
+      hf: [bHf[0] - bSwing, bHf[1] + bTremble], hb: [bHb[0] + bSwing * 0.5 + 8 * Math.sin(t * 13) * bCheer, bHb[1] - bTremble],
+      bag: t < 45.84, phone: t >= 54.1 && t < 57.2,
+      head: kf(t, [[38, 0], [41.5, 0], [41.68, -8], [42.25, -8], [42.45, 0], [45.9, 12], [46.3, 0], [47.3, -6], [48.6, 0], [49.3, -10], [51.6, -8], [52.4, 0],
+        [53.3, -4], [53.5, -14], [53.9, -8], [54.3, 6], [56.2, 6], [56.5, -8], [57.3, -8], [57.5, -18], [57.72, -18], [57.85, 8], [58.1, -6]])
+        + 11 * Math.sin(t * 24) * shrug + 4 * Math.sin(t * 13) * bCheer,
+      look: kf(t, [[38, [0.6, 0.1]], [41.4, [0.6, 0.1]], [41.6, [0.2, -0.5]], [42.3, [0.2, -0.5]], [42.5, [0.9, 0]], [45.2, [0.9, 0]], [45.5, [0.7, 0.5]], [46.3, [0.8, 0.7]],
+        [47.0, [0.6, -0.6]], [48.6, [0.6, 0.2]], [51.6, [0.6, 0.2]], [52.2, [0.9, -0.1]], [53.3, [0.9, -0.1]], [53.5, [0.3, -0.9]], [53.9, [0.4, -0.9]], [54.3, [0.75, 0.2]],
+        [56.2, [0.75, 0.2]], [56.5, [0.6, -0.5]], [57.3, [0.5, -0.5]], [57.5, [0.3, -0.9]], [57.72, [0.4, -0.9]], [57.8, [0.6, 0.7]], [58.15, [0.6, -0.5]]]),
+      blink: Math.max(blinkAt(t, 1.7), 0.3 * bWorried, 0.45 * shrug), eye: 1 + 0.22 * bShock + 0.15 * life(t, 57.76, 58.1, 0.06, 0.2) + 0.15 * life(t, 53.45, 53.9, 0.06, 0.2),
+      joy: t >= 47.35 && t < 47.95, browL: 6 * bWorried + 8 * bShock + 6 * bCheer + 10 * shrug, browA: 18 * bWorried - 6 * shrug,
+      mouth: bMouth, hatY: -(190 * bump(t, 58.62, 0.86) + 26 * hop(t, 0.07) * (t < 58.6 || t > 59.5 ? 1 : 0) + 20 * bump(t, 57.82, 0.3)) - 4 * Math.abs(Math.sin(bph - 0.6)) * bWalk,
+      hatR: 360 * E.inout3(prog(t, 58.66, 59.44)),
+    })
+    at(shockB, { opacity: life(t, 50.82, 51.3, 0.06, 0.2) }); tf(shockB, `translate(${bx - 6},${GROUND - 500}) scale(${0.7 + 0.5 * E.out3(prog(t, 50.82, 51.0))})`)
+    const bl = life(t, 53.45, 54.1, 0.25, 0.15, E.outBack)
+    at(bulbG, { opacity: clamp(bl * 3) }); tf(bulbG, `translate(${bx - 14},${GROUND - 510}) scale(${Math.max(0, bl) * 0.9}) rotate(${4 * Math.sin(t * 12)})`)
 
-    // ---- corn
-    const grown = prog(t, 41.3, 41.95), tw = Math.max(0, t - 41.95)
-    const wave = life(t, 42.5, 43.8, 0.2, 0.25), heal = prog(t, 53.92, 54.45), happy = prog(t, 54.1, 54.5)
-    const shiver = sick * (0.35 + 0.65 * bump((t - 47.2) % 1.3, 0, 0.7)) * (t > 46.6 && t < 53.75 ? 1 : 0)
-    const cJump = hop(t, 0.03), bop = happy * Math.sin((t - 54) * 2 * Math.PI)
-    const armsUp = [-56, -4]
-    const armPose = (sd) => {
-      if (t < 42.4) { const a = kf(t, [[41.3, [86, 44]], [41.62, [-64, -16]], [41.95, [-20, 30]], [42.15, [40, 10]], [42.4, [28, 18]]]); return a }
-      if (t >= 53.75) { const k = E.outBack(prog(t, 53.95, 54.4)); return [lerp(62, armsUp[0] + 16 * Math.sin((t - 54) * 4 * Math.PI + sd), k), lerp(46, armsUp[1] + 14 * Math.sin((t - 54) * 4 * Math.PI + sd - 1), k)] }
-      const base = [lerp(28 + 3 * Math.sin(t * 2 + sd), 62, sick) + shiver * 3 * Math.sin(t * 38 + sd), lerp(18, 46, sick)]
-      if (sd < 0 && wave > 0) return [lerp(base[0], -52 + 24 * Math.sin(t * 12), wave), lerp(base[1], 6 + 16 * Math.sin(t * 12 - 1.2), wave)]
+    // ---- seeds, mounds, sprouts
+    toss(seedW, t, 42.3, 42.62, ax + 110, GROUND - 250, WHEAT_X); puffSeedW(t, 42.62, WHEAT_X, GROUND - 6, 50, 0.4, 11); moundW(t, 42.62, 43.0)
+    toss(seedC, t, 45.82, 46.14, bx - 110, GROUND - 250, CORN_X); puffSeedC(t, 46.14, CORN_X, GROUND - 6, 50, 0.4, 11); moundC(t, 46.14, 46.72)
+    sproutW(t, 42.64, 0.5, WHEAT_X, -0.75); sproutC(t, 46.16, 0.7, CORN_X, 0.75)
+
+    // ---- the wheat: shoots up at once, waves at its farmer, worries for the corn, cheers at the end
+    const wGrown = prog(t, 43.12, 43.7), wtw = Math.max(0, t - 43.7), wSpring = t > 43.7 ? 1 : 0
+    const wWave = life(t, 44.2, 45.1, 0.2, 0.25), wWorry = life(t, 48.6, 51.6, 0.4, 0.3), wHappy = prog(t, 58.1, 58.5), wBop = wHappy * Math.sin((t - 58) * 2 * Math.PI + 1)
+    const wArm = (sd) => {
+      if (t < 44.15) return kf(t, [[43.12, [86, 44]], [43.4, [-64, -16]], [43.7, [-20, 30]], [43.9, [40, 10]], [44.15, [28, 18]]])
+      if (t >= 57.75) { const k = E.outBack(prog(t, 57.95, 58.4)); return [lerp(28, -56 + 16 * Math.sin((t - 58) * 4 * Math.PI + sd + 1), k), lerp(18, -4 + 14 * Math.sin((t - 58) * 4 * Math.PI + sd), k)] }
+      const base = [28 + 3 * Math.sin(t * 2 + sd) + 14 * wWorry * (sd > 0 ? 1 : 0.3), 18 + 10 * wWorry]
+      if (sd < 0 && wWave > 0) return [lerp(base[0], -52 + 24 * Math.sin(t * 12), wWave), lerp(base[1], 6 + 16 * Math.sin(t * 12 - 1.2), wWave)]
       return base
     }
-    const tp = prog(t, 53.86, 54.45)
-    const cMouth = t >= 53.95 ? [27, 8, 24 + 3 * Math.sin(t * 12), 0.15] : t >= 53.76 ? [9, 0, 12, 1] : t >= 46.0 ? [11, -4, 0] : t >= 45.3 ? [15, -9, 0] : t >= 43.95 ? [18, 7, 0]
-      : t >= 42.35 ? [24, 9, 11, 0.15] : [20, 4, 22, 0.5]
+    wheat({
+      s: t < 43.12 ? 0 : 0.12 + 0.88 * E.out3(wGrown), dx: 0,
+      sy: (t < 44.4 ? kf(t, [[43.12, 0.6], [43.37, 1.26], [43.7, 1.1], [43.85, 0.9], [44.0, 1.06], [44.17, 0.97], [44.35, 1]]) : 1) + cheerSquash(t, 0.06),
+      y: -46 * hop(t, 0.06),
+      lean: 8 * Math.exp(-3.5 * wtw) * Math.sin(15 * wtw) * wSpring + 4 * wBop + 1.5 * Math.sin(t * 1.9),
+      head: 6 * Math.exp(-3 * wtw) * Math.sin(15 * wtw - 1) * wSpring - 7 * wWave + 6 * wBop + 6 * wWorry,
+      sway: 3 * Math.sin(t * 2.3) + 10 * wBop, armL: wArm(-1), armR: wArm(1),
+      awn: 6 * Math.sin(t * 2.6) + 40 * Math.exp(-3 * wtw) * Math.sin(13 * wtw) * wSpring - 26 * (1 - wGrown) + 16 * Math.sin((t - 58.1) * 2 * Math.PI) * wHappy,
+      look: kf(t, [[43.7, [0, -0.3]], [44.0, [-0.7, 0.4]], [45.2, [-0.7, 0.4]], [45.6, [0.7, 0.2]], [48.6, [0.75, 0.3]], [52.4, [0.75, 0.3]], [52.7, [0.6, -0.2]], [57.5, [0.6, -0.2]],
+        [57.7, [0.7, -0.7]], [58.1, [0.2, 0.3]]]),
+      blink: blinkAt(t, 0.5), eye: 1 + 0.15 * life(t, 43.2, 44.0, 0.1, 0.3),
+      joy: t >= 58.5 || (t >= 44.5 && t < 45.0), browL: 8 * life(t, 43.2, 44.0, 0.1, 0.3) + 6 * wHappy, browA: 16 * wWorry,
+      mouth: t >= 57.95 ? [27, 8, 24 + 3 * Math.sin(t * 12), 0.15] : wWorry > 0.3 ? [12, -4, 0] : t >= 43.75 ? [24, 9, 11, 0.15] : [20, 4, 22, 0.5],
+    })
+    puffGrowW(t, 43.12, WHEAT_X, GROUND - 4, 130, 0.6, 20); flyClods(clodsW, t, 43.12, WHEAT_X, 190)
+
+    // ---- the corn: grows normally, falls ill, recovers when the parcel lands
+    const grown = prog(t, 46.85, 47.4), tw = Math.max(0, t - 47.4), cSpring = t > 47.4 ? 1 : 0
+    const happy = prog(t, 58.1, 58.5)
+    const shiver = sick * (0.35 + 0.65 * bump((t - 49.2) % 1.3, 0, 0.7)) * (t > 49.2 && t < 57.75 ? 1 : 0)
+    const cJump = hop(t, 0.03), bop = happy * Math.sin((t - 58) * 2 * Math.PI)
+    const armPose = (sd) => {
+      if (t < 47.65) return kf(t, [[46.85, [86, 44]], [47.1, [-64, -16]], [47.35, [-20, 30]], [47.5, [40, 10]], [47.65, [28, 18]]])
+      if (t >= 57.75) { const k = E.outBack(prog(t, 57.95, 58.4)); return [lerp(62, -56 + 16 * Math.sin((t - 58) * 4 * Math.PI + sd), k), lerp(46, -4 + 14 * Math.sin((t - 58) * 4 * Math.PI + sd - 1), k)] }
+      return [lerp(28 + 3 * Math.sin(t * 2 + sd), 62, sick) + shiver * 3 * Math.sin(t * 38 + sd), lerp(18, 46, sick)]
+    }
+    const tp = prog(t, 57.86, 58.45)
     corn({
-      s: t < 41.3 ? 0 : 0.12 + 0.88 * E.out3(grown), dx: shiver * 2.2 * Math.sin(t * 41),
-      sy: (t < 42.6 ? kf(t, [[41.3, 0.6], [41.55, 1.22], [41.95, 1.1], [42.1, 0.9], [42.25, 1.06], [42.42, 0.97], [42.6, 1]]) : 1) - 0.07 * bump(t, 53.76, 0.2)
-        + 0.14 * bump(t, 54.0, 0.3) + (t >= CHEER ? 0.07 * cJump - 0.1 * bump((t - CHEER - 0.03) % 0.5, 0.38, 0.12) : 0),
-      y: -46 * cJump - 18 * bump(t, 53.78, 0.22),
-      lean: -6 * sick + 7 * Math.exp(-3.5 * tw) * Math.sin(15 * tw) * (t > 41.95 ? 1 : 0) + 5 * bop + 1.2 * Math.sin(t * 1.7) * sick,
-      head: -13 * sick + 5 * Math.exp(-3 * tw) * Math.sin(15 * tw - 1) * (t > 41.95 ? 1 : 0) - 7 * wave + 6 * bop + 2 * Math.sin(t * 1.7 - 0.8) * sick,
+      s: t < 46.85 ? 0 : 0.12 + 0.88 * E.out3(grown), dx: shiver * 2.2 * Math.sin(t * 41),
+      sy: (t < 47.9 ? kf(t, [[46.85, 0.6], [47.1, 1.18], [47.4, 1.08], [47.55, 0.94], [47.7, 1.03], [47.85, 1]]) : 1) - 0.07 * bump(t, 57.76, 0.2)
+        + 0.14 * bump(t, 58.0, 0.3) + cheerSquash(t, 0.03),
+      y: -46 * cJump - 18 * bump(t, 57.78, 0.22),
+      lean: -6 * sick + 6 * Math.exp(-3.5 * tw) * Math.sin(15 * tw) * cSpring + 5 * bop + 1.2 * Math.sin(t * 1.7) * sick,
+      head: -13 * sick + 4 * Math.exp(-3 * tw) * Math.sin(15 * tw - 1) * cSpring + 6 * bop + 2 * Math.sin(t * 1.7 - 0.8) * sick,
       sick, sway: 3 * Math.sin(t * 2.1) + 10 * bop, armL: armPose(-1), armR: armPose(1),
-      silk: 9 * Math.sin(t * 2.3) + 46 * Math.exp(-3 * tw) * Math.sin(13 * tw) * (t > 41.95 ? 1 : 0) - 30 * (1 - grown) + 22 * Math.sin((t - 54.1) * 2 * Math.PI) * happy,
-      look: kf(t, [[42.0, [0, -0.2]], [42.3, [-0.65, 0.5]], [44.6, [-0.65, 0.5]], [45.6, [-0.2, 0.8]], [49.4, [-0.2, 0.8]], [49.65, [-0.7, 0.45]], [53.3, [-0.7, 0.45]], [53.5, [-0.5, -0.8]],
-        [53.72, [-0.5, -0.8]], [53.8, [-0.8, 0.7]], [54.1, [-0.5, 0.3]]]),
-      blink: Math.max(blinkAt(t, 0), 0.48 * sick * (1 - bump(t, 53.76, 0.3))), eye: 1 + 0.2 * bump(t, 53.76, 0.4) + 0.15 * life(t, 41.4, 42.2, 0.1, 0.3),
-      joy: t >= 54.5 || (t >= 42.95 && t < 43.6), browL: 8 * life(t, 41.4, 42.3, 0.1, 0.3) + 6 * happy - 2 * sick, browA: 20 * sick,
-      mouth: cMouth, blush: 0.5 * life(t, 48.8, 53.9, 0.2, 0.3),
-      thermo: t >= 46.6 && t < 54.45 ? 1 - E.in3(prog(t, 54.2, 54.45)) : 0, merc: E.inout3(prog(t, 47.4, 48.8)), hot: life(t, 48.8, 49.6, 0.15, 0.3, E.outBack),
+      silk: 9 * Math.sin(t * 2.3) + 36 * Math.exp(-3 * tw) * Math.sin(13 * tw) * cSpring - 30 * (1 - grown) + 22 * Math.sin((t - 58.1) * 2 * Math.PI) * happy,
+      look: kf(t, [[47.4, [0, -0.2]], [47.7, [0.65, 0.5]], [48.6, [0.2, 0.8]], [52.3, [0.2, 0.8]], [52.6, [-0.7, 0.3]], [54.0, [-0.7, 0.3]], [54.3, [0.7, 0.45]],
+        [57.3, [0.7, 0.45]], [57.5, [-0.5, -0.8]], [57.72, [-0.5, -0.8]], [57.8, [-0.8, 0.7]], [58.1, [0, 0.3]]]),
+      blink: Math.max(blinkAt(t, 0), 0.48 * sick * (1 - bump(t, 57.76, 0.3))), eye: 1 + 0.2 * bump(t, 57.76, 0.4) + 0.12 * life(t, 46.9, 47.6, 0.1, 0.3),
+      joy: t >= 58.5 || (t >= 47.45 && t < 47.95), browL: 6 * life(t, 46.9, 47.6, 0.1, 0.3) + 6 * happy - 2 * sick, browA: 20 * sick,
+      mouth: t >= 57.95 ? [27, 8, 24 + 3 * Math.sin(t * 12), 0.15] : t >= 57.76 ? [9, 0, 12, 1] : t >= 48.6 ? [11, -4, 0] : t >= 48.0 ? [15, -9, 0]
+        : t >= 47.4 ? [24, 9, 11, 0.15] : [20, 4, 22, 0.5],
+      blush: 0.5 * life(t, 50.8, 57.9, 0.2, 0.3),
+      thermo: t >= 48.6 && t < 58.45 ? 1 - E.in3(prog(t, 58.2, 58.45)) : 0, merc: E.inout3(prog(t, 49.4, 50.8)), hot: life(t, 50.8, 51.6, 0.15, 0.3, E.outBack),
       thermoAt: [430 * tp, -150 * Math.sin(Math.PI * tp * 0.8) + 260 * tp * tp + 3 * shiver * Math.sin(t * 40), 520 * tp],
     })
-    puffGrow(t, 41.3, CORN_X, GROUND - 4, 130, 0.6, 20)
-    clods.forEach((c, i) => {
-      const p = prog(t, 41.3, 41.95), a = (i - 3) / 3
-      at(c, { cx: CORN_X + a * 190 * p, cy: GROUND - 10 - (190 + hash(i) * 110) * Math.sin(Math.PI * p) * (1 - 0.3 * Math.abs(a)), r: 5 + hash(i + 5) * 6, opacity: p > 0 && p < 1 ? 1 : 0 })
-    })
-    puffLand(t, 42.0, 790, GROUND, 80, 0.45, 13)
+    puffGrowC(t, 46.85, CORN_X, GROUND - 4, 110, 0.6, 18); flyClods(clodsC, t, 46.85, CORN_X, 150)
     // a leaf lets go
-    const lf = prog(t, 47.7, 49.1)
-    at(fallLeaf, { opacity: t >= 47.7 ? 1 - prog(t, 53.95, 54.3) : 0 })
+    const lf = prog(t, 49.7, 51.1)
+    at(fallLeaf, { opacity: t >= 49.7 ? 1 - prog(t, 57.95, 58.3) : 0 })
     tf(fallLeaf, `translate(${CORN_X - 96 - 70 * lf + 34 * Math.sin(lf * 9) * (1 - lf)},${lerp(GROUND - 170, GROUND + 22, E.in3(lf) * 0.4 + lf * 0.6)}) rotate(${150 + 40 * Math.sin(lf * 9) * (1 - lf) + 30 * lf})`)
 
     // ---- the parcel and what is in it
-    const bp = prog(t, 53.38, 53.75)
-    if (show(box, t >= 53.38)) {
-      const bs = kf(t, [[53.75, 0.66], [53.9, 1.14], [54.05, 1]])
+    const bp = prog(t, 57.38, 57.75)
+    if (show(box, t >= 57.38)) {
+      const bs = kf(t, [[57.75, 0.66], [57.9, 1.14], [58.05, 1]])
       tf(box, `translate(${BOX_X},${lerp(GROUND - 1000, GROUND + 16, E.in3(bp))}) rotate(${14 * (1 - bp)})`)
       tf(boxIn, `scale(${1 / Math.sqrt(bs)},${bs})`)
-      const open = E.outBack(prog(t, 53.88, 54.2))
+      const open = E.outBack(prog(t, 57.88, 58.2))
       flaps.forEach((f, i) => tf(f, `translate(${i ? 58 : -58},-88) scale(${i ? -1 : 1},1) rotate(${-142 * open})`))
     }
-    puffBox(t, 53.75, BOX_X, GROUND + 14, 120, 0.5, 18)
+    puffBox(t, 57.75, BOX_X, GROUND + 14, 120, 0.5, 18)
     grains.forEach((g, i) => {
-      const p = prog(t, 53.95 + i * 0.035, 54.4 + i * 0.035), x1 = CORN_X - 40 + hash(i) * 80
+      const p = prog(t, 57.95 + i * 0.035, 58.4 + i * 0.035), x1 = CORN_X - 40 + hash(i) * 80
       at(g, { cx: lerp(BOX_X, x1, p), cy: lerp(GROUND - 90, GROUND - 6, p) - (150 + hash(i + 3) * 120) * Math.sin(Math.PI * p), opacity: p > 0 && p < 1 ? 1 : 0 })
     })
-    at(rays, { opacity: 0.5 * prog(t, 54.1, 54.6) })
-    tf(rays, `translate(${toFar(CORN_X, GROUND - 400).join(',')}) rotate(${(t - 54) * 14}) scale(${0.4 + 0.6 * E.outBack(prog(t, 54.1, 54.7))})`)
+    at(rays, { opacity: 0.5 * prog(t, 58.1, 58.6) })
+    tf(rays, `translate(${toFar(CORN_X, GROUND - 400).join(',')}) rotate(${(t - 58) * 14}) scale(${0.4 + 0.6 * E.outBack(prog(t, 58.1, 58.7))})`)
     stars.forEach((s, i) => {
-      const a = i * 2.39996, born = 54.05 + (i % 8) * 0.06, p = prog(t, born, born + 0.4)
+      const a = i * 2.39996, born = 58.05 + (i % 8) * 0.06, p = prog(t, born, born + 0.4)
       const rx = (170 + hash(i) * 150) * (Math.cos(a) < 0 ? 0.55 : 1), ry = 210 + hash(i + 20) * 150, tw2 = 0.55 + 0.45 * Math.sin(t * 9 + i * 1.7)
       at(s, { opacity: p > 0 ? 1 : 0 })
       tf(s, `translate(${CORN_X + Math.cos(a) * rx * E.out3(p)},${GROUND - 330 + Math.sin(a) * ry * E.out3(p) - 14 * (t - born)}) rotate(${t * 40 + i * 30}) scale(${E.outBack(p) * tw2 * (0.9 + hash(i + 40) * 0.9)})`)
     })
 
-    // ---- frost behind the card and the phone
-    const cardIn = E.outBack(prog(t, 44.0, 44.5)), cardOut = E.in3(prog(t, 46.72, 47.08))
-    const phIn = E.outBack(prog(t, 50.38, 50.85)), phOut = E.in3(prog(t, 52.95, 53.3))
-    frost.style.opacity = 0.55 * Math.max(prog(t, 44.0, 44.4) * (1 - cardOut), prog(t, 50.4, 50.8) * (1 - phOut) * 0.75)
-
-    // ---- greenness card
-    if (show(card, t >= 44.0 && t < 47.08)) {
-      card.style.opacity = clamp(cardIn * 2.5) * (1 - cardOut)
-      place(card, CARD_X, CARD_Y + (1 - cardIn) * 260 + cardOut * 120, `scale(${0.86 + 0.14 * cardIn - 0.1 * cardOut}) rotate(${(1 - cardIn) * 3}deg)`)
-      let f = PEAK * E.inout3(prog(t, 44.55, 45.25))
-      for (let i = 0; i < 4; i++) f += ((NPT - PEAK) / 4) * E.out3(prog(t, 45.3 + i * 0.32, 45.52 + i * 0.32))
-      const v = valAt(f), n = Math.floor(f), D = clamp((f - PEAK) / (NPT - PEAK))
-      const pts = vals.slice(0, n + 1).map((y, i) => [ptX(i), ptY(y)]); pts.push([ptX(f), ptY(v)])
-      const path = (a) => a.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join('')
-      lineUp.setAttribute('d', path(pts.slice(0, PEAK + 1))); lineDown.setAttribute('d', pts.length > PEAK + 1 ? path(pts.slice(PEAK)) : '')
-      dotsC.forEach((d, i) => at(d, { opacity: i <= n && t >= 44.55 ? 1 : 0 }))
-      at(headDot, { cx: ptX(f), cy: ptY(v), fill: ndviColor(v), opacity: t >= 44.5 ? 1 : 0, r: 13 + 5 * Math.max(...[0, 1, 2, 3].map((i) => bump(t, 45.3 + i * 0.32, 0.25))) })
-      valEl.textContent = v.toFixed(2); valEl.style.color = D > 0 ? '#b91c1c' : '#1f6f43'
-      for (const c of fieldCells) c.r.setAttribute('fill', ndviColor((D > 0 ? lerp(0.86, 0.2, clamp((D * 1.7 - c.d) * 3)) : v) + c.n))
-      const al = E.outBack(prog(t, 45.95, 46.3))
-      alertEl.style.opacity = clamp(al * 2)
-      alertEl.style.transform = `scale(${0.5 + 0.5 * al}) rotate(${5 * Math.sin((t - 45.95) * 30) * (1 - prog(t, 45.95, 46.5))}deg)`
+    // ---- the risk card, linked to the careful neighbour's phone
+    const rIn = E.outBack(prog(t, 39.45, 39.95)), rOut = E.in3(prog(t, 41.1, 41.4))
+    if (show(rcard, t >= 39.45 && t < 41.4)) {
+      rcard.style.opacity = clamp(rIn * 2.5) * (1 - rOut)
+      place(rcard, RC_X + (1 - rIn) * 120, RC_Y + rOut * 60, `scale(${0.8 + 0.2 * rIn - 0.1 * rOut}) rotate(${(1 - rIn) * 3}deg)`)
+      const pc = life(t, 40.0, 41.3, 0.25, 0.2, E.outBack), pw = life(t, 40.45, 41.3, 0.25, 0.2, E.outBack)
+      css(ringC, { opacity: clamp(pc) * (0.75 + 0.25 * Math.sin(t * 16)), borderColor: '#c0262d', transform: `scale(${0.96 + 0.04 * clamp(pc)})` })
+      css(ringW, { opacity: clamp(pw), borderColor: '#1f7a45', transform: `scale(${0.96 + 0.04 * clamp(pw)})` })
+      const tk = E.outBack(prog(t, 40.7, 41.0)); css(tick, { opacity: clamp(tk * 2), transform: `scale(${tk})` })
     }
+    const [lx, ly] = toScreen(aHand[0], aHand[1] - 30), lp = E.out3(prog(t, 39.5, 39.85)) * (1 - rOut)
+    const ex = RC_X, ey = RC_Y + 200
+    at(link, { d: `M${lx},${ly} C${lerp(lx, ex, 0.5)},${ly - 120} ${lerp(lx, ex, 0.6)},${ey} ${lerp(lx, ex, lp)},${lerp(ly, ey, lp)}`, opacity: t >= 39.5 && t < 41.4 ? lp : 0,
+      'stroke-dashoffset': -t * 40 })
+
+    // ---- frost behind the phone
+    const phIn = E.outBack(prog(t, 54.38, 54.85)), phOut = E.in3(prog(t, 56.95, 57.3))
+    frost.style.opacity = 0.55 * prog(t, 54.4, 54.8) * (1 - phOut) * 0.75
 
     // ---- phone: the Treatment plan, and a tap on "Buy now"
-    if (show(phone, t >= 50.38 && t < 53.3)) {
-      const zoom = kf(t, [[50.95, 1], [51.45, ZOOM], [52.5, ZOOM], [52.9, 1]])
+    if (show(phone, t >= 54.38 && t < 57.3)) {
+      const zoom = kf(t, [[54.95, 1], [55.45, ZOOM], [56.5, ZOOM], [56.9, 1]])
       const [hx, hy] = toScreen(handPos[0], handPos[1] - 30)
       const k = clamp(phIn) * (1 - phOut), s = (phIn - phOut * phIn) * zoom
       // the phone scales about its top right corner (transform-origin), which travels from the farmer's hand to its place
       place(phone, lerp(hx - 540, PX, k), lerp(hy, PY, k), `scale(${Math.max(0.02, s)}) rotate(${(1 - k) * -14}deg)`)
       phone.style.opacity = clamp(k * 4)
-      const TAP = 51.85, done = t >= TAP + 0.06
+      const TAP = 55.85, done = t >= TAP + 0.06
       const op = E.outBack(prog(t, TAP + 0.06, TAP + 0.36))
       css(ordered, { opacity: done ? 1 : 0 }); place(ordered, BUY[0] - 4, BUY[1] - 3, `scale(${0.6 + 0.4 * op})`)
       const rp = prog(t, TAP, TAP + 0.5)
@@ -1232,18 +1340,18 @@ scene(38, 56, (root) => {
       const tu = E.outBack(prog(t, TAP + 0.25, TAP + 0.65))
       css(toast, { opacity: clamp(tu * 2), transform: `translateY(${(1 - tu) * 120}px)` })
       // fingertip on the button (the phone is at rest there, only zoomed)
-      const bx = PX + 540 - (540 - 14 - BUY[0] - BUY[2] / 2) * zoom, by = PY + (14 + BUY[1] + BUY[3] / 2) * zoom
-      const hi = E.out3(prog(t, 51.25, 51.72)), ho = E.in3(prog(t, 52.2, 52.6)), press = bump(t, TAP - 0.08, 0.26)
-      at(hand, { opacity: t >= 51.25 && t < 52.6 ? 1 : 0 })
-      tf(hand, `translate(${bx + 8 + (1 - hi) * 300 + ho * 360 - press * 5},${by + 14 + (1 - hi) * 420 + ho * 520 - press * 9 + 26 * bump(t, 51.55, 0.3)}) scale(${1 - 0.05 * press})`)
+      const bx2 = PX + 540 - (540 - 14 - BUY[0] - BUY[2] / 2) * zoom, by2 = PY + (14 + BUY[1] + BUY[3] / 2) * zoom
+      const hi = E.out3(prog(t, 55.25, 55.72)), ho = E.in3(prog(t, 56.2, 56.6)), press = bump(t, TAP - 0.08, 0.26)
+      at(hand, { opacity: t >= 55.25 && t < 56.6 ? 1 : 0 })
+      tf(hand, `translate(${bx2 + 8 + (1 - hi) * 300 + ho * 360 - press * 5},${by2 + 14 + (1 - hi) * 420 + ho * 520 - press * 9 + 26 * bump(t, 55.55, 0.3)}) scale(${1 - 0.05 * press})`)
     } else at(hand, { opacity: 0 })
   }
 })
 
 // =====================================================================================
-// 56-62 s  End card
+// 60-66 s  End card
 // =====================================================================================
-scene(56, 62, (root) => {
+scene(60, 66, (root) => {
   const logo = lockup(root, 1000)
   const tag = el('div', 'sub abs center', root, 'Your fields, <b style="color:#b5f26b;font-weight:700">from orbit to the microbe.</b>')
   css(tag, { fontSize: '40px' })
@@ -1254,19 +1362,19 @@ scene(56, 62, (root) => {
   const fade = el('div', 'abs', root); css(fade, { width: '1920px', height: '1080px', background: '#000' })
   let widths = null
   return (t) => {
-    logo.set(E.inout3(prog(t, 56.05, 56.8)), E.outBack(prog(t, 56.15, 57.0)))
+    logo.set(E.inout3(prog(t, 60.05, 60.8)), E.outBack(prog(t, 60.15, 61)))
     place(logo.box, 960 - logo.width / 2, 300)
-    const sp = E.out3(prog(t, 56.6, 57.1)); tag.style.opacity = sp; place(tag, 0, 525 + (1 - sp) * 20)
+    const sp = E.out3(prog(t, 60.6, 61.1)); tag.style.opacity = sp; place(tag, 0, 525 + (1 - sp) * 20)
     widths ??= feats.map((f) => f.offsetWidth)
     const total = widths.reduce((a, b) => a + b, 0) + 16 * (feats.length - 1)
     let x = 960 - total / 2
     feats.forEach((f, i) => {
-      const p = E.outBack(prog(t, 57.0 + i * 0.12, 57.45 + i * 0.12))
+      const p = E.outBack(prog(t, 61 + i * 0.12, 61.45 + i * 0.12))
       f.style.opacity = clamp(p); place(f, x, 650 + (1 - p) * 40, `scale(${0.7 + 0.3 * p})`)
       x += widths[i] + 16
     })
-    const fp = E.out3(prog(t, 57.9, 58.4)); facts.style.opacity = fp; place(facts, 0, 790 + (1 - fp) * 15)
-    fade.style.opacity = E.in3(prog(t, 61.0, 62))
+    const fp = E.out3(prog(t, 61.9, 62.4)); facts.style.opacity = fp; place(facts, 0, 790 + (1 - fp) * 15)
+    fade.style.opacity = E.in3(prog(t, 65, 66))
   }
 })
 
@@ -1291,7 +1399,7 @@ function cursor(t, path, a, b, clicks = []) {
 }
 
 const wipe = el('div', '', stage); wipe.id = 'wipe'; el('div', 'edge', wipe)
-const WIPES = [[4, '#1f6f43'], [24, '#14532d'], [32, '#1e3a5f'], [38, '#7cc25b'], [56, '#1f6f43']]
+const WIPES = [[4, '#1f6f43'], [24, '#14532d'], [32, '#1e3a5f'], [38, '#7cc25b'], [60, '#1f6f43']]
 const progress = el('div', '', stage); progress.id = 'progress'
 
 // ---------- frame ----------
@@ -1302,7 +1410,7 @@ function seek(t) {
   place(blobB, 1300 + Math.cos(t * 0.31) * 200, 500 + Math.sin(t * 0.4) * 160)
   dots.style.transform = `translate(${(-t * 18) % 44}px, ${(-t * 9) % 44}px)`
   // beat pulse on the dot grid (120 bpm once the drums are in)
-  dots.style.opacity = 0.6 + (t >= 4 && t < 56 ? 0.4 * (1 - prog((t - 4) % 0.5, 0, 0.3)) : 0)
+  dots.style.opacity = 0.6 + (t >= 4 && t < 60 ? 0.4 * (1 - prog((t - 4) % 0.5, 0, 0.3)) : 0)
 
   cursorSet = false
   css(rip, { display: 'none' })
