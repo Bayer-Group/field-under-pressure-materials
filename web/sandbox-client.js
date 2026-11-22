@@ -107,6 +107,8 @@
       validateField: body => request('/fields/validate', { method: 'POST', body }),
       putField: (id, body) => request(`/fields/${encodeURIComponent(id)}`, { method: 'PUT', body }),
       gridRisk: day => request(`/grid/risk?${new URLSearchParams({ date: day })}`),
+      sprayWindows: params => request(`/me/spray-window${params ? '?' + new URLSearchParams(params) : ''}`),
+      sprayWindow: (id, params) => request(`/crop-areas/${encodeURIComponent(id)}/spray-window${params ? '?' + new URLSearchParams(params) : ''}`),
       sprays: id => request(`/crop-areas/${encodeURIComponent(id)}/sprays`),
       patchArea: (id, body) => request(`/crop-areas/${encodeURIComponent(id)}`, { method: 'PATCH', body }),
       patchSpray: (id, sprayId, body) => request(`/crop-areas/${encodeURIComponent(id)}/sprays/${encodeURIComponent(sprayId)}`, { method: 'PATCH', body }),
