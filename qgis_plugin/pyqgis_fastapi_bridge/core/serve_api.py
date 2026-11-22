@@ -12,7 +12,7 @@ views of schema serve; this module only reads it:
   GET  /crop-areas/{id}           one crop area with soil and crop-map context
   GET  /crop-areas/{id}/risk      one row per day (from, to)
   GET  /crop-areas/{id}/changes   when and why the class, status or conditions_met changed
-  GET  /grid/risk?date=           FeatureCollection of 4 km cells (squares) for one day, analyst only
+  GET  /grid/risk?date=           FeatureCollection of 4 km cells (squares) for one day, analyst or sandbox
 
 Dates in the answers are never converted here. Fields can be null; null stays None (never 0).
 """
@@ -168,7 +168,7 @@ def _request(base_url, path, params=None, token=None, body=None, method="GET", t
 
 _HINTS = {
     401: "No or expired token: start a sandbox or log in again.",
-    403: "This needs another role (the grid is for the analyst).",
+    403: "This needs another role (the grid is for the analyst or a sandbox session; the server may not have the sandbox access yet).",
     404: "Not found (or a crop area of somebody else).",
     429: "Too many requests; wait a moment.",
     503: "The API is busy or read-only.",

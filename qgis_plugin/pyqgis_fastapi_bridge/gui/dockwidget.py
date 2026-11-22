@@ -500,9 +500,6 @@ class PyQgisBridgeDockWidget(QDockWidget, FORM_CLASS):
         elif not token:
             self._risk_msg("Start a sandbox or log in first (the API needs a token).")
             return
-        elif kind == "grid" and self._session_role not in (None, "analyst"):
-            self._risk_msg("The voivodeship grid needs the analyst role: log in as analyst.")
-            return
         date = self.dateGrid.date().toString("yyyy-MM-dd")
         source = path or base_url + (serve_api.CROP_AREA_PATH if kind == "crop_areas"
                                      else f"{serve_api.GRID_RISK_PATH}?date={date}")
