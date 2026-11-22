@@ -1,3 +1,26 @@
+data/
+!static_version/data/
+__pycache__/
+*.part
+.venv/
+.env
+*.zip
+.pytest_cache/
+.DS_Store
+data/cache/
+outputs/
+web/node_modules/
+web/dist/
+
+# showcase: generated media (rebuild with the scripts in showcase/, see showcase/README.md)
+showcase/shots/
+showcase/stills/
+showcase/*.mp4
+showcase/*.wav
+showcase/*.mp4.sources
+showcase/export/
+
+# --- from the organizers' repo (Bayer-Group/field-under-pressure-materials) ---
 # Data & downloads (keep data/*.md docs tracked)
 data/**
 !data/**/
@@ -25,3 +48,7 @@ __pycache__/
 .DS_Store
 .idea/
 .vscode/
+
+# tracked template, not a secret (the organizers' .env.* rule would hide it)
+!.env.example
+!web/.env.static

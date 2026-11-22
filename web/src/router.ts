@@ -1,0 +1,56 @@
+import { useSyncExternalStore } from 'react'
+
+// Hash routes, so the app works from any static server and links can be bookmarked:
+//   #/                                    overview map
+//   #/plot/<plot_id>                      map zoomed to one plot, on its default tab (soil microbes)
+//   #/plot/<plot_id>/greenness            the same plot with its greenness chart
+//   #/plot/<plot_id>/microbes[/<sample>][?view=taxonomy]  the same plot with its soil microbes by role (or by taxonomy)
+//   #/plot/<plot_id>/functions[/<sample>] the same plot with what its soil microbes are equipped to do
+//   #/plot/<plot_id>/risk[/<unit>[/<crop>]]  the same plot with its crop disease risk
+//   #/plot/<plot_id>/plan[/<unit>[/<crop>]]  the same plot with products to consider for a crop
+//   #/event/<event_id>                    details of one sampling visit
+export type MicrobeView = 'taxonomy' | 'roles'
+export type PlotTab = 'greenness' | 'microbes' | 'functions' | 'risk' | 'plan'
+export type Route =
+  | { page: 'map'; plotId: string | null; tab: PlotTab; sampleId: string | null; unit: string | null; crop: string | null; view: MicrobeView }
+  | { page: 'event'; eventId: string }
+
+export function parseRoute(hash: string): Route {
+  const [path, query = ''] = hash.replace(/^#\/?/, '').split('?')
+  const [page, arg, tab, third, fourth] = path.split('/').map(decodeURIComponent)
+  const view: MicrobeView = new URLSearchParams(query).get('view') === 'taxonomy' ? 'taxonomy' : 'roles'
+  if (page === 'event' && arg) return { page: 'event', eventId: arg }
+  const plotId = page === 'plot' && arg ? arg : null
+  const greenness = plotId !== null && tab === 'greenness'
+  const functions = plotId !== null && tab === 'functions'
+  const risk = plotId !== null && tab === 'risk'
+  const plan = plotId !== null && tab === 'plan'
+  return {
+    page: 'map', plotId, tab: greenness ? 'greenness' : functions ? 'functions' : risk ? 'risk' : plan ? 'plan' : 'microbes',
+    sampleId: (tab === 'microbes' || functions) && third ? third : null,
+    unit: (risk || plan) && third ? third : null, crop: (risk || plan) && third && fourth ? fourth : null, view,
+  }
+}
+
+export const plotHref = (plotId: string) => `#/plot/${encodeURIComponent(plotId)}`
+export const greennessHref = (plotId: string) => `${plotHref(plotId)}/greenness`
+export const microbesHref = (plotId: string, sampleId?: string, view?: MicrobeView) =>
+  `${plotHref(plotId)}/microbes${sampleId ? `/${encodeURIComponent(sampleId)}` : ''}${view === 'taxonomy' ? '?view=taxonomy' : ''}`
+export const riskHref = (plotId: string, unit?: string | null, crop?: string | null) =>
+  `${plotHref(plotId)}/risk${unit ? `/${encodeURIComponent(unit)}${crop ? `/${encodeURIComponent(crop)}` : ''}` : ''}`
+export const planHref = (plotId: string, unit?: string | null, crop?: string | null) =>
+  `${plotHref(plotId)}/plan${unit ? `/${encodeURIComponent(unit)}${crop ? `/${encodeURIComponent(crop)}` : ''}` : ''}`
+export const functionsHref = (plotId: string, sampleId?: string) =>
+  `${plotHref(plotId)}/functions${sampleId ? `/${encodeURIComponent(sampleId)}` : ''}`
+export const eventHref = (eventId: string) => `#/event/${encodeURIComponent(eventId)}`
+export const navigate = (href: string) => { window.location.hash = href }
+
+const subscribe = (cb: () => void) => {
+  window.addEventListener('hashchange', cb)
+  return () => window.removeEventListener('hashchange', cb)
+}
+
+export function useRoute(): Route {
+  const hash = useSyncExternalStore(subscribe, () => window.location.hash)
+  return parseRoute(hash)
+}

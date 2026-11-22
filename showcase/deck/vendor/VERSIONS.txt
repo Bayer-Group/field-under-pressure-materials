@@ -1,0 +1,2 @@
+reveal.js 6.0.2 (npm, MIT)  gsap 3.15.1 (npm, GSAP standard no-charge license)
+d3-array 3.2.4, d3-geo 3.1.1, topojson-client 3.1.0 (npm, ISC)  world-atlas 2.0.2 land-110m (npm, ISC; Natural Earth data, public domain)
