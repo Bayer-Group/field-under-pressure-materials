@@ -25,7 +25,7 @@ qgis_plugin/
     │   ├── dockwidget.py     # Panel logic: QgsTask, signal and event handling
     │   └── dockwidget.ui     # Qt Designer layout (XML)
     ├── core/
-    │   ├── serve_api.py      # HTTP client of the read contract (sandbox, login, crop areas, grid, heatmap, history)
+    │   ├── serve_api.py      # HTTP client of the read contract (sandbox, login, crop areas, grid, heatmap, spray window, history)
     │   ├── serve_layers.py   # builds the QGIS layers from the contract answers
     │   ├── farmer_fields.py  # GET /fields and the farmer-fields file
     │   ├── farmer_layers.py  # farmer crop-area and parcel layers
