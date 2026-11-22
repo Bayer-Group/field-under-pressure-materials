@@ -1,0 +1,1192 @@
+
+def _is_unsown_crop_rule(crop_val) -> bool:
+    c = str(crop_val or "").strip().lower()
+    return (
+        not c
+        or c in ("none", "nan", "brak", "ugór", "ugor", "niezasiane")
+        or "brak uprawy" in c
+        or "pod zasiew" in c
+        or "niezasian" in c
+    )
+
+import json
+from pathlib import Path
+from typing import Optional
+import pandas as pd
+
+DATA_DIR = Path(__file__).parent / "data_app"
+FARM_PROFILE_PATH = DATA_DIR / "farm_profile.json"
+
+SOWING_ALIASES = {"ZASIEJ", "SIEJ", "ZASADŹ"}
+FALLOW_LABEL = "Brak uprawy / Pod zasiew"
+
+KNOWN_CROPS = [
+    "Pszenica ozima",
+    "Pszenica jara",
+    "Jęczmień",
+    "Jęczmień jary",
+    "Żyto",
+    "Owies",
+    "Kukurydza",
+    "Rzepak ozimy",
+    "Ziemniaki",
+    "Buraki cukrowe",
+    "Rośliny strączkowe",
+    "Użytki zielone",
+    FALLOW_LABEL,
+]
+
+ECO_FERTILIZER_KEYWORDS = (
+    "eko",
+    "wapno",
+    "dolomit",
+    "obornik",
+    "kompost",
+    "biohumus",
+    "patentkali",
+    "siarczan potasu",
+    "mączka",
+    "fosforyt",
+    "biolog",
+)
+
+
+def _to_float_series(series: pd.Series) -> pd.Series:
+    return pd.to_numeric(
+        series.astype(str).str.strip().str.replace(",", ".", regex=False),
+        errors="coerce",
+    )
+
+
+def normalize_decision(value: str) -> str:
+    clean = str(value).strip().upper()
+    if clean in SOWING_ALIASES:
+        return "ZASIEJ"
+    return clean
+
+
+def load_static_fields() -> pd.DataFrame:
+    active_path = DATA_DIR / "active_fields.parquet"
+    if active_path.exists():
+        df = pd.read_parquet(active_path)
+        if "polygon_json" not in df.columns or df["polygon_json"].isna().all():
+            return pd.DataFrame()
+        if "field_uid" not in df.columns and "h3_index" in df.columns:
+            df["field_uid"] = [f"{h3}_{i+1:03d}" for i, h3 in enumerate(df["h3_index"].astype(str))]
+        return df
+    return pd.DataFrame(
+        columns=[
+            "field_uid", "h3_index", "lat", "lon", "grid_id",
+            "crop_code", "crop_name", "ndvi", "soil_ph", "soil_soc",
+            "soil_texture", "area_ha", "polygon_json", "sentinel_date",
+        ]
+    )
+
+
+def load_weather_timeseries() -> pd.DataFrame:
+    w_path = DATA_DIR / "active_weather.parquet"
+    f_path = DATA_DIR / "active_fields.parquet"
+    if not w_path.exists():
+        return pd.DataFrame(
+            columns=["grid_id", "timestamp", "temp_c", "humidity_pct", "wind_ms", "precip_24h_mm", "soil_moisture"]
+        )
+    df = pd.read_parquet(w_path)
+    df["timestamp"] = pd.to_datetime(df["timestamp"])
+
+    now_pl = pd.Timestamp.now(tz="Europe/Warsaw").tz_localize(None)
+    if f_path.exists() and (df.empty or df["timestamp"].max() < now_pl + pd.Timedelta(hours=12) or df["timestamp"].min() > now_pl):
+        try:
+            import ssl
+            import urllib.request
+            import numpy as np
+
+            fields_df = pd.read_parquet(f_path)
+            if not fields_df.empty:
+                c_lat, c_lon = float(fields_df["lat"].mean()), float(fields_df["lon"].mean())
+                url = (
+                    f"https://api.open-meteo.com/v1/forecast?latitude={c_lat:.3f}&longitude={c_lon:.3f}"
+                    "&past_days=5&forecast_days=5"
+                    "&hourly=temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,soil_moisture_0_to_7cm"
+                    "&wind_speed_unit=ms&timezone=Europe%2FWarsaw"
+                )
+                ctx = ssl._create_unverified_context()
+                with urllib.request.urlopen(url, context=ctx, timeout=12) as resp:
+                    h = json.loads(resp.read().decode("utf-8"))["hourly"]
+                w_base = pd.DataFrame({
+                    "timestamp": pd.to_datetime(h["time"]),
+                    "temp_c": pd.Series(h["temperature_2m"]).ffill().bfill().round(1).astype("float32"),
+                    "humidity_pct": pd.Series(h["relative_humidity_2m"]).ffill().bfill().round(1).astype("float32"),
+                    "wind_ms": pd.Series(h["wind_speed_10m"]).ffill().bfill().round(1).astype("float32"),
+                    "precip_1h": pd.Series(h["precipitation"]).fillna(0.0).clip(lower=0.0),
+                    "soil_moisture": pd.Series(h["soil_moisture_0_to_7cm"]).ffill().bfill().fillna(0.25).round(3).astype("float32"),
+                })
+                w_base["precip_24h_mm"] = w_base["precip_1h"].rolling(24, min_periods=1).sum().round(1).astype("float32")
+                w_base = w_base[w_base["timestamp"] >= w_base["timestamp"].min() + pd.Timedelta(hours=24)].copy()
+                out = []
+                for gid in fields_df["grid_id"].unique():
+                    sub = w_base[["timestamp", "temp_c", "humidity_pct", "wind_ms", "precip_24h_mm", "soil_moisture"]].copy()
+                    sub.insert(0, "grid_id", np.int32(gid))
+                    out.append(sub)
+                df = pd.concat(out, ignore_index=True)
+                df.to_parquet(w_path, index=False)
+        except Exception:
+            pass
+    return df
+
+
+def ensure_base_reference_data() -> dict[str, bool]:
+    """Gwarantuje obecność pełnej listy 16 województw i reguł bez folderu data_local."""
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    gminy_path = DATA_DIR / "gminy_polska.parquet"
+    rules_path = DATA_DIR / "reguly_agronomiczne.csv"
+
+    need_gminy = True
+    if gminy_path.exists():
+        try:
+            chk = pd.read_parquet(gminy_path, columns=["wojewodztwo"])
+            if chk["wojewodztwo"].nunique() >= 16:
+                need_gminy = False
+        except Exception:
+            pass
+
+    if need_gminy:
+        alt_gminy = Path(__file__).parent / "data_app" / "gminy_polska.parquet"
+        if alt_gminy.exists():
+            try:
+                chk2 = pd.read_parquet(alt_gminy, columns=["wojewodztwo"])
+                if chk2["wojewodztwo"].nunique() >= 16:
+                    import shutil
+                    shutil.copy2(alt_gminy, gminy_path)
+                    need_gminy = False
+            except Exception:
+                pass
+
+    if need_gminy:
+        try:
+            import ssl
+            import urllib.request
+            import geopandas as gpd
+
+            ctx = ssl._create_unverified_context()
+            tmp_zip = Path("/tmp/gminy_pol.zip")
+            url = "https://geodata.ucdavis.edu/gadm/gadm4.1/json/gadm41_POL_3.json.zip"
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, context=ctx, timeout=45) as resp:
+                tmp_zip.write_bytes(resp.read())
+            gdf = gpd.read_file(tmp_zip)
+            b = gdf.geometry.bounds
+            c = gdf.to_crs("EPSG:2180").geometry.centroid.to_crs("EPSG:4326")
+            pd.DataFrame({
+                "wojewodztwo": gdf["NAME_1"].astype(str).str.strip(),
+                "powiat": gdf["NAME_2"].astype(str).str.strip(),
+                "gmina": gdf["NAME_3"].astype(str).str.strip(),
+                "typ_gminy": "Gmina",
+                "min_lon": b["minx"].round(5), "min_lat": b["miny"].round(5),
+                "max_lon": b["maxx"].round(5), "max_lat": b["maxy"].round(5),
+                "center_lat": c.y.round(5), "center_lon": c.x.round(5),
+            }).drop_duplicates(subset=["wojewodztwo", "powiat", "gmina"]).to_parquet(gminy_path, index=False)
+        except Exception:
+            pass
+
+    if not rules_path.exists():
+        pd.DataFrame([
+            {
+                "rule_id": "R-001", "uprawa": "WSZYSTKIE", "zagrozenie": "Zbyt silny wiatr do oprysku",
+                "temp_min_c": "", "temp_max_c": "", "wilgotnosc_min_pct": "", "opad_24h_min_mm": "",
+                "wiatr_max_ms": 4.0, "ndvi_prog": "", "decyzja": "CZEKAJ", "poziom_ryzyka": "WYSOKI",
+                "komunikat": "Wstrzymaj oprysk: wiatr przekracza 4 m/s", "ph_min": "", "ph_max": "",
+                "soc_max_g_kg": "", "zalecany_nawoz": "", "nawozy_eko": "TAK",
+            }
+        ]).to_csv(rules_path, sep=";", index=False, encoding="utf-8-sig")
+
+    return {"gminy_ok": gminy_path.exists(), "rules_ok": rules_path.exists()}
+
+
+def load_admin_hierarchy() -> dict[str, dict[str, list[dict]]]:
+    ensure_base_reference_data()
+    base_dir = Path(__file__).parent
+    candidates = [
+        DATA_DIR / "gminy_polska.parquet",
+        base_dir / "data_app" / "gminy_polska.parquet",
+        base_dir / "data_app" / "gminy_polska.parquet",
+    ]
+    gminy_path = next((p for p in candidates if p.exists()), None)
+    hierarchy: dict[str, dict[str, list[dict]]] = {}
+    if gminy_path is not None:
+        gdf = pd.read_parquet(gminy_path)
+        for r in gdf.itertuples(index=False):
+            woj = str(getattr(r, "wojewodztwo", "")).strip()
+            powiat = str(getattr(r, "powiat", "")).strip()
+            gmina = str(getattr(r, "gmina", "")).strip()
+            if not (woj and powiat and gmina):
+                continue
+            bbox = [
+                float(getattr(r, "min_lon", 19.0)),
+                float(getattr(r, "min_lat", 50.0)),
+                float(getattr(r, "max_lon", 20.0)),
+                float(getattr(r, "max_lat", 51.0)),
+            ]
+            hierarchy.setdefault(woj, {}).setdefault(powiat, []).append(
+                {"gmina": gmina, "bbox": bbox}
+            )
+    return hierarchy
+
+
+def load_farm_profile() -> dict:
+    default_profile = {
+        "farm_name": "Moje Gospodarstwo",
+        "wojewodztwo": "",
+        "powiat": "",
+        "gmina": "",
+        "area_configured": False,
+        "only_my_farm": False,
+        "eco_mode": False,
+        "fields": {},
+    }
+    if FARM_PROFILE_PATH.exists():
+        try:
+            with open(FARM_PROFILE_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                if "33UXR" in str(data.get("gmina", "")):
+                    data["gmina"] = ""
+                    data["area_configured"] = False
+                default_profile.update(data)
+        except Exception:
+            pass
+    return default_profile
+
+
+def save_farm_profile(profile: dict) -> None:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    with open(FARM_PROFILE_PATH, "w", encoding="utf-8") as f:
+        json.dump(profile, f, ensure_ascii=False, indent=2)
+
+
+def apply_farm_profile(
+    fields_df: pd.DataFrame,
+    farm_profile: dict,
+    crop_dict_df: Optional[pd.DataFrame] = None,
+) -> pd.DataFrame:
+    df = fields_df.copy()
+    selected_map: dict = farm_profile.get("fields", {})
+    global_eco = bool(farm_profile.get("eco_mode", False))
+
+    df["is_my_field"] = df["field_uid"].isin(selected_map.keys())
+    df["is_fallow"] = False
+    df["is_eco_field"] = global_eco
+
+    if selected_map:
+        new_crops = []
+        new_ndvi = []
+        is_fallow_list = []
+        is_eco_list = []
+        for r in df.itertuples(index=False):
+            cfg = selected_map.get(r.field_uid)
+            if cfg is not None:
+                declared = str(cfg.get("crop_name", r.crop_name)).strip()
+                is_eco_list.append(bool(cfg.get("is_eco", global_eco)))
+                if declared == FALLOW_LABEL:
+                    rec_crop, _ = recommend_crop_by_soil(
+                        r.soil_ph, r.soil_soc, r.soil_texture, crop_dict_df=crop_dict_df
+                    )
+                    new_crops.append(f"Pod zasiew ({rec_crop})")
+                    new_ndvi.append(min(float(r.ndvi), 0.18))
+                    is_fallow_list.append(True)
+                else:
+                    new_crops.append(declared)
+                    new_ndvi.append(float(r.ndvi))
+                    is_fallow_list.append(False)
+            else:
+                new_crops.append(r.crop_name)
+                new_ndvi.append(float(r.ndvi))
+                is_fallow_list.append(False)
+                is_eco_list.append(global_eco)
+
+        df["crop_name"] = new_crops
+        df["ndvi"] = pd.Series(new_ndvi, index=df.index, dtype="float32")
+        df["is_fallow"] = is_fallow_list
+        df["is_eco_field"] = is_eco_list
+
+    if farm_profile.get("only_my_farm", False) and df["is_my_field"].any():
+        df = df[df["is_my_field"]].copy().reset_index(drop=True)
+
+    return df
+
+
+
+
+def load_optional_crop_recommendations() -> Optional[pd.DataFrame]:
+    path = DATA_DIR / "rekomendacje_upraw.csv"
+    if not path.exists():
+        return None
+    df = pd.read_csv(path, sep=None, engine="python", encoding="utf-8-sig")
+    df.columns = [c.strip() for c in df.columns]
+    for col in ["ph_min", "ph_max", "soc_min_g_kg"]:
+        if col in df.columns:
+            df[col] = _to_float_series(df[col])
+    return df
+
+
+def recommend_crop_by_soil(
+    soil_ph: float,
+    soil_soc: float,
+    soil_texture: str,
+    crop_dict_df: Optional[pd.DataFrame] = None,
+) -> tuple[str, str]:
+    texture = str(soil_texture).strip().lower()
+
+    if pd.isna(soil_ph) or pd.isna(soil_soc):
+        return "Jęczmień jary", "Uniwersalny wybór przy niepełnych danych glebowych"
+
+    if soil_ph >= 6.6 and soil_soc >= 19.0 and ("clay" in texture or "silt" in texture or texture == "loam"):
+        return (
+            "Burak cukrowy",
+            f"Bardzo żyzne stanowisko (pH {soil_ph:.1f}, próchnica {soil_soc:.1f} g/kg, {soil_texture}) — wysoki potencjał okopowych",
+        )
+
+    if soil_ph >= 6.3 and soil_soc >= 16.5 and "sand" not in texture:
+        return (
+            "Rzepak ozimy",
+            f"Wysokie pH ({soil_ph:.1f}) i zasobność organiczna ({soil_soc:.1f} g/kg) na zwięzłej glebie ({soil_texture})",
+        )
+
+    if soil_ph >= 6.0 and soil_soc >= 14.0 and texture in {"loam", "silt loam", "clay loam", "silty clay loam", "silt"}:
+        return (
+            "Pszenica ozima",
+            f"Uregulowany odczyn (pH {soil_ph:.1f}) i dobra zawartość próchnicy ({soil_soc:.1f} g/kg) sprzyjają pszenicy",
+        )
+
+    if soil_ph >= 6.0 and soil_soc < 14.0 and "sand" not in texture:
+        return (
+            "Soja / Bobik (strączkowe)",
+            f"Dobre pH ({soil_ph:.1f}) przy niższym SOC ({soil_soc:.1f} g/kg) — rośliny motylkowe wzbogacą glebę w azot",
+        )
+
+    if 5.6 <= soil_ph < 6.4 and ("sandy loam" in texture or "loam" in texture) and soil_soc >= 12.5:
+        return (
+            "Kukurydza na ziarno",
+            f"Dobra tolerancja dla odczynu pH {soil_ph:.1f} i przepuszczalnej struktury ({soil_texture})",
+        )
+
+    if 5.2 <= soil_ph < 5.9 and ("sandy" in texture or "loam" in texture) and soil_soc >= 12.5:
+        return (
+            "Ziemniak jadalny",
+            f"Lekko kwaśny odczyn (pH {soil_ph:.1f}) i lżejsze uziarnienie ({soil_texture}) ułatwiają zbiór i ograniczają parcha",
+        )
+
+    if 5.8 <= soil_ph < 6.3 and soil_soc >= 11.5:
+        return (
+            "Jęczmień jary",
+            f"Stabilne plonowanie przy pH {soil_ph:.1f} i zasobności SOC {soil_soc:.1f} g/kg ({soil_texture})",
+        )
+
+    if 5.4 <= soil_ph < 6.0 and soil_soc < 12.5:
+        return (
+            "Pszenżyto ozime",
+            f"Mniejsze wymagania glebowe niż pszenica — optymalne dla pH {soil_ph:.1f} i SOC {soil_soc:.1f} g/kg",
+        )
+
+    if 5.0 <= soil_ph < 5.6 and soil_soc >= 11.0:
+        return (
+            "Owies zwyczajny",
+            f"Wysoka odporność na zakwaszenie (pH {soil_ph:.1f}) i efektywne wykorzystanie wilgoci ({soil_texture})",
+        )
+
+    if soil_ph < 5.3 and ("sand" in texture or soil_soc < 11.0):
+        return (
+            "Łubin wąskolistny (EKO)",
+            f"Stanowisko kwaśne i lekkie (pH {soil_ph:.1f}, {soil_texture}) — łubin poprawi strukturę i zwiąże azot",
+        )
+
+    return (
+        "Żyto ozime",
+        f"Niezawodny gatunek na słabsze i kwaśniejsze stanowiska (pH {soil_ph:.1f}, {soil_texture})",
+    )
+
+
+def recommend_fertilization(
+    soil_ph: float,
+    soil_soc: float,
+    soil_texture: str,
+    crop_name: str,
+    area_ha: float,
+    temp_c: Optional[float] = None,
+    precip_24h_mm: Optional[float] = None,
+    rule_fertilizer: str = "",
+    rule_eco_fertilizer: str = "",
+    rule_dose_kg_ha: Optional[float] = None,
+    eco_mode: bool = False,
+) -> dict:
+    area = float(area_ha) if pd.notna(area_ha) and float(area_ha) > 0 else 1.5
+    ph = float(soil_ph) if pd.notna(soil_ph) else 6.2
+    soc = float(soil_soc) if pd.notna(soil_soc) else 15.0
+    crop_l = str(crop_name).strip().lower()
+
+    weather_blocked = (
+        (pd.notna(precip_24h_mm) and float(precip_24h_mm) >= 5.0)
+        or (pd.notna(temp_c) and (float(temp_c) < 2.0 or float(temp_c) > 32.0))
+    )
+
+    clean_rule_fert = str(rule_fertilizer).strip() if pd.notna(rule_fertilizer) else ""
+    clean_rule_eco = str(rule_eco_fertilizer).strip() if pd.notna(rule_eco_fertilizer) else ""
+
+    if ph < 5.5:
+        eco_name = clean_rule_eco or "Wapno kredowe / dolomitowe (EKO)"
+        conv_name = clean_rule_fert or "Wapno węglanowe granulowane"
+        dose_ha = float(rule_dose_kg_ha) if (rule_dose_kg_ha is not None and pd.notna(rule_dose_kg_ha) and rule_dose_kg_ha > 0) else 650.0
+        reason = f"Niskie pH ({ph:.1f} < 5,5) — zalecane wapnowanie korygujące odczyn gleby."
+    elif soc < 13.5:
+        eco_name = clean_rule_eco or "Obornik granulowany / kompost (EKO)"
+        conv_name = clean_rule_fert or "Obornik / nawóz organiczno-mineralny"
+        dose_ha = float(rule_dose_kg_ha) if (rule_dose_kg_ha is not None and pd.notna(rule_dose_kg_ha) and rule_dose_kg_ha > 0) else 400.0
+        reason = f"Niska zawartość próchnicy/SOC ({soc:.1f} g/kg < 13,5) — uzupełnienie materii organicznej."
+    elif "rzepak" in crop_l:
+        eco_name = clean_rule_eco or "Patentkali + siarka i bor (EKO)"
+        conv_name = clean_rule_fert or "NPK pod rzepak + siarczan magnezu"
+        dose_ha = float(rule_dose_kg_ha) if (rule_dose_kg_ha is not None and pd.notna(rule_dose_kg_ha) and rule_dose_kg_ha > 0) else 220.0
+        reason = f"Zapotrzebowanie rzepaku na siarkę, potas i magnez przy pH {ph:.1f}."
+    elif "kukurydz" in crop_l:
+        eco_name = clean_rule_eco or "Obornik / biohumus pod kukurydzę (EKO)"
+        conv_name = clean_rule_fert or "NPK startowy pod kukurydzę"
+        dose_ha = float(rule_dose_kg_ha) if (rule_dose_kg_ha is not None and pd.notna(rule_dose_kg_ha) and rule_dose_kg_ha > 0) else 250.0
+        reason = f"Zapotrzebowanie kukurydzy przy SOC {soc:.1f} g/kg i pH {ph:.1f}."
+    else:
+        eco_name = clean_rule_eco or "Biohumus / mączka mineralna (EKO)"
+        conv_name = clean_rule_fert or "Nawóz wieloskładnikowy pogłówny"
+        dose_ha = float(rule_dose_kg_ha) if (rule_dose_kg_ha is not None and pd.notna(rule_dose_kg_ha) and rule_dose_kg_ha > 0) else 180.0
+        reason = f"Utrzymanie zasobności stanowiska ({soil_texture}, pH {ph:.1f}, SOC {soc:.1f} g/kg)."
+
+    if eco_mode:
+        chosen_fert = eco_name
+        eco_status = "TAK (EKO)"
+    else:
+        chosen_fert = conv_name if conv_name else eco_name
+        check_str = f"{chosen_fert} {clean_rule_eco}".lower()
+        is_eco_compatible = any(k in check_str for k in ECO_FERTILIZER_KEYWORDS)
+        eco_status = "TAK (EKO)" if is_eco_compatible else "NIE"
+
+    if weather_blocked:
+        reason = f"Warunki pogodowe ograniczają aplikację (sprawdź opady/temperaturę) — {reason}"
+
+    total_kg = round(dose_ha * area, 1)
+    return {
+        "zalecany_nawoz": chosen_fert,
+        "nawozy_eko": eco_status,
+        "dawka_nawozu_kg_ha": round(dose_ha, 1),
+        "ilosc_nawozu_kg": total_kg,
+        "uzasadnienie_nawozenia": reason,
+    }
+
+
+
+
+def evaluate_fields(
+    fields_df: pd.DataFrame,
+    weather_df: pd.DataFrame,
+    rules_df: pd.DataFrame,
+    selected_timestamp: pd.Timestamp,
+    what_if: bool = False,
+    override_temp_c: Optional[float] = None,
+    override_wind_ms: Optional[float] = None,
+    override_precip_24h_mm: Optional[float] = None,
+    crop_dict_df: Optional[pd.DataFrame] = None,
+    eco_mode: bool = False,
+) -> pd.DataFrame:
+    if fields_df.empty:
+        return fields_df.copy()
+
+    weather_slice = weather_df[weather_df["timestamp"] == pd.to_datetime(selected_timestamp)].copy()
+    if not weather_slice.empty and "grid_id" in weather_slice.columns:
+        weather_slice = weather_slice.drop_duplicates(subset=["grid_id"], keep="last")
+    merged = fields_df.merge(weather_slice, on="grid_id", how="left")
+
+    if what_if:
+        if override_temp_c is not None:
+            merged["temp_c"] = float(override_temp_c)
+        if override_wind_ms is not None:
+            merged["wind_ms"] = float(override_wind_ms)
+        if override_precip_24h_mm is not None:
+            merged["precip_24h_mm"] = float(override_precip_24h_mm)
+
+    merged["temp_c"] = pd.to_numeric(merged.get("temp_c", 14.0), errors="coerce").fillna(14.0)
+    merged["humidity_pct"] = pd.to_numeric(merged.get("humidity_pct", 65.0), errors="coerce").fillna(65.0)
+    merged["wind_ms"] = pd.to_numeric(merged.get("wind_ms", 2.5), errors="coerce").fillna(2.5)
+    merged["precip_24h_mm"] = pd.to_numeric(merged.get("precip_24h_mm", 0.0), errors="coerce").fillna(0.0)
+    merged["ndvi"] = pd.to_numeric(merged.get("ndvi", 0.5), errors="coerce").fillna(0.5)
+    merged["soil_ph"] = pd.to_numeric(merged.get("soil_ph", 6.2), errors="coerce").fillna(6.2)
+    merged["soil_soc"] = pd.to_numeric(merged.get("soil_soc", 16.0), errors="coerce").fillna(16.0)
+    if "area_ha" not in merged.columns:
+        merged["area_ha"] = 1.5
+
+    rules_work = rules_df.copy() if (rules_df is not None and not rules_df.empty) else pd.DataFrame()
+    if not rules_work.empty and "decyzja_norm" not in rules_work.columns:
+        rules_work["decyzja_norm"] = rules_work["decyzja"].map(normalize_decision)
+
+    decisions = []
+    messages = []
+    hazards = []
+    rule_ids = []
+    risk_levels = []
+    fertilizers = []
+    eco_statuses = []
+    preparaty_eko = []
+    metody_oprysku = []
+    dose_kg_ha_list = []
+    total_kg_list = []
+    fert_reasons = []
+    recommended_crops = []
+    soil_reasons = []
+
+    for row in merged.itertuples(index=False):
+        rec_crop, soil_reason = recommend_crop_by_soil(
+            row.soil_ph, row.soil_soc, row.soil_texture, crop_dict_df=crop_dict_df
+        )
+        recommended_crops.append(rec_crop)
+        soil_reasons.append(soil_reason)
+
+        decision = "MONITORUJ"
+        message = "MONITORUJ: Warunki stabilne, brak konieczności interwencji"
+        hazard = "Brak krytycznego zagrożenia"
+        rule_id = "DEFAULT-00"
+        risk_level = "NISKI"
+        rule_fert = ""
+        rule_eco = ""
+        rule_dose = None
+        prep_eko = "Brak"
+        metoda = "Lustracja polowa"
+        is_fallow = bool(getattr(row, "is_fallow", False))
+
+        if pd.notna(row.precip_24h_mm) and float(row.precip_24h_mm) >= 5.0:
+            decision = "CZEKAJ"
+            message = f"CZEKAJ: Wysoki opad 24h ({row.precip_24h_mm:.1f} mm) — ryzyko zmycia środka / grząska gleba"
+            hazard = "Nadmierny opad 24h"
+            rule_id = "BLK-RAIN"
+            risk_level = "KRYTYCZNY"
+            prep_eko = "Brak (wstrzymanie zabiegu)"
+            metoda = "Wstrzymaj zabieg (ochrona przed zmyciem)"
+        elif pd.notna(row.wind_ms) and float(row.wind_ms) > 4.0 and not is_fallow:
+            decision = "CZEKAJ"
+            message = f"CZEKAJ: Zbyt silny wiatr > 4 m/s ({row.wind_ms:.1f} m/s)"
+            hazard = "Znoszenie cieczy roboczej"
+            rule_id = "BLK-WIND"
+            risk_level = "WYSOKI"
+            prep_eko = "Brak (wstrzymanie zabiegu)"
+            metoda = "Wstrzymaj zabieg (ochrona przed znoszeniem)"
+        elif is_fallow:
+            if pd.notna(row.soil_ph) and float(row.soil_ph) < 5.5:
+                decision = "NAWOŹ"
+                rule_fert = "Wapno węglanowe granulowane"
+                rule_eco = "Wapno kredowe / dolomitowe (EKO)"
+                hazard = "Zbyt kwaśny odczyn gleby przed siewem"
+                rule_id = "FALLOW-LIME"
+                risk_level = "WYSOKI"
+                prep_eko = "Wapno naturalne / dolomit (EKO)"
+                metoda = "Wapnowanie przedsiewne"
+                message = f"NAWOŹ przed siewem: pH {row.soil_ph:.1f} wymaga wapnowania | Docelowo: {rec_crop}"
+            else:
+                decision = "ZASIEJ"
+                hazard = "Pole nieobsiane — gotowe do siewu"
+                rule_id = "FALLOW-SOW"
+                risk_level = "OPTYMALNY"
+                prep_eko = "Kompost / zaprawa biologiczna EKO"
+                metoda = "Siew rzędowy / punktowy"
+                message = f"ZASIEJ: Pole pod zasiew — zalecany gatunek: {rec_crop} ({soil_reason})"
+        elif not rules_work.empty:
+            canon_crop = _canonical_crop_for_rules(str(row.crop_name))
+            allowed_crops = {canon_crop.lower(), "wszystkie"}
+            if canon_crop in CEREAL_CROPS:
+                allowed_crops.add("zboża ogółem")
+
+            crop_rules = rules_work[
+                rules_work["uprawa"].astype(str).str.strip().str.lower().isin(allowed_crops)
+            ]
+
+            matched = []
+            for _, r_rule in crop_rules.iterrows():
+                if _rule_matches_row(
+                    r_rule,
+                    temp_c=float(row.temp_c),
+                    humidity_pct=float(row.humidity_pct),
+                    precip_24h_mm=float(row.precip_24h_mm),
+                    wind_ms=float(row.wind_ms),
+                    ndvi=float(row.ndvi),
+                    soil_ph=float(row.soil_ph),
+                    soil_soc=float(row.soil_soc),
+                ):
+                    matched.append(r_rule)
+
+            if matched:
+                matched.sort(
+                    key=lambda r_item: (
+                        RISK_PRIORITY.get(str(r_item.get("poziom_ryzyka", "")).strip().upper(), 0),
+                        DECISION_PRIORITY.get(normalize_decision(r_item.get("decyzja", "")), 0),
+                        1 if str(r_item.get("uprawa", "")).strip().lower() == canon_crop.lower() else 0,
+                    ),
+                    reverse=True,
+                )
+                best = matched[0]
+                decision = normalize_decision(best.get("decyzja", "MONITORUJ"))
+                message = str(best.get("komunikat", message))
+                hazard = str(best.get("zagrozenie", hazard))
+                rule_id = str(best.get("rule_id", rule_id))
+                risk_level = str(best.get("poziom_ryzyka", risk_level)).strip().upper()
+                prep_eko = str(best.get("preparat_eko", "Brak"))
+                metoda = str(best.get("metoda_oprysku", "Standardowa agrotechnika"))
+                raw_fert = best.get("zalecany_nawoz", "")
+                raw_eco = best.get("nawozy_eko", "")
+                raw_dose = pd.to_numeric(best.get("dawka_nawozu_kg_ha"), errors="coerce")
+                if pd.notna(raw_fert) and str(raw_fert).strip() and not str(raw_fert).strip().lower().startswith("brak"):
+                    rule_fert = str(raw_fert).strip()
+                if pd.notna(raw_eco) and str(raw_eco).strip() and not str(raw_eco).strip().lower().startswith("brak"):
+                    rule_eco = str(raw_eco).strip()
+                if pd.notna(raw_dose) and float(raw_dose) > 0:
+                    rule_dose = float(raw_dose)
+
+        row_eco_mode = bool(getattr(row, "is_eco_field", eco_mode)) or bool(eco_mode)
+        fert_info = recommend_fertilization(
+            soil_ph=row.soil_ph,
+            soil_soc=row.soil_soc,
+            soil_texture=row.soil_texture,
+            crop_name=row.crop_name,
+            area_ha=getattr(row, "area_ha", 1.5),
+            temp_c=row.temp_c,
+            precip_24h_mm=row.precip_24h_mm,
+            rule_fertilizer=rule_fert,
+            rule_eco_fertilizer=rule_eco,
+            rule_dose_kg_ha=rule_dose,
+            eco_mode=row_eco_mode,
+        )
+
+        if decision == "ZASIEJ":
+            message = f"{message} | Rekomendowany siew: {rec_crop}"
+        elif decision == "NAWOŹ":
+            message = (
+                f"{message} | Nawóz: {fert_info['zalecany_nawoz']} "
+                f"({fert_info['dawka_nawozu_kg_ha']:.0f} kg/ha, {fert_info['ilosc_nawozu_kg']:.0f} kg łącznie) "
+                f"[{fert_info['nawozy_eko']}]"
+            )
+
+        decisions.append(decision)
+        messages.append(message)
+        hazards.append(hazard)
+        rule_ids.append(rule_id)
+        risk_levels.append(risk_level)
+        fertilizers.append(fert_info["zalecany_nawoz"])
+        eco_statuses.append(fert_info["nawozy_eko"])
+        preparaty_eko.append(prep_eko)
+        metody_oprysku.append(metoda)
+        dose_kg_ha_list.append(fert_info["dawka_nawozu_kg_ha"])
+        total_kg_list.append(fert_info["ilosc_nawozu_kg"])
+        fert_reasons.append(fert_info["uzasadnienie_nawozenia"])
+
+    merged["decyzja"] = decisions
+    merged["komunikat"] = messages
+    merged["zagrozenie"] = hazards
+    merged["rule_id"] = rule_ids
+    merged["poziom_ryzyka"] = risk_levels
+    merged["zalecany_nawoz"] = fertilizers
+    merged["nawozy_eko"] = eco_statuses
+    merged["preparat_eko"] = preparaty_eko
+    merged["metoda_oprysku"] = metody_oprysku
+    merged["dawka_nawozu_kg_ha"] = dose_kg_ha_list
+    merged["ilosc_nawozu_kg"] = total_kg_list
+    merged["uzasadnienie_nawozenia"] = fert_reasons
+    merged["rekomendowana_uprawa"] = recommended_crops
+    merged["uzasadnienie_glebowe"] = soil_reasons
+    return merged
+
+
+CROP_RULE_ALIASES = {
+    "pszenica ozima": "Pszenica ozima",
+    "pszenica jara": "Pszenica jara",
+    "jęczmień jary": "Jęczmień jary",
+    "jęczmień": "Jęczmień jary",
+    "jęczmień ozimy": "Jęczmień jary",
+    "żyto ozime": "Żyto",
+    "żyto": "Żyto",
+    "owies zwyczajny": "Owies",
+    "owies": "Owies",
+    "pszenżyto ozime": "Pszenżyto ozime",
+    "pszenżyto": "Pszenżyto ozime",
+    "kukurydza na ziarno": "Kukurydza",
+    "kukurydza": "Kukurydza",
+    "rzepak ozimy": "Rzepak ozimy",
+    "rzepak": "Rzepak ozimy",
+    "ziemniak jadalny": "Ziemniaki",
+    "ziemniaki": "Ziemniaki",
+    "burak cukrowy": "Buraki cukrowe",
+    "buraki cukrowe": "Buraki cukrowe",
+    "soja / bobik (strączkowe)": "Rośliny strączkowe",
+    "rośliny strączkowe": "Rośliny strączkowe",
+    "użytki zielone": "Użytki zielone",
+}
+
+CEREAL_CROPS = {
+    "Pszenica ozima",
+    "Pszenica jara",
+    "Jęczmień jary",
+    "Żyto",
+    "Owies",
+    "Pszenżyto ozime",
+}
+
+RISK_PRIORITY = {
+    "KRYTYCZNY": 5,
+    "WYSOKI": 4,
+    "ŚREDNI": 3,
+    "NISKI": 2,
+    "OPTYMALNY": 1,
+}
+
+DECISION_PRIORITY = {
+    "CZEKAJ": 6,
+    "PRYSKAJ TERAZ": 5,
+    "ZASIEJ": 4,
+    "NAWOŹ": 3,
+    "ZBIERAJ": 2,
+    "MONITORUJ": 1,
+}
+
+
+def load_agronomic_rules() -> pd.DataFrame:
+    ensure_base_reference_data()
+    for fname in ("reguly_agronomiczne.csv", "reguly_agronomiczne_v2_3.csv"):
+        p = DATA_DIR / fname
+        if p.exists():
+            sample = p.read_text(encoding="utf-8-sig", errors="ignore")[:1024]
+            sep = "," if sample.count(",") >= sample.count(";") else ";"
+            df = pd.read_csv(p, sep=sep, encoding="utf-8-sig")
+            df.columns = [str(c).strip() for c in df.columns]
+            for opt_col, default_val in (
+                ("dawka_nawozu_kg_ha", 0.0),
+                ("preparat_eko", "Brak"),
+                ("metoda_oprysku", "Standardowa agrotechnika"),
+            ):
+                if opt_col not in df.columns:
+                    df[opt_col] = default_val
+            return df
+    return pd.DataFrame()
+
+
+def _canonical_crop_for_rules(crop_name: str) -> str:
+    clean = str(crop_name or "").strip()
+    return CROP_RULE_ALIASES.get(clean.lower(), clean)
+
+
+def _rule_matches_row(
+    rule: pd.Series,
+    temp_c: float,
+    humidity_pct: float,
+    precip_24h_mm: float,
+    wind_ms: float,
+    ndvi: float,
+    soil_ph: float,
+    soil_soc: float,
+) -> bool:
+    dec = normalize_decision(rule.get("decyzja", ""))
+    zag = str(rule.get("zagrozenie", "")).lower()
+    kom = str(rule.get("komunikat", "")).lower()
+
+    t_min = pd.to_numeric(rule.get("temp_min_c"), errors="coerce")
+    t_max = pd.to_numeric(rule.get("temp_max_c"), errors="coerce")
+    h_min = pd.to_numeric(rule.get("wilgotnosc_min_pct"), errors="coerce")
+    p_min = pd.to_numeric(rule.get("opad_24h_min_mm"), errors="coerce")
+    w_max = pd.to_numeric(rule.get("wiatr_max_ms"), errors="coerce")
+    ndvi_thr = pd.to_numeric(rule.get("ndvi_prog"), errors="coerce")
+    ph_min = pd.to_numeric(rule.get("ph_min"), errors="coerce")
+    ph_max = pd.to_numeric(rule.get("ph_max"), errors="coerce")
+    soc_max = pd.to_numeric(rule.get("soc_max_g_kg"), errors="coerce")
+
+    if pd.notna(ph_min) and soil_ph < float(ph_min):
+        return False
+    if pd.notna(ph_max) and soil_ph > float(ph_max):
+        return False
+    if pd.notna(soc_max) and float(soc_max) < 90.0 and soil_soc > float(soc_max):
+        return False
+
+    # Specjalna obsługa reguł blokujących CZEKAJ (wiatr > 4 m/s, opad >= 8 mm, stres > 26°C)
+    if dec == "CZEKAJ":
+        if pd.notna(t_max) and temp_c > float(t_max):
+            return False
+        if pd.notna(h_min) and humidity_pct < float(h_min):
+            return False
+
+        # Reguła czysto wiatrowa (np. R-01: wiatr > 4 m/s, opad_24h_min_mm == 0, wiatr_max_ms == 99)
+        if pd.notna(w_max) and float(w_max) >= 90.0 and (pd.isna(p_min) or float(p_min) <= 0.0) and (pd.isna(t_min) or float(t_min) < 25.0):
+            return wind_ms > 4.0
+
+        # Reguła łączona wiatr > 4 m/s LUB opad >= p_min (np. R-07, R-16, R-21, ..., R-49)
+        if pd.notna(w_max) and float(w_max) >= 90.0 and pd.notna(p_min) and float(p_min) > 0.0:
+            wind_block = wind_ms > 4.0
+            rain_block = precip_24h_mm >= float(p_min)
+            heat_block = (pd.notna(t_min) and float(t_min) >= 25.0 and temp_c >= float(t_min))
+            if pd.notna(t_min) and float(t_min) >= 25.0:
+                return wind_block or rain_block or heat_block
+            return (wind_block or rain_block) and (pd.isna(t_min) or temp_c >= float(t_min))
+
+        # Reguła stresu termicznego / suszowego (np. R-12, R-20: temp >= 26°C oraz niski wigor NDVI <= ndvi_prog)
+        if pd.notna(t_min) and temp_c < float(t_min):
+            return False
+        if pd.notna(ndvi_thr) and float(ndvi_thr) > 0.0 and ndvi > float(ndvi_thr):
+            return False
+        if pd.notna(p_min) and precip_24h_mm < float(p_min):
+            return False
+        if pd.notna(w_max) and float(w_max) < 90.0 and wind_ms > float(w_max):
+            return False
+        return True
+
+    # Standardowe reguły zabiegowe: ZASIEJ, NAWOŹ, PRYSKAJ TERAZ, ZBIERAJ, MONITORUJ
+    if pd.notna(t_min) and temp_c < float(t_min):
+        return False
+    if pd.notna(t_max) and temp_c > float(t_max):
+        return False
+    if pd.notna(h_min) and humidity_pct < float(h_min):
+        return False
+    if pd.notna(p_min) and precip_24h_mm < float(p_min):
+        return False
+    if pd.notna(w_max) and wind_ms > float(w_max):
+        return False
+
+    if pd.notna(ndvi_thr) and float(ndvi_thr) > 0.0:
+        if dec in ("ZASIEJ", "ZBIERAJ"):
+            if ndvi > float(ndvi_thr):
+                return False
+        else:
+            if ndvi < float(ndvi_thr):
+                return False
+
+    return True
+
+
+def evaluate_fields_with_rules(
+    fields_df: pd.DataFrame,
+    weather_slice_df: pd.DataFrame,
+    rules_df: pd.DataFrame,
+    eco_mode: bool = False,
+) -> pd.DataFrame:
+    if fields_df.empty:
+        return fields_df.copy()
+
+    df = fields_df.copy()
+    if not weather_slice_df.empty and "grid_id" in weather_slice_df.columns:
+        w_dedup = weather_slice_df.drop_duplicates(subset=["grid_id"], keep="last")
+        w_cols = [c for c in ("grid_id", "temp_c", "humidity_pct", "wind_ms", "precip_24h_mm", "soil_moisture") if c in w_dedup.columns]
+        df = df.merge(w_dedup[w_cols], on="grid_id", how="left")
+
+    df["temp_c"] = pd.to_numeric(df.get("temp_c", 14.0), errors="coerce").fillna(14.0)
+    df["humidity_pct"] = pd.to_numeric(df.get("humidity_pct", 65.0), errors="coerce").fillna(65.0)
+    df["wind_ms"] = pd.to_numeric(df.get("wind_ms", 2.5), errors="coerce").fillna(2.5)
+    df["precip_24h_mm"] = pd.to_numeric(df.get("precip_24h_mm", 0.0), errors="coerce").fillna(0.0)
+    df["soil_moisture"] = pd.to_numeric(df.get("soil_moisture", 0.25), errors="coerce").fillna(0.25)
+    df["ndvi"] = pd.to_numeric(df.get("ndvi", 0.5), errors="coerce").fillna(0.5)
+    df["soil_ph"] = pd.to_numeric(df.get("soil_ph", 6.2), errors="coerce").fillna(6.2)
+    df["soil_soc"] = pd.to_numeric(df.get("soil_soc", 16.0), errors="coerce").fillna(16.0)
+    df["area_ha"] = pd.to_numeric(df.get("area_ha", 1.0), errors="coerce").fillna(1.0)
+
+    out_records = []
+    for row in df.itertuples(index=False):
+        raw_crop = str(getattr(row, "crop_name", "Pszenica ozima"))
+        is_fallow = raw_crop == FALLOW_LABEL
+        canon_crop = _canonical_crop_for_rules(raw_crop)
+        row_eco = bool(getattr(row, "is_eco", getattr(row, "is_eco_field", eco_mode)))
+
+        if not rules_df.empty:
+            if is_fallow:
+                cand_rules = rules_df[rules_df["decyzja"].astype(str).str.upper().isin(SOWING_ALIASES)].copy()
+            else:
+                allowed_crops = {canon_crop, "WSZYSTKIE"}
+                if canon_crop in CEREAL_CROPS:
+                    allowed_crops.add("Zboża ogółem")
+                cand_rules = rules_df[rules_df["uprawa"].astype(str).str.strip().isin(allowed_crops)].copy()
+                if cand_rules.empty:
+                    cand_rules = rules_df[rules_df["uprawa"].astype(str).str.strip() == "WSZYSTKIE"].copy()
+        else:
+            cand_rules = pd.DataFrame()
+
+        matched = []
+        if not cand_rules.empty:
+            for _, r_rule in cand_rules.iterrows():
+                if _rule_matches_row(
+                    r_rule,
+                    temp_c=float(row.temp_c),
+                    humidity_pct=float(row.humidity_pct),
+                    precip_24h_mm=float(row.precip_24h_mm),
+                    wind_ms=float(row.wind_ms),
+                    ndvi=float(row.ndvi),
+                    soil_ph=float(row.soil_ph),
+                    soil_soc=float(row.soil_soc),
+                ):
+                    matched.append(r_rule)
+
+        if matched:
+            matched.sort(
+                key=lambda r: (
+                    RISK_PRIORITY.get(str(r.get("poziom_ryzyka", "")).strip().upper(), 0),
+                    DECISION_PRIORITY.get(normalize_decision(r.get("decyzja", "")), 0),
+                    1 if str(r.get("uprawa", "")).strip() == canon_crop else 0,
+                ),
+                reverse=True,
+            )
+            best = matched[0]
+            rule_id = str(best.get("rule_id", "R-00"))
+            decyzja = normalize_decision(best.get("decyzja", "MONITORUJ"))
+            poziom_ryzyka = str(best.get("poziom_ryzyka", "NISKI")).strip().upper()
+            komunikat = str(best.get("komunikat", ""))
+            zalecany_nawoz = str(best.get("zalecany_nawoz", "Brak"))
+            nawozy_eko = str(best.get("nawozy_eko", "Brak"))
+            preparat_eko = str(best.get("preparat_eko", "Brak"))
+            metoda_oprysku = str(best.get("metoda_oprysku", "Standardowa agrotechnika"))
+            raw_dose = pd.to_numeric(best.get("dawka_nawozu_kg_ha"), errors="coerce")
+            dawka_kg_ha = float(raw_dose) if pd.notna(raw_dose) else 0.0
+        else:
+            rule_id = "R-OK"
+            decyzja = "ZASIEJ" if is_fallow else "MONITORUJ"
+            poziom_ryzyka = "OPTYMALNY" if is_fallow else "NISKI"
+            komunikat = (
+                "Stanowisko przygotowane pod siew — wybierz gatunek w doradcy siewu."
+                if is_fallow
+                else "Stabilne warunki pogodowe i wegetacyjne — prowadź standardową lustrację łanu."
+            )
+            zalecany_nawoz = "Brak"
+            nawozy_eko = "Brak"
+            preparat_eko = "Brak"
+            metoda_oprysku = "Lustracja polowa"
+            dawka_kg_ha = 0.0
+
+        # W trybie EKO priorytetowo pokazujemy dopuszczony nawóz lub preparat EKO
+        aktywny_srodek_eko = (
+            preparat_eko
+            if (nawozy_eko.lower().startswith("brak") and not preparat_eko.lower().startswith("brak"))
+            else nawozy_eko
+        )
+        wyswietlany_nawoz = aktywny_srodek_eko if row_eco else zalecany_nawoz
+        ilosc_nawozu_kg = round(dawka_kg_ha * float(row.area_ha), 1)
+
+        rec_crop = "-"
+        if decyzja == "ZASIEJ":
+            if is_fallow:
+                rec_crop = "Rzepak ozimy / Pszenica ozima" if float(row.soil_ph) >= 5.8 else "Żyto / Owies / Pszenżyto ozime"
+            else:
+                rec_crop = raw_crop
+
+        rec_dict = row._asdict()
+        rec_dict.update({
+            "rule_id": rule_id,
+            "decyzja": decyzja,
+            "poziom_ryzyka": poziom_ryzyka,
+            "komunikat": komunikat,
+            "zalecany_nawoz": wyswietlany_nawoz,
+            "nawozy_eko": aktywny_srodek_eko,
+            "preparat_eko": preparat_eko,
+            "metoda_oprysku": metoda_oprysku,
+            "dawka_nawozu_kg_ha": round(dawka_kg_ha, 1),
+            "ilosc_nawozu_kg": ilosc_nawozu_kg,
+            "rekomendowana_uprawa": rec_crop,
+        })
+        out_records.append(rec_dict)
+
+    return pd.DataFrame(out_records)
+
+
+# Referencyjne ceny materiału siewnego (Bayer DEKALB + kwalifikat z zaprawami Bayer) oraz parametrów plonowania
+BAYER_SEED_CATALOG = {
+    "Pszenica ozima": {
+        "odmiana_bayer": "Kwalifikat + zaprawa Bayer Bariton Super (180 kg/ha)",
+        "cena_ziarna_zl_ha": 490.0,
+        "cena_pestycydow_zl_ha": 460.0,
+        "cena_nawozu_zl_t": 1850.0,
+        "plon_bazowy_t_ha": 7.4,
+        "cena_skupu_zl_t": 910.0,
+    },
+    "Pszenica jara": {
+        "odmiana_bayer": "Kwalifikat + zaprawa Bayer Redigo Pro (190 kg/ha)",
+        "cena_ziarna_zl_ha": 510.0,
+        "cena_pestycydow_zl_ha": 410.0,
+        "cena_nawozu_zl_t": 1850.0,
+        "plon_bazowy_t_ha": 5.8,
+        "cena_skupu_zl_t": 920.0,
+    },
+    "Rzepak ozimy": {
+        "odmiana_bayer": "Bayer DEKALB (np. DK Exaura / DK Excited, 1 jedn. = 3 ha)",
+        "cena_ziarna_zl_ha": 365.0,
+        "cena_pestycydow_zl_ha": 640.0,
+        "cena_nawozu_zl_t": 2100.0,
+        "plon_bazowy_t_ha": 3.8,
+        "cena_skupu_zl_t": 2150.0,
+    },
+    "Kukurydza": {
+        "odmiana_bayer": "Bayer DEKALB (np. DKC3419 / DKC3710, 80 tys. nasion/ha)",
+        "cena_ziarna_zl_ha": 620.0,
+        "cena_pestycydow_zl_ha": 390.0,
+        "cena_nawozu_zl_t": 1950.0,
+        "plon_bazowy_t_ha": 10.2,
+        "cena_skupu_zl_t": 820.0,
+    },
+    "Jęczmień jary": {
+        "odmiana_bayer": "Kwalifikat + zaprawa Bayer Redigo Pro (160 kg/ha)",
+        "cena_ziarna_zl_ha": 440.0,
+        "cena_pestycydow_zl_ha": 360.0,
+        "cena_nawozu_zl_t": 1800.0,
+        "plon_bazowy_t_ha": 5.6,
+        "cena_skupu_zl_t": 840.0,
+    },
+    "Pszenżyto ozime": {
+        "odmiana_bayer": "Kwalifikat + zaprawa Bayer Bariton Super (170 kg/ha)",
+        "cena_ziarna_zl_ha": 420.0,
+        "cena_pestycydow_zl_ha": 340.0,
+        "cena_nawozu_zl_t": 1750.0,
+        "plon_bazowy_t_ha": 6.1,
+        "cena_skupu_zl_t": 810.0,
+    },
+    "Żyto": {
+        "odmiana_bayer": "Odmiana mieszańcowa + zaprawa Bayer (90 kg/ha)",
+        "cena_ziarna_zl_ha": 450.0,
+        "cena_pestycydow_zl_ha": 290.0,
+        "cena_nawozu_zl_t": 1700.0,
+        "plon_bazowy_t_ha": 5.2,
+        "cena_skupu_zl_t": 760.0,
+    },
+    "Owies": {
+        "odmiana_bayer": "Kwalifikat + zaprawa Bayer Redigo Pro (160 kg/ha)",
+        "cena_ziarna_zl_ha": 390.0,
+        "cena_pestycydow_zl_ha": 240.0,
+        "cena_nawozu_zl_t": 1700.0,
+        "plon_bazowy_t_ha": 4.8,
+        "cena_skupu_zl_t": 790.0,
+    },
+    "Rośliny strączkowe": {
+        "odmiana_bayer": "Nasiona kwalifikowane + zaprawa fungicydowa/inokulant",
+        "cena_ziarna_zl_ha": 560.0,
+        "cena_pestycydow_zl_ha": 320.0,
+        "cena_nawozu_zl_t": 1900.0,
+        "plon_bazowy_t_ha": 3.2,
+        "cena_skupu_zl_t": 1350.0,
+    },
+    "Ziemniaki": {
+        "odmiana_bayer": "Sadzeniaki kwalifikowane + zaprawa Bayer Moncut/Emesto",
+        "cena_ziarna_zl_ha": 2850.0,
+        "cena_pestycydow_zl_ha": 1150.0,
+        "cena_nawozu_zl_t": 2200.0,
+        "plon_bazowy_t_ha": 34.0,
+        "cena_skupu_zl_t": 680.0,
+    },
+    "Buraki cukrowe": {
+        "odmiana_bayer": "Nasiona otoczkowane + program ochrony Bayer Betanal",
+        "cena_ziarna_zl_ha": 1180.0,
+        "cena_pestycydow_zl_ha": 980.0,
+        "cena_nawozu_zl_t": 2100.0,
+        "plon_bazowy_t_ha": 62.0,
+        "cena_skupu_zl_t": 210.0,
+    },
+    "Użytki zielone": {
+        "odmiana_bayer": "Mieszanka traw i motylkowatych (podsiew 25 kg/ha)",
+        "cena_ziarna_zl_ha": 340.0,
+        "cena_pestycydow_zl_ha": 90.0,
+        "cena_nawozu_zl_t": 1650.0,
+        "plon_bazowy_t_ha": 8.5,
+        "cena_skupu_zl_t": 460.0,
+    },
+}
+
+
+def estimate_field_loss_pct(row: pd.Series) -> float:
+    """Szacuje przewidywany % straty plonu na podstawie ryzyka reguły, pogody oraz wigoru NDVI."""
+    risk = str(row.get("poziom_ryzyka", "NISKI")).strip().upper()
+    dec = normalize_decision(row.get("decyzja", "MONITORUJ"))
+    ndvi = float(pd.to_numeric(row.get("ndvi", 0.5), errors="coerce") or 0.5)
+    temp_c = float(pd.to_numeric(row.get("temp_c", 15.0), errors="coerce") or 15.0)
+    precip_24h = float(pd.to_numeric(row.get("precip_24h_mm", 0.0), errors="coerce") or 0.0)
+
+    base_loss = {
+        "KRYTYCZNY": 18.0,
+        "WYSOKI": 11.0,
+        "ŚREDNI": 6.5,
+        "NISKI": 3.5,
+        "OPTYMALNY": 2.5,
+    }.get(risk, 5.0)
+
+    if dec == "CZEKAJ" and (temp_c >= 26.0 or precip_24h >= 8.0):
+        base_loss += 4.0
+    if ndvi < 0.32 and dec not in ("ZASIEJ", "ZBIERAJ"):
+        base_loss += 3.5
+
+    return round(min(max(base_loss, 1.0), 45.0), 1)
+
+
+def calculate_profit_forecast(
+    evaluated_df: pd.DataFrame,
+    custom_prices: dict | None = None,
+    loss_offset_pct: float = 0.0,
+) -> pd.DataFrame:
+    """Wylicza koszty (ziarno Bayer, nawozy, pestycydy), stratę % oraz zysk netto całego pola."""
+    if evaluated_df.empty:
+        return evaluated_df.copy()
+
+    custom_prices = custom_prices or {}
+    rows = []
+    for r in evaluated_df.itertuples(index=False):
+        raw_crop = str(getattr(r, "crop_name", "Pszenica ozima"))
+        canon_crop = _canonical_crop_for_rules(raw_crop)
+        if canon_crop == FALLOW_LABEL or bool(getattr(r, "is_fallow", False)) or _is_unsown_crop_rule(raw_crop):
+            rec = str(getattr(r, "rekomendowana_uprawa", "Pszenica ozima")).split("/")[0].strip()
+            canon_crop = _canonical_crop_for_rules(rec)
+
+        cfg = dict(BAYER_SEED_CATALOG.get(canon_crop, BAYER_SEED_CATALOG["Pszenica ozima"]))
+        if canon_crop in custom_prices:
+            cfg.update(custom_prices[canon_crop])
+
+        area = float(getattr(r, "area_ha", 1.0) or 1.0)
+        ndvi = float(getattr(r, "ndvi", 0.5) or 0.5)
+        is_eco = bool(getattr(r, "is_eco", getattr(r, "is_eco_field", False)))
+        dec = normalize_decision(getattr(r, "decyzja", "MONITORUJ"))
+        dose_kg_ha = float(getattr(r, "dawka_nawozu_kg_ha", 0.0) or 0.0)
+
+        # Koszt ziarna wg cennika Bayer
+        seed_cost_ha = float(cfg["cena_ziarna_zl_ha"])
+        seed_cost_total = round(seed_cost_ha * area, 2)
+
+        # Koszt nawozu (dawka z reguły + ewentualna dawka bazowa sezonu)
+        effective_fert_kg_ha = dose_kg_ha if dose_kg_ha > 0 else 140.0
+        fert_price_t = float(cfg["cena_nawozu_zl_t"]) * (0.85 if is_eco else 1.0)
+        fert_cost_total = round((effective_fert_kg_ha / 1000.0) * fert_price_t * area, 2)
+
+        # Koszt pestycydów / ochrony roślin (Bayer ŚOR lub środki biologiczne w EKO)
+        pest_mult = 0.65 if is_eco else (1.15 if dec == "PRYSKAJ TERAZ" else 1.0)
+        pest_cost_ha = round(float(cfg["cena_pestycydow_zl_ha"]) * pest_mult, 2)
+        pest_cost_total = round(pest_cost_ha * area, 2)
+
+        total_cost = round(seed_cost_total + fert_cost_total + pest_cost_total, 2)
+
+        # Korekta plonu względem NDVI oraz przewidywanego % straty
+        row_series = pd.Series(r._asdict())
+        auto_loss = estimate_field_loss_pct(row_series)
+        final_loss_pct = round(min(max(auto_loss + float(loss_offset_pct), 0.0), 60.0), 1)
+
+        ndvi_factor = 1.0 if dec in ("ZASIEJ", "ZBIERAJ") else min(max(0.75 + (ndvi - 0.35) * 0.75, 0.70), 1.18)
+        est_yield_t_ha = round(float(cfg["plon_bazowy_t_ha"]) * ndvi_factor, 2)
+        crop_price_t = float(cfg["cena_skupu_zl_t"]) * (1.18 if is_eco else 1.0)
+
+        gross_revenue = round(area * est_yield_t_ha * crop_price_t, 2)
+        expected_revenue = round(gross_revenue * (1.0 - final_loss_pct / 100.0), 2)
+        net_profit = round(expected_revenue - total_cost, 2)
+        profit_per_ha = round(net_profit / area, 2) if area > 0 else 0.0
+
+        d = r._asdict()
+        d.update({
+            "bayer_seed_info": cfg["odmiana_bayer"],
+            "koszt_ziarna_zl": seed_cost_total,
+            "koszt_nawozu_zl": fert_cost_total,
+            "koszt_pestycydow_zl": pest_cost_total,
+            "koszt_calkowity_zl": total_cost,
+            "strata_pct": final_loss_pct,
+            "szacowany_plon_t_ha": est_yield_t_ha,
+            "cena_skupu_zl_t": round(crop_price_t, 0),
+            "przychod_brutto_zl": gross_revenue,
+            "przychod_po_stracie_zl": expected_revenue,
+            "zysk_netto_zl": net_profit,
+            "zysk_netto_zl_ha": profit_per_ha,
+        })
+        rows.append(d)
+
+    return pd.DataFrame(rows)
