@@ -1,4 +1,4 @@
-// Animations for the story slides: title, problem, goal, data, business value, future.
+// Animations for the story slides: title, problem, goal, data, future.
 // Every builder follows engine.js: return a timeline, add labels step1, step2, ... for clicks.
 ;(function () {
   'use strict'
@@ -151,8 +151,8 @@
   })
 
   // ===================================================================================
-  // 1a · Digital agriculture sees the surface → GENOMICS reads the soil
-  // Steps: 1 the tools · 2 arrow into the soil, GENOMICS
+  // 1a · Geoinformatic data sees the surface → GENOMICS reads the soil
+  // Steps: 1 geoinformatic data · 2 arrow into the soil, GENOMICS
   // ===================================================================================
   Deck.anim('genomics', (slide, D) => {
     const ground = slide.querySelector('.ground')
@@ -184,7 +184,7 @@
   })
 
   // ===================================================================================
-  // 1b · Sequencing cost (log) and papers per year, two panels on one year axis.
+  // 1c · Sequencing cost (log) and papers per year, two panels on one year axis.
   // Steps: 1 cost line · 2 paper bars
   // ===================================================================================
   Deck.anim('trend', (slide) => {
@@ -250,7 +250,7 @@
   })
 
   // ===================================================================================
-  // 1c · What is metagenomics: soil sample → all its DNA → who lives there
+  // 1b · What is metagenomics: soil sample → all its DNA → who lives there
   // Steps: 1 DNA reads fly out of the soil · 2 composition bar
   // ===================================================================================
   Deck.anim('meta', (slide, D) => {
@@ -614,54 +614,7 @@
   })
 
   // ===================================================================================
-  // 5 · Business value: same dose everywhere vs dose by soil need. Schematic data.
-  // Steps: 1 soil analysis scans the field · 2 fertilizer bars, savings
-  // ===================================================================================
-  Deck.anim('value', (slide, D) => {
-    const COLS = 10, ROWS = 7
-    const uni = slide.querySelector('.f-uni'), per = slide.querySelector('.f-per')
-    const r = rng(31)
-    const need = Array.from({ length: COLS * ROWS }, (_, k) => {
-      const i = k % COLS, j = Math.floor(k / COLS)
-      const v = 0.55 + 0.32 * Math.sin(i * 0.65 + 0.8) * Math.cos(j * 0.8 - 0.4) + (r() - 0.5) * 0.3
-      return Math.max(0.15, Math.min(1, v))
-    })
-    const mean = need.reduce((a, b) => a + b, 0) / need.length
-    D.once(slide, 'value', () => {
-      const cells = '<i><b></b></i>'.repeat(COLS * ROWS)
-      uni.querySelector('.grid').insertAdjacentHTML('afterbegin', cells)
-      per.querySelector('.grid').insertAdjacentHTML('afterbegin', cells)
-      per.querySelector('.bar i').style.width = `${(mean * 100).toFixed(1)}%`
-      per.querySelector('.bar .saved').style.width = `${((1 - mean) * 100).toFixed(1)}%`
-      uni.querySelector('.bar i').style.width = '100%'
-    })
-    const uniDots = uni.querySelectorAll('.grid b'), perCells = per.querySelectorAll('.grid i'), perDots = per.querySelectorAll('.grid b')
-    const soil = gsap.utils.interpolate('#4a3420', '#2f6b3a')
-
-    const tl = headIn(gsap.timeline({ defaults: { ease: 'power3.out' } }), slide)
-    tl.from(slide.querySelectorAll('.fld, .vs'), { y: 60, autoAlpha: 0, duration: 0.7, stagger: 0.12 }, 0.3)
-      .from([...uniDots, ...perDots], { scale: 0, duration: 0.4, stagger: { each: 0.004, from: 'random' }, ease: 'back.out(2)' }, 0.7)
-      .set(slide.querySelectorAll('.bar'), { autoAlpha: 0 }, 0)
-      .from(slide.querySelector('.unit'), { autoAlpha: 0, duration: 0.5 }, 1)
-    const scanDur = 1.6
-    tl.addLabel('step1')
-      .set(per.querySelector('.scan'), { opacity: 1 })
-      .fromTo(per.querySelector('.scan'), { left: '0%' }, { left: '100%', duration: scanDur, ease: 'none' })
-      .to(per.querySelector('.scan'), { opacity: 0, duration: 0.3 })
-    perCells.forEach((c, k) => {
-      const at = `step1+=${((k % COLS) / COLS) * scanDur + 0.08}`
-      tl.to(c, { backgroundColor: soil(1 - need[k]), duration: 0.35 }, at)
-        .to(perDots[k], { scale: need[k], duration: 0.5, ease: 'back.out(2)' }, at)
-    })
-    tl.addLabel('step2')
-      .to(slide.querySelectorAll('.bar'), { autoAlpha: 1, duration: 0.3 })
-      .from(slide.querySelectorAll('.bar i'), { scaleX: 0, transformOrigin: '0% 50%', duration: 1, ease: 'power2.out', stagger: 0.15 })
-      .from(per.querySelector('.saved'), { autoAlpha: 0, scale: 0.6, duration: 0.6, ease: 'back.out(2)' }, '-=0.2')
-    return tl
-  })
-
-  // ===================================================================================
-  // 6 · Future: a road with two milestones.
+  // 5 · Future: a road with two milestones.
   // Steps: 1 agro-chemical branch · 2 EU sustainability
   // ===================================================================================
   Deck.anim('future', (slide, D) => {
