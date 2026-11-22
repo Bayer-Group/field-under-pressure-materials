@@ -5,6 +5,7 @@ import { spawn } from 'node:child_process'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { launch } from './cdp.mjs'
 import { writeSoundtrack } from './music.mjs'
+import { STAMP, sourcesHash } from './video-sources.mjs'
 
 const DIR = new URL('.', import.meta.url).pathname
 const args = process.argv.slice(2)
@@ -24,6 +25,7 @@ try {
       console.log('still', t)
     }
   } else {
+    const hash = sourcesHash() // taken before rendering, so edits made mid-render count as changes
     const wav = DIR + 'soundtrack.wav'
     writeSoundtrack(wav, DURATION)
     const out = DIR + 'terranos-showcase.mp4'
@@ -41,6 +43,7 @@ try {
     }
     ff.stdin.end()
     await done
+    writeFileSync(STAMP, hash + '\n')
     console.log('wrote', out)
   }
 } finally {
