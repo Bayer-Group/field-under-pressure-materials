@@ -1,8 +1,8 @@
 # Farmer data provider
 
-For the team workflow and backend integration checklist, see [Mock API guide](../MOCK_API_GUIDE.md). For the deployed sandbox and its differences from this mock, see [Live sandbox integration](../LIVE_SANDBOX_INTEGRATION.md).
+For the team workflow and backend integration checklist, see [Mock API guide](../docs/MOCK_API_GUIDE.md). For the deployed sandbox and its differences from this mock, see [Live sandbox integration](../docs/LIVE_SANDBOX_INTEGRATION.md).
 
-`farmer-data.js` exposes `FarmerData.createProvider(options)` to browser scripts. It implements the frontend mock for the contract in [`../FARMER_INPUT_CONTRACT.md`](../FARMER_INPUT_CONTRACT.md). No backend server or extra package is required for mock mode. The farmer-facing map viewer (`index.html`) no longer loads it: it always uses the farm service through `sandbox-client.js`. The mock remains for `mock-qgis-server.cjs` and for development against the contract.
+`farmer-data.js` exposes `FarmerData.createProvider(options)` to browser scripts. It implements the frontend mock for the contract in [`docs/FARMER_INPUT_CONTRACT.md`](../docs/FARMER_INPUT_CONTRACT.md). No backend server or extra package is required for mock mode. The farmer-facing map viewer (`index.html`) no longer loads it: it always uses the farm service through `sandbox-client.js`. The mock remains for `mock-qgis-server.cjs` and for development against the contract.
 
 ```js
 const data = FarmerData.createProvider({ mode: 'mock' });
@@ -33,7 +33,7 @@ operation. The legacy adapter's optional `geometryImportPath`,
 configured once the backend team agrees and implements the operations. Group save is
 available only when both save and load paths are configured. No endpoint paths or backend
 capabilities are implied by these options. See the proposed
-[geometry contract](../GEOMETRY_VALIDATION_CONTRACT.md) for request and response details,
+[geometry contract](../docs/GEOMETRY_VALIDATION_CONTRACT.md) for request and response details,
 confirmation rules and current limitations.
 
 The editor uses Turf.js 7.1.0 (loaded from unpkg, alongside MapLibre) for a local,

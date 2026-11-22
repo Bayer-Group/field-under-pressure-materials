@@ -69,7 +69,7 @@ Source: `grid_table` from `weather_grids.zip`. The source has points only (cell 
 | `elevation` | real | metres, constant per cell (from the weather files) |
 
 ### `raw.weather_hourly`: hourly weather
-Source: `hourly_table` (parquet per voivodeship and year). Columns **1:1 with [`data/weather.md`](../data/weather.md)**, metric
+Source: `hourly_table` (parquet per voivodeship and year). Columns **1:1 with [`bayer/data/weather.md`](../bayer/data/weather.md)**, metric
 units, `real` values. Key `(grid_id, utc_time)`, plus an index on `utc_time` alone.
 
 | Column | Type | Notes |
@@ -93,7 +93,7 @@ units, `real` values. Key `(grid_id, utc_time)`, plus an index on `utc_time` alo
 | `eto`, `etr` | real | mm/h |
 
 ### `raw.crop_class`: CLMS CTY crop class legend
-Filled in by the schema (`code` → `name`, e.g. `1110` = Wheat). Source: [`data/cropland.md`](../data/cropland.md).
+Filled in by the schema (`code` → `name`, e.g. `1110` = Wheat). Source: [`bayer/data/cropland.md`](../bayer/data/cropland.md).
 
 ### `app.field`: fields (e.g. one farmer's fields)
 
@@ -118,7 +118,7 @@ Computed from the 10 m CTY raster (e.g. zonal statistics) at load time.
 | `share` | real | 0–1 (constraint in the database) |
 
 ### Farmer input (schema `app`)
-From [`FARMER_INPUT_CONTRACT.md`](../FARMER_INPUT_CONTRACT.md); DDL in [`initdb/04_app_farmer_input.sql`](initdb/04_app_farmer_input.sql)
+From [`FARMER_INPUT_CONTRACT.md`](../docs/FARMER_INPUT_CONTRACT.md); DDL in [`initdb/04_app_farmer_input.sql`](initdb/04_app_farmer_input.sql)
 (migration [`migrations/002_app_farmer_input.sql`](migrations/002_app_farmer_input.sql)).
 
 | Table | One row = | Key | Notes |

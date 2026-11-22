@@ -1,6 +1,6 @@
 # Frontend mocks and backend API integration
 
-This guide describes the existing farmer-input mock and how to extend it so the frontend can develop before real endpoints are available. The agreed data shapes, operations and validation requirements are in [FARMER_INPUT_CONTRACT.md](FARMER_INPUT_CONTRACT.md). The implementation and runnable examples are in [web/FARMER_DATA.md](web/FARMER_DATA.md).
+This guide describes the existing farmer-input mock and how to extend it so the frontend can develop before real endpoints are available. The agreed data shapes, operations and validation requirements are in [FARMER_INPUT_CONTRACT.md](FARMER_INPUT_CONTRACT.md). The implementation and runnable examples are in [web/FARMER_DATA.md](../web/FARMER_DATA.md).
 
 ## One interface for the UI
 
@@ -45,4 +45,4 @@ Before switching an environment, verify the real endpoint paths, envelopes, geom
 
 The mock starts with five fictional parcels: three populated and two without saved fields. It supports searches, crop choices, field save/read, validation and simulated unavailability. It is not a cadastral service, ownership system or durable database. The provider checks basic polygon structure; self-intersections, overlap, containment and the nearby-parcel selection flow are not implemented here.
 
-For QGIS, `node web/mock-qgis-server.cjs` serves the **initial fixtures** at `http://127.0.0.1:8765/mock/plots.geojson` as a read-only GeoJSON layer. This optional local endpoint is for visualization, not a mock of the real backend's write operations. It uses the same initial data but cannot see browser-memory changes. QGIS and MapLibre can share the contract and example content now; shared edits need the real backend or a separately agreed exchange. See [web/FARMER_DATA.md](web/FARMER_DATA.md) for the commands, attributes and limitations.
+For QGIS, `node web/mock-qgis-server.cjs` serves the **initial fixtures** at `http://127.0.0.1:8765/mock/plots.geojson` as a read-only GeoJSON layer. This optional local endpoint is for visualization, not a mock of the real backend's write operations. It uses the same initial data but cannot see browser-memory changes. QGIS and MapLibre can share the contract and example content now; shared edits need the real backend or a separately agreed exchange. See [web/FARMER_DATA.md](../web/FARMER_DATA.md) for the commands, attributes and limitations.

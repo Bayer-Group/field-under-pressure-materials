@@ -31,7 +31,7 @@ jobs:
 
       - name: Package QGIS Plugin ZIP
         run: |
-          python package_plugin.py pyqgis_fastapi_bridge-${{ github.ref_name }}.zip
+          python scripts/package_plugin.py pyqgis_fastapi_bridge-${{ github.ref_name }}.zip
 
       - name: Build Python Package (Wheel & Sdist)
         run: |

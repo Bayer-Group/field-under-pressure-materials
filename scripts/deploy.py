@@ -28,8 +28,8 @@ def get_qgis_plugin_dir():
         return os.path.join(home, ".local", "share", "QGIS", "QGIS3", "profiles", PROFILE_NAME, "python", "plugins")
 
 def link_plugin():
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    source_dir = os.path.join(script_dir, "qgis_plugin", PLUGIN_NAME)
+    repo_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # this script lives in scripts/
+    source_dir = os.path.join(repo_dir, "qgis_plugin", PLUGIN_NAME)
     target_dir = os.path.join(get_qgis_plugin_dir(), PLUGIN_NAME)
 
     print("=" * 60)

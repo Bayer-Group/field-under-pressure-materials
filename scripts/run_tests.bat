@@ -33,6 +33,9 @@ if "!PYTHON_EXE!"=="" (
     exit /b 1
 )
 
+:: Run from the repository root (this script lives in scripts/)
+cd /d "%~dp0.."
+
 echo Uzywany interpreter: "!PYTHON_EXE!"
 echo.
 

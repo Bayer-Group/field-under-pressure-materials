@@ -11,8 +11,8 @@ import sys
 import zipfile
 
 def package_qgis_plugin(output_zip=None):
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    plugin_parent = os.path.join(script_dir, "qgis_plugin")
+    repo_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # this script lives in scripts/
+    plugin_parent = os.path.join(repo_dir, "qgis_plugin")
     plugin_dir = os.path.join(plugin_parent, "pyqgis_fastapi_bridge")
     
     if not os.path.exists(plugin_dir):
@@ -20,7 +20,7 @@ def package_qgis_plugin(output_zip=None):
         sys.exit(1)
         
     if not output_zip:
-        output_zip = os.path.join(script_dir, "pyqgis_fastapi_bridge.zip")
+        output_zip = os.path.join(repo_dir, "pyqgis_fastapi_bridge.zip")
 
     print(f"📦 Pakowanie wtyczki QGIS do: {output_zip}...")
 

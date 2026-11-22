@@ -1,5 +1,5 @@
 -- Raw layer (schema raw) and farmer tables (schema app). See docker/RAW_SCHEMA.md.
--- Weather columns map 1:1 to data/weather.md (metric units). NULL from the source stays NULL (not 0).
+-- Weather columns map 1:1 to bayer/data/weather.md (metric units). NULL from the source stays NULL (not 0).
 -- Data is loaded with its original dates. The demo time shift is applied at the API, and
 -- raw.ingest_log.time_shift records any shift applied inside the database.
 -- More raw tables (daily weather, IMERG daily, soil, crop raster) are in 03_raw_layers.sql.
@@ -55,7 +55,7 @@ CREATE TABLE weather_hourly (
 -- Snapshot of the whole country at a given moment (queries by time without grid_id).
 CREATE INDEX weather_hourly_utc_time_idx ON weather_hourly (utc_time);
 
--- 3. CLMS CTY crop class legend (data/cropland.md).
+-- 3. CLMS CTY crop class legend (bayer/data/cropland.md).
 CREATE TABLE crop_class (
     code integer PRIMARY KEY,
     name text    NOT NULL

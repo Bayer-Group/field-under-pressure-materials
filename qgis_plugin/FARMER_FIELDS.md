@@ -1,7 +1,7 @@
 # Farmer fields in QGIS (issue #14)
 
 The plugin panel can show the saved farmer fields and crop areas defined in
-[FARMER_INPUT_CONTRACT.md](../FARMER_INPUT_CONTRACT.md). QGIS only reads; it never writes.
+[FARMER_INPUT_CONTRACT.md](../docs/FARMER_INPUT_CONTRACT.md). QGIS only reads; it never writes.
 
 ## What is loaded
 
