@@ -21,7 +21,7 @@ from psycopg import sql
 from pydantic import BaseModel, Field
 
 from backend.app.api.v1.endpoints.farm import _require_area, current_user
-from backend.app.core.config import (AUTH_SECRET, DEMO_READONLY, MAX_AREA_HA, MAX_AREAS_OTHER, MAX_AREAS_SANDBOX,
+from backend.app.core.config import (ALLOW_EXAMPLE_FARM_WRITES, AUTH_SECRET, DEMO_READONLY, MAX_AREA_HA, MAX_AREAS_OTHER, MAX_AREAS_SANDBOX,
                                      MAX_PARALLEL_REFRESH, SANDBOX_MAX_OWNERS, SANDBOX_RATE_PER_MIN, SANDBOX_TTL_HOURS)
 from backend.app.core.db import get_db, get_db_rw
 from backend.app.core.limits import RateLimiter, client_ip, enforce
@@ -66,7 +66,15 @@ def _require_writes(user: dict) -> None:
         raise HTTPException(status_code=503, detail="the demo is read-only now")
     if user.get("role") != "farmer":
         raise HTTPException(status_code=403, detail="only a farmer can save crop areas")
+    if not (user.get("account") or user.get("sandbox")) and not ALLOW_EXAMPLE_FARM_WRITES:
+        raise HTTPException(status_code=403, detail="an example farm is read-only: log in with your account (POST /login) or start a "
+                                                    "sandbox (POST /sandbox) and edit your own copy")
     enforce(_write_limit, user["owner_id"])
+
+
+def pick_template(owners: list[str], n: int) -> str:
+    """The example farm for the n-th sandbox (n counts from 1): they are handed out one after another and start again after the last."""
+    return sorted(owners)[(n - 1) % len(owners)]
 
 
 def _shift(con) -> int:
@@ -128,7 +136,7 @@ def sandbox(body: SandboxIn, request: Request, con=Depends(get_db_rw)):
     enforce(_sandbox_limit, client_ip(request))
     ttl = SANDBOX_TTL_HOURS * 3600
     if DEMO_READONLY:                                    # read-only fallback: look at a shared farm, nothing is saved
-        owner = con.execute("SELECT owner_id FROM app.field WHERE data_status = 'mock' AND owner_id NOT LIKE 'sbx-%' "
+        owner = con.execute("SELECT owner_id FROM app.field WHERE data_status = 'mock' AND owner_id LIKE 'farmer-%' "
                             "GROUP BY owner_id ORDER BY count(*) DESC, owner_id LIMIT 1").fetchone()
         if not owner:
             raise HTTPException(status_code=503, detail="no demo data")
@@ -142,28 +150,40 @@ def sandbox(body: SandboxIn, request: Request, con=Depends(get_db_rw)):
                     "GROUP BY owner_id ORDER BY min(created_at) LIMIT 1)")
     sid = "sbx-" + secrets.token_hex(4)
     n_areas = 0
+    template = display = None
     if body.mode == "mock":
-        t = con.execute("SELECT owner_id FROM app.field WHERE data_status = 'mock' AND owner_id NOT LIKE 'sbx-%' "
-                        "GROUP BY owner_id HAVING count(*) BETWEEN 4 AND 12 ORDER BY random() LIMIT 1").fetchone()
-        if t:
+        owners = [r["owner_id"] for r in con.execute(
+            "SELECT owner_id FROM app.field WHERE data_status = 'mock' AND owner_id LIKE 'farmer-%' "   # example farmers only, not accounts
+            "GROUP BY owner_id HAVING count(*) >= 2 ORDER BY owner_id").fetchall()]
+        if owners:
+            try:
+                with con.transaction():
+                    n = con.execute("UPDATE app.sandbox_counter SET n = n + 1 WHERE id = 1 RETURNING n").fetchone()["n"]
+            except psycopg.errors.UndefinedTable:                 # the migration 009 is not applied: a random example farm
+                n = secrets.randbelow(len(owners)) + 1
+            template = pick_template(owners, n)
             ids = [r["crop_area_id"] for r in con.execute(
                 "SELECT a.crop_area_id FROM app.crop_area a JOIN app.field f USING (field_id) WHERE f.owner_id = %s "
-                "ORDER BY a.crop_area_id LIMIT 8", (t["owner_id"],)).fetchall()]
-            p = {"sid": sid, "ids": ids}
-            ca = "%(sid)s || '-' || crop_area_id"
+                "ORDER BY a.crop_area_id LIMIT 12", (template,)).fetchall()]
+            p = {"sid": sid, "ids": ids, "tpl": template}
+            tail = "CASE WHEN {c} LIKE %(tpl)s || '-%%' THEN substr({c}, length(%(tpl)s) + 2) ELSE {c} END"    # p1, p1a: no owner prefix
+            ca = "%(sid)s || '~' || " + tail.format(c="crop_area_id")          # the id format of PUT /fields (owner~id): edited in place
+            fld = "%(sid)s || '~' || " + tail.format(c="field_id")
             _clone(con, "app", "field", "field_id IN (SELECT field_id FROM app.crop_area WHERE crop_area_id = ANY(%(ids)s))", p,
-                   {"field_id": "%(sid)s || '-' || field_id", "owner_id": "%(sid)s", "created_at": "now()",
-                    "updated_at": "now()"})
-            _clone(con, "app", "crop_area", "crop_area_id = ANY(%(ids)s)", p,
-                   {"crop_area_id": ca, "field_id": "%(sid)s || '-' || field_id"})
+                   {"field_id": fld, "owner_id": "%(sid)s", "created_at": "now()", "updated_at": "now()"})
+            _clone(con, "app", "field_parcel", "field_id IN (SELECT field_id FROM app.crop_area WHERE crop_area_id = ANY(%(ids)s))", p,
+                   {"field_id": fld})                       # the cadastral parcels of the copied fields (parcel_ids of GET /fields)
+            _clone(con, "app", "crop_area", "crop_area_id = ANY(%(ids)s)", p, {"crop_area_id": ca, "field_id": fld})
             _clone(con, "app", "spray", "crop_area_id = ANY(%(ids)s)", p, {"crop_area_id": ca})
             for table in ("crop_area_crop_map", "field_context", "risk_assessment"):
                 _clone(con, "curated", table, "crop_area_id = ANY(%(ids)s)", p, {"crop_area_id": ca})
             n_areas = len(ids)
+            row = con.execute("SELECT display_name FROM app.demo_user WHERE owner_id = %s AND role = 'farmer' LIMIT 1", (template,)).fetchone()
+            display = row["display_name"] if row else None
     con.commit()
     token = make_token({"sub": sid, "owner_id": sid, "role": "farmer", "sandbox": True}, AUTH_SECRET, ttl)
     return {"token": token, "owner_id": sid, "role": "farmer", "mode": body.mode, "expires_in": ttl,
-            "display_name": "Visitor", "crop_areas": n_areas}
+            "display_name": display or "Visitor", "crop_areas": n_areas, "template": template}
 
 
 @router.delete("/sandbox", status_code=204, summary="Delete everything in my sandbox (start over)")
@@ -219,24 +239,26 @@ def create_crop_area(body: AreaIn, user=Depends(current_user), con=Depends(get_d
 @router.post("/crop-areas/{crop_area_id}/sprays", status_code=201, summary="Save a spray (recomputes the crop area)")
 def add_spray(crop_area_id: str, body: SprayIn, user=Depends(current_user), con=Depends(get_db_rw)):
     _require_writes(user)
-    _require_area(con, user, crop_area_id)
+    crop_area_id = _require_area(con, user, crop_area_id)               # the id of GET /fields or the stored one
     shift, today = _shift(con), _today(con)
     if body.spray_date > today:
         raise HTTPException(status_code=422, detail="the spray date cannot be in the future")
-    con.execute("INSERT INTO app.spray (crop_area_id, spray_date, protection_duration_days) VALUES (%s, %s, %s)",
-                (crop_area_id, body.spray_date - timedelta(days=shift), body.protection_duration_days))
+    spray_id = con.execute("INSERT INTO app.spray (crop_area_id, spray_date, protection_duration_days) VALUES (%s, %s, %s) "
+                           "RETURNING spray_id", (crop_area_id, body.spray_date - timedelta(days=shift),
+                                                  body.protection_duration_days)).fetchone()["spray_id"]
     con.execute("UPDATE app.crop_area SET sprays_confirmed = true WHERE crop_area_id = %s", (crop_area_id,))
     _recompute(con, crop_area_id, "spray", what="risk")       # a spray changes nothing in the crop map or the soil
     changed = con.execute("SELECT count(*) AS n FROM curated.risk_change WHERE crop_area_id = %s AND reason = 'spray' "
                           "AND computed_at = now()", (crop_area_id,)).fetchone()["n"]
     con.commit()
-    return {"crop_area": _feature(con, crop_area_id), "changed_days": changed}
+    return {"crop_area": _feature(con, crop_area_id), "changed_days": changed,
+            "spray": {"spray_id": spray_id, "date": body.spray_date, "protection_duration_days": body.protection_duration_days}}
 
 
 @router.delete("/crop-areas/{crop_area_id}", status_code=204, summary="Delete a crop area")
 def delete_crop_area(crop_area_id: str, user=Depends(current_user), con=Depends(get_db_rw)):
     _require_writes(user)
-    _require_area(con, user, crop_area_id)
+    crop_area_id = _require_area(con, user, crop_area_id)
     con.execute("DELETE FROM app.field WHERE field_id = (SELECT field_id FROM app.crop_area WHERE crop_area_id = %s)",
                 (crop_area_id,))
     con.commit()

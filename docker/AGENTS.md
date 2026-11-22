@@ -25,7 +25,11 @@ docker/
 │   ├── 002_app_farmer_input.sql  # farmer input tables in app (idempotent)
 │   ├── 003_curated.sql      # curated layer tables (idempotent)
 │   ├── 004_serve.sql        # serving layer: change log, cell-day table, demo shift, views (idempotent)
-│   └── 005_demo_users.sql   # app.demo_user for the API login (idempotent)
+│   ├── 005_demo_users.sql   # app.demo_user for the API login (idempotent)
+│   ├── 006_sprays_confirmed.sql  # app.crop_area.sprays_confirmed (idempotent)
+│   ├── 007_parcel_locations.sql  # app.parcel: names of the place of a parcel (idempotent)
+│   ├── 008_grid_cells.sql   # the cells of serve.grid_risk_daily tile the plane (idempotent)
+│   └── 010_user_accounts.sql  # app.user_account: login and password accounts of the demo API (idempotent)
 └── initdb/                  # SQL scripts run on the first PostGIS start (empty volume)
     ├── 01_extensions.sql    # PostGIS, PostGIS raster, schemas raw / curated / app
     ├── 02_schema.sql        # raw: grid_cell, weather_hourly, crop_class, ingest_log; app: field, field_crop_share
@@ -33,7 +37,8 @@ docker/
     ├── 04_app_farmer_input.sql  # app: parcel, field_parcel, crop_area, spray (field extended)
     ├── 05_curated.sql       # curated: weather features, resumption, crop map, field context, risk assessment
     ├── 06_serve.sql         # serve: views with the demo shift; curated.risk_change and septoria_cell_day
-    └── 07_demo_users.sql    # app.demo_user: demo logins of the API
+    ├── 07_demo_users.sql    # app.demo_user: the logins of the example farmers; the sandbox counter
+    └── 08_user_accounts.sql # app.user_account: login and password accounts that own editable farms
 ```
 
 The `raw`, `curated` and `app` schemas are created only on an empty volume. After changing files in

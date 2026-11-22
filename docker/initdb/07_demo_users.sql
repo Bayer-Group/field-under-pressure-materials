@@ -11,3 +11,11 @@ CREATE TABLE IF NOT EXISTS app.demo_user (
     created_at    timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS demo_user_owner_idx ON app.demo_user (owner_id);
+
+-- The counter behind POST /sandbox mode mock: the example farms are handed out one after another (visitor k gets example farm
+-- k modulo their number), so each visitor in a room gets another farm to work on (a copy; the example farm itself stays untouched).
+CREATE TABLE IF NOT EXISTS app.sandbox_counter (
+    id smallint PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+    n  bigint   NOT NULL DEFAULT 0
+);
+INSERT INTO app.sandbox_counter (id) VALUES (1) ON CONFLICT (id) DO NOTHING;

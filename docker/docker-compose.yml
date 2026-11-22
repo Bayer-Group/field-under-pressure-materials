@@ -33,6 +33,8 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-gis_user}:${POSTGRES_PASSWORD:-secretpassword}@postgis:5432/${POSTGRES_DB:-spatial_db}
       AUTH_SECRET: ${AUTH_SECRET:-}      # empty: random at start (tokens expire on restart)
       DEMO_READONLY: ${DEMO_READONLY:-0}  # 1: nobody saves anything (kill switch for the audience demo)
+      ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-1}   # 0: POST /register is switched off
+      MAX_ACCOUNTS: ${MAX_ACCOUNTS:-500}
       SANDBOX_RATE_PER_MIN: ${SANDBOX_RATE_PER_MIN:-150}
       WEB_CONCURRENCY: ${WEB_CONCURRENCY:-3}    # uvicorn worker processes (one Python process is limited by the GIL)
     ports:

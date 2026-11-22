@@ -13,13 +13,13 @@ from __future__ import annotations
 import datetime as _dt
 import re
 from datetime import timedelta
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from backend.app.api.v1.endpoints.farm import current_user
-from backend.app.api.v1.endpoints.farm_write import _require_writes, _recompute, _shift, _today
+from backend.app.api.v1.endpoints.farm import _require_area, current_user
+from backend.app.api.v1.endpoints.farm_write import _feature, _recompute, _require_writes, _shift, _today
 from backend.app.core.config import MAX_AREA_HA, MAX_AREAS_OTHER, MAX_AREAS_SANDBOX
 from backend.app.core.db import get_db, get_db_rw
 from backend.app.core.limits import RateLimiter, enforce
@@ -44,6 +44,16 @@ def external_id(owner: str, stored: str) -> str:
         if stored.startswith(prefix):
             return stored[len(prefix):]
     return stored
+
+
+def resolve_id(con, table: str, column: str, owner: str, client_id: str) -> str:
+    """The stored id of what the client calls `client_id`: made through this API (owner~id), or a sandbox copy made before the id
+    format was unified (owner-id), whichever exists, so that a copy is edited in place and not duplicated; else a new owner~id.
+    `table` and `column` are fixed names from the code."""
+    new, legacy = internal_id(owner, client_id), f"{owner}-{client_id}"
+    row = con.execute(f"SELECT {column} AS id FROM {table} WHERE {column} IN (%s, %s) ORDER BY ({column} = %s) DESC LIMIT 1",
+                      (new, legacy, new)).fetchone()
+    return row["id"] if row else new
 
 
 def _check_id(value: str, what: str) -> None:
@@ -73,6 +83,7 @@ class CropIn(BaseModel):
 
 
 class SprayIn(BaseModel):
+    spray_id: Optional[int] = None                        # of an existing spray: it is kept and updated (a new one has none)
     date: _dt.date
     protection_duration_days: int = Field(ge=1, le=60)
 
@@ -129,9 +140,10 @@ def load_fields(con, owner: str, only: Optional[str] = None) -> list[dict]:
         "LEFT JOIN curated.crop_mapping m ON m.class_code = fc.map_crop_class_code "
         "WHERE t.field_id = ANY(%s) ORDER BY t.crop_area_id", (ids,)).fetchall()
     sprays: dict[str, list] = {}
-    for r in con.execute("SELECT crop_area_id, spray_date + serve.shift_days() AS date, protection_duration_days FROM app.spray "
-                         "WHERE crop_area_id = ANY(%s) ORDER BY spray_date", ([a["crop_area_id"] for a in areas],)).fetchall():
-        sprays.setdefault(r["crop_area_id"], []).append({"date": r["date"], "protection_duration_days": r["protection_duration_days"]})
+    for r in con.execute("SELECT crop_area_id, spray_id, spray_date + serve.shift_days() AS date, protection_duration_days FROM app.spray "
+                         "WHERE crop_area_id = ANY(%s) ORDER BY spray_date, spray_id", ([a["crop_area_id"] for a in areas],)).fetchall():
+        sprays.setdefault(r["crop_area_id"], []).append({"spray_id": r["spray_id"], "date": r["date"],
+                                                         "protection_duration_days": r["protection_duration_days"]})
     by_field: dict[str, list] = {}
     for a in areas:
         by_field.setdefault(a["field_id"], []).append({
@@ -159,7 +171,8 @@ def list_fields(user=Depends(current_user), con=Depends(get_db)):
 @router.get("/fields/{field_id}", summary="One field with its crop areas")
 def get_field(field_id: str, user=Depends(current_user), con=Depends(get_db)):
     _check_id(field_id, "field_id")
-    for candidate in (internal_id(user["owner_id"], field_id), field_id):    # a field made through this API, or a generated one
+    owner = user["owner_id"]
+    for candidate in (internal_id(owner, field_id), f"{owner}-{field_id}", field_id):    # made through this API, an older copy, a generated one
         found = load_fields(con, user["owner_id"], candidate)
         if found:
             return found[0]
@@ -229,7 +242,8 @@ def put_field(field_id: str, body: FieldIn, user=Depends(current_user), con=Depe
         raise HTTPException(status_code=422, detail={"message": "confirmations are missing", "missing": missing})
 
     limit = MAX_AREAS_SANDBOX if user.get("sandbox") else MAX_AREAS_OTHER
-    fid = internal_id(owner, field_id)
+    fid = resolve_id(con, "app.field", "field_id", owner, field_id)
+    cids = {i: resolve_id(con, "app.crop_area", "crop_area_id", owner, i) for i in ids}
     others = con.execute("SELECT count(*) AS n FROM app.crop_area a JOIN app.field f USING (field_id) "
                          "WHERE f.owner_id = %s AND f.field_id <> %s", (owner, fid)).fetchone()["n"]
     if others + len(body.crop_areas) > limit:
@@ -253,20 +267,153 @@ def put_field(field_id: str, body: FieldIn, user=Depends(current_user), con=Depe
     con.execute("DELETE FROM app.field_parcel WHERE field_id = %s", (fid,))
     for p in parcel_ids:
         con.execute("INSERT INTO app.field_parcel (field_id, parcel_id) VALUES (%s, %s)", (fid, p))
-    keep = [internal_id(owner, i) for i in ids]
+    keep = list(cids.values())
     con.execute("DELETE FROM app.crop_area WHERE field_id = %s AND NOT (crop_area_id = ANY(%s))", (fid, keep))
     for a in body.crop_areas:
-        cid = internal_id(owner, a.crop_area_id)
+        cid = cids[a.crop_area_id]
         con.execute(
             "INSERT INTO app.crop_area (crop_area_id, field_id, geom, farmer_crop_id, sowing_date, sprays_confirmed) "
             "VALUES (%s, %s, ST_GeomFromEWKB(decode(%s, 'hex')), %s, %s, true) "
             "ON CONFLICT (crop_area_id) DO UPDATE SET geom = EXCLUDED.geom, farmer_crop_id = EXCLUDED.farmer_crop_id, "
             "sowing_date = EXCLUDED.sowing_date, sprays_confirmed = true",
             (cid, fid, internals["proposed"][a.crop_area_id], a.crop.farmer_crop_id, a.sowing_date - timedelta(days=shift)))
-        con.execute("DELETE FROM app.spray WHERE crop_area_id = %s", (cid,))
-        for s in a.past_sprays:
-            con.execute("INSERT INTO app.spray (crop_area_id, spray_date, protection_duration_days) VALUES (%s, %s, %s)",
-                        (cid, s.date - timedelta(days=shift), s.protection_duration_days))
+        existing = {r["spray_id"] for r in con.execute("SELECT spray_id FROM app.spray WHERE crop_area_id = %s", (cid,)).fetchall()}
+        kept = set()
+        for s in a.past_sprays:                           # a spray with the id of an existing one is updated, the others are new
+            if s.spray_id is not None and s.spray_id in existing:
+                con.execute("UPDATE app.spray SET spray_date = %s, protection_duration_days = %s WHERE spray_id = %s",
+                            (s.date - timedelta(days=shift), s.protection_duration_days, s.spray_id))
+                kept.add(s.spray_id)
+            else:
+                kept.add(con.execute("INSERT INTO app.spray (crop_area_id, spray_date, protection_duration_days) VALUES (%s, %s, %s) "
+                                     "RETURNING spray_id", (cid, s.date - timedelta(days=shift),
+                                                            s.protection_duration_days)).fetchone()["spray_id"])
+        con.execute("DELETE FROM app.spray WHERE crop_area_id = %s AND NOT (spray_id = ANY(%s))", (cid, list(kept)))
         _recompute(con, cid, "save")
     con.commit()
     return load_fields(con, owner, fid)[0]
+
+
+# ---------------------------------------------------------------- editing one crop area and its sprays
+class AreaPatch(BaseModel):
+    """Only the fields that are sent change; bbch_override: null clears it. sprays_confirmed can only be set to true (the answer
+    "there were no sprays")."""
+    sowing_date: Optional[_dt.date] = None
+    farmer_crop_id: Optional[str] = None
+    bbch_override: Optional[Literal[31, 37, 39, 51, 59]] = None
+    sprays_confirmed: Optional[bool] = None
+
+
+class SprayPatch(BaseModel):
+    date: Optional[_dt.date] = None
+    protection_duration_days: Optional[int] = Field(None, ge=1, le=60)
+
+
+def _area_of(con, owner: str, stored_id: str) -> dict:
+    """The crop area in the shape of GET /fields (with its past_sprays and their ids)."""
+    field_id = con.execute("SELECT field_id FROM app.crop_area WHERE crop_area_id = %s", (stored_id,)).fetchone()["field_id"]
+    wanted = external_id(owner, stored_id)
+    for a in load_fields(con, owner, field_id)[0]["crop_areas"]:
+        if a["crop_area_id"] == wanted:
+            return a
+    raise HTTPException(status_code=404, detail="crop area not found")
+
+
+def _spray_list(con, stored_id: str) -> list[dict]:
+    return [{"spray_id": r["spray_id"], "date": r["date"], "protection_duration_days": r["protection_duration_days"]}
+            for r in con.execute("SELECT spray_id, spray_date + serve.shift_days() AS date, protection_duration_days FROM app.spray "
+                                 "WHERE crop_area_id = %s ORDER BY spray_date, spray_id", (stored_id,)).fetchall()]
+
+
+def _changed_days(con, stored_id: str, reason: str) -> int:
+    return con.execute("SELECT count(*) AS n FROM curated.risk_change WHERE crop_area_id = %s AND reason = %s AND computed_at = now()",
+                       (stored_id, reason)).fetchone()["n"]
+
+
+@router.patch("/crop-areas/{crop_area_id}", summary="Edit one crop area: sowing date, crop, growth stage, the answer about sprays")
+def patch_crop_area(crop_area_id: str, body: AreaPatch, user=Depends(current_user), con=Depends(get_db_rw)):
+    """The id is the one of GET /fields (or the stored one). Answers the crop area in the shape of an element of crop_areas."""
+    _require_writes(user)
+    sent = body.model_fields_set
+    if not sent:
+        raise HTTPException(status_code=422, detail="nothing to change: send sowing_date, farmer_crop_id, bbch_override or sprays_confirmed")
+    if ("sowing_date" in sent and body.sowing_date is None) or ("farmer_crop_id" in sent and not body.farmer_crop_id):
+        raise HTTPException(status_code=422, detail="sowing_date and farmer_crop_id cannot be null")
+    if "sprays_confirmed" in sent and body.sprays_confirmed is not True:
+        raise HTTPException(status_code=422, detail="sprays_confirmed can only be set to true (it confirms that there were no sprays "
+                            "or that the list is complete)")
+    stored = _require_area(con, user, crop_area_id)
+    sets, args = [], []
+    if "sowing_date" in sent:
+        if body.sowing_date > _today(con):
+            raise HTTPException(status_code=422, detail="sowing_date must be a date that is not in the future (the time shown by GET /clock)")
+        sets.append("sowing_date = %s")
+        args.append(body.sowing_date - timedelta(days=_shift(con)))
+    crop_changed = False
+    if "farmer_crop_id" in sent:
+        if not con.execute("SELECT 1 FROM curated.crop_mapping WHERE farmer_crop_id = %s", (body.farmer_crop_id,)).fetchone():
+            raise HTTPException(status_code=422, detail="unknown crop (see GET /crops)")
+        sets.append("farmer_crop_id = %s")
+        args.append(body.farmer_crop_id)
+        crop_changed = True
+    if "bbch_override" in sent:
+        sets.append("bbch_override = %s")
+        args.append(body.bbch_override)
+    if "sprays_confirmed" in sent:
+        sets.append("sprays_confirmed = true")
+    con.execute("UPDATE app.crop_area SET " + ", ".join(sets) + " WHERE crop_area_id = %s", (*args, stored))
+    if sent & {"farmer_crop_id", "bbch_override"}:                       # they change the context and the growth stage
+        _recompute(con, stored, "edit", what="all" if crop_changed else "risk")
+    con.commit()
+    return _area_of(con, user["owner_id"], stored)
+
+
+@router.get("/crop-areas/{crop_area_id}/sprays", summary="The sprays of one crop area, with their ids")
+def list_sprays(crop_area_id: str, user=Depends(current_user), con=Depends(get_db)):
+    stored = _require_area(con, user, crop_area_id)
+    confirmed = con.execute("SELECT sprays_confirmed FROM app.crop_area WHERE crop_area_id = %s", (stored,)).fetchone()["sprays_confirmed"]
+    return {"crop_area_id": external_id(user["owner_id"], stored), "sprays_confirmed": bool(confirmed), "sprays": _spray_list(con, stored)}
+
+
+def _spray_answer(con, user, stored: str, spray: Optional[dict], reason: str) -> dict:
+    return {"spray": spray, "past_sprays": _spray_list(con, stored), "crop_area": _feature(con, stored),
+            "changed_days": _changed_days(con, stored, reason)}
+
+
+@router.patch("/crop-areas/{crop_area_id}/sprays/{spray_id}", summary="Change one spray (recomputes the crop area)")
+def patch_spray(crop_area_id: str, spray_id: int, body: SprayPatch, user=Depends(current_user), con=Depends(get_db_rw)):
+    _require_writes(user)
+    sent = body.model_fields_set
+    if not sent or ("date" in sent and body.date is None) or ("protection_duration_days" in sent and body.protection_duration_days is None):
+        raise HTTPException(status_code=422, detail="send date and/or protection_duration_days")
+    stored = _require_area(con, user, crop_area_id)
+    row = con.execute("SELECT spray_date, protection_duration_days FROM app.spray WHERE spray_id = %s AND crop_area_id = %s",
+                      (spray_id, stored)).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="spray not found")
+    shift = _shift(con)
+    new_date = row["spray_date"]
+    if "date" in sent:
+        if body.date > _today(con):
+            raise HTTPException(status_code=422, detail="the spray date cannot be in the future")
+        new_date = body.date - timedelta(days=shift)
+    days = body.protection_duration_days if "protection_duration_days" in sent else row["protection_duration_days"]
+    con.execute("UPDATE app.spray SET spray_date = %s, protection_duration_days = %s WHERE spray_id = %s", (new_date, days, spray_id))
+    con.execute("UPDATE app.crop_area SET sprays_confirmed = true WHERE crop_area_id = %s", (stored,))
+    _recompute(con, stored, "spray", what="risk")
+    answer = _spray_answer(con, user, stored, {"spray_id": spray_id, "date": new_date + timedelta(days=shift), "protection_duration_days": days}, "spray")
+    con.commit()
+    return answer
+
+
+@router.delete("/crop-areas/{crop_area_id}/sprays/{spray_id}", summary="Delete one spray (recomputes the crop area)")
+def delete_spray(crop_area_id: str, spray_id: int, user=Depends(current_user), con=Depends(get_db_rw)):
+    """200 with the remaining sprays and the recomputed crop area (not 204: the front end needs the new list)."""
+    _require_writes(user)
+    stored = _require_area(con, user, crop_area_id)
+    if not con.execute("DELETE FROM app.spray WHERE spray_id = %s AND crop_area_id = %s RETURNING spray_id", (spray_id, stored)).fetchone():
+        raise HTTPException(status_code=404, detail="spray not found")
+    _recompute(con, stored, "spray", what="risk")
+    answer = _spray_answer(con, user, stored, None, "spray")
+    con.commit()
+    return answer
