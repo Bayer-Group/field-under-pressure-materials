@@ -6,11 +6,16 @@ documentation at `/docs`). Base URL of the demo: `https://34-118-11-71.nip.io/ap
 the VM, see `docker/VM.md`). CORS allows any origin and no cookies are used, so a front end on any host (also `http://localhost`) can
 call it with the `Authorization: Bearer` header.
 
-**Start here: the sandbox.** `POST /sandbox` `{"mode": "mock" | "empty"}` needs no password and returns a token for 8 hours:
-`mock` starts with a copy of a ready farm (4 to 8 crop areas with results, **linked to their cadastral parcels**: `parcel_ids` and `parcel` of `GET /fields` are filled, and a copied field is edited in place by `PUT /fields/{id}` with the id it has in `GET /fields`), `empty` starts from scratch. Whatever the visitor saves
-belongs to that sandbox and is kept for the 8 hours (keep the token, for example in `localStorage`, and the data is there after a
-reload); `DELETE /sandbox` starts over. The development logins `farmer001` … `farmer050` exist only for the team and will be removed
-before the demo. The views of schema `serve` (`docker/README.md`, "Serving layer") are the single source: the API is a thin `SELECT`
+**Start here: the sandbox.** `POST /sandbox` `{"mode": "mock" | "empty"}` needs no password and returns a token for 8 hours. `mock`
+copies **the next example farm in turn** (the example farms are handed out one after another, so a room gets different farms; the
+answer has `template`, the example farm that was copied, and `display_name`): a farm of mostly 3 fields, some of them split into 2 or 3
+crop areas, with sprays, parcels (`parcel_ids`) and risk. `empty` starts from scratch. Whatever the visitor saves belongs to that
+sandbox and is kept for the 8 hours (keep the token, for example in `localStorage`, and the data is there after a reload);
+`DELETE /sandbox` starts over. The copy has short ids (`p1`, `p1a`, `p1b`) and is edited in place by `PUT /fields/{id}`.
+
+**The example farmers** can also be read directly: login `farmer001` ... `farmer100` with the password `demo001` ... `demo100` (the same
+word and the number of the login). They are **read-only** (`403` on writes: "start a sandbox"), because the copies for the visitors are
+made from them and the passwords are easy to guess. The analyst has a separate password. The views of schema `serve` (`docker/README.md`, "Serving layer") are the single source: the API is a thin `SELECT`
 over them, so the farmer front end and QGIS see the same data and no business logic lives in the API or in the readers.
 
 ## 1. Rules

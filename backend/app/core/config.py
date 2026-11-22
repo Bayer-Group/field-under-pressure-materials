@@ -30,5 +30,8 @@ MAX_PARALLEL_REFRESH = int(os.environ.get("MAX_PARALLEL_REFRESH", "4"))      # r
 # Nowych sandboxów na minutę z jednego adresu IP. Wysoko, bo cała sala na jednym Wi-Fi wychodzi zwykle przez jeden publiczny adres (NAT).
 SANDBOX_RATE_PER_MIN = int(os.environ.get("SANDBOX_RATE_PER_MIN", "150"))
 
+# Konta przykładowych rolników (farmer-001...) mają przewidywalne hasła i służą za wzorce kopiowane do sandboxów: tylko do odczytu.
+ALLOW_EXAMPLE_FARM_WRITES = os.environ.get("ALLOW_EXAMPLE_FARM_WRITES", "0") == "1"
+
 # Dozwolone originy CORS
 CORS_ORIGINS = ["*"]
