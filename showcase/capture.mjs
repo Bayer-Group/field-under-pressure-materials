@@ -57,7 +57,7 @@ try {
   await pick('.date-pick select:last-child', 'Jul|Aug|Jun'); await sleep(3500)
   await shot('greenness-map')
 
-  await page.goto(`${BASE}/#/plot/${PLOT}/microbes`, 4000)
+  await page.goto(`${BASE}/#/plot/${PLOT}/microbes?view=taxonomy`, 4000)
   await click('.layer-card button', 'Aerial'); await sleep(2500)
   await shot('microbes')
   await click('.microbiome button, button', 'Fungi'); await sleep(2000)

@@ -657,13 +657,13 @@ New `web/src/GenusName.tsx`: `<GenusName name={string} description={string | nul
   2. Roles view genus table (8.2).
   3. Soil functions: every carrier genus in "Who may carry it" lists (8.3).
 
-### 8.2 Soil microbes: "View: Taxonomy | Roles"
+### 8.2 Soil microbes: "View: Roles | Taxonomy"
 
-- Route: the view is a hash query parameter on the microbes route: `#/plot/<id>/microbes/<sample>?view=roles`.
+- Route: the view is a hash query parameter on the microbes route: `#/plot/<id>/microbes/<sample>?view=taxonomy`.
   `parseRoute` strips `?...` from the hash before splitting and returns `view: 'taxonomy' | 'roles'` (default
-  `'taxonomy'`) on the map route; `microbesHref(plotId, sampleId?, view?)` appends `?view=roles` only for roles.
+  `'roles'`) on the map route; `microbesHref(plotId, sampleId?, view?)` appends `?view=taxonomy` only for taxonomy.
   Switching sample, year or organism keeps the view.
-- `MicrobiomePanel`: a `Choice` "View" with buttons **Taxonomy** and **Roles** after "Organisms". In Roles view
+- `MicrobiomePanel`: a `Choice` "View" with buttons **Roles** (the default) and **Taxonomy** after "Organisms". In Roles view
   the "Group by" choice is hidden (roles are genus level) and the sub-heading reads `Share of DNA reads per role ·
   N reads from K soil cores`. Data: `api.roles(sampleId)` with `useFetch` key `` `${sample}|roles` ``. The notes
   block ("About this sample") renders `RoleComposition.notes` as in Taxonomy view.

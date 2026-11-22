@@ -29,7 +29,7 @@ function closestInSeason(options: MicrobiomeSample[], from: MicrobiomeSample): M
 
 /** Soil microbiome of one plot: choose bacteria or fungi, a year, a sampling day within it, and the taxonomic
  *  rank; shows the composition of that sample. The chosen sample is in the URL; the rank stays while browsing. */
-export function MicrobiomePanel({ plotId, sampleId, view = 'taxonomy' }: { plotId: string; sampleId: string | null; view?: MicrobeView }) {
+export function MicrobiomePanel({ plotId, sampleId, view = 'roles' }: { plotId: string; sampleId: string | null; view?: MicrobeView }) {
   const samples = useFetch(`microbiome:${plotId}`, (s) => api.microbiome(plotId, s))
   const [rank, setRank] = useState<TaxonRank>('phylum')
   const [query, setQuery] = useState('') // kept while switching sample, so one taxon can be followed over the years
@@ -84,7 +84,7 @@ export function MicrobiomePanel({ plotId, sampleId, view = 'taxonomy' }: { plotI
           </Choice>
         )}
         <Choice label="View">
-          {(['taxonomy', 'roles'] as const).map((v) => (
+          {(['roles', 'taxonomy'] as const).map((v) => (
             <button key={v} aria-pressed={view === v} onClick={() => navigate(microbesHref(plotId, current.sample_id, v))}>
               {v === 'taxonomy' ? 'Taxonomy' : 'Roles'}
             </button>
