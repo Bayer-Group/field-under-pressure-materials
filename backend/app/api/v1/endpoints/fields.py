@@ -24,11 +24,13 @@ from backend.app.core.config import MAX_AREA_HA, MAX_AREAS_OTHER, MAX_AREAS_SAND
 from backend.app.core.db import get_db, get_db_rw
 from backend.app.core.limits import RateLimiter, enforce
 from backend.app.services import geometry_validation as gv
+from backend.app.services.parcels import location_label
 
 router = APIRouter()
 
 _validate_limit = RateLimiter(120, 60)          # validations per minute and owner
 _ID = re.compile(r"^[A-Za-z0-9_.:-]{1,80}$")
+_PARCEL_ID = re.compile(r"^[A-Za-z0-9_.:/-]{1,80}$")
 
 
 # ---------------------------------------------------------------- ids and models
@@ -47,6 +49,12 @@ def external_id(owner: str, stored: str) -> str:
 def _check_id(value: str, what: str) -> None:
     if not _ID.match(value):
         raise HTTPException(status_code=422, detail=f"{what} must be 1 to 80 characters of letters, digits and _ . : -")
+
+
+def _check_parcel_id(value: str) -> None:
+    """Accept cadastral identifiers, including parcel numbers containing a slash."""
+    if not _PARCEL_ID.fullmatch(value):
+        raise HTTPException(status_code=422, detail="parcel_id must be 1 to 80 characters of letters, digits and _ . : / -")
 
 
 class ValidateArea(BaseModel):
@@ -103,11 +111,14 @@ def load_fields(con, owner: str, only: Optional[str] = None) -> list[dict]:
     ids = [f["field_id"] for f in fields]
     parcels: dict[str, list] = {}
     for r in con.execute(
-            "SELECT fp.field_id, p.parcel_id, p.parcel_number, ST_AsGeoJSON(p.geom, 7)::jsonb AS geometry "
+            "SELECT fp.field_id, p.parcel_id, p.parcel_number, p.region, p.commune, p.county, p.voivodeship, "
+            "ST_AsGeoJSON(p.geom, 7)::jsonb AS geometry "
             "FROM app.field_parcel fp JOIN app.parcel p USING (parcel_id) WHERE fp.field_id = ANY(%s) ORDER BY p.parcel_id",
             (ids,)).fetchall():
-        parcels.setdefault(r["field_id"], []).append({"parcel_id": r["parcel_id"], "parcel_number": r["parcel_number"],
-                                                      "geometry": r["geometry"]})
+        parcels.setdefault(r["field_id"], []).append({
+            "parcel_id": r["parcel_id"], "parcel_number": r["parcel_number"], "region": r["region"], "commune": r["commune"],
+            "county": r["county"], "voivodeship": r["voivodeship"], "location": location_label(r["region"], r["commune"]),
+            "geometry": r["geometry"]})
     areas = con.execute(
         "SELECT t.crop_area_id, t.field_id, ST_AsGeoJSON(t.geom, 7)::jsonb AS geometry, t.farmer_crop_id, c.sowing_date, "
         "a.sprays_confirmed, m.farmer_crop_id AS map_crop_id, ST_Area(t.geom::geography) / 10000 AS area_ha, "
@@ -160,8 +171,10 @@ def get_field(field_id: str, user=Depends(current_user), con=Depends(get_db)):
 def validate_geometry(body: ValidateIn, user=Depends(current_user), con=Depends(get_db_rw)):
     enforce(_validate_limit, user["owner_id"])
     ids = [a.crop_area_id for a in body.crop_areas]
-    for i in ids + body.parcel_ids:
-        _check_id(i, "id")
+    for i in ids:
+        _check_id(i, "crop_area_id")
+    for parcel_id in body.parcel_ids:
+        _check_parcel_id(parcel_id)
     if len(set(ids)) != len(ids):
         raise HTTPException(status_code=422, detail="crop_area_id values must be unique")
     response, _ = gv.validate(con, list(dict.fromkeys(body.parcel_ids)),
@@ -182,7 +195,7 @@ def put_field(field_id: str, body: FieldIn, user=Depends(current_user), con=Depe
     if not parcel_ids:
         raise HTTPException(status_code=422, detail="give parcel_ids (or a parcel)")
     for p in parcel_ids:
-        _check_id(p, "parcel_id")
+        _check_parcel_id(p)
     ids = [a.crop_area_id for a in body.crop_areas]
     for i in ids:
         _check_id(i, "crop_area_id")

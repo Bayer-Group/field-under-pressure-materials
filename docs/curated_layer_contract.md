@@ -412,7 +412,7 @@ The plugin applies its own styles; the API sends none.
 | Layer | Style | Time |
 | --- | --- | --- |
 | Septoria risk | categorized by `status`, then `risk_class`: `high` red, `medium` yellow, `low` green, `uncertain` yellow hatched, `out_of_window`, `insufficient_data` and `stage_unknown` grey | one feature set per `as_of`; the plugin refetches on a date change |
-| Farmer crop areas | categorized by "farmer crop differs from crop map" (see `FARMER_FIELDS.md`) | none |
+| Farmer crop areas | categorized by "farmer crop differs from crop map" (see `qgis_plugin/FARMER_FIELDS.md`) | none |
 | Weather cells | graduated by `relative_humidity` | feature time field `utc_time` |
 
 ### 6.6 What the plugin guarantees
