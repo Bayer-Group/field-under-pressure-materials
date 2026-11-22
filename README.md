@@ -7,7 +7,7 @@ The prototype shows a farmer when the weather has favoured **septoria in winter 
 may be a suitable window to **consider** a treatment. It states conditions, not a diagnosis, and never tells anyone to spray:
 the decision stays with the farmer or agronomist.
 
-**Documentation:** <https://geoearth-junction.github.io/field-under-pressure-materials/> (source in [`docs/`](docs/index.md))
+**Live demo:** <https://fup-web-1039876972059.europe-central2.run.app> · **Documentation:** <https://geoearth-junction.github.io/field-under-pressure-materials/> (source in [`docs/`](docs/index.md))
 
 ## What it does
 
@@ -59,7 +59,7 @@ Details, including the database tunnel and the QGIS plugin: [Getting started](do
 | [Architecture](docs/architecture.md) | data flow from organizer files to the map, database layers, demo clock |
 | [Risk models](docs/risk-models.md) | septoria and spray window rules |
 | [API](docs/api.md) | endpoints, authentication, sandbox |
-| [Deployment](docs/deployment.md) | the VM, migrations and deploying the backend |
+| [Deployment](docs/deployment.md) | the VM, migrations, deploying the backend and the web map (Cloud Run) |
 | [Data sources](docs/data-sources.md) | organizer datasets and public registers |
 | [Project requirements](docs/PROJECT.md) | goals, first iteration, open decisions |
 

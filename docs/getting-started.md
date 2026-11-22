@@ -30,7 +30,8 @@ python -m http.server 5500
 ```
 
 Open <http://localhost:5500> and choose **Explore an example farm**. By default the page talks to the deployed demo API
-(`BASE_URL` in `web/sandbox-client.js`), so it works without a local backend. MapLibre GL JS and Turf.js are loaded from a CDN,
+(`BASE_URL` in `web/sandbox-client.js`), so it works without a local backend. The deployed web map runs on Cloud Run (see
+[Deployment](deployment.md#front-end-on-cloud-run)). MapLibre GL JS and Turf.js are loaded from a CDN,
 so the page needs internet access.
 
 ## 2. The backend (FastAPI)

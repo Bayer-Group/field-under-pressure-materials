@@ -20,7 +20,7 @@ docs/
 ├── getting-started.md, architecture.md, risk-models.md, api.md, deployment.md, data-sources.md, team.md
 ├── PROJECT.md                           # Product requirements and open decisions
 ├── *_CONTRACT.md, *_contract.md         # Agreed contracts (farmer input, geometry validation, curated layer, serve read)
-├── LIVE_SANDBOX_INTEGRATION.md, MOCK_API_GUIDE.md, DATA_PIPELINE_NOTES.md
+├── LIVE_SANDBOX_INTEGRATION.md, MOCK_API_GUIDE.md, DATA_PIPELINE_NOTES.md, WEB_DEPLOY.md
 ├── polskie_rejestry_publiczne_gis.csv   # Table with sources, formats and URLs (46 services)
 └── polskie_rejestry_publiczne_gis.md    # Detailed description divided into categories
 ```

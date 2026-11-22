@@ -26,6 +26,7 @@
                   ┌──────────────┴──────────────┐
                   ▼                             ▼
         web map (MapLibre GL JS)       QGIS plugin (PyQGIS, QgsTask)
+        served from Cloud Run
 ```
 
 All data lives in one PostGIS database with four schemas:

@@ -18,9 +18,10 @@ the farmer and a QGIS plugin for the analyst, both reading one FastAPI backend o
 | --- | --- |
 | Septoria risk per crop area and day (wet hours, growth stage, spray protection) | working, demo data 2024 |
 | Risk heatmap of the voivodeship (grid cells) | working |
-| Spray window: up to three weather windows in the next 72 hours | backend and API client working, no UI yet |
+| Spray window: up to three weather windows in the next 72 hours | working: API and a view in the web map |
 | Farmer input: parcels from GUGiK ULDK, crop areas, sowing dates, sprays | working in the sandbox |
 | QGIS plugin reading the same API | working |
+| Web map deployed on Cloud Run, API on the project VM | working |
 
 The demo replays the real weather of 2024, shifted so that the data looks current ("replay"). See
 [Risk models](risk-models.md) for what each value means and what it cannot say.
@@ -33,7 +34,7 @@ The demo replays the real weather of 2024, shifted so that the data looks curren
 | [Architecture](architecture.md) | how data flows from the organizer files to the map, and where the code lives |
 | [Risk models](risk-models.md) | the septoria rules and the spray window rules, with the origin of every threshold |
 | [API](api.md) | the endpoints, authentication and the sandbox |
-| [Deployment](deployment.md) | the VM, database migrations and deploying the backend |
+| [Deployment](deployment.md) | the VM, database migrations, the backend and the web map on Cloud Run |
 | [Data sources](data-sources.md) | the organizer datasets and the public Polish registers |
 | [Team](team.md) | who works on what |
 
@@ -47,5 +48,6 @@ The detailed, agreed specifications stay as separate documents:
 - [Farmer input contract](FARMER_INPUT_CONTRACT.md) and [geometry validation contract](GEOMETRY_VALIDATION_CONTRACT.md)
 - [Live sandbox integration](LIVE_SANDBOX_INTEGRATION.md) and [mock API guide](MOCK_API_GUIDE.md)
 - [Data pipeline notes](DATA_PIPELINE_NOTES.md)
+- [Deploying the front end (Cloud Run)](WEB_DEPLOY.md)
 
 Source code: [github.com/geoearth-junction/field-under-pressure-materials](https://github.com/geoearth-junction/field-under-pressure-materials).

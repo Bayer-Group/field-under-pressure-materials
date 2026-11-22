@@ -1,8 +1,12 @@
 # Deployment
 
-The demo runs on one virtual machine on Google Cloud: `fup-vm` in the project `geo-earth-junction`, zone `europe-central2-a`.
-Docker Compose runs three services: `postgis` (the database), `backend` (FastAPI) and `caddy` (HTTPS in front of the backend).
-The database port is never opened to the internet; only SSH and the HTTPS API are reachable.
+The demo runs on Google Cloud, project `geo-earth-junction`, in two parts:
+
+- **Database and API** on one virtual machine, `fup-vm` (zone `europe-central2-a`). Docker Compose runs `postgis` (the
+  database), `backend` (FastAPI) and `caddy` (HTTPS in front of the backend). The database port is never opened to the
+  internet; only SSH and the HTTPS API are reachable.
+- **Web map** on Cloud Run, service `fup-web` (region `europe-central2`): an nginx container that serves `web/`, proxies `/api/`
+  to the VM and caches the map tiles. See [Front end on Cloud Run](#front-end-on-cloud-run).
 
 Step-by-step instructions for access, the tunnel and granting access are in
 [`docker/VM.md`](https://github.com/geoearth-junction/field-under-pressure-materials/blob/team/geoearth-junction/docker/VM.md);
@@ -66,6 +70,17 @@ Things to know:
 - **Apply migrations before deploying** code that needs them.
 - **Windows:** `gcloud compute ssh` on Windows (PuTTY's `plink`) can drop the beginning of a script sent on standard input, so
   the remote script fails with an error such as `y: command not found`. Run the deploy from Linux, macOS or Cloud Shell instead.
+
+## Front end on Cloud Run
+
+```bash
+scripts/deploy_web.sh check     # read-only: account, enabled APIs, the service
+scripts/deploy_web.sh deploy    # builds the image from web/ with Cloud Build and deploys it
+```
+
+The image (`docker/web/`) serves the files of `web/`, the pinned map libraries from `/vendor/` and a cache of OpenStreetMap
+tiles, and proxies `/api/` to the VM, so the browser talks to one domain only. When the VM's address changes, only an
+environment variable of the service changes, with no rebuild. Details: [Deploying the front end](WEB_DEPLOY.md).
 
 ## Other commands of `scripts/provision_vm.sh`
 
