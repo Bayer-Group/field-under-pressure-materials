@@ -135,7 +135,7 @@ def sandbox(body: SandboxIn, request: Request, con=Depends(get_db_rw)):
     enforce(_sandbox_limit, client_ip(request))
     ttl = SANDBOX_TTL_HOURS * 3600
     if DEMO_READONLY:                                    # read-only fallback: look at a shared farm, nothing is saved
-        owner = con.execute("SELECT owner_id FROM app.field WHERE data_status = 'mock' AND owner_id NOT LIKE 'sbx-%' "
+        owner = con.execute("SELECT owner_id FROM app.field WHERE data_status = 'mock' AND owner_id LIKE 'farmer-%' "
                             "GROUP BY owner_id ORDER BY count(*) DESC, owner_id LIMIT 1").fetchone()
         if not owner:
             raise HTTPException(status_code=503, detail="no demo data")
@@ -152,7 +152,7 @@ def sandbox(body: SandboxIn, request: Request, con=Depends(get_db_rw)):
     template = display = None
     if body.mode == "mock":
         owners = [r["owner_id"] for r in con.execute(
-            "SELECT owner_id FROM app.field WHERE data_status = 'mock' AND owner_id NOT LIKE 'sbx-%' "
+            "SELECT owner_id FROM app.field WHERE data_status = 'mock' AND owner_id LIKE 'farmer-%' "   # example farmers only, not accounts
             "GROUP BY owner_id HAVING count(*) >= 2 ORDER BY owner_id").fetchall()]
         if owners:
             try:
