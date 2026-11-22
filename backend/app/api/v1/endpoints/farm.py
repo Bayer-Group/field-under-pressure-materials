@@ -50,10 +50,17 @@ def _own(user: dict) -> tuple[str, tuple]:
     return " AND owner_id = %s", (user["owner_id"],)
 
 
-def _require_area(con, user: dict, crop_area_id: str) -> None:
+def _require_area(con, user: dict, crop_area_id: str) -> str:
+    """The stored id of one of the user's crop areas, from the id as GET /fields shows it (the id the client chose) or the stored one
+    (also a sandbox copy made before the id format was unified); 404 otherwise, also for somebody else's area."""
     cond, args = _own(user)
-    if not con.execute("SELECT 1 FROM serve.crop_area WHERE crop_area_id = %s" + cond, (crop_area_id, *args)).fetchone():
-        raise HTTPException(status_code=404, detail="crop area not found")      # also for somebody else's area
+    owner = user["owner_id"]
+    row = con.execute("SELECT crop_area_id AS id FROM serve.crop_area WHERE crop_area_id = ANY(%s)" + cond +
+                      " ORDER BY (crop_area_id = %s) DESC LIMIT 1",
+                      ([crop_area_id, f"{owner}~{crop_area_id}", f"{owner}-{crop_area_id}"], *args, crop_area_id)).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="crop area not found")
+    return row["id"]
 
 
 def _collection(rows) -> dict:
@@ -122,20 +129,16 @@ def my_crop_areas(limit: int = Query(5000, ge=1, le=50000), user=Depends(current
 
 @router.get("/crop-areas/{crop_area_id}", summary="One crop area with soil and crop-map context (GeoJSON Feature)")
 def crop_area(crop_area_id: str, user=Depends(current_user), con=Depends(get_db)):
-    cond, args = _own(user)
-    row = con.execute(
+    stored = _require_area(con, user, crop_area_id)
+    return con.execute(
         "SELECT jsonb_build_object('type', 'Feature', 'geometry', ST_AsGeoJSON(geom, 6)::jsonb, "
-        "'properties', to_jsonb(c) - 'geom') AS f FROM serve.crop_area c WHERE crop_area_id = %s" + cond,
-        (crop_area_id, *args)).fetchone()
-    if not row:
-        raise HTTPException(status_code=404, detail="crop area not found")
-    return row["f"]
+        "'properties', to_jsonb(c) - 'geom') AS f FROM serve.crop_area c WHERE crop_area_id = %s", (stored,)).fetchone()["f"]
 
 
 @router.get("/crop-areas/{crop_area_id}/risk", summary="Assessment per day (the date slider)")
 def crop_area_risk(crop_area_id: str, date_from: Optional[date] = Query(None, alias="from"),
                    date_to: Optional[date] = Query(None, alias="to"), user=Depends(current_user), con=Depends(get_db)):
-    _require_area(con, user, crop_area_id)
+    crop_area_id = _require_area(con, user, crop_area_id)
     rows = con.execute(
         "SELECT date, risk_class, status, conditions_met, h_hours, h_low, h_high, coverage, protected_until, "
         "growth_stage_zone, growth_stage_source, gdd_since_resumption, reasons, model_version FROM serve.risk_daily "
@@ -147,7 +150,7 @@ def crop_area_risk(crop_area_id: str, date_from: Optional[date] = Query(None, al
 
 @router.get("/crop-areas/{crop_area_id}/changes", summary="Changes of the class, status or conditions_met")
 def crop_area_changes(crop_area_id: str, user=Depends(current_user), con=Depends(get_db)):
-    _require_area(con, user, crop_area_id)
+    crop_area_id = _require_area(con, user, crop_area_id)
     return con.execute(
         "SELECT date, computed_at, reason, old_class, new_class, old_status, new_status, old_conditions_met, "
         "new_conditions_met FROM serve.risk_change_log WHERE crop_area_id = %s AND old_status IS NOT NULL "   # not the first calculation

@@ -129,7 +129,8 @@ def _prepare(con, crop_area_id: str, geometry: dict, union_hex: str, errors: lis
             "p AS (SELECT ST_CollectionExtract(ST_Intersection(g1, u), 3) AS ins, " + _opened("ST_Difference(g1, u)") + " AS outp FROM g) "
             "SELECT ST_Area(ST_Transform(ins, 2180)) AS ins_m2, ST_Area(ST_Transform(outp, 2180)) AS out_m2, "
             "ST_IsEmpty(ins) AS ins_empty, encode(ST_AsEWKB(ins), 'hex') AS ins_hex, encode(ST_AsEWKB(outp), 'hex') AS out_hex, "
-            "ST_AsGeoJSON(ins, 7)::jsonb AS ins_json, ST_AsGeoJSON(outp, 7)::jsonb AS out_json FROM p",
+            "ST_AsGeoJSON(ins, 7)::jsonb AS ins_json, ST_AsGeoJSON(outp, 7)::jsonb AS out_json, "
+            "ST_AsGeoJSON(ST_GeomFromEWKB(decode(%(g1)s, 'hex')), 7)::jsonb AS g1_json FROM p",
             {"g1": r["g1"], "u": union_hex}).fetchone()
     if c["ins_empty"] or (c["ins_m2"] or 0) < EMPTY_MIN_M2:
         errors.append(_err("empty_area", "nothing of the crop area lies on the selected parcels", crop_area_id))
@@ -137,7 +138,10 @@ def _prepare(con, crop_area_id: str, geometry: dict, union_hex: str, errors: lis
     outside = None
     if (c["out_m2"] or 0) >= OUTSIDE_MIN_M2:
         outside = {"outside_id": "outside-" + _h(crop_area_id, c["out_hex"]), "crop_area_id": crop_area_id, "geometry": c["out_json"]}
-    return {"hex": c["ins_hex"], "geometry": c["ins_json"], "repair": repair, "outside": outside}
+        return {"hex": c["ins_hex"], "geometry": c["ins_json"], "repair": repair, "outside": outside}
+    # Nothing to clip: keep the repaired geometry as it is. The intersection with the parcels would add vertices wherever the crop
+    # area runs along a parcel boundary (a crop area equal to a parcel grew 25, 36, 39, 46, 50, 56 vertices with every save).
+    return {"hex": r["g1"], "geometry": c["g1_json"], "repair": repair, "outside": None}
 
 
 def validate(con, parcel_ids: list[str], crop_areas: list[dict]) -> tuple[dict, dict]:
