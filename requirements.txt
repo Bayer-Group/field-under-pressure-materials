@@ -8,10 +8,10 @@ duckdb>=1.0
 # H3 spatial index (soil uses level 10; some other layers may use L11)
 h3>=3.7
 # Optional helpers:
-# h3pandas>=0.2
-# polars>=1.0          # fast Parquet alternative to pandas (mentioned in weather.md)
-# openpyxl>=3.1        # if you open the yield-risks Excel summary in Python
-# jupyter>=1.0         # local notebooks (Colab/Kaggle already provide this)
+h3pandas>=0.2
+polars>=1.0          # fast Parquet alternative to pandas (mentioned in weather.md)
+openpyxl>=3.1        # if you open the yield-risks Excel summary in Python
+jupyter>=1.0         # local notebooks (Colab/Kaggle already provide this)
 
 # Sentinel-2 Earth Search starter notebook
 pystac-client>=0.8
@@ -28,3 +28,12 @@ earthengine-api>=1.1
 geemap>=0.32
 # Uncomment if you Export.*.toCloudStorage and need to list/download GCS objects in Python:
 # google-cloud-storage>=2.14
+# custom
+torch
+segmentation-models-pytorch
+geopandas>=1.0
+shapely>=2.0
+scipy
+psycopg2-binary>=2.9
+scikit-learn
+joblib
