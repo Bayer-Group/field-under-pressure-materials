@@ -1,0 +1,2 @@
+# Ignore only temporary files created during atomic backup writes
+*.tmp.*
