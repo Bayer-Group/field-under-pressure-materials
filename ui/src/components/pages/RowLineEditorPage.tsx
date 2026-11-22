@@ -57,8 +57,6 @@ export function RowLineEditorPage() {
   const [orchard, setOrchard] = useState<OrchardBoundaryDoc | null>(null);
   const [cropPrefs, setCropPrefs] = useState<CropPrefDoc[]>([]);
   const [storedTrees, setStoredTrees] = useState<TreeDoc[]>([]);
-  const [orchardEndpoint, setOrchardEndpoint] = useState<string>('');
-  const [cropPrefsEndpoint, setCropPrefsEndpoint] = useState<string>('');
 
   // Drawing configuration & tools
   const [backdropMode, setBackdropMode] = useState<CanvasBackdropMode>('satellite');
@@ -78,10 +76,7 @@ export function RowLineEditorPage() {
 
   // Save confirmation state
   const [isSaving, setIsSaving] = useState(false);
-  const [saveBanner, setSaveBanner] = useState<{
-    response: SaveOrchardLayoutResponse;
-    endpoint: string;
-  } | null>(null);
+  const [saveBanner, setSaveBanner] = useState<SaveOrchardLayoutResponse | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -113,9 +108,7 @@ export function RowLineEditorPage() {
         const speciesByTree = new Map(trees.map((tree) => [tree._id, tree.species]));
         setStoredTrees(trees);
         setOrchard(orchardRes.data);
-        setOrchardEndpoint(orchardRes.endpoint);
         setCropPrefs(cropsRes.data);
-        setCropPrefsEndpoint(cropsRes.endpoint);
 
         if (cropsRes.data.length > 0) {
           setActiveSpeciesId((prev) => prev || cropsRes.data[0]._id);
@@ -377,7 +370,7 @@ export function RowLineEditorPage() {
       setOrchard((current) => current?._id === res.data.orchardId ? {
         ...current, rows: res.data.orchard.rows,
       } : current);
-      setSaveBanner({ response: res.data, endpoint: res.endpoint });
+      setSaveBanner(res.data);
     } catch (err) {
       console.error('Failed to save orchard layout:', err);
     } finally {
@@ -439,12 +432,10 @@ export function RowLineEditorPage() {
           <div className="editor-save-banner-left">
             <CheckCircle2 size={18} />
             <span>
-              <strong>{t.rowEditor.saveSuccessTitle}</strong> — {saveBanner.response.savedRowsCount}{' '}
-              {t.rowEditor.rowsUnit}, {saveBanner.response.savedTreesCount} {t.rowEditor.treesUnit}{' '}
-              ({t.rowEditor.saveBackendNote})
+              <strong>{t.rowEditor.saveSuccessTitle}</strong> — {saveBanner.savedRowsCount}{' '}
+              {t.rowEditor.rowsUnit}, {saveBanner.savedTreesCount} {t.rowEditor.treesUnit}
             </span>
           </div>
-          <code className="endpoint-tag">POST {saveBanner.endpoint}</code>
         </div>
       )}
 
@@ -573,22 +564,18 @@ export function RowLineEditorPage() {
                 </span>
               )}
             </div>
-            <code className="endpoint-tag">
-              GET {orchardEndpoint} · GET {cropPrefsEndpoint}
-            </code>
           </div>
         </div>
 
-        {/* Right Side Control Panel: Species Picker (CropPref), Spacing, Selected Item, Rows List */}
+        {/* Right Side Control Panel: Species Picker, Spacing, Selected Item, Rows List */}
         <aside className="editor-side-panel">
-          {/* 1. Intuitive Species Selector (CropPref collection) */}
+          {/* 1. Intuitive Species Selector */}
           <section className="card editor-panel-card">
             <div className="panel-section-head">
               <div className="panel-section-title-row">
                 <Sprout size={16} className="panel-accent-icon" />
                 <h2 className="panel-section-title">{t.rowEditor.speciesTitle}</h2>
               </div>
-              <code className="mini-collection-tag">CropPref</code>
             </div>
 
             <div className="species-grid">
@@ -603,7 +590,6 @@ export function RowLineEditorPage() {
                     type="button"
                     className={`species-card-btn${isActive ? ' is-active' : ''}`}
                     onClick={() => handleSelectSpecies(crop)}
-                    title={`CropPref ObjectId: ${crop._id}`}
                   >
                     <span className="species-card-top">
                       <span
@@ -626,9 +612,6 @@ export function RowLineEditorPage() {
 
             {activeSpecies && (
               <div className="active-species-footer">
-                <span className="muted-caption">
-                  ObjectId: <code>{activeSpecies._id}</code>
-                </span>
                 <button
                   type="button"
                   className="text-action-btn"
@@ -726,23 +709,14 @@ export function RowLineEditorPage() {
                 <h2 className="panel-section-title">
                   {t.rowEditor.selectedTreeTitle} #{selectedTree.indexInRow + 1}
                 </h2>
-                <code className="mini-collection-tag">Tree</code>
               </div>
 
               <div className="tree-meta-mini">
                 <div className="inspector-row">
-                  <span>_id</span>
-                  <code>{selectedTree.tempId}</code>
-                </div>
-                <div className="inspector-row">
-                  <span>coordinates</span>
+                  <span>{t.orchard3d.inspectorGeo}</span>
                   <strong>
                     {selectedTree.coordinates.lat.toFixed(6)}, {selectedTree.coordinates.lng.toFixed(6)}
                   </strong>
-                </div>
-                <div className="inspector-row">
-                  <span>healthIndex</span>
-                  <code>null ({t.rowEditor.computedByBackend})</code>
                 </div>
               </div>
 
@@ -781,13 +755,12 @@ export function RowLineEditorPage() {
             </section>
           )}
 
-          {/* 4. Drawn Rows List (Orchard.rows) */}
+          {/* 4. Drawn Rows List */}
           <section className="card editor-panel-card editor-rows-card">
             <div className="panel-section-head">
               <h2 className="panel-section-title">
                 {t.rowEditor.rowsListTitle} ({rows.length})
               </h2>
-              <code className="mini-collection-tag">Orchard.rows</code>
             </div>
 
             {calculatedRows.length === 0 ? (

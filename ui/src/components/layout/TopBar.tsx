@@ -1,5 +1,4 @@
 import { ChevronDown, Globe, Monitor, Moon, Sun, Trees } from 'lucide-react';
-import { apiConfig } from '../../config/apiConfig';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useOrchard } from '../../contexts/OrchardContext';
 import { useTheme, type ThemePreference } from '../../contexts/ThemeContext';
@@ -19,8 +18,7 @@ export function TopBar({ activeSection }: TopBarProps) {
     dashboard: t.nav.dashboard,
     'row-editor': t.nav.rowEditor,
     analytics: t.nav.analytics,
-    layers: t.nav.layers,
-    settings: t.nav.settings,
+    calendar: t.nav.calendar,
   };
 
   const themeOptions: Array<{ value: ThemePreference; label: string; icon: typeof Sun }> = [
@@ -43,13 +41,6 @@ export function TopBar({ activeSection }: TopBarProps) {
           </span>
           <span className="topbar-section-name">{sectionLabels[activeSection]}</span>
         </div>
-
-        {apiConfig.usePlaceholders && activeSection !== 'analytics' && (
-          <span className="placeholder-pill" title={t.app.placeholderTooltip}>
-            <span className="placeholder-pill-dot" aria-hidden="true" />
-            {t.app.placeholderBadge}
-          </span>
-        )}
       </div>
 
       <div className="topbar-right">

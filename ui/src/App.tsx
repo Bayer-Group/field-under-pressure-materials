@@ -2,9 +2,9 @@ import { useState } from 'react';
 import { Sidebar, type NavSectionId } from './components/layout/Sidebar';
 import { TopBar } from './components/layout/TopBar';
 import { DashboardPage } from './components/pages/DashboardPage';
-import { PlaceholderSectionPage } from './components/pages/PlaceholderSectionPage';
 import { RowLineEditorPage } from './components/pages/RowLineEditorPage';
 import { AnalyticsPage } from './components/pages/AnalyticsPage';
+import { CalendarPage } from './components/pages/CalendarPage';
 import { LanguageProvider } from './contexts/LanguageContext';
 import { OrchardProvider } from './contexts/OrchardContext';
 import { ThemeProvider } from './contexts/ThemeContext';
@@ -23,11 +23,8 @@ function AppShell() {
             <DashboardPage />
           ) : activeSection === 'row-editor' ? (
             <RowLineEditorPage />
-          ) : activeSection !== 'analytics' && activeSection !== 'layers' ? (
-            <PlaceholderSectionPage
-              section={activeSection}
-              onBackToDashboard={() => setActiveSection('dashboard')}
-            />
+          ) : activeSection === 'calendar' ? (
+            <CalendarPage />
           ) : null}
           <div hidden={activeSection !== 'analytics'}>
             <AnalyticsPage active={activeSection === 'analytics'} />

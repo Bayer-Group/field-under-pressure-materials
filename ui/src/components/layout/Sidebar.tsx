@@ -1,7 +1,7 @@
-import { ChartNoAxesCombined, Layers, LayoutDashboard, Route, Settings } from 'lucide-react';
+import { CalendarDays, ChartNoAxesCombined, LayoutDashboard, Route } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
 
-export type NavSectionId = 'dashboard' | 'row-editor' | 'analytics' | 'layers' | 'settings';
+export type NavSectionId = 'dashboard' | 'row-editor' | 'analytics' | 'calendar';
 
 interface SidebarProps {
   activeSection: NavSectionId;
@@ -11,12 +11,11 @@ interface SidebarProps {
 export function Sidebar({ activeSection, onSelectSection }: SidebarProps) {
   const { t } = useLanguage();
 
-  // Minimalist placeholder navigation items — icons and final routes will be refined later
   const primaryItems: Array<{ id: NavSectionId; label: string; icon: typeof LayoutDashboard }> = [
     { id: 'dashboard', label: t.nav.dashboard, icon: LayoutDashboard },
     { id: 'row-editor', label: t.nav.rowEditor, icon: Route },
     { id: 'analytics', label: t.nav.analytics, icon: ChartNoAxesCombined },
-    { id: 'layers', label: t.nav.layers, icon: Layers },
+    { id: 'calendar', label: t.nav.calendar, icon: CalendarDays },
   ];
 
   return (
@@ -54,19 +53,6 @@ export function Sidebar({ activeSection, onSelectSection }: SidebarProps) {
           );
         })}
       </nav>
-
-      <div className="sidebar-footer">
-        <button
-          type="button"
-          className={`sidebar-btn${activeSection === 'settings' ? ' is-active' : ''}`}
-          onClick={() => onSelectSection('settings')}
-          title={t.nav.settings}
-          aria-label={t.nav.settings}
-          aria-current={activeSection === 'settings' ? 'page' : undefined}
-        >
-          <Settings size={20} strokeWidth={1.75} />
-        </button>
-      </div>
     </aside>
   );
 }

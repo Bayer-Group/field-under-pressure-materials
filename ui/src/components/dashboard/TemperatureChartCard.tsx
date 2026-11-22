@@ -23,7 +23,6 @@ export function TemperatureChartCard() {
   const [range, setRange] = useState<TimeRange>('30d');
   const [windowPercent, setWindowPercent] = useState<number>(100);
   const [series, setSeries] = useState<TemperatureSeriesResponse | null>(null);
-  const [endpoint, setEndpoint] = useState<string>('');
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
 
@@ -34,7 +33,6 @@ export function TemperatureChartCard() {
     fetchTemperatureSeries(range, selectedOrchardId, controller.signal)
       .then((res) => {
         setSeries(res.data);
-        setEndpoint(res.endpoint);
         setHoverIndex(null);
       })
       .catch((err) => {
@@ -429,7 +427,6 @@ export function TemperatureChartCard() {
             </span>
           )}
         </div>
-        <code className="endpoint-tag">GET {endpoint}</code>
       </div>
     </section>
   );

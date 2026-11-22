@@ -12,17 +12,14 @@ export function OrchardHealthCard() {
   const { resolvedTheme } = useTheme();
   const { selectedOrchardId } = useOrchard();
   const [summary, setSummary] = useState<OrchardHealthSummary | null>(null);
-  const [endpoint, setEndpoint] = useState<string>('');
 
   useEffect(() => {
     const controller = new AbortController();
     setSummary(null);
-    setEndpoint('');
     fetchOrchardHealth(selectedOrchardId, controller.signal)
       .then((res) => {
         if (controller.signal.aborted) return;
         setSummary(res.data);
-        setEndpoint(res.endpoint);
       })
       .catch((err) => {
         if ((err as Error).name !== 'AbortError') {
@@ -169,11 +166,6 @@ export function OrchardHealthCard() {
             );
           })}
         </div>
-      </div>
-
-      <div className="card-footer-meta">
-        <span className="muted-caption">{t.health.overallLabel}</span>
-        <code className="endpoint-tag">GET {endpoint}</code>
       </div>
     </section>
   );

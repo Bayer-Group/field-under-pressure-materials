@@ -83,7 +83,6 @@ export function Orchard3DViewerCard() {
 
   const [sceneData, setSceneData] = useState<OrchardSceneResponse | null>(null);
   const [parsedLas, setParsedLas] = useState<ParsedLasCloud | null>(null);
-  const [lasEndpoint, setLasEndpoint] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   const [colorMode, setColorMode] = useState<LasColorMode>('rgb');
@@ -122,7 +121,6 @@ export function Orchard3DViewerCard() {
     ])
       .then(([sceneRes, lasRes]) => {
         setSceneData(sceneRes.data);
-        setLasEndpoint(lasRes.endpoint);
 
         if (lasRes.data) {
           try {
@@ -762,7 +760,9 @@ export function Orchard3DViewerCard() {
             <div className="tree-inspector-header">
               <div>
                 <div className="tree-inspector-kicker">{t.orchard3d.inspectorTitle}</div>
-                <div className="tree-inspector-id">{selectedTree.id}</div>
+                <div className="tree-inspector-id">
+                  {t.orchard3d.inspectorRow}: {selectedTree.rowLabel} · #{selectedTree.indexInRow}
+                </div>
               </div>
               <button
                 type="button"
@@ -799,12 +799,6 @@ export function Orchard3DViewerCard() {
                     )}
                   </strong>
                 </span>
-              </div>
-              <div className="inspector-row">
-                <span>{t.orchard3d.inspectorRow}</span>
-                <strong>
-                  {selectedTree.rowLabel} · #{selectedTree.indexInRow}
-                </strong>
               </div>
               <div className="inspector-row">
                 <span>{t.orchard3d.inspectorHeight}</span>
@@ -852,13 +846,6 @@ export function Orchard3DViewerCard() {
         <div className="viewer-hud viewer-hud-bottom-right">
           {t.orchard3d.controlsHint.replace('{mod}', zoomMod)}
         </div>
-      </div>
-
-      <div className="card-footer-meta">
-        <span className="muted-caption">
-          {sceneData?.orchardName ?? 'Grojec A'} · CRS: EPSG:2180 (PUWG 1992) ↔ WGS 84 (EPSG:4326)
-        </span>
-        <code className="endpoint-tag">GET {lasEndpoint}</code>
       </div>
     </section>
   );
