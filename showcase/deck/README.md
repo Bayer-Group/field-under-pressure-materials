@@ -33,6 +33,19 @@ The demo break plays the video with sound. It starts by itself when you arrive o
 | F | Fullscreen |
 | B | Blank the screen |
 
+## Export a folder to send
+
+When the slides are done, run:
+
+```bash
+node showcase/export.mjs          # -> showcase/export/terranos-deck/
+node showcase/export.mjs --zip    # also -> showcase/export/terranos-deck.zip
+```
+
+The folder holds `deck/`, `brand/`, the video, a short `README.txt` with the keys, and an `Open presentation.html` launcher. It opens from disk with no server or internet. The script stops if the video is missing. It warns if `video.html`, `music.mjs`, `shots/` or `brand/` changed since the video was rendered (`render.mjs` records a hash of them in `terranos-showcase.mp4.sources`), if the page references a file outside the export, or if a `todo` marker is left. `showcase/export/` is ignored by git.
+
+Fonts aren't bundled: the slides use Inter or Roboto if installed, else the system font.
+
 To get a PDF, open `http://127.0.0.1:8090/deck/?print-pdf` in Chromium and print it to PDF (landscape, no margins, background graphics on). Every animated slide is shown in its final state.
 
 ## Files

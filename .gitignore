@@ -17,3 +17,5 @@ showcase/shots/
 showcase/stills/
 showcase/*.mp4
 showcase/*.wav
+showcase/*.mp4.sources
+showcase/export/
