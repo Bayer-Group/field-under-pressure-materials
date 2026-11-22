@@ -253,12 +253,10 @@ def _core_path():
 
 def _light_plots() -> tuple[str, ...] | None:
     """Light-mode plots (data/light_mode.txt next to the processed folder), or None when light mode is off.
-    Read relative to core.PROCESSED (not config.LIGHT_FILE) so the API and its tests follow the same data dir."""
-    f = core.PROCESSED.parent / "light_mode.txt"
-    if not f.exists():
-        return None
-    plots = {config.normalise_plot(line.split("#")[0]) for line in f.read_text().splitlines()}
-    return tuple(sorted(p for p in plots if p))
+    On by default when the file is missing (config.read_light_file). Read relative to core.PROCESSED (not
+    config.LIGHT_FILE) so the API and its tests follow the same data dir."""
+    lp = config.read_light_file(core.PROCESSED.parent / "light_mode.txt")
+    return None if lp is None else tuple(lp)
 
 
 def _core_df() -> pd.DataFrame:

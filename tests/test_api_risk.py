@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-from cropfit import api, api_risk, risk
+from cropfit import api, api_risk, config, risk
 from cropfit import kb as kbmod
 from test_risk import core_rows, mk_kb
 
@@ -40,6 +40,9 @@ def client(tmp_path, monkeypatch):
     proc = tmp_path / "data" / "processed"
     proc.mkdir(parents=True)
     monkeypatch.setattr(api, "PROCESSED", proc)
+    # synthetic plots, not the default light-mode ones: switch light mode off for this temp data dir
+    (proc.parent / "light_mode.txt").write_text("off\n")
+    monkeypatch.setattr(config, "LIGHT_FILE", proc.parent / "light_mode.txt")
     plots = [f"STER_{i:03d}" for i in list(range(1, 13)) + [20, 21, 22, 23, 30, 999]]
     pd.DataFrame([dict(plotID=p, site="STER", lat=40.0, lon=-103.0, half_m=20.0) for p in plots]
                  ).to_parquet(proc / "plot_geometry.parquet")
@@ -229,7 +232,7 @@ def test_light_mode_scores_only_light_plots(client):
     for c in r["crops"]:
         assert {p["plot_id"] for p in c["peers"]} <= light
     assert client.get("/api/plots/STER_006/crop-risk").json() == []        # outside light mode: no ITS units
-    (client.proc.parent / "light_mode.txt").unlink()                        # switching off is picked up (cache key)
+    (client.proc.parent / "light_mode.txt").write_text("off\n")             # switching off is picked up (cache key)
     r = client.get("/api/plots/STER_001/crop-risk/2022-002").json()
     assert r["n_units_in_group"] > 5 and not any(n.startswith("Light mode") for n in r["notes"])
 

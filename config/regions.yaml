@@ -16,5 +16,6 @@ windows:
     half_km: 15
     state_fips: "20"
 crops: [corn, soybean, winter_wheat, sorghum, sunflower]
-# Light mode (scripts/00_light_mode.py on): download and build everything for these plots only.
+# Light mode (on by default; scripts/00_light_mode.py): download and build everything for these plots only.
+# Keep this on one line: scripts/pull_nmdc_cropland.py reads it without a yaml parser.
 light_plots: [STER_006, STER_010, STER_011, STER_012, STER_016]

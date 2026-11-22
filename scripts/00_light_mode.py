@@ -1,14 +1,18 @@
 """Switch light mode on or off: every download (and the event registry built from it) is restricted to a
 few plots, so the whole pipeline runs in a fraction of the time and disk.
 
+Light mode is ON BY DEFAULT: with no data/light_mode.txt (a fresh clone) it uses the default plots,
+`light_plots` in config/regions.yaml. Run `off` to download and build all plots.
+
 Usage: 00_light_mode.py [status]              show whether light mode is on and for which plots
        00_light_mode.py on [PLOT ...]         default plots: `light_plots` in config/regions.yaml
-       00_light_mode.py off
+       00_light_mode.py off                   all plots (writes "off" to data/light_mode.txt)
 
-Plots can be written "STER_006" or "STER 006". Light mode is on while data/light_mode.txt exists; you can
-also edit that file by hand. Run it before the downloads (pull_nmdc_cropland.py, 02_fetch_neon.py, then the
-rest of the pipeline in order). Switching it does not delete anything already downloaded: processed tables
-are replaced when their step is re-run, and cached satellite scenes of other plots are ignored, not removed.
+Plots can be written "STER_006" or "STER 006". You can also edit data/light_mode.txt by hand: one plot per
+line, or a single line "off"; deleting it goes back to the default plots. Run it before the downloads
+(pull_nmdc_cropland.py, 02_fetch_neon.py, then the rest of the pipeline in order). Switching it does not delete
+anything already downloaded: processed tables are replaced when their step is re-run, and cached satellite
+scenes of other plots are ignored, not removed.
 """
 import re
 import sys
@@ -24,7 +28,8 @@ def status() -> None:
     if lp is None:
         print(f"light mode is OFF (all plots of {', '.join(config.sites())})")
     else:
-        print(f"light mode is ON: {len(lp)} plots ({', '.join(lp)}); sites {', '.join(config.sites()) or 'none'}")
+        how = "" if config.LIGHT_FILE.exists() else " [default: no data/light_mode.txt]"
+        print(f"light mode is ON{how}: {len(lp)} plots ({', '.join(lp)}); sites {', '.join(config.sites()) or 'none'}")
 
 
 if __name__ == "__main__":
@@ -37,15 +42,16 @@ if __name__ == "__main__":
         leftover = re.sub(pat, " ", raw).replace(",", " ").split()
         if leftover:
             sys.exit(f"not a plot ID: {leftover[0]!r} (expected e.g. STER_006 or 'STER 006')")
-        plots = sorted({f"{a}_{b}" for a, b in re.findall(pat, raw)}) or list(config.regions()["light_plots"])
+        plots = sorted({f"{a}_{b}" for a, b in re.findall(pat, raw)}) or config.default_light_plots()
         res = pd.read_csv(config.RESOURCES / "neon_soil_plots_landcover.csv")
         unknown = sorted(set(plots) - set(res["plot"].str.replace(".basePlot.bgc", "", regex=False)))
         if unknown:
             print(f"warning: no coordinates in resources/neon_soil_plots_landcover.csv for {', '.join(unknown)}")
         config.LIGHT_FILE.write_text("# light mode: downloads restricted to these plots "
-                                     "(scripts/00_light_mode.py off to remove)\n" + "\n".join(plots) + "\n")
+                                     "(scripts/00_light_mode.py off for all plots)\n" + "\n".join(plots) + "\n")
     elif cmd == "off":
-        config.LIGHT_FILE.unlink(missing_ok=True)
+        config.LIGHT_FILE.write_text("# light mode is off: all plots are downloaded and built "
+                                     "(scripts/00_light_mode.py on, or delete this file, to switch back)\noff\n")
     elif cmd != "status":
         sys.exit(__doc__)
     status()

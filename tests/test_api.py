@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-from cropfit import api, ndvimap, overlay, stac
+from cropfit import api, config, ndvimap, overlay, stac
 
 
 @pytest.fixture
@@ -15,6 +15,9 @@ def client(tmp_path, monkeypatch):
     proc.mkdir(parents=True)
     monkeypatch.setattr(api, "PROCESSED", proc)
     monkeypatch.setattr(api, "ROOT", tmp_path)
+    # synthetic plots, not the default light-mode ones: switch light mode off for this temp data dir
+    (proc.parent / "light_mode.txt").write_text("off\n")
+    monkeypatch.setattr(config, "LIGHT_FILE", proc.parent / "light_mode.txt")
     monkeypatch.setattr(overlay, "OVERLAY_DIR", tmp_path / "overlay")
     pd.DataFrame([dict(plotID="P_001", site="P", lat=39.2, lon=-96.6, half_m=20.0)]).to_parquet(proc / "plot_geometry.parquet")
     d = pd.to_datetime

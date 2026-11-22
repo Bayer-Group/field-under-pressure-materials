@@ -36,9 +36,13 @@ def sites() -> list[str]:
 
 
 # ---------------------------------------------------------------- light mode
-# Light mode restricts every download (and the event registry built from it) to a few plots. It is on while
-# data/light_mode.txt exists; that file lists the plots, one per line ("STER_006" or "STER 006").
-# Switch it with scripts/00_light_mode.py; the default plot list is `light_plots` in config/regions.yaml.
+# Light mode restricts every download (and the event registry built from it) to a few plots. It is ON BY
+# DEFAULT, so a fresh clone never starts an hours-long full download by accident. State is in
+# data/light_mode.txt:
+#   - file missing (fresh clone)  -> on, with the default plots (`light_plots` in config/regions.yaml);
+#   - file says "off"             -> off, all plots;
+#   - file lists plots            -> on, with those plots (one per line, "STER_006" or "STER 006").
+# A file with neither plots nor "off" also falls back to the default plots. Switch with scripts/00_light_mode.py.
 LIGHT_FILE = DATA / "light_mode.txt"
 _PLOT_RE = re.compile(r"^([A-Z]{4})[\s_-]*(\d{3})")
 
@@ -49,12 +53,26 @@ def normalise_plot(s: str) -> str | None:
     return f"{m[1]}_{m[2]}" if m else None
 
 
-def light_plots() -> list[str] | None:
-    """Plot IDs of light mode, or None when light mode is off."""
-    if not LIGHT_FILE.exists():
+def default_light_plots() -> list[str]:
+    """The default light-mode plots (`light_plots` in config/regions.yaml)."""
+    return sorted({p for p in map(normalise_plot, regions()["light_plots"]) if p})
+
+
+def read_light_file(path: Path) -> list[str] | None:
+    """Light-mode plots from a light_mode.txt (see the rules above), or None when it says "off"."""
+    if not path.exists():
+        return default_light_plots()
+    words = [line.split("#")[0].strip() for line in path.read_text().splitlines()]
+    words = [w for w in words if w]
+    if any(w.lower() == "off" for w in words):
         return None
-    plots = {normalise_plot(line.split("#")[0]) for line in LIGHT_FILE.read_text().splitlines()}
-    return sorted(p for p in plots if p)
+    plots = sorted({p for p in map(normalise_plot, words) if p})
+    return plots or default_light_plots()
+
+
+def light_plots() -> list[str] | None:
+    """Plot IDs of light mode, or None when light mode is off. On by default (no data/light_mode.txt)."""
+    return read_light_file(LIGHT_FILE)
 
 
 def light_filter(df, cols=("plotID", "namedLocation", "sampleID", "dnaSampleID", "soilSampleID",

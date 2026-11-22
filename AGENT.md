@@ -65,7 +65,7 @@ Pipeline order (what produces what):
 
 | Step | Command | Output |
 |---|---|---|
-| Light mode (optional, first) | `scripts/00_light_mode.py on` | `data/light_mode.txt` (see below) |
+| Light mode (**on by default**; `off` for all plots) | `scripts/00_light_mode.py [on\|off]` | `data/light_mode.txt` (see below) |
 | NMDC download | `scripts/pull_nmdc_cropland.py` | `data/nmdc/` |
 | NEON download | `scripts/02_fetch_neon.py` (needs token) | `data/raw/neon/` |
 | NEON tables | `scripts/02b_build_neon_features.py` (offline) | `its_core_genus`, `its_genus`, `its_genus_lineage`, `plot_its*`, `neon_metagenome_pooling`, `neon_chem`, `neon_qpcr` |
@@ -93,7 +93,7 @@ Note: `03_build_plots.py` takes its plots from the event registry (the 29 plots 
 
 ### Light mode: download only a few plots
 
-For a quick start (or a small laptop), switch light mode on **before** downloading, then run the pipeline as usual:
+Light mode is **on by default**: a fresh clone (no `data/light_mode.txt`) downloads and builds only the default plots, so nobody starts an hours-long full download by accident. To get every plot, switch it off **before** downloading, then run the pipeline as usual:
 
 ```bash
 .venv/bin/python scripts/00_light_mode.py on        # default plots: STER_006, STER_010, STER_011, STER_012, STER_016
@@ -102,9 +102,9 @@ For a quick start (or a small laptop), switch light mode on **before** downloadi
 .venv/bin/python scripts/00_light_mode.py off
 ```
 
-- It is on while `data/light_mode.txt` exists (one plot per line, `STER_006` or `STER 006`; editable by hand). The default list is `light_plots` in `config/regions.yaml`. `config.light_plots()` reads it, `config.light_filter(df)` drops the rows of other plots (rows that name no plot, such as site-level lab rows, are kept), and `config.sites()` returns only the sites of those plots (STER for the default list), so KONA is not fetched at all.
+- State is in `data/light_mode.txt` (editable by hand): **missing** means on with the default list (`light_plots` in `config/regions.yaml`); a line **`off`** means off (all plots); otherwise it lists the plots, one per line (`STER_006` or `STER 006`). A file with neither falls back to the default list. `config.light_plots()` reads it (via `config.read_light_file()`; `api_risk.py` and the standalone `pull_nmdc_cropland.py` follow the same rules), `config.light_filter(df)` drops the rows of other plots (rows that name no plot, such as site-level lab rows, are kept), and `config.sites()` returns only the sites of those plots (STER for the default list), so KONA is not fetched at all.
 - Where it applies: `pull_nmdc_cropland.py` pulls only those plots' biosamples (measured with `--dry-run`: 39 biosamples, 60 files, 239 MB, against 295 files and 729 MB for the full pull; `--plots` overrides the list, `--all-plots` ignores light mode); `02_fetch_neon.py` still downloads whole sites (NEON serves sites, not plots) but saves only those plots' rows, so the ITS per-sample files are fetched for them only; `nmdc.load_samples()`, the event registry (`01_build_events.py`) and `satellite.load_observations()` keep only those plots. Every geo step (03, 08, 09, 13) reads `plot_geometry`, so it follows. `04_build_fields.py` builds the STER window only; the window itself (SSURGO polygons, CSB) is not reduced to the plots.
-- Switching does not delete anything: processed tables are replaced when their step is re-run, and cached satellite scenes of other plots stay on disk but are ignored. Switch it off and re-run the steps to get all plots back. Not verified: a full pipeline run end to end in light mode (the filters were checked on the existing raw NEON, NMDC and satellite data on 21 Nov 2026).
+- Switching does not delete anything: processed tables are replaced when their step is re-run, and cached satellite scenes of other plots stay on disk but are ignored. Switch it off (`00_light_mode.py off`) and re-run the steps to get all plots back. Not verified: a full pipeline run end to end in light mode (the filters were checked on the existing raw NEON, NMDC and satellite data on 21 Nov 2026).
 
 ---
 

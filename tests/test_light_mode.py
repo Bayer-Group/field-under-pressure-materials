@@ -11,11 +11,40 @@ def light(tmp_path, monkeypatch):
     return f
 
 
-def test_off_by_default(light):
+def test_on_by_default(light):
+    assert not light.exists()                                    # fresh clone: no data/light_mode.txt
+    assert config.light_plots() == config.regions()["light_plots"]
+    assert config.sites() == ["STER"]
+    df = pd.DataFrame({"plotID": ["STER_006", "KONA_001"]})
+    assert config.light_filter(df)["plotID"].tolist() == ["STER_006"]
+
+
+def test_off_when_file_says_off(light):
+    light.write_text("# switched off\nOff\n")
     assert config.light_plots() is None
     df = pd.DataFrame({"plotID": ["STER_006", "KONA_001"]})
     assert config.light_filter(df) is df
     assert config.sites() == list(config.regions()["windows"])
+
+
+def test_empty_file_falls_back_to_default(light):
+    light.write_text("# nothing here\n\n")
+    assert config.light_plots() == config.regions()["light_plots"]
+
+
+def test_pull_script_reads_the_same_rules(light, monkeypatch):
+    import importlib.util
+    from pathlib import Path
+    path = Path(__file__).resolve().parents[1] / "scripts" / "pull_nmdc_cropland.py"
+    spec = importlib.util.spec_from_file_location("pull_nmdc_cropland", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    monkeypatch.setattr(mod, "LIGHT_FILE", light)
+    assert mod.light_plots() == config.light_plots() == config.regions()["light_plots"]
+    light.write_text("off\n")
+    assert mod.light_plots() is None
+    light.write_text("STER 011\n")
+    assert mod.light_plots() == ["STER_011"]
 
 
 def test_plot_list_and_sites(light):

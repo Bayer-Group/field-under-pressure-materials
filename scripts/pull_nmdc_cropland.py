@@ -21,8 +21,8 @@ Usage:
     uv run scripts/pull_nmdc_cropland.py --sites KONA --out data/nmdc
     uv run scripts/pull_nmdc_cropland.py --plots STER_006 STER_010   # these plots only
 
-Light mode: while data/light_mode.txt exists (scripts/00_light_mode.py on), only the plots listed there
-are pulled, unless --plots or --all-plots is given.
+Light mode (on by default; scripts/00_light_mode.py): only the light-mode plots are pulled, unless --plots or
+--all-plots is given. With no data/light_mode.txt those are `light_plots` in config/regions.yaml.
 
 Re-running is safe: files that already exist with the expected size are skipped.
 """
@@ -85,19 +85,30 @@ DO_FIELDS = [
     "selected", "local_path",
 ]
 
-LIGHT_FILE = Path(__file__).resolve().parents[1] / "data" / "light_mode.txt"
+REPO = Path(__file__).resolve().parents[1]
+LIGHT_FILE = REPO / "data" / "light_mode.txt"
 
 
 def light_plots() -> list[str] | None:
-    """Plots of light mode (data/light_mode.txt, 'STER_006' or 'STER 006' per line), None when it is off."""
+    """Plots of light mode, None when it is off. Same rules as cropfit.config.read_light_file (this script stays
+    standalone): no data/light_mode.txt -> on with `light_plots` of config/regions.yaml; a line "off" -> off;
+    otherwise the plots listed ('STER_006' or 'STER 006' per line)."""
+    def plot(s: str) -> str | None:
+        m = re.match(r"^([A-Z]{4})[\s_-]*(\d{3})", s.strip().upper())
+        return f"{m[1]}_{m[2]}" if m else None
+
+    def defaults() -> list[str]:   # the `light_plots: [...]` line; no yaml (only requests under `uv run`)
+        m = re.search(r"^light_plots:\s*\[([^\]]*)\]", (REPO / "config" / "regions.yaml").read_text(), re.M)
+        if not m:
+            sys.exit("config/regions.yaml has no `light_plots: [...]` line; pass --plots or --all-plots")
+        return sorted({p for p in map(plot, m[1].split(",")) if p})
+
     if not LIGHT_FILE.exists():
+        return defaults()
+    words = [w for w in (line.split("#")[0].strip() for line in LIGHT_FILE.read_text().splitlines()) if w]
+    if any(w.lower() == "off" for w in words):
         return None
-    out = set()
-    for line in LIGHT_FILE.read_text().splitlines():
-        m = re.match(r"^([A-Z]{4})[\s_-]*(\d{3})", line.split("#")[0].strip().upper())
-        if m:
-            out.add(f"{m[1]}_{m[2]}")
-    return sorted(out)
+    return sorted({p for p in map(plot, words) if p}) or defaults()
 
 
 session = requests.Session()
