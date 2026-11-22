@@ -9,9 +9,21 @@ if BASE_DIR not in sys.path:
 
 from fastapi import HTTPException  # noqa: E402
 
-from backend.app.api.v1.endpoints.farm_write import _require_writes, pick_template  # noqa: E402
+from backend.app.api.v1.endpoints.farm_write import _require_writes, pick_template, template_pool  # noqa: E402
 
 OWNERS = ["farmer-003", "farmer-001", "farmer-002"]
+
+
+class Pool(unittest.TestCase):
+    def test_only_the_chosen_farms(self):
+        self.assertEqual(template_pool(OWNERS, ["farmer-002", "farmer-003"]), ["farmer-003", "farmer-002"])
+
+    def test_a_chosen_farm_missing_from_the_database_is_skipped(self):
+        self.assertEqual(template_pool(OWNERS, ["farmer-001", "farmer-099"]), ["farmer-001"])
+
+    def test_every_farm_when_none_is_chosen_or_none_exists(self):
+        self.assertEqual(template_pool(OWNERS, []), OWNERS)
+        self.assertEqual(template_pool(OWNERS, ["farmer-099"]), OWNERS)
 
 
 class Rotation(unittest.TestCase):

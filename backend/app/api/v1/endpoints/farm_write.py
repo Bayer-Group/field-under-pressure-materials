@@ -22,7 +22,8 @@ from pydantic import BaseModel, Field
 
 from backend.app.api.v1.endpoints.farm import _require_area, current_user
 from backend.app.core.config import (ALLOW_EXAMPLE_FARM_WRITES, AUTH_SECRET, DEMO_READONLY, MAX_AREA_HA, MAX_AREAS_OTHER, MAX_AREAS_SANDBOX,
-                                     MAX_PARALLEL_REFRESH, SANDBOX_MAX_OWNERS, SANDBOX_RATE_PER_MIN, SANDBOX_TTL_HOURS)
+                                     MAX_PARALLEL_REFRESH, SANDBOX_MAX_OWNERS, SANDBOX_RATE_PER_MIN, SANDBOX_TEMPLATES,
+                                     SANDBOX_TTL_HOURS)
 from backend.app.core.db import get_db, get_db_rw
 from backend.app.core.limits import RateLimiter, client_ip, enforce
 from backend.app.core.security import make_token
@@ -69,6 +70,12 @@ def _require_writes(user: dict) -> None:
     if not user["owner_id"].startswith("sbx-") and not ALLOW_EXAMPLE_FARM_WRITES:
         raise HTTPException(status_code=403, detail="an example farm is read-only: start a sandbox (POST /sandbox) and edit your copy")
     enforce(_write_limit, user["owner_id"])
+
+
+def template_pool(owners: list[str], chosen: list[str]) -> list[str]:
+    """The example farms a sandbox may copy: the chosen ones that exist; all of them when none is chosen or none exists."""
+    picked = [o for o in owners if o in set(chosen)]
+    return picked or owners
 
 
 def pick_template(owners: list[str], n: int) -> str:
@@ -154,6 +161,7 @@ def sandbox(body: SandboxIn, request: Request, con=Depends(get_db_rw)):
         owners = [r["owner_id"] for r in con.execute(
             "SELECT owner_id FROM app.field WHERE data_status = 'mock' AND owner_id LIKE 'farmer-%' "   # example farmers only, not accounts
             "GROUP BY owner_id HAVING count(*) >= 2 ORDER BY owner_id").fetchall()]
+        owners = template_pool(owners, SANDBOX_TEMPLATES)
         if owners:
             try:
                 with con.transaction():

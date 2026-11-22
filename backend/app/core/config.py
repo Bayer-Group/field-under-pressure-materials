@@ -33,5 +33,12 @@ SANDBOX_RATE_PER_MIN = int(os.environ.get("SANDBOX_RATE_PER_MIN", "150"))
 # Konta przykładowych rolników (farmer-001...) mają przewidywalne hasła i służą za wzorce kopiowane do sandboxów: tylko do odczytu.
 ALLOW_EXAMPLE_FARM_WRITES = os.environ.get("ALLOW_EXAMPLE_FARM_WRITES", "0") == "1"
 
+# The example farms a sandbox copies (comma-separated owner_id): ten reviewed farms with a good mix of risk classes on the demo day.
+# Empty: every example farmer. Ids missing from the database are skipped; if none is there, every example farmer is used.
+SANDBOX_TEMPLATES = [s.strip() for s in os.environ.get(
+    "SANDBOX_TEMPLATES",
+    "farmer-024,farmer-055,farmer-042,farmer-020,farmer-015,farmer-016,farmer-099,farmer-086,farmer-051,farmer-093",
+).split(",") if s.strip()]
+
 # Dozwolone originy CORS
 CORS_ORIGINS = ["*"]
