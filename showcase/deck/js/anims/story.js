@@ -51,6 +51,13 @@
     soil: '<path d="M3 7.5h18M3 12.5h18M3 17.5h18"/><path d="M12 7.5V3M12 3l-2 1.8M12 3l2 1.8"/><circle cx="7" cy="10" r=".8"/><circle cx="15.5" cy="15" r=".8"/><circle cx="9.5" cy="20" r=".8"/><circle cx="18" cy="10" r=".8"/>',
     risk: '<path d="M12 3.2L21.5 20H2.5z"/><path d="M12 9.5v5"/><circle cx="12" cy="17.2" r=".9"/>',
     leaf: '<path d="M5 19C5 10 11 5 20 5c0 9-5.2 14.5-14 14.5"/><path d="M5 19.5L13.5 11"/><path d="M9.5 12.5h3.5v-3.5"/>',
+    scope: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.3 15.3L21 21"/><circle cx="10.5" cy="10.5" r="1.8"/><path d="M10.5 6.8v1.4M10.5 12.8v1.4M6.8 10.5h1.4M12.8 10.5h1.4"/>',
+    trend: '<path d="M3 3v18h18"/><path d="M6.5 15.5l4-4 3 3 6-6.5"/><path d="M15.5 8h4v4"/>',
+    bug: '<ellipse cx="12" cy="14" rx="6" ry="7"/><path d="M12 7v14M8.5 5L10 7.2M15.5 5L14 7.2"/><circle cx="9.3" cy="12.3" r=".9"/><circle cx="14.7" cy="12.3" r=".9"/><circle cx="9.5" cy="16.8" r=".9"/><circle cx="14.5" cy="16.8" r=".9"/><path d="M6 11.5l-2.5-1M18 11.5l2.5-1M6.2 16.5l-2.5 1M17.8 16.5l2.5 1"/>',
+    target: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1.2"/><path d="M12 1.5V5M12 19v3.5M1.5 12H5M19 12h3.5"/>',
+    shield: '<path d="M12 3l7.5 3v5.5c0 4.6-3.2 8.3-7.5 9.5-4.3-1.2-7.5-4.9-7.5-9.5V6z"/><path d="M8.6 12.2l2.3 2.3 4.6-4.8"/>',
+    cow: '<path d="M7.6 6.2C6 5.6 5 4.2 5 2.6M16.4 6.2C18 5.6 19 4.2 19 2.6"/><path d="M6.6 8.2L2.4 7.6l1.4 3 3.1.3M17.4 8.2l4.2-.6-1.4 3-3.1.3"/><path d="M7.4 5.6h9.2c.9 0 1.5.7 1.4 1.6L17.3 13H6.7L6 7.2c-.1-.9.5-1.6 1.4-1.6z"/><rect x="6.2" y="13" width="11.6" height="8" rx="4"/><circle cx="9.6" cy="9.4" r=".8"/><circle cx="14.4" cy="9.4" r=".8"/><circle cx="10" cy="17" r=".9"/><circle cx="14" cy="17" r=".9"/>',
+    pill: '<path d="M10.5 3.9a4.3 4.3 0 0 1 6.1 0l3.5 3.5a4.3 4.3 0 0 1 0 6.1l-6.6 6.6a4.3 4.3 0 0 1-6.1 0l-3.5-3.5a4.3 4.3 0 0 1 0-6.1z"/><path d="M7.2 7.2l9.6 9.6"/>',
   }
   const iconSvg = (name) =>
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${ICONS[name] || ''}</svg>`
@@ -636,47 +643,13 @@
   })
 
   // ===================================================================================
-  // 6 · Future: a road with two milestones.
-  // Steps: 1 agro-chemical branch · 2 EU sustainability
+  // 6 · Future: six concrete uses of soil metagenomics. All cards come in together on entry (no clicks).
   // ===================================================================================
-  Deck.anim('future', (slide, D) => {
-    const path = slide.querySelector('.road .path')
-    const M = [[700, 600], [1400, 640]]
-    D.once(slide, 'future', () => {
-      slide.querySelectorAll('.ms').forEach((m, i) => {
-        m.style.left = `${M[i][0]}px`
-        m.style.top = `${M[i][1]}px`
-      })
-      slide.querySelector('.stars').innerHTML = Array.from({ length: 12 }, (_, i) =>
-        `<span style="transform:rotate(${i * 30}deg) translate(0,-128px) rotate(${-i * 30}deg)">★</span>`).join('')
-    })
-    // path length fraction closest to each milestone
-    const len = path.getTotalLength()
-    const frac = M.map(([mx, my]) => {
-      let best = 0, bd = Infinity
-      for (let l = 0; l <= len; l += 4) {
-        const p = path.getPointAtLength(l), d = (p.x - mx) ** 2 + (p.y - my) ** 2
-        if (d < bd) (bd = d), (best = l)
-      }
-      return (best / len) * 100
-    })
-    const [m1, m2] = slide.querySelectorAll('.ms')
+  Deck.anim('future', (slide) => {
+    const cards = slide.querySelectorAll('.use')
     const tl = headIn(gsap.timeline({ defaults: { ease: 'power3.out' } }), slide)
-    tl.from(slide.querySelector('.road .bed'), { autoAlpha: 0, duration: 0.6 }, 0.3)
-      .fromTo(path, { drawSVG: '0%' }, { drawSVG: '0%', duration: 0.01 }, 0)
-      .set([m1, m2], { autoAlpha: 0 }, 0)
-    tl.addLabel('step1')
-      .to(path, { drawSVG: `${frac[0]}%`, duration: 1.2, ease: 'power2.inOut' })
-      .set(m1, { autoAlpha: 1 }, '-=0.2')
-      .from(m1.querySelector('.badge'), { scale: 0, rotation: -90, duration: 0.8, ease: 'back.out(1.8)' }, '<')
-      .from(m1.querySelector('b'), { y: -20, autoAlpha: 0, duration: 0.6 }, '-=0.4')
-    tl.addLabel('step2')
-      .to(path, { drawSVG: '100%', duration: 1.4, ease: 'power2.inOut' })
-      .set(m2, { autoAlpha: 1 }, 'step2+=0.6')
-      .from(m2.querySelector('.badge'), { scale: 0, duration: 0.8, ease: 'back.out(1.8)' }, 'step2+=0.6')
-      .from(m2.querySelectorAll('.stars span'), { scale: 0, autoAlpha: 0, duration: 0.35, stagger: 0.06, ease: 'back.out(3)' }, 'step2+=0.9')
-      .from(m2.querySelector('.stars'), { rotation: -120, duration: 1.4, ease: 'power3.out' }, 'step2+=0.9')
-      .from(m2.querySelector('b'), { y: -20, autoAlpha: 0, duration: 0.6 }, 'step2+=1.3')
+    tl.from(cards, { y: 50, scale: 0.96, autoAlpha: 0, duration: 0.6, stagger: 0.08 }, 0.4)
+      .from(slide.querySelectorAll('.use .ico'), { scale: 0, rotation: -30, duration: 0.6, stagger: 0.08, ease: 'back.out(2)' }, 0.55)
     return tl
   })
 

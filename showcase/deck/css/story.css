@@ -160,20 +160,18 @@
   background: var(--lime); color: var(--ink); font-size: 34px; font-weight: 900; font-style: normal; line-height: 1; }
 
 /* ---------- 6 · future ---------- */
-.s-future svg.road { position: absolute; inset: 0; width: 1920px; height: 1080px; overflow: visible; }
-.s-future .road .bed { fill: none; stroke: rgba(255,255,255,.06); stroke-width: 46; stroke-linecap: round; }
-.s-future .road .path { fill: none; stroke: var(--lime); stroke-width: 8; stroke-linecap: round; }
-.s-future .ms { position: absolute; width: 0; height: 0; }
-.s-future .badge { position: absolute; left: -95px; top: -95px; width: 190px; height: 190px; border-radius: 50%; display: grid; place-items: center;
-  background: var(--deep); border: 4px solid var(--lime); box-shadow: 0 0 70px rgba(181,242,107,.3); }
-.s-future .badge i { width: 96px; height: 96px; color: var(--lime); }
-.s-future .badge.eu { background: #0e2a6b; border-color: #ffcc00; box-shadow: 0 0 70px rgba(255,204,0,.25); }
-.s-future .badge.eu i { color: var(--lime); }
-.s-future .stars { position: absolute; inset: 0; }
-.s-future .stars span { position: absolute; left: 50%; top: 50%; width: 30px; height: 30px; margin: -15px; color: #ffcc00; font-size: 30px; line-height: 30px; text-align: center; }
-.s-future .ms b { position: absolute; width: 520px; font-size: 40px; font-weight: 900; line-height: 1.15; }
-.s-future .m1 b { left: -260px; top: 125px; text-align: center; }
-.s-future .m2 b { left: -260px; top: 140px; text-align: center; }
+.s-future .uses { position: absolute; left: 140px; right: 140px; top: 270px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 36px 40px; }
+.s-future .use { position: relative; height: 345px; padding: 32px 36px; box-sizing: border-box; border-radius: 28px; background: var(--panel); border: 1px solid var(--line);
+  display: flex; flex-direction: column; }
+.s-future .use .ico { width: 132px; height: 132px; flex: none; border-radius: 32px; display: grid; place-items: center;
+  background: rgba(181,242,107,.12); border: 2px solid var(--line); color: var(--lime); }
+.s-future .use .ico i { width: 92px; height: 92px; }
+.s-future .use.beyond { border-color: rgba(96,165,250,.55); }
+.s-future .use.beyond .ico { color: var(--sky); background: rgba(96,165,250,.12); border-color: rgba(96,165,250,.45); }
+.s-future .use .tag { position: absolute; top: 32px; right: 32px; padding: 8px 18px; border-radius: 999px; font-style: normal;
+  font-size: 20px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--ink); background: var(--sky); }
+.s-future .use b { margin-top: 24px; font-size: 36px; font-weight: 900; letter-spacing: -.01em; line-height: 1.1; }
+.s-future .use span { margin-top: 14px; font-size: 30px; text-wrap: balance; line-height: 1.35; color: var(--soft); }
 
 /* ---------- outro ---------- */
 .reveal .s-outro .lockup { margin-top: 290px; }

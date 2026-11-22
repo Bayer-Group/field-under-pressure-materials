@@ -72,7 +72,7 @@ To get a PDF, open `http://127.0.0.1:8090/deck/?print-pdf` in Chromium and print
 | 3 | Data | `stack` (shotgun sequencing, NDVI, geochemistry, qPCR) |
 | 4 | Demo | `reel`: a short break that plays `../terranos-showcase.mp4` full screen |
 | 5 | Already done | `done` (soil microbes, soil characteristics, crop disease risk, treatment) |
-| 6 | Future | `future` (agro-chemical branch, EU sustainability) |
+| 6 | Future | `future` (six uses of metagenomics: early disease alarm, soil trends, biocontrol, spray per pathogen, suppressive soil, livestock antibiotic resistance) |
 | | Outro | `finale` |
 
 ## How a slide animates
