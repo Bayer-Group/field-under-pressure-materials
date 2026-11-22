@@ -1,0 +1,177 @@
+/* Story slides (title, problem, goal, data, already done, future). Layout in slide pixels (1920 x 1080).
+   The demo slides keep their styles in theme.css. */
+.reveal .slides > section .abs { position: absolute; }
+.reveal [data-ico] { display: inline-block; }
+.reveal [data-ico] svg { display: block; width: 100%; height: 100%; }
+.reveal .center { text-align: center; }
+.reveal .source { position: absolute; right: 140px; bottom: 44px; text-align: right; margin: 0; font-size: 20px; color: var(--soft); opacity: .7; }
+
+/* ---------- 0 · title: Geoinformatics ⇒ Terranos ⇐ Bioinformatics ---------- */
+.s-collide .orb { position: absolute; top: 350px; width: 380px; height: 380px; display: grid; place-items: center; }
+.s-collide .orb::before { content: ''; position: absolute; inset: -30%; border-radius: 50%; pointer-events: none; }
+.s-collide .orb.geo { left: 20px; }
+.s-collide .orb.bio { left: 1520px; }
+.s-collide .orb.geo::before { background: radial-gradient(circle, rgba(96,165,250,.28), transparent 62%); }
+.s-collide .orb.bio::before { background: radial-gradient(circle, rgba(181,242,107,.24), transparent 62%); }
+.s-collide .orb canvas { width: 380px; height: 380px; position: relative; }
+.s-collide .orb svg.helix { width: 220px; height: 380px; position: relative; overflow: visible; }
+.s-collide .helix .s1 { fill: none; stroke: var(--lime); stroke-width: 7; stroke-linecap: round; }
+.s-collide .helix .s2 { fill: none; stroke: var(--leaf); stroke-width: 7; stroke-linecap: round; }
+.s-collide .helix line { stroke: var(--cream); stroke-width: 4; stroke-linecap: round; }
+.s-collide .orb .lbl { position: absolute; top: 100%; left: 50%; margin-top: 46px; transform: translateX(-50%); white-space: nowrap;
+  font-size: 54px; font-weight: 800; letter-spacing: -.01em; }
+.s-collide .orb.geo .lbl { color: var(--sky); }
+.s-collide .orb.bio .lbl { color: var(--lime); }
+.s-collide .burst { position: absolute; left: 860px; top: 440px; width: 200px; height: 200px; border-radius: 50%;
+  background: radial-gradient(circle, #fff 0%, var(--lime) 35%, rgba(181,242,107,0) 70%); opacity: 0; }
+.s-collide .sparks i { position: absolute; left: 960px; top: 540px; width: 14px; height: 14px; margin: -7px; border-radius: 50%; opacity: 0; }
+.s-collide svg.arrows { position: absolute; inset: 0; width: 1920px; height: 1080px; overflow: visible; pointer-events: none; }
+.s-collide .arrows path { fill: none; stroke-width: 8; stroke-linecap: round; stroke-linejoin: round; }
+.s-collide .arrows .l { stroke: var(--sky); }
+.s-collide .arrows .r { stroke: var(--lime); }
+.reveal .s-collide .lockup { position: absolute; left: 470px; top: 450px; width: 980px; }
+
+/* ---------- 1a · geoinformatic data → genomics ---------- */
+.s-genomics .ground { position: absolute; left: 0; right: 0; top: 640px; bottom: 0; border-top: 3px solid rgba(181,242,107,.45);
+  background: linear-gradient(180deg, rgba(122,86,50,.45), rgba(70,46,26,.25) 55%, rgba(11,26,18,0)); overflow: hidden; }
+.s-genomics .ground i { position: absolute; border-radius: 99px; background: var(--leaf); opacity: .35; }
+.s-genomics .tools { position: absolute; left: 0; right: 0; top: 330px; display: flex; justify-content: center; gap: 90px; }
+.s-genomics .tool { min-width: 220px; text-align: center; color: var(--sky); }
+.s-genomics .tool i { width: 130px; height: 130px; }
+.s-genomics .tool span { display: block; margin-top: 18px; font-size: 30px; font-weight: 700; color: var(--cream); }
+.s-genomics svg.dive { position: absolute; inset: 0; width: 1920px; height: 1080px; overflow: visible; pointer-events: none; }
+.s-genomics .dive path { fill: none; stroke: var(--lime); stroke-width: 8; stroke-linecap: round; stroke-linejoin: round; }
+.s-genomics .genomics { position: absolute; left: 0; right: 0; top: 790px; display: flex; justify-content: center; align-items: center; gap: 36px; color: var(--lime); }
+.s-genomics .genomics i { width: 150px; height: 150px; }
+.s-genomics .genomics b { font-size: 150px; font-weight: 900; letter-spacing: .06em; line-height: 1; text-shadow: 0 0 60px rgba(181,242,107,.45); }
+
+/* ---------- 1c · cost vs papers ---------- */
+.s-trend svg.trend { position: absolute; left: 110px; top: 270px; width: 1300px; height: 720px; overflow: visible; }
+.s-trend .grid line { stroke: rgba(255,255,255,.09); stroke-width: 2; }
+.s-trend .grid text, .s-trend .xaxis text { fill: var(--soft); font-size: 24px; }
+.s-trend .ptitle { fill: var(--cream); font-size: 28px; font-weight: 700; }
+.s-trend .cost { fill: none; stroke: var(--sky); stroke-width: 5; stroke-linejoin: round; stroke-linecap: round; }
+.s-trend .cdot { fill: var(--sky); stroke: var(--ink); stroke-width: 3; }
+.s-trend .clabel, .s-trend .blabel { fill: var(--cream); font-size: 28px; font-weight: 800; }
+.s-trend .bars path { fill: var(--lime); }
+.s-trend .bars path.partial { fill: url(#hatch); stroke: var(--lime); stroke-width: 2; }
+.s-trend .callouts { position: absolute; left: 1480px; top: 300px; display: flex; flex-direction: column; gap: 150px; }
+.s-trend .co .n { font-size: 92px; font-weight: 900; letter-spacing: -.03em; line-height: 1; }
+.s-trend .co .l { font-size: 28px; color: var(--soft); margin-top: 10px; }
+.s-trend .co.cost .n { color: var(--sky); }
+.s-trend .co.pubs .n { color: var(--lime); }
+
+/* ---------- 1b · what is metagenomics ---------- */
+.s-meta .pipe { position: absolute; left: 140px; right: 140px; top: 320px; display: flex; align-items: flex-start; justify-content: space-between; }
+.s-meta .stage { width: 440px; text-align: center; }
+.s-meta .stage > span { display: block; margin-top: 34px; font-size: 38px; font-weight: 800; }
+.s-meta .vis { position: relative; width: 440px; height: 440px; }
+.s-meta .arrow { margin-top: 170px; font-size: 90px; font-weight: 300; color: var(--lime); }
+.s-meta .soilbox::before { content: ''; position: absolute; inset: 20px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #6b4a2c, #3d2817 70%); box-shadow: inset 0 0 60px rgba(0,0,0,.5), 0 0 0 6px rgba(181,242,107,.18); }
+.s-meta .soilbox i, .s-meta .reads i { position: absolute; border-radius: 99px; }
+.s-meta .comp svg { width: 440px; height: 440px; overflow: visible; }
+.s-meta .comp text { fill: var(--cream); font-size: 26px; font-weight: 600; }
+
+/* ---------- 1d · metagenomics + geoinformation ---------- */
+.s-merge .heading { position: absolute; left: 0; right: 0; top: 110px; }
+.s-merge .slab { position: absolute; left: 700px; width: 520px; height: 520px; }
+.s-merge .plane { position: absolute; inset: 0; transform: rotateX(58deg) rotateZ(-45deg); border-radius: 18px; overflow: hidden;
+  box-shadow: 0 0 0 3px rgba(255,255,255,.12), 0 60px 80px rgba(0,0,0,.45); }
+.s-merge .geo .plane { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; padding: 4px; background: #0d2418; }
+.s-merge .geo .plane i { border-radius: 4px; }
+.s-merge .bio .plane { background: radial-gradient(circle at 40% 35%, #5a3d24, #2c1c0f 75%); }
+.s-merge .bio .plane i { position: absolute; border-radius: 99px; }
+.s-merge .stag { position: absolute; white-space: nowrap; font-size: 44px; font-weight: 800; }
+.s-merge .stag.t-geo { color: var(--sky); }
+.s-merge .stag.t-bio { color: var(--lime); }
+.s-merge .pin { position: absolute; width: 0; }
+.s-merge .pin::before { content: ''; position: absolute; left: -3px; top: 0; bottom: 0; width: 6px; border-radius: 3px; background: var(--cream); box-shadow: 0 0 16px rgba(255,255,255,.6); }
+.s-merge .pin b { position: absolute; left: -16px; top: -16px; width: 32px; height: 32px; border-radius: 50%; background: var(--cream); box-shadow: 0 0 0 8px rgba(243,247,241,.2); }
+
+/* ---------- 2a · goal flow ---------- */
+.s-goal .flow { position: absolute; left: 140px; top: 290px; width: 1640px; height: 720px; }
+.s-goal .flow svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.s-goal .flow .link { fill: none; stroke: rgba(181,242,107,.35); stroke-width: 4; }
+.s-goal .flow .pulse { fill: var(--lime); }
+.s-goal .node { position: absolute; transform: translate(-50%, -75px); display: flex; flex-direction: column; align-items: center; text-align: center; }
+.s-goal .node i { width: 150px; height: 150px; padding: 30px; box-sizing: border-box; border-radius: 50%; background: var(--panel); border: 2px solid var(--line); }
+.s-goal .node span { margin-top: 16px; font-size: 32px; font-weight: 800; white-space: nowrap; }
+.s-goal .in i { color: var(--sky); }
+.s-goal .in.in2 i { color: var(--lime); }
+.s-goal .act i { color: var(--amber); }
+.s-goal .node.core { transform: translate(-50%, -50%); }
+.s-goal .node.out { transform: translate(-50%, -105px); }
+.s-goal .core img { width: 220px; height: 220px; max-width: none; margin: 0; filter: drop-shadow(0 0 50px rgba(121,224,170,.35)); }
+/* The wordmark hangs below the globe, out of the flow, so the globe stays centred where the links meet. */
+.s-goal .core img.name { position: absolute; left: 50%; top: 100%; width: 300px; height: auto; margin: 48px 0 0 -150px; filter: none; }
+.s-goal .out i { width: 210px; height: 210px; padding: 36px; color: var(--lime); border-color: var(--lime); box-shadow: 0 0 60px rgba(181,242,107,.3); }
+
+/* ---------- 2b · history → now → future ---------- */
+.s-time svg.tl { position: absolute; left: 140px; top: 300px; width: 1640px; height: 680px; overflow: visible; }
+.s-time .axis { stroke: rgba(255,255,255,.25); stroke-width: 3; }
+.s-time .pastbg { fill: rgba(255,255,255,.035); }
+.s-time .past { fill: none; stroke: var(--soft); stroke-width: 4; stroke-linejoin: round; }
+.s-time .sample { fill: var(--visit); }
+.s-time .zone { fill: var(--soft); font-size: 32px; font-weight: 700; }
+.s-time .branch { fill: none; stroke: var(--soft); stroke-width: 5; stroke-dasharray: 2 14; stroke-linecap: round; }
+.s-time .branch.good { stroke: var(--lime); stroke-width: 8; stroke-dasharray: none; filter: drop-shadow(0 0 12px rgba(181,242,107,.6)); }
+.s-time .nowline { stroke: var(--cream); stroke-width: 3; stroke-dasharray: 10 10; }
+.s-time .now circle { fill: var(--cream); }
+.s-time .now .ring { fill: none; stroke: var(--cream); stroke-width: 3; }
+.s-time .now text { fill: var(--ink); font-size: 64px; font-weight: 900; }
+.s-time .nowlbl { fill: var(--cream); font-size: 36px; font-weight: 900; letter-spacing: .14em; }
+.s-time .goal circle { fill: var(--lime); }
+.s-time .goal text { fill: var(--lime); font-size: 34px; font-weight: 800; }
+
+/* ---------- 3 · data tiles ---------- */
+.s-stack .tiles { position: absolute; left: 140px; right: 140px; top: 290px; display: flex; gap: 40px; }
+.s-stack .tile { flex: 1; height: 660px; padding: 30px 30px 36px; box-sizing: border-box; border-radius: 28px; background: var(--panel); border: 1px solid var(--line);
+  box-shadow: 0 30px 80px rgba(0,0,0,.4); display: flex; flex-direction: column; }
+.s-stack .tile svg.viz { width: 100%; height: 400px; overflow: visible; }
+.s-stack .tile b { margin-top: auto; font-size: 40px; font-weight: 900; letter-spacing: -.01em; line-height: 1.1; }
+.s-stack .tile span { margin-top: 10px; font-size: 26px; color: var(--soft); }
+.s-stack .viz .strand { fill: none; stroke: var(--cream); stroke-width: 5; stroke-linecap: round; }
+.s-stack .viz .ax { stroke: rgba(255,255,255,.25); stroke-width: 2; }
+.s-stack .viz .thr { stroke: var(--cream); stroke-width: 2; stroke-dasharray: 8 8; opacity: .7; }
+.s-stack .viz .curve { fill: none; stroke-width: 5; stroke-linecap: round; }
+.s-stack .viz .vtxt { fill: var(--soft); font-size: 22px; }
+.s-stack .viz .big { fill: var(--cream); font-size: 54px; font-weight: 900; }
+.s-stack .viz .needle { stroke: var(--cream); stroke-width: 6; stroke-linecap: round; }
+.s-stack .viz .bar { fill: var(--lime); }
+.s-stack .viz .blbl { fill: var(--cream); font-size: 28px; font-weight: 800; }
+
+/* ---------- 4 · video break ---------- */
+.reveal .slides > section.s-reel { padding: 0; }
+.s-reel .screen { position: absolute; inset: 0; overflow: hidden; background: #000; box-shadow: 0 40px 120px rgba(0,0,0,.6); }
+.s-reel video { display: block; width: 100%; height: 100%; object-fit: cover; }
+
+/* ---------- 5 · what's already done ---------- */
+.s-done .feats { position: absolute; left: 140px; right: 140px; top: 330px; display: flex; gap: 40px; }
+.s-done .feat { position: relative; flex: 1; height: 560px; padding: 56px 34px 40px; box-sizing: border-box; border-radius: 28px; background: var(--panel);
+  border: 1px solid var(--line); border-top: 6px solid var(--c); display: flex; flex-direction: column; align-items: center; text-align: center; }
+.s-done .feat .ic { width: 190px; height: 190px; border-radius: 50%; display: grid; place-items: center; color: var(--c);
+  background: color-mix(in srgb, var(--c) 14%, transparent); border: 2px solid color-mix(in srgb, var(--c) 55%, transparent); }
+.s-done .feat .ic i { width: 104px; height: 104px; }
+.s-done .feat b { margin-top: 36px; min-height: 2.2em; display: flex; align-items: flex-end; justify-content: center;
+  font-size: 40px; font-weight: 900; letter-spacing: -.01em; line-height: 1.1; }
+.s-done .feat span { margin-top: 18px; font-size: 28px; line-height: 1.3; color: var(--soft); }
+.s-done .feat .ok { position: absolute; right: 26px; top: 22px; width: 58px; height: 58px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--lime); color: var(--ink); font-size: 34px; font-weight: 900; font-style: normal; line-height: 1; }
+
+/* ---------- 6 · future ---------- */
+.s-future .uses { position: absolute; left: 140px; right: 140px; top: 270px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 36px 40px; }
+.s-future .use { position: relative; height: 345px; padding: 32px 36px; box-sizing: border-box; border-radius: 28px; background: var(--panel); border: 1px solid var(--line);
+  display: flex; flex-direction: column; }
+.s-future .use .ico { width: 132px; height: 132px; flex: none; border-radius: 32px; display: grid; place-items: center;
+  background: rgba(181,242,107,.12); border: 2px solid var(--line); color: var(--lime); }
+.s-future .use .ico i { width: 92px; height: 92px; }
+.s-future .use.beyond { border-color: rgba(96,165,250,.55); }
+.s-future .use.beyond .ico { color: var(--sky); background: rgba(96,165,250,.12); border-color: rgba(96,165,250,.45); }
+.s-future .use .tag { position: absolute; top: 32px; right: 32px; padding: 8px 18px; border-radius: 999px; font-style: normal;
+  font-size: 20px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--ink); background: var(--sky); }
+.s-future .use b { margin-top: 24px; font-size: 36px; font-weight: 900; letter-spacing: -.01em; line-height: 1.1; }
+.s-future .use span { margin-top: 14px; font-size: 30px; text-wrap: balance; line-height: 1.35; color: var(--soft); }
+
+/* ---------- outro ---------- */
+.reveal .s-outro .lockup { margin-top: 290px; }

@@ -1,0 +1,193 @@
+<!doctype html>
+<!--
+  Terranos presentation: reveal.js for navigation, GSAP for animation. See README.md.
+  Keys: →/Space next · ← back · S speaker notes · O overview · R replay slide animation · F fullscreen · B blank
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Terranos</title>
+<link rel="icon" type="image/png" href="../brand/terranos-globe.png">
+<link rel="stylesheet" href="vendor/reveal/reset.css">
+<link rel="stylesheet" href="vendor/reveal/reveal.css">
+<link rel="stylesheet" href="css/theme.css">
+<link rel="stylesheet" href="css/story.css">
+</head>
+<body>
+<img id="brand" src="../brand/terranos-dark.png" alt="Terranos">
+<div id="bg"><div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div><div class="dots"></div><div class="vignette"></div></div>
+
+<div class="reveal"><div class="slides">
+
+  <!-- ===================== 0 · Title ===================== -->
+  <section data-anim="collide" class="s-collide" data-hide-brand>
+    <div class="orb geo"><canvas aria-hidden="true"></canvas><span class="lbl">Geoinformatics</span></div>
+    <div class="orb bio"><svg class="helix" aria-hidden="true"></svg><span class="lbl">Bioinformatics</span></div>
+    <div class="burst"></div>
+    <div class="sparks"></div>
+    <svg class="arrows" viewBox="0 0 1920 1080" aria-hidden="true">
+      <path class="l" d="M338 540 H448 M418 508 L450 540 L418 572"/>
+      <path class="r" d="M1582 540 H1472 M1502 508 L1470 540 L1502 572"/>
+    </svg>
+    <h1 class="lockup" aria-label="Terranos">
+      <img class="letters" src="../brand/terranos-dark-letters.png" alt="">
+      <canvas class="globe earth" aria-hidden="true"></canvas>
+    </h1>
+    <aside class="notes">Geoinformatics and bioinformatics collide, and Terranos is what comes out. Every slide plays its whole animation on entry; press R to replay it.</aside>
+  </section>
+
+  <!-- ===================== 1 · The problem ===================== -->
+  <section data-anim="genomics" class="s-genomics">
+    <div class="kicker"><b>01</b>The problem</div>
+    <h2 class="heading">Metagenomics in <span class="hl">agriculture</span>?</h2>
+    <div class="ground"></div>
+    <div class="tools">
+      <div class="tool"><i data-ico="globe"></i><span>Geoinformatic data</span></div>
+    </div>
+    <svg class="dive" viewBox="0 0 1920 1080" aria-hidden="true"><path d="M960 560 C 900 620, 1020 690, 960 765 M928 735 L960 768 L992 735"/></svg>
+    <div class="genomics"><i data-ico="dna"></i><b>GENOMICS</b></div>
+    <aside class="notes">Agriculture already reads the surface with geoinformatic data. What is missing is underground: the soil biology. Genomics reads it.</aside>
+  </section>
+
+  <section data-anim="meta" class="s-meta">
+    <div class="kicker"><b>01</b>The problem</div>
+    <h2 class="heading">What is <span class="hl">metagenomics</span>?</h2>
+    <div class="pipe">
+      <div class="stage"><div class="vis soilbox"></div><span>Soil sample</span></div>
+      <div class="arrow">→</div>
+      <div class="stage"><div class="vis reads"></div><span>All its DNA</span></div>
+      <div class="arrow">→</div>
+      <div class="stage"><div class="vis comp"></div><span>Who lives there</span></div>
+    </div>
+    <aside class="notes">Metagenomics sequences all the DNA in a sample at once, without growing anything in the lab. The DNA of every organism is cut into short reads; matching the reads tells us who lives there and in what share (shares here are illustrative).</aside>
+  </section>
+
+  <section data-anim="trend" class="s-trend">
+    <div class="kicker"><b>01</b>The problem</div>
+    <h2 class="heading">Cheaper DNA, <span class="hl">more research</span></h2>
+    <svg class="trend" role="img" aria-label="Cost per human genome falls from 95 million dollars in 2001 to 525 dollars in 2022, while PubMed papers on metagenomics in agriculture rise from 1 in 2004 to 1,553 in 2025"></svg>
+    <div class="callouts">
+      <div class="co cost"><div class="n">÷180,000</div><div class="l">cost per genome</div></div>
+      <div class="co pubs"><div class="n">1 → 1,553</div><div class="l">papers per year</div></div>
+    </div>
+    <p class="source">Sources: NHGRI DNA sequencing costs (2001–2022) · PubMed, query “metagenomic agriculture”, by publication year (2026 to date)</p>
+    <aside class="notes">Top: cost per human genome, log scale, from about 95 million dollars (2001) to 525 dollars (2022), NHGRI. Bottom: PubMed papers matching "metagenomic agriculture" per year: 1 in 2004, 1,553 in 2025; 2026 is still in progress (1,815 so far). Hover a bar or point for its value.</aside>
+  </section>
+
+  <section data-anim="merge" class="s-merge">
+    <h2 class="heading center">Metagenomics <span class="hl">+</span> Geoinformation</h2>
+    <div class="slab bio"><div class="plane"></div><span class="stag t-bio" style="left:650px; top:235px">Metagenomics</span></div>
+    <div class="slab geo"><div class="plane"></div><span class="stag t-geo" style="right:650px; top:235px">Geoinformation</span></div>
+    <aside class="notes">The core idea: put both layers on the same map. The layers merge, and each pin is one plot where we know both what grows on top and what lives in the soil.</aside>
+  </section>
+
+  <!-- ===================== 2 · Goal ===================== -->
+  <section data-anim="goal" class="s-goal">
+    <div class="kicker"><b>02</b>Goal</div>
+    <h2 class="heading">Optimize sowing, fertilizing &amp; <span class="hl">spraying</span></h2>
+    <div class="flow">
+      <svg aria-hidden="true"></svg>
+      <div class="node in in1"><i data-ico="globe"></i><span>Geoinformation</span></div>
+      <div class="node in in2"><i data-ico="dna"></i><span>Metagenomics</span></div>
+      <div class="node core"><img src="../brand/terranos-globe.png" alt=""><img class="name" src="../brand/terranos-dark.png" alt="Terranos analysis"></div>
+      <div class="node act a1"><i data-ico="sprout"></i><span>Sowing</span></div>
+      <div class="node act a2"><i data-ico="bag"></i><span>Fertilization</span></div>
+      <div class="node act a3"><i data-ico="spray"></i><span>Spraying</span></div>
+      <div class="node out"><i data-ico="balance"></i><span>Biological balance</span></div>
+    </div>
+    <aside class="notes">Both data sources are analysed together. The output is a decision for sowing, fertilization and spraying. The aim is to keep the soil's biological order in balance.</aside>
+  </section>
+
+  <section data-anim="timeline" class="s-time">
+    <div class="kicker"><b>02</b>Goal</div>
+    <h2 class="heading">What to do <span class="hl">now</span>?</h2>
+    <svg class="tl" aria-label="Historical data leads to now; from now, several futures, one good"></svg>
+    <aside class="notes">Years of history per plot: greenness seasons and soil samples (diamonds). From today there are several possible futures; the analysis picks the action that leads to the good one.</aside>
+  </section>
+
+  <!-- ===================== 3 · Data ===================== -->
+  <section data-anim="stack" class="s-stack">
+    <div class="kicker"><b>03</b>Data</div>
+    <h2 class="heading">Four layers of <span class="hl">data</span></h2>
+    <div class="tiles">
+      <div class="tile"><svg class="viz" aria-hidden="true"></svg><b>Shotgun sequencing</b><span>who lives there · their genes</span></div>
+      <div class="tile"><svg class="viz" aria-hidden="true"></svg><b>NDVI</b><span>crop vigour from satellites</span></div>
+      <div class="tile"><svg class="viz" aria-hidden="true"></svg><b>Geochemistry</b><span>pH · N · P · K</span></div>
+      <div class="tile"><svg class="viz" aria-hidden="true"></svg><b>qPCR</b><span>target genes, counted</span></div>
+    </div>
+    <aside class="notes">Shotgun sequencing: all DNA cut into reads. NDVI: greenness from Sentinel-2/Landsat. Geochemistry: pH and nutrients from the soil lab. qPCR: fast, targeted counts of specific genes or pathogens.</aside>
+  </section>
+
+  <!-- ===================== 4 · Demo: a short break with the showcase video ===================== -->
+  <section data-anim="reel" class="s-reel" data-hide-brand>
+    <div class="screen"><video src="../terranos-showcase.mp4" preload="auto" playsinline></video></div>
+    <aside class="notes">A one-minute break: the app tour and the corn story (showcase/terranos-showcase.mp4, with sound). It starts by itself; press → when it ends. Press R to restart it.</aside>
+  </section>
+
+  <!-- ===================== 5 · What's already done ===================== -->
+  <section data-anim="done" class="s-done">
+    <div class="kicker"><b>05</b>Already done</div>
+    <h2 class="heading">What's <span class="hl">already done</span>?</h2>
+    <div class="feats">
+      <div class="feat" style="--c:#fbbf24"><div class="ic"><i data-ico="microbe"></i></div><b>Soil microbes</b><span>Who lives in the soil, and what they do</span><em class="ok">✓</em></div>
+      <div class="feat" style="--c:#b5f26b"><div class="ic"><i data-ico="soil"></i></div><b>Soil characteristics</b><span>What the soil can do, in plain words</span><em class="ok">✓</em></div>
+      <div class="feat" style="--c:#ef4444"><div class="ic"><i data-ico="risk"></i></div><b>Crop disease risk</b><span>Which crops are at risk on this plot</span><em class="ok">✓</em></div>
+      <div class="feat" style="--c:#60a5fa"><div class="ic"><i data-ico="spray"></i></div><b>Treatment</b><span>What to apply, and when</span><em class="ok">✓</em></div>
+    </div>
+    <aside class="notes">Four parts of the app already work. Soil microbes: who lives in the soil and their roles. Soil characteristics: soil measurements and microbe genes in plain words. Crop disease risk: each crop scored against the neighbouring plots. Treatment: product types worth considering, and when.</aside>
+  </section>
+
+  <!-- ===================== 6 · Future development ===================== -->
+  <section data-anim="future" class="s-future">
+    <div class="kicker"><b>06</b>Future</div>
+    <h2 class="heading">What else metagenomics can <span class="hl">tell us</span></h2>
+    <div class="uses">
+      <div class="use"><div class="ico"><i data-ico="scope"></i></div><b>Early disease alarm</b><span>Finds pathogens nobody tested for</span></div>
+      <div class="use"><div class="ico"><i data-ico="trend"></i></div><b>Soil trends over years</b><span>Spot threats years in advance</span></div>
+      <div class="use"><div class="ico"><i data-ico="bug"></i></div><b>Proof for biocontrol</b><span>Check biopesticides really take hold</span></div>
+      <div class="use"><div class="ico"><i data-ico="target"></i></div><b>Spray per pathogen</b><span>Target the pathogen, not zone</span></div>
+      <div class="use"><div class="ico"><i data-ico="shield"></i></div><b>Suppressive soil forecast</b><span>Predict if outbreaks take hold</span></div>
+      <div class="use beyond"><em class="tag">Beyond soil</em><div class="ico"><i data-ico="cow"></i></div><b>Livestock health</b><span>Track antibiotic resistance in herds</span></div>
+    </div>
+    <aside class="notes">1 Early disease alarm: with climate change, diseases spread faster than anyone expects. Shotgun metagenomics doesn't look for anything specific, so it can find, say, a corn-killing fungus from Lebanon in a Polish field before anyone thought to test for it.
+2 Soil trends: sample the same plot over the years. If a harmful bacterium shows up at a tiny share, we can predict it will be a problem in about five years, not now. If a beneficial one is fading, we know to help it.
+3 Biocontrol: monitor how biological pesticides and other biological plant protection and support actually work in the soil, instead of traditional chemical ones.
+4 Spray per pathogen: targeted spraying chosen by the specific pathogen present, not only by its location on the field.
+5 Suppressive soil: sequencing shows whether beneficial microbes around the roots carry antimicrobial genes that naturally block pathogens, so we can predict whether an outbreak will actually take hold.
+6 Livestock health (beyond soil): the same method works for livestock, not only soil. Routine metagenomic monitoring of manure, irrigation runoff and post-harvest produce maps the spread of antibiotic resistance genes (the "resistome") and foodborne pathogens before they enter the human food supply.</aside>
+  </section>
+
+  <!-- ===================== Outro ===================== -->
+  <section data-anim="finale" class="s-outro" data-hide-brand>
+    <div class="lockup" aria-label="Terranos">
+      <img class="letters" src="../brand/terranos-dark-letters.png" alt="">
+      <img class="globe" src="../brand/terranos-globe.png" alt="">
+    </div>
+    <h2 class="heading">Thank you</h2>
+    <aside class="notes"></aside>
+  </section>
+
+</div></div>
+
+<script src="vendor/reveal/reveal.js"></script>
+<script src="vendor/reveal/plugin/notes.js"></script>
+<script src="vendor/gsap/gsap.min.js"></script>
+<script src="vendor/gsap/SplitText.min.js"></script>
+<script src="vendor/gsap/DrawSVGPlugin.min.js"></script>
+<script src="vendor/gsap/MotionPathPlugin.min.js"></script>
+<script src="vendor/gsap/Flip.min.js"></script>
+<script src="vendor/gsap/Draggable.min.js"></script>
+<script src="../brand/logo.js"></script>
+<script src="vendor/geo/d3-array.min.js"></script>
+<script src="vendor/geo/d3-geo.min.js"></script>
+<script src="vendor/geo/topojson-client.min.js"></script>
+<script src="vendor/geo/land-110m.js"></script>
+<script src="js/data.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/earth.js"></script>
+<script src="js/anims/basic.js"></script>
+<script src="js/anims/story.js"></script>
+<script>Deck.start()</script>
+</body>
+</html>

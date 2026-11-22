@@ -1,0 +1,42 @@
+ko,gene,function_group,caveat
+K02588,nifH,n_fixation,"Zero in all 67 NMDC tables: not detectable, never absent"
+K02586,nifD,n_fixation,
+K02591,nifK,n_fixation,
+K10944,pmoA-amoA,nitrification,KEGG label is pmoA-amoA: methane and ammonia monooxygenase A cannot be separated
+K10945,pmoB-amoB,nitrification,Same pmo/amo ambiguity as K10944
+K10946,pmoC-amoC,nitrification,Same pmo/amo ambiguity as K10944
+K10535,hao,nitrification,Hydroxylamine dehydrogenase; also occurs in anammox organisms
+K00371,narH/nxrB,nitrification,KEGG groups narH/narY/nxrB: nitrite oxidation cannot be separated from nitrate reduction
+K00370,narG/nxrA,denitrification,KEGG groups narG/narZ/nxrA: nitrate reduction vs nitrite oxidation ambiguous; weak flag
+K02567,napA,denitrification,Periplasmic nitrate reductase
+K00368,nirK,denitrification,
+K15864,nirS,denitrification,
+K04561,norB,denitrification,
+K00376,nosZ,nosZ,"Clade I nosZ KO only; atypical clade II nosZ is not covered, so nosZ may be under-counted"
+K03385,nrfA,dnra,
+K00362,nirB,dnra,Also assimilatory nitrite reduction
+K01428,ureC,urease,
+K01429,ureB,urease,
+K01430,ureA,urease,
+K01113,phoD,p_mobilisation,
+K01077,phoA,p_mobilisation,Alkaline phosphatase; broad family
+K00117,gcd,p_mobilisation,Glucose dehydrogenase; role in P solubilisation is indirect
+K06137,pqqC,p_mobilisation,
+K01093,appA,p_mobilisation,Phytase (4-phytase / acid phosphatase)
+K15431,phlD,phlD,"DAPG biosynthesis (Pseudomonas); rare, STER 2022 only"
+K01505,acdS,acdS,ACC deaminase
+K01183,chiA,chitinase,Chitinase: not specific to biocontrol
+K10814,hcnA,hcnA,Hydrogen cyanide synthase
+K03043,rpoB,marker,Single-copy marker
+K03553,recA,marker,Single-copy marker
+K02950,rpsL,marker,Single-copy marker (ribosomal S12)
+K02967,rpsB,marker,Single-copy marker (ribosomal S2)
+K02982,rpsC,marker,Single-copy marker (ribosomal S3)
+K07233,pcoB/copB,copper_resistance,Plasmid-borne copper resistance (pco/cop operon)
+K07156,pcoC/copC,copper_resistance,Plasmid-borne copper resistance (pco/cop operon)
+K07245,pcoD/copD,copper_resistance,Plasmid-borne copper resistance (pco/cop operon)
+K07787,cusA,copper_resistance,Cu/Ag efflux pump; also used for silver
+K07798,cusB,copper_resistance,Cu/Ag efflux pump; also used for silver
+K07796,cusC,copper_resistance,Cu/Ag efflux pump; also used for silver
+K07810,cusF,copper_resistance,Cu/Ag efflux pump; also used for silver
+K07665,cusR/copR,copper_resistance,"Regulator of copper resistance; general copper homeostasis genes (copA, cueO) are deliberately left out"

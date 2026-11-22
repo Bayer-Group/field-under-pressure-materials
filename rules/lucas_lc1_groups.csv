@@ -1,0 +1,90 @@
+lc1_code,lc1_name,group,is_cereal
+A00,ARTIFICIAL LAND,noncrop,false
+A10,ROOFED BUILT-UP AREAS,noncrop,false
+A11,Buildings with one to three floors,noncrop,false
+A12,Buildings with more than three floors,noncrop,false
+A13,Greenhouses,noncrop,false
+A20,ARTIFICIAL NON-BUILT UP AREAS,noncrop,false
+A21,Non built-up area features,noncrop,false
+A22,Non built-up linear features,noncrop,false
+A30,OTHER ARTIFICIAL AREAS,noncrop,false
+B11,Common wheat,cereal,true
+B12,Durum wheat,cereal,true
+B13,Barley,cereal,true
+B14,Rye,cereal,true
+B15,Oats,cereal,true
+B16,Maize,maize,true
+B17,Rice,cereal,true
+B18,Triticale,cereal,true
+B19,Other cereals,cereal,true
+B21,Potatoes,root,false
+B22,Sugar beet,root,false
+B23,Other root crops,root,false
+B31,Sunflower,oilseed,false
+B32,Rape and turnip rape,oilseed,false
+B33,Soya,oilseed,false
+B34,Cotton,other_crop,false
+B35,Other fibre and oleaginous crops,other_crop,false
+B36,Tobacco,other_crop,false
+B37,Other non-permanent industrial crops,other_crop,false
+B41,Dry pulses,legume_forage,false
+B42,Tomatoes,other_crop,false
+B43,Other fresh vegetables,other_crop,false
+B44,Floriculture and ornamental plants,other_crop,false
+B45,Strawberries,other_crop,false
+B51,Clovers,legume_forage,false
+B52,Lucerne,legume_forage,false
+B53,Other leguminous and mixtures for fodder,legume_forage,false
+B54,Mixed cereals for fodder,other_crop,false
+B55,Temporary grasslands,legume_forage,false
+B71,Apple fruit,other_crop,false
+B72,Pear fruit,other_crop,false
+B73,Cherry fruit,other_crop,false
+B74,Nuts trees,other_crop,false
+B75,Other fruit trees and berries,other_crop,false
+B76,Oranges,other_crop,false
+B77,Other citrus fruit,other_crop,false
+B81,Olive groves,other_crop,false
+B82,Vineyards,other_crop,false
+B83,Nurseries,other_crop,false
+B84,Permanent industrial crops,other_crop,false
+C00,WOODLAND,noncrop,false
+C10,BROADLEAVED WOODLAND,noncrop,false
+C20,CONIFEROUS WOODLAND,noncrop,false
+C21,Spruce dominated coniferous woodland,noncrop,false
+C22,Pine dominated coniferous woodland,noncrop,false
+C23,Other coniferous woodland,noncrop,false
+C30,MIXED WOODLAND,noncrop,false
+C31,Spruce dominated mixed woodland,noncrop,false
+C32,Pine dominated mixed woodland,noncrop,false
+C33,Other mixed woodland,noncrop,false
+D00,SHRUBLAND,noncrop,false
+D10,SHRUBLAND WITH SPARSE TREE COVER,noncrop,false
+D20,SHRUBLAND WITHOUT TREE COVER,noncrop,false
+E00,GRASSLAND,noncrop,false
+E10,GRASSLAND WITH SPARSE TREE/SHRUB COVER,noncrop,false
+E20,GRASSLAND WITHOUT TREE/SHRUB COVER,noncrop,false
+E30,SPONTANEOUSLY RE-VEGETATED SURFACES,noncrop,false
+F00,BARE LAND AND LICHENS/MOSS,noncrop,false
+F10,ROCKS AND STONES,noncrop,false
+F20,SAND,noncrop,false
+F30,LICHENS AND MOSS,noncrop,false
+F40,OTHER BARE SOIL,noncrop,false
+G00,WATER AREAS,noncrop,false
+G10,INLAND WATER BODIES,noncrop,false
+G11,Inland fresh water bodies,noncrop,false
+G12,Inland salty water bodies,noncrop,false
+G20,INLAND RUNNING WATER,noncrop,false
+G21,Inland fresh running water,noncrop,false
+G22,Inland salty running water,noncrop,false
+G30,TRANSITIONAL WATER BODIES,noncrop,false
+G40,SEA AND OCEAN,noncrop,false
+G50,"GLACIERS, PERMANENT SNOW",noncrop,false
+H00,WETLANDS,noncrop,false
+H10,INLAND WETLANDS,noncrop,false
+H11,Inland marshes,noncrop,false
+H12,Peatbogs,noncrop,false
+H20,COASTAL WETLANDS,noncrop,false
+H21,Salt marshes,noncrop,false
+H22,Salines and other chemical deposits,noncrop,false
+H23,Intertidal flats,noncrop,false

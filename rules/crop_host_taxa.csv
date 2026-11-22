@@ -1,0 +1,42 @@
+host_taxon,rank,crop_group,note
+Medicago sativa,species,alfalfa,accepted name (lucerne)
+Medicago x varia,species,alfalfa,hybrid alfalfa (M. sativa x falcata); cultivated as alfalfa
+Medicago ×varia,species,alfalfa,hybrid alfalfa; multiplication-sign spelling variant
+Avena,genus,barley_oats,genus dominated by the crop (Avena fatua weed only identified to species)
+Avena byzantina,species,barley_oats,cultivated red oat; treated as oat crop
+Avena sativa,species,barley_oats,accepted name; Avena fatua (wild oat weed) deliberately excluded
+Hordeum,genus,barley_oats,genus dominated by the crop
+Hordeum distichon,species,barley_oats,old synonym of Hordeum vulgare (two-row barley)
+Hordeum distichum,species,barley_oats,spelling variant of Hordeum distichon
+Hordeum sativum,species,barley_oats,old synonym of Hordeum vulgare
+Hordeum vulgare,species,barley_oats,accepted name
+Zea,genus,corn,genus dominated by the crop
+Zea mays,species,corn,accepted name; teosintes (Zea mexicana etc.) excluded as wild
+Phaseolus vulgaris,species,dry_bean,accepted name; lima bean (P. lunatus) and other Phaseolus not counted
+Panicum miliaceum,species,millet,proso millet; CDL Millet in Colorado is proso; foxtail and pearl millet not mapped
+Andropogon sorghum,species,sorghum,old synonym of Sorghum bicolor
+Holcus sorghum,species,sorghum,old synonym of Sorghum bicolor
+Sorghum bicolor,species,sorghum,accepted name
+Sorghum sudanense,species,sorghum,sudangrass; forage sorghum grown in the same system
+Sorghum vulgare,species,sorghum,old synonym of Sorghum bicolor (common in older USDA records); Sorghum halepense (Johnson grass) excluded
+Sorghum x drummondii,species,sorghum,sudangrass hybrid (S. bicolor x sudanense); spelling variant
+Sorghum ×drummondii,species,sorghum,sudangrass hybrid; multiplication-sign spelling variant
+Glycine,genus,soybean,genus dominated by the crop
+Glycine hispida,species,soybean,old synonym of Glycine max
+Glycine max,species,soybean,accepted name; Glycine soja (wild) excluded
+Soja max,species,soybean,old synonym of Glycine max
+Triticum,genus,spring_wheat,genus dominated by the crop
+Triticum aestivum,species,spring_wheat,accepted name (bread wheat)
+Triticum compactum,species,spring_wheat,club wheat; cultivated aestivum group
+Triticum durum,species,spring_wheat,durum is grown as spring wheat in the US; spring_wheat only
+Triticum sativum,species,spring_wheat,old synonym of Triticum aestivum
+Triticum spelta,species,spring_wheat,spelt; cultivated wheat
+Triticum turgidum,species,spring_wheat,includes durum; spring_wheat only
+Triticum vulgare,species,spring_wheat,old synonym of Triticum aestivum (common in older USDA records)
+Helianthus annuus,species,sunflower,accepted name; wild Helianthus species excluded
+Triticum,genus,winter_wheat,genus dominated by the crop
+Triticum aestivum,species,winter_wheat,accepted name (bread wheat)
+Triticum compactum,species,winter_wheat,club wheat; cultivated aestivum group (winter in PNW)
+Triticum sativum,species,winter_wheat,old synonym of Triticum aestivum
+Triticum spelta,species,winter_wheat,spelt; cultivated wheat
+Triticum vulgare,species,winter_wheat,old synonym of Triticum aestivum (common in older USDA records)

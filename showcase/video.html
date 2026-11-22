@@ -1,0 +1,1508 @@
+<!doctype html>
+<!--
+  Terranos: 66-second showcase video, written as code. No logo cards: it opens on the app and ends on the story.
+  Every frame is a pure function of time: seek(t) lays out the whole stage for second t.
+  - Open this file in a browser to watch it play (Space pauses, arrow keys step, click the bar to scrub, ?t=12 starts at 12 s).
+  - showcase/render.mjs calls seek() frame by frame and pipes screenshots into ffmpeg.
+  The app screens are real captures of the GUI (showcase/capture.mjs), with element positions in shots/rects.js.
+
+  Storyboard (video time; the scenes are written in scene time = video time + 4, plus the holds before them)
+     0 –  6  01 plot selection: list and map (2 s hold on the hovered plot)
+     6 – 16  02 soil microbes: taxonomy, then roles (2 s holds on the table and on the role tree)
+    16 – 24  03 soil characteristics (2 s hold on the cards)
+    24 – 28  hold ends; break: soil DNA (double helix) and map layers flow through Terranos into the app's outputs (to 36)
+    36 – 44  04 crop disease risk (2 s hold on the heatmap)
+    44 – 66  break: two neighbours. One checks the crop disease risk (corn high, sugar beet low) and plants beet, which shoots up;
+             the other plants corn anyway; a soil pathogen infects its roots (close-up under the ground), red veins climb the stalk and it falls ill;
+             he finally listens and buys from the treatment plan; everyone is happy
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Terranos showcase</title>
+<style>
+  :root {
+    --ink: #0b1a12; --deep: #0f2a1c; --green: #1f6f43; --leaf: #34a865; --lime: #b5f26b;
+    --amber: #f59e0b; --sky: #60a5fa; --cream: #f3f7f1; --soft: #b9d3c3; --red: #ef4444;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #000; overflow: hidden; }
+  body { font-family: 'Roboto', system-ui, sans-serif; color: var(--cream); -webkit-font-smoothing: antialiased; }
+  #fit { position: fixed; inset: 0; display: grid; place-items: center; }
+  #stage { position: relative; width: 1920px; height: 1080px; overflow: hidden; background: var(--ink); transform-origin: 50% 50%; }
+  .abs { position: absolute; left: 0; top: 0; }
+  .scene { position: absolute; inset: 0; display: none; }
+  svg.abs { overflow: visible; }
+
+  /* background */
+  #bg { position: absolute; inset: 0;
+    background: radial-gradient(1200px 800px at 20% 10%, #16402a 0%, transparent 60%),
+                radial-gradient(1000px 700px at 90% 100%, #123524 0%, transparent 60%), var(--ink); }
+  .blob { position: absolute; width: 900px; height: 900px; border-radius: 50%; filter: blur(120px); opacity: .45; }
+  #dots { position: absolute; inset: -60px;
+    background-image: radial-gradient(rgba(181,242,107,.16) 1.4px, transparent 1.6px); background-size: 44px 44px; }
+  #vignette { position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,.55) 100%); pointer-events: none; }
+
+  /* text */
+  .kicker { font-size: 22px; font-weight: 700; letter-spacing: .22em; text-transform: uppercase; color: var(--lime); white-space: nowrap; }
+  .kicker b { color: var(--cream); opacity: .55; font-weight: 700; margin-right: 14px; }
+  .heading { font-size: 72px; font-weight: 900; letter-spacing: -0.025em; line-height: 1.02; white-space: nowrap; }
+  .sub { font-size: 28px; font-weight: 300; color: var(--soft); white-space: nowrap; }
+  .mask { display: inline-block; overflow: hidden; vertical-align: top; padding-bottom: .1em; margin-bottom: -.1em; }
+  .mask > span { display: inline-block; will-change: transform; }
+  .hl { color: var(--lime); }
+  .center { width: 1920px; text-align: center; }
+
+  /* browser window around a screenshot */
+  .win { position: absolute; border-radius: 16px; overflow: hidden; background: #fff;
+    box-shadow: 0 40px 120px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.08); transform-origin: 50% 0%; }
+  .win .bar { height: 44px; background: #eef1ec; display: flex; align-items: center; gap: 9px; padding: 0 18px; border-bottom: 1px solid #dde2db; }
+  .win .bar i { width: 13px; height: 13px; border-radius: 50%; background: #d7dbd5; }
+  .win .bar i:nth-child(1) { background: #f87171; } .win .bar i:nth-child(2) { background: #fbbf24; } .win .bar i:nth-child(3) { background: #4ade80; }
+  .win .url { margin-left: 18px; flex: 1; max-width: 520px; height: 26px; border-radius: 13px; background: #fff; color: #5b665f;
+    font-size: 14px; display: flex; align-items: center; padding: 0 14px; gap: 8px; }
+  .vp { position: relative; overflow: hidden; background: #fff; }
+  .vp img { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+  .vp .layer { position: absolute; inset: 0; }
+
+  /* crop of a screenshot shown as a floating tile */
+  .tile { position: absolute; left: 0; top: 0; background-repeat: no-repeat; border-radius: 12px; background-color: #fff;
+    box-shadow: 0 24px 70px rgba(0,0,0,.45), 0 0 0 1px rgba(0,0,0,.05); transform-origin: 0 0; }
+
+  /* annotations */
+  .ring { position: absolute; left: 0; top: 0; border-radius: 50%; border: 4px solid var(--lime); }
+  .glow { position: absolute; left: 0; top: 0; border-radius: 12px; border: 4px solid var(--lime);
+    box-shadow: 0 0 0 6px rgba(181,242,107,.25), 0 0 40px rgba(181,242,107,.55); }
+  .pill { position: absolute; left: 0; top: 0; white-space: nowrap; padding: 12px 22px; border-radius: 999px; font-size: 24px; font-weight: 700;
+    background: var(--cream); color: var(--ink); box-shadow: 0 14px 40px rgba(0,0,0,.4); }
+  .pill small { font-weight: 400; color: #4b5a51; margin-left: 8px; font-size: 20px; }
+  .chip { position: absolute; left: 0; top: 0; display: flex; align-items: center; gap: 16px; padding: 18px 24px; border-radius: 18px; white-space: nowrap;
+    background: rgba(12,32,22,.9); border: 1px solid rgba(181,242,107,.25); box-shadow: 0 20px 60px rgba(0,0,0,.45); }
+  .chip .n { font-size: 42px; font-weight: 900; letter-spacing: -0.02em; }
+  .chip .l { font-size: 21px; color: var(--soft); line-height: 1.15; }
+  .dot { width: 18px; height: 18px; border-radius: 50%; flex: none; }
+  .tag { display: inline-flex; align-items: center; gap: 12px; padding: 14px 26px; border-radius: 999px; font-size: 26px; font-weight: 700;
+    background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.16); white-space: nowrap; position: absolute; left: 0; top: 0; }
+  #cursor { position: absolute; left: 0; top: 0; width: 44px; height: 44px; z-index: 50; filter: drop-shadow(0 6px 10px rgba(0,0,0,.45)); }
+  #ripple { position: absolute; left: 0; top: 0; width: 80px; height: 80px; margin: -40px 0 0 -40px; border-radius: 50%; border: 4px solid #fff; z-index: 49;
+    box-shadow: 0 0 0 2px rgba(0,0,0,.25); }
+
+  /* data-flow break */
+  .particle { position: absolute; left: 0; top: 0; font: 900 22px/1 'Roboto Mono', ui-monospace, monospace; }
+  .px { width: 12px; height: 12px; border-radius: 2px; }
+  .geo-layer { position: absolute; width: 300px; height: 300px; left: -150px; top: -150px; border-radius: 10px; overflow: hidden;
+    border: 2px solid rgba(181,242,107,.55); box-shadow: 0 30px 60px rgba(0,0,0,.35); background-repeat: no-repeat; }
+  .out-card { position: absolute; left: 0; top: 0; width: 500px; height: 128px; display: flex; align-items: center; gap: 20px; padding: 9px;
+    border-radius: 18px; background: rgba(12,32,22,.92); border: 1px solid rgba(181,242,107,.25); box-shadow: 0 20px 60px rgba(0,0,0,.45); }
+  .out-card .thumb { position: relative; width: 200px; height: 110px; border-radius: 10px; flex: none; background-repeat: no-repeat; background-color: #fff; }
+  .out-card b { display: block; font-size: 27px; font-weight: 800; }
+  .out-card span { display: block; font-size: 19px; color: var(--soft); margin-top: 4px; }
+  .label-block .kicker { font-size: 20px; }
+  .label-block .sub { font-size: 22px; margin-top: 6px; }
+
+  /* two-neighbours story */
+  .rcard { position: absolute; left: 0; top: 0; width: 780px; padding: 30px 36px 26px; border-radius: 28px; background: #fff; color: #16231b;
+    box-shadow: 0 40px 120px rgba(11,26,18,.4); transform-origin: 0 50%; }
+  .rcard .hd { display: flex; align-items: center; gap: 24px; white-space: nowrap; }
+  .rcard .hd img { height: 42px; }
+  .rcard .hd b { font-size: 26px; color: #1f6f43; border-bottom: 4px solid #1f6f43; padding: 6px 0; }
+  .rcard .lab { margin-top: 20px; font-size: 17px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #5f6f66; white-space: nowrap; }
+  .rcard .row { position: relative; display: flex; align-items: center; gap: 22px; margin-top: 18px; padding: 14px 18px 14px 22px; border-radius: 18px; background: #f4f7f3; }
+  .rcard .ic svg { display: block; overflow: visible; }
+  .rcard .nm { flex: 1; font-size: 44px; font-weight: 900; letter-spacing: -.02em; }
+  .rcard .cell { padding: 16px 28px; border-radius: 12px; font-size: 28px; font-weight: 800; color: #fff; white-space: nowrap; }
+  .rcard .bad .cell { background: #c0262d; } .rcard .good .cell { background: #1f7a45; }
+  .rcard .ring { position: absolute; inset: -7px; border-radius: 24px; border: 5px solid; opacity: 0; }
+  .rcard .tick { position: absolute; right: -20px; top: -20px; width: 54px; height: 54px; border-radius: 50%; background: #1f7a45; color: #fff;
+    font-size: 30px; font-weight: 900; display: grid; place-items: center; box-shadow: 0 0 0 5px #fff, 0 8px 20px rgba(0,0,0,.25); opacity: 0; }
+  .rcard .key { display: flex; align-items: center; gap: 10px; margin-top: 18px; font-size: 19px; color: #5f6f66; white-space: nowrap; }
+  .rcard .key i { width: 16px; height: 16px; border-radius: 4px; display: inline-block; }
+  .phone { position: absolute; left: 0; top: 0; width: 540px; height: 880px; border-radius: 64px; background: #15181c;
+    box-shadow: 0 50px 120px rgba(11,26,18,.5), inset 0 0 0 3px #30353c; transform-origin: 100% 0; }
+  .phone .screen { position: absolute; left: 14px; top: 14px; right: 14px; bottom: 14px; border-radius: 50px; overflow: hidden; background: #f4f7f3; color: #16231b; }
+  .phone .notch { position: absolute; left: 50%; top: 12px; width: 124px; height: 28px; margin-left: -62px; border-radius: 14px; background: #15181c; }
+  .phone .appbar { position: absolute; left: 0; right: 0; top: 0; height: 104px; background: #fff; }
+  .phone .appbar img { position: absolute; left: 24px; top: 56px; height: 36px; }
+  .phone .ptabs { position: absolute; left: 0; right: 0; top: 104px; height: 50px; background: #fff; display: flex; gap: 24px; padding: 10px 24px 0; font-size: 19px; color: #5f6f66;
+    border-bottom: 1px solid #dfe5e0; white-space: nowrap; }
+  .phone .ptabs b { color: #1f6f43; border-bottom: 4px solid #1f6f43; }
+  .phone .crop { position: absolute; left: 24px; top: 168px; font-size: 21px; font-weight: 800; white-space: nowrap; }
+  .phone .tile { box-shadow: 0 0 0 1px #dfe5e0, 0 6px 16px rgba(0,0,0,.07); border-radius: 12px; }
+  .phone .ordered { position: absolute; left: 0; top: 0; border-radius: 9px; background: #16a34a; color: #fff; font-weight: 800; font-size: 15px;
+    display: grid; place-items: center; white-space: nowrap; box-shadow: 0 0 0 3px #fff; }
+  .phone .tapring { position: absolute; left: 0; top: 0; width: 120px; height: 120px; margin: -60px 0 0 -60px; border-radius: 50%; border: 5px solid #1f6f43; }
+  .phone .toast { position: absolute; left: 20px; right: 20px; bottom: 30px; padding: 18px 22px; border-radius: 18px; background: #10281a; color: #fff;
+    font-size: 21px; font-weight: 700; box-shadow: 0 12px 30px rgba(0,0,0,.3); white-space: nowrap; }
+  .phone .toast span { color: var(--lime); margin-right: 8px; }
+
+  #wipe { position: absolute; left: 0; top: -200px; height: 1480px; width: 2700px; z-index: 80; transform-origin: 0 0; }
+  #wipe .edge { position: absolute; right: 0; top: 0; bottom: 0; width: 26px; background: var(--lime); }
+  #progress { position: absolute; left: 0; bottom: 0; height: 6px; background: linear-gradient(90deg, var(--leaf), var(--lime)); z-index: 90; }
+
+  /* preview controls (hidden while rendering) */
+  #ui { position: fixed; left: 0; right: 0; bottom: 0; height: 34px; background: rgba(0,0,0,.6); display: flex; align-items: center; gap: 12px; padding: 0 12px; color: #ddd; font: 13px system-ui; z-index: 100; }
+  #ui .track { flex: 1; height: 6px; background: #333; border-radius: 3px; position: relative; cursor: pointer; }
+  #ui .track b { position: absolute; left: 0; top: 0; bottom: 0; background: #b5f26b; border-radius: 3px; }
+  body.render #ui { display: none; }
+</style>
+<script src="shots/rects.js"></script>
+</head>
+<body>
+<div id="fit"><div id="stage"></div></div>
+<div id="ui"><span id="time">0.00 s</span><div class="track" id="track"><b id="bar"></b></div><span>Space: play/pause · ←/→: step</span></div>
+<script>
+'use strict'
+const FPS = 30, SW = 2400, SH = 1350  // screenshot size in px
+// Scenes are written in "scene time". The video starts at scene time 4 (straight into the app tour) and ends at 60
+// (the end of the story). At each HOLD [scene time, seconds] the frame freezes so a fully loaded app view can be read.
+// Holds are whole bars (2 s at 120 bpm), so music.mjs can map its sections and effects the same way.
+const START = 4, END = 60
+const HOLDS = [[7.0, 2], [12.6, 2], [16.8, 2], [23.0, 2], [34.55, 2]]
+const DURATION = END - START + HOLDS.reduce((a, h) => a + h[1], 0)
+/** Video time -> scene time. */
+function sceneTime(v) {
+  let s = v + START
+  for (const [h, d] of HOLDS) { if (s < h) break; if (s < h + d) return h; s -= d }
+  return s
+}
+const R = window.RECTS
+const stage = document.getElementById('stage')
+
+// ---------- time helpers ----------
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x))
+const prog = (t, a, b) => clamp((t - a) / (b - a))
+const lerp = (a, b, p) => a + (b - a) * p
+const E = {
+  lin: (x) => x,
+  out3: (x) => 1 - (1 - x) ** 3,
+  in3: (x) => x * x * x,
+  inout3: (x) => (x < 0.5 ? 4 * x * x * x : 1 - (-2 * x + 2) ** 3 / 2),
+  outExpo: (x) => (x >= 1 ? 1 : 1 - 2 ** (-10 * x)),
+  outBack: (x) => { const c = 1.70158; return 1 + (c + 1) * (x - 1) ** 3 + c * (x - 1) ** 2 },
+  outElastic: (x) => (x <= 0 ? 0 : x >= 1 ? 1 : 2 ** (-10 * x) * Math.sin((x * 10 - 0.75) * (2 * Math.PI) / 3) + 1),
+}
+/** Keyframes [[t, value], ...]; values are numbers or arrays of numbers. */
+function kf(t, frames, ease = E.inout3) {
+  if (t <= frames[0][0]) return frames[0][1]
+  for (let i = 0; i < frames.length - 1; i++) {
+    const [t0, v0] = frames[i], [t1, v1] = frames[i + 1]
+    if (t <= t1) {
+      const p = ease(prog(t, t0, t1))
+      return Array.isArray(v0) ? v0.map((v, j) => lerp(v, v1[j], p)) : lerp(v0, v1, p)
+    }
+  }
+  return frames.at(-1)[1]
+}
+/** 0 -> 1 on the way in, 1 -> 0 on the way out: for things that appear at `a` and leave at `b`. */
+const life = (t, a, b, inDur = 0.4, outDur = 0.3, ease = E.out3) =>
+  Math.min(ease(prog(t, a, a + inDur)), 1 - E.in3(prog(t, b - outDur, b)))
+/** Deterministic pseudo-random number in [0, 1) for an integer seed. */
+const hash = (n) => { const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x) }
+
+// ---------- colour helpers ----------
+const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16))
+const mix = (a, b, p) => { const x = rgb(a), y = rgb(b); return `rgb(${x.map((v, i) => Math.round(lerp(v, y[i], clamp(p)))).join(',')})` }
+// Greenness colours of the app's map legend (NDVI_RAMP in src/cropfit/overlay.py).
+const NDVI = [[0, '#a6763e'], [0.2, '#d9b36c'], [0.4, '#e9e08a'], [0.6, '#8cc45a'], [0.8, '#2f8f3a'], [1, '#0b5a24']]
+const ndviColor = (v) => {
+  v = clamp(v)
+  for (let i = 0; i < NDVI.length - 1; i++) if (v <= NDVI[i + 1][0]) return mix(NDVI[i][1], NDVI[i + 1][1], prog(v, NDVI[i][0], NDVI[i + 1][0]))
+  return NDVI.at(-1)[1]
+}
+
+// ---------- DOM helpers ----------
+function el(tag, cls, parent, html) {
+  const e = document.createElement(tag)
+  if (cls) e.className = cls
+  if (html != null) e.innerHTML = html
+  ;(parent ?? stage).appendChild(e)
+  return e
+}
+const css = (e, s) => { for (const k in s) e.style[k] = s[k]; return e }
+const place = (e, x, y, extra = '') => { e.style.transform = `translate(${x}px, ${y}px) ${extra}` }
+const show = (e, on) => { e.style.display = on ? '' : 'none'; return on }
+const NS = 'http://www.w3.org/2000/svg'
+function S(tag, attrs = {}, parent) {
+  const e = document.createElementNS(NS, tag)
+  for (const k in attrs) e.setAttribute(k, attrs[k])
+  if (parent) parent.appendChild(e)
+  return e
+}
+const at = (e, attrs) => { for (const k in attrs) e.setAttribute(k, attrs[k]); return e }
+const svgLayer = (parent) => S('svg', { class: 'abs', width: 1920, height: 1080, viewBox: '0 0 1920 1080' }, parent)
+
+/** Words that rise out of a mask one by one. */
+function words(parent, html, cls, x, y, center = false) {
+  const box = el('div', cls + ' abs' + (center ? ' center' : ''), parent)
+  place(box, x, y)
+  const parts = html.split(/\s+(?![^<]*>)/)
+  box.innerHTML = parts.map((w) => `<span class="mask"><span>${w}</span></span>`).join(' ')
+  const inner = [...box.querySelectorAll('.mask > span')]
+  return {
+    box,
+    update(t, start, end, stagger = 0.06, dur = 0.5) {
+      inner.forEach((s, i) => {
+        const pin = E.outExpo(prog(t, start + i * stagger, start + i * stagger + dur))
+        const pout = E.in3(prog(t, end - 0.3, end))
+        s.style.transform = `translateY(${(1 - pin) * 110 + pout * -110}%)`
+      })
+    },
+  }
+}
+/** Kicker, heading and subline of one section, entering at `a` and leaving at `b`. */
+function header(parent, { k, h, s }, x, y, center = false) {
+  const kw = k && words(parent, k, 'kicker', x, y, center)
+  const hw = words(parent, h, 'heading', x, y + 34, center)
+  const sw = s && words(parent, s, 'sub', x, y + 126, center)
+  return (t, a, b) => { kw?.update(t, a, b); hw.update(t, a + 0.05, b, 0.06); sw?.update(t, a + 0.25, b, 0.025) }
+}
+
+/** A crop of a screenshot as a floating card. rect is [x, y, w, h] in screenshot pixels. */
+function tile(parent, shot, rect, scale, cls = 'tile') {
+  const [x, y, w, h] = rect
+  const e = el('div', cls, parent)
+  css(e, { width: w * scale + 'px', height: h * scale + 'px', backgroundImage: `url(shots/${shot}.png)`,
+    backgroundSize: `${SW * scale}px ${SH * scale}px`, backgroundPosition: `${-x * scale}px ${-y * scale}px` })
+  e.w = w * scale; e.h = h * scale
+  return e
+}
+
+/** Pop a chip/pill in at `a` from the right, out at `b`. */
+function popIn(e, t, a, b, x, y, { dx = 140, dy = 0, s0 = 0.8 } = {}) {
+  const p = E.outBack(prog(t, a, a + 0.5)), o = 1 - E.in3(prog(t, b - 0.3, b))
+  e.style.opacity = clamp(p) * o
+  place(e, x + (1 - p) * dx, y + (1 - p) * dy, `scale(${s0 + (1 - s0) * p})`)
+}
+const chip = (parent, n, l, color) =>
+  el('div', 'chip', parent, `<span class="dot" style="background:${color}"></span><span class="n">${n}</span><span class="l">${l}</span>`)
+/** A glowing frame around stage rect [x, y, w, h]. */
+function glowAt(e, t, a, b, [x, y, w, h], color = '#b5f26b', pad = 8) {
+  const g = life(t, a, b, 0.3, 0.25, E.outBack)
+  css(e, { width: w + 2 * pad + 'px', height: h + 2 * pad + 'px', opacity: clamp(g), borderColor: color,
+    boxShadow: `0 0 0 6px ${color}40, 0 0 40px ${color}99` })
+  place(e, x - pad, y - pad, `scale(${0.96 + 0.04 * clamp(g)})`)
+  e.style.transformOrigin = '50% 50%'
+}
+
+/** A browser window showing screenshots through a movable camera.
+ *  shots: names, or [name, dy, clipPath] where dy shifts a scrolled capture into the same (virtual) page coordinates. */
+function browserWindow(parent, shots, x, y, vw, vh) {
+  const win = el('div', 'win', parent)
+  css(win, { width: vw + 'px', height: vh + 44 + 'px', left: x + 'px', top: y + 'px' })
+  el('div', 'bar', win, '<i></i><i></i><i></i><div class="url">🔒 localhost · Terranos</div>')
+  const vp = el('div', 'vp', win)
+  css(vp, { width: vw + 'px', height: vh + 'px' })
+  const imgs = {}
+  for (const s of shots) {
+    const [name, dy = 0, clip] = Array.isArray(s) ? s : [s]
+    const i = el('img', '', vp); i.src = `shots/${name}.png`; i.width = SW; i.height = SH; i.dy = dy
+    if (clip) i.style.clipPath = clip
+    imgs[name] = i
+  }
+  const layer = el('div', 'layer', vp)
+  const cam = { s: 1, tx: 0, ty: 0 }
+  return {
+    win, vp, imgs, layer,
+    /** Fit rect [x, y, w, h] (virtual page px) into the viewport. */
+    camera(rect) {
+      const [rx, ry, rw, rh] = rect
+      cam.s = Math.min(vw / rw, vh / rh)
+      cam.tx = vw / 2 - (rx + rw / 2) * cam.s
+      cam.ty = vh / 2 - (ry + rh / 2) * cam.s
+      for (const i of Object.values(imgs)) i.style.transform = `translate(${cam.tx}px, ${cam.ty + i.dy * cam.s}px) scale(${cam.s})`
+    },
+    alpha(name, a) { imgs[name].style.opacity = a; imgs[name].style.display = a > 0 ? 'block' : 'none' },
+    /** Page point -> stage point (ignores the window's own entrance transform). */
+    toStage(px, py) { return [x + cam.tx + px * cam.s, y + 44 + cam.ty + py * cam.s] },
+    /** Page rect -> stage rect. */
+    rectStage(r) { const [sx, sy] = this.toStage(r[0], r[1]); return [sx, sy, r[2] * cam.s, r[3] * cam.s] },
+    /** Page point -> point inside the viewport (for things in `layer`, clipped by the window). */
+    toVp(px, py) { return [cam.tx + px * cam.s, cam.ty + py * cam.s] },
+    scale: () => cam.s,
+  }
+}
+const center = (r) => [r[0] + r[2] / 2, r[1] + r[3] / 2]
+
+// ---------- persistent layers ----------
+const bg = el('div', '', stage); bg.id = 'bg'
+const blobA = el('div', 'blob', bg); blobA.style.background = '#2f9e5a'
+const blobB = el('div', 'blob', bg); blobB.style.background = '#c9a227'
+const dots = el('div', '', bg); dots.id = 'dots'
+el('div', '', stage).id = 'vignette'
+
+const scenes = []
+function scene(start, end, build) {
+  const root = el('div', 'scene', stage)
+  const update = build(root)
+  scenes.push({ start, end, root, update })
+}
+
+// =====================================================================================
+// 4-24 s  App tour in one window: plot selection, soil microbes (taxonomy, roles), soil characteristics
+// =====================================================================================
+const WX = 110, WY = 250, VW = 1300, VH = 731, FULL = [0, 0, SW, SH], CX = 1450 // CX: column for side chips
+const PANEL_TOP = [0, 72, 1392, 783]
+const TREE_DY = 680 // roles-tree is the roles page scrolled by 680 px (its bar sits at y 100 instead of 780)
+scene(4, 24, (root) => {
+  const heads = [
+    [4.05, 10.0, { k: '<b>01</b>Plot selection', h: 'Pick a plot from the <span class="hl">list or the map.</span>', s: '29 sampled plots at two farm sites, in Kansas and Colorado' }],
+    [10.0, 14.0, { k: '<b>02</b>Soil microbes · taxonomy', h: 'Who lives in <span class="hl">your soil?</span>', s: 'Every DNA read sorted by phylum, class or genus' }],
+    [14.0, 18.0, { k: '<b>02</b>Soil microbes · roles', h: 'And what are they <span class="hl">doing there?</span>', s: 'Useful, harmful or cycling nitrogen: every genus gets its roles' }],
+    [18.0, 24.3, { k: '<b>03</b>Soil characteristics', h: 'What can your soil <span class="hl">do for you?</span>', s: 'Soil measurements and microbe genes in plain words, with how sure we are' }],
+  ].map(([a, b, txt]) => ({ a, b, up: header(root, txt, WX, 50) }))
+
+  const w = browserWindow(root, ['overview', 'overview-site', 'overview-hot', 'microbes', 'roles',
+    ['roles-tree', TREE_DY, 'inset(72px 1008px 0 0)'], 'functions'], WX, WY, VW, VH)
+  const fades = { // name: [fade in from, to, hidden once covered at]
+    overview: [-1, 0, 6.0], 'overview-site': [5.65, 5.95, 7.1], 'overview-hot': [6.85, 7.0, 8.9], microbes: [8.55, 8.85, 14.1],
+    roles: [13.75, 14.0, 18.2], 'roles-tree': [14.9, 15.1, 18.2], functions: [17.85, 18.1, 99],
+  }
+  const lines = svgLayer(root)
+  // --- 01 plot selection
+  const OV = R['overview-hot']
+  const zoomBtn = center(R['overview-site'].zoomSite.at(-1)) /* North Sterling's card is the last one */, plotBtn = center(OV.hotBtn[0]), plotDot = [1615, 956]
+  const link = S('line', { stroke: '#b5f26b', 'stroke-width': 5, 'stroke-dasharray': '14 10', 'stroke-linecap': 'round' }, lines)
+  const rings = [0, 1, 2].map(() => el('div', 'ring', root))
+  const plotChips = [chip(root, '29', 'sampled plots', '#3fae6a'), chip(root, '2', 'farm sites<br>Kansas · Colorado', '#60a5fa')]
+  const hoverPill = el('div', 'pill', root, 'Hover a plot <small>it lights up on the map</small>')
+  // --- 02 taxonomy
+  const MI = R.microbes
+  const taxChips = [chip(root, '17M', 'DNA reads from<br>3 soil cores', '#3fae6a'), chip(root, '42', 'phyla in<br>one bar', '#60a5fa'),
+    chip(root, '52%', 'Actinobacteria', '#2b6fd6')]
+  const rowGlow = el('div', 'glow', root), barGlow = el('div', 'glow', root)
+  // --- 02 roles
+  const RT = R['roles-tree']
+  const roleChips = [['15%', 'useful', '#16a37f'], ['17%', 'mixed', '#e8a317'], ['6.5%', 'potentially<br>harmful', '#e04848'], ['2.0%', 'nitrogen<br>cyclers', '#2e6fd8']]
+    .map(([n, l, c]) => chip(root, n, l, c))
+  const roleNote = el('div', 'sub abs', root, 'share of named DNA reads'); css(roleNote, { fontSize: '20px' })
+  const rolesBarGlow = el('div', 'glow', root), goodGlow = el('div', 'glow', root), badGlow = el('div', 'glow', root)
+  // --- 03 soil characteristics: the first five cards fly out of the window
+  const FN = R.functions, CS = 0.85
+  const cards = FN.scCard.slice(0, 5).map((r) => ({ r, e: tile(root, 'functions', r, CS) }))
+  const slot = (i) => {
+    const row = i < 3 ? 0 : 1, n = row ? 2 : 3, k = row ? i - 3 : i, cw = 653 * CS, gap = 26
+    return [960 - (n * cw + (n - 1) * gap) / 2 + k * (cw + gap), row ? 300 + 189 * CS + gap : 300]
+  }
+  const inside = (b, r) => b[0] >= r[0] && b[1] >= r[1] && b[0] < r[0] + r[2] && b[1] < r[1] + r[3]
+  const tagGlows = [...(FN.tagOk ?? []).map((b) => [b, '#3fae6a']), ...(FN.tagLook ?? []).map((b) => [b, '#f59e0b'])]
+    .map(([b, c]) => ({ b, c, i: cards.findIndex((x) => inside(b, x.r)), e: el('div', 'glow', root) })).filter((g) => g.i >= 0)
+  const fnTags = [['#3fae6a', 'Measured in the soil'], ['#60a5fa', 'From microbe genes'], ['#f59e0b', 'Looks fine · worth a look']]
+    .map(([c, l]) => el('div', 'tag', root, `<span class="dot" style="background:${c}"></span>${l}`))
+  let tagW = null
+
+  return (t) => {
+    for (const h of heads) h.up(t, h.a, h.b)
+    // window entrance; it recedes once the soil cards fly out
+    const ent = E.outExpo(prog(t, 4.0, 4.8)), back = E.inout3(prog(t, 19.3, 20.1))
+    w.win.style.transform = `perspective(2000px) translateY(${(1 - ent) * 380 + back * 30}px) rotateX(${(1 - ent) * 22}deg) scale(${(0.86 + 0.14 * ent) * (1 - 0.06 * back)})`
+    w.win.style.opacity = 1 - 0.88 * back
+    w.camera(kf(t, [[4.0, FULL], [8.95, FULL], [9.8, PANEL_TOP], [10.5, PANEL_TOP], [11.3, [0, 567, 1392, 783]], [12.7, [0, 567, 1392, 783]],
+      [13.3, [0, 200, 1392, 783]], [14.3, [0, 200, 1392, 783]], [15.0, [0, 560, 1392, 783]], [15.5, [0, 560, 1392, 783]],
+      [16.3, [0, 1000, 1392, 783]], [16.95, [0, 1000, 1392, 783]], [17.5, PANEL_TOP], [18.3, PANEL_TOP], [19.0, [0, 560, 1392, 783]]]))
+    for (const [name, [a, b, gone]] of Object.entries(fades)) w.alpha(name, t >= gone ? 0 : prog(t, a, b))
+
+    // --- 01: zoom the map to North Sterling, hover plot 010 (it lights up on the map), click it
+    const tz = w.toStage(...zoomBtn), tp = w.toStage(...plotBtn), td = w.toStage(...plotDot)
+    plotChips.forEach((c, i) => popIn(c, t, 4.6 + i * 0.2, 9.4, CX, 300 + i * 132))
+    const lp = E.out3(prog(t, 7.0, 7.45)), lo = 1 - prog(t, 8.3, 8.55)
+    at(link, { x1: tp[0], y1: tp[1], x2: lerp(tp[0], td[0], lp), y2: lerp(tp[1], td[1], lp), opacity: t > 7.0 ? lo : 0 })
+    rings.forEach((r, i) => {
+      const ph = ((t - 7.3 - i * 0.33) % 1 + 1) % 1, vis = t > 7.3 + i * 0.33 && t < 8.5
+      const d = 20 + ph * 110
+      css(r, { width: d + 'px', height: d + 'px', opacity: vis ? (1 - ph) * 0.9 : 0 }); place(r, td[0] - d / 2, td[1] - d / 2)
+    })
+    popIn(hoverPill, t, 7.3, 8.5, td[0] - 120, td[1] + 70, { dx: 0, dy: 30 })
+    // --- 02 taxonomy
+    taxChips.forEach((c, i) => popIn(c, t, 10.4 + i * 0.2, 13.6, CX, 300 + i * 132))
+    glowAt(barGlow, t, 11.3, 12.2, w.rectStage(MI.segBar[0]))
+    glowAt(rowGlow, t, 12.1, 13.1, w.rectStage(MI.row[0]))
+    // --- 02 roles
+    roleChips.forEach((c, i) => popIn(c, t, 14.4 + i * 0.15, 17.6, CX, 330 + i * 120))
+    const rn = life(t, 14.4, 17.6); roleNote.style.opacity = rn; place(roleNote, CX + 4, 290 + (1 - rn) * 10)
+    glowAt(rolesBarGlow, t, 14.55, 15.6, w.rectStage(R.roles.segBar[0]))
+    const treeRow = (i) => { const r = RT.roleRow[i]; return w.rectStage([r[0], r[1] + TREE_DY, r[2], r[3]]) }
+    glowAt(goodGlow, t, 16.25, 17.1, treeRow(3), '#16a37f')
+    glowAt(badGlow, t, 16.45, 17.1, treeRow(5), '#e04848')
+    // --- 03 soil characteristics
+    cards.forEach(({ r, e }, i) => {
+      const a = 19.3 + i * 0.1, on = show(e, t >= a)
+      if (!on) return
+      const p = E.outExpo(prog(t, a, a + 0.9)), [sx, sy] = w.toStage(r[0], r[1]), [tx, ty] = slot(i)
+      const s0 = w.scale() / CS
+      place(e, lerp(sx, tx, p), lerp(sy, ty, p) - Math.sin(Math.PI * p) * 60,
+        `rotate(${Math.sin(Math.PI * p) * (i % 2 ? 4 : -4)}deg) scale(${lerp(s0, 1, p)})`)
+    })
+    tagGlows.forEach((g, k) => {
+      const [x, y] = slot(g.i), r = cards[g.i].r
+      glowAt(g.e, t, 20.5 + k * 0.2, 24.0, [x + (g.b[0] - r[0]) * CS, y + (g.b[1] - r[1]) * CS, g.b[2] * CS, g.b[3] * CS], g.c, 6)
+    })
+    tagW ??= fnTags.map((f) => f.offsetWidth)
+    let x = 960 - (tagW.reduce((a, b) => a + b, 0) + 18 * (fnTags.length - 1)) / 2
+    fnTags.forEach((f, i) => { popIn(f, t, 21.0 + i * 0.15, 24.2, x, 820, { dx: 0, dy: 40 }); x += tagW[i] + 18 })
+
+    cursor(t, [[4.9, [1700, 950]], [5.5, tz], [6.1, tz], [6.8, tp], [9.0, tp]], 4.85, 9.0, [5.55, 8.35])
+    const row0 = w.toStage(420, MI.row[0][1] + 22), roles = w.toStage(722, 382)
+    cursor(t, [[11.7, [1250, 1000]], [12.2, row0], [12.9, row0], [13.55, roles], [14.2, roles]], 11.65, 14.2, [13.6])
+    const tab = w.toStage(320, 276)
+    cursor(t, [[17.0, [1250, 1000]], [17.6, tab], [18.1, tab]], 16.95, 18.1, [17.75])
+  }
+})
+
+// =====================================================================================
+// 24-32 s  Break: soil DNA and map layers flow through Terranos into the app's outputs
+// =====================================================================================
+scene(24, 32, (root) => {
+  const up = header(root, { k: 'How it works', h: 'Soil DNA and maps in. <span class="hl">Answers out.</span>' }, 0, 46, true)
+  const svg = svgLayer(root)
+  // --- double helix (biological data), horizontal
+  const HX0 = 110, HX1 = 640, HY = 360, A = 56, N = 24
+  const strands = [S('path', { fill: 'none', stroke: '#b5f26b', 'stroke-width': 6, 'stroke-linecap': 'round' }, svg),
+    S('path', { fill: 'none', stroke: '#7cc4ff', 'stroke-width': 6, 'stroke-linecap': 'round' }, svg)]
+  const PAIRS = [['#fbbf24', '#f87171'], ['#60a5fa', '#34d399']]
+  const rungs = Array.from({ length: N }, (_, i) => {
+    const pair = PAIRS[hash(i) > 0.5 ? 1 : 0], [c1, c2] = hash(i + 50) > 0.5 ? pair : [pair[1], pair[0]]
+    return { a: S('line', { stroke: c1, 'stroke-width': 7, 'stroke-linecap': 'round' }, svg), b: S('line', { stroke: c2, 'stroke-width': 7, 'stroke-linecap': 'round' }, svg),
+      n1: S('circle', { fill: '#b5f26b' }, svg), n2: S('circle', { fill: '#7cc4ff' }, svg) }
+  })
+  const bioLabel = el('div', 'abs label-block', root, '<div class="kicker">Biological data</div><div class="sub">soil DNA · microbes · genes</div>')
+  // --- map layers (geoinformatic data), stacked in 3D
+  const geo = el('div', 'abs', root); css(geo, { perspective: '1600px' }); place(geo, 375, 760)
+  const map = R['greenness-map'].map[0], ms = 300 / 760
+  const layers = [
+    { bg: `url(shots/greenness-map.png) ${-(map[0] + 120) * ms}px ${-(map[1] + 150) * ms}px / ${SW * ms}px ${SH * ms}px no-repeat`, label: 'Satellite greenness' },
+    { svg: contours(), bg: 'rgba(15,42,28,.72)', label: 'Terrain and soil maps' },
+    { svg: plotsLayer(), bg: 'rgba(15,42,28,.4)', label: 'Plots and samples' },
+  ].map((L) => {
+    const e = el('div', 'geo-layer', geo, L.svg ?? ''); e.style.background = L.bg
+    const lab = el('div', 'abs sub', root, L.label); css(lab, { fontSize: '19px', color: '#d7eadf' })
+    return { e, lab }
+  })
+  const geoLabel = el('div', 'abs label-block', root, '<div class="kicker">Geoinformatic data</div><div class="sub">satellites · terrain · plots</div>')
+  // --- Terranos core
+  const CORE = [960, 560]
+  const halo = el('div', 'abs', root); css(halo, { width: '520px', height: '520px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(181,242,107,.45), rgba(181,242,107,0) 65%)' })
+  const coreRings = [0, 1, 2].map(() => el('div', 'ring', root))
+  const globe = el('img', 'abs', root); globe.src = 'brand/terranos-globe.png'; css(globe, { width: '230px', height: '230px' })
+  const word = el('img', 'abs', root); word.src = 'brand/terranos-dark.png'; css(word, { width: '330px' })
+  // --- outputs: the app's tabs, as thumbnails of the real screens
+  const OUT = [
+    ['Soil microbes', 'Who lives in the soil', 'microbes', [33, 640, 760, 420], '#fbbf24'],
+    ['Soil characteristics', 'What the soil can do', 'functions', [704, 560, 653, 361], '#b5f26b'],
+    ['Crop disease risk', 'Which crops are at risk', 'risk', [33, 650, 900, 497], '#ef4444'],
+    ['Greenness over time', 'How green, year by year', 'greenness', [80, 500, 1000, 553], '#3fae6a'],
+    ['Treatment plan', 'What to apply, and when', 'plan', [709, 693, 649, 358], '#60a5fa'],
+  ].map(([name, desc, shot, r, c], k) => {
+    const e = el('div', 'out-card', root, `<div class="thumb"></div><div><b><span class="dot" style="display:inline-block;width:14px;height:14px;background:${c};margin:0 10px 3px 0"></span>${name}</b><span>${desc}</span></div>`)
+    const s = 200 / r[2], th = e.querySelector('.thumb')
+    css(th, { backgroundImage: `url(shots/${shot}.png)`, backgroundSize: `${SW * s}px ${SH * s}px`, backgroundPosition: `${-r[0] * s}px ${-r[1] * s}px` })
+    return { e, c, y: 238 + k * 150, x: 1370 }
+  })
+  const riskGlow = el('div', 'glow', root)
+  // --- particles
+  const BASES = 'ACGT', BASE_C = { A: '#fbbf24', C: '#34d399', G: '#60a5fa', T: '#f87171' }
+  const dnaP = Array.from({ length: 30 }, (_, i) => { const b = BASES[i % 4]; const e = el('div', 'particle', root, b); e.style.color = BASE_C[b]; return e })
+  const geoP = Array.from({ length: 30 }, (_, i) => { const e = el('div', 'particle px', root); e.style.background = ndviColor(0.15 + hash(i + 9) * 0.85); return e })
+  const outP = OUT.flatMap((o, k) => Array.from({ length: 6 }, (_, i) => { const e = el('div', 'particle px', root); css(e, { background: o.c, borderRadius: '50%' }); return { e, k, i } }))
+  const bez = (p0, c, p1, u) => [0, 1].map((j) => (1 - u) ** 2 * p0[j] + 2 * (1 - u) * u * c[j] + u * u * p1[j])
+  /** A stream of particles from src(i) to dst(i), period P, emitted from t0 to t1. */
+  function stream(t, list, t0, t1, P, src, ctrl, dst, size = 1) {
+    list.forEach((e, i) => {
+      const s = t0 + (i / list.length) * P, cyc = Math.floor((t - s) / P), born = s + cyc * P
+      if (t < s || born > t1) { e.style.opacity = 0; return }
+      const u = (t - born) / P, p0 = src(i), p1 = dst(i), [x, y] = bez(p0, ctrl(i, p0, p1), p1, E.inout3(u))
+      e.style.opacity = Math.min(1, u * 6, (1 - u) * 5)
+      place(e, x, y, `translate(-50%, -50%) scale(${size * (1 - 0.5 * u)}) rotate(${u * 200}deg)`)
+    })
+  }
+  return (t) => {
+    up(t, 24.05, 31.9)
+    // helix
+    const reveal = HX0 + (HX1 - HX0) * E.out3(prog(t, 24.1, 25.0)), fadeAll = 1 - E.in3(prog(t, 31.4, 31.9))
+    const phase = (x) => (x - HX0) * 0.024 - t * 2.4
+    for (const [j, sgn] of [[0, 1], [1, -1]]) {
+      let d = ''
+      for (let x = HX0; x <= reveal; x += 6) d += (d ? 'L' : 'M') + x.toFixed(1) + ',' + (HY + sgn * A * Math.sin(phase(x))).toFixed(1)
+      at(strands[j], { d: d || 'M0,0', opacity: fadeAll })
+    }
+    rungs.forEach((r, i) => {
+      const x = HX0 + i * (HX1 - HX0) / (N - 1), ph = phase(x), y1 = HY + A * Math.sin(ph), y2 = HY - A * Math.sin(ph), z = Math.cos(ph)
+      const vis = x <= reveal ? fadeAll : 0
+      at(r.a, { x1: x, y1, x2: x, y2: (y1 + y2) / 2, opacity: vis * 0.9 }); at(r.b, { x1: x, y1: (y1 + y2) / 2, x2: x, y2, opacity: vis * 0.9 })
+      at(r.n1, { cx: x, cy: y1, r: 7 + 3 * z, opacity: vis * (0.55 + 0.45 * (z + 1) / 2) })
+      at(r.n2, { cx: x, cy: y2, r: 7 - 3 * z, opacity: vis * (0.55 + 0.45 * (1 - z) / 2) })
+    })
+    const bl = life(t, 24.5, 31.9); bioLabel.style.opacity = bl; place(bioLabel, HX0, HY + 92 + (1 - bl) * 14)
+    // map layers
+    const sep = 12 + 52 * E.outBack(prog(t, 24.6, 25.4))
+    layers.forEach((L, i) => {
+      const p = E.outExpo(prog(t, 24.2 + i * 0.15, 24.9 + i * 0.15)), z = i * sep + Math.sin(t * 2 + i) * 4 + (1 - p) * 80
+      L.e.style.opacity = clamp(p) * fadeAll
+      L.e.style.transform = `translateY(${-z}px) rotateX(58deg) rotateZ(-42deg)`
+      const lp = life(t, 25.2 + i * 0.12, 31.9); L.lab.style.opacity = lp
+      place(L.lab, 375 + 228, 760 - z - 14 + (1 - lp) * 10)
+    })
+    const gl = life(t, 24.7, 31.9); geoLabel.style.opacity = gl; place(geoLabel, 160, 932 + (1 - gl) * 14)
+    // core
+    const cp = E.outBack(prog(t, 24.4, 25.1)), beat = t > 25.5 ? 1 - prog((t - 24) % 0.5, 0, 0.35) : 0
+    const charge = prog(t, 25.3, 27.0)
+    globe.style.opacity = clamp(cp) * fadeAll
+    place(globe, CORE[0] - 115, CORE[1] - 115, `scale(${cp * (1 + 0.05 * beat * charge)}) rotate(${t * 45}deg)`)
+    halo.style.opacity = (0.3 + 0.7 * charge) * clamp(cp) * fadeAll; place(halo, CORE[0] - 260, CORE[1] - 260, `scale(${0.9 + 0.15 * beat * charge})`)
+    coreRings.forEach((r, i) => {
+      const ph = ((t - 25.3 - i * 0.5) % 1.5 + 1.5) % 1.5 / 1.5, vis = t > 25.3 + i * 0.5
+      const d = 240 + ph * 260
+      css(r, { width: d + 'px', height: d + 'px', opacity: vis ? (1 - ph) * 0.7 * fadeAll : 0 }); place(r, CORE[0] - d / 2, CORE[1] - d / 2)
+    })
+    const wp = E.out3(prog(t, 25.0, 25.6)); word.style.opacity = wp * fadeAll; place(word, CORE[0] - 165, CORE[1] + 150 + (1 - wp) * 20)
+    // inflow
+    stream(t, dnaP, 25.1, 30.2, 1.7, (i) => [HX0 + hash(i) * (HX1 - HX0), HY + (hash(i + 3) - 0.5) * 80],
+      (i, a, b) => [(a[0] + b[0]) / 2 + 40, a[1] - 40 + hash(i + 7) * 90], () => CORE)
+    stream(t, geoP, 25.3, 30.2, 1.7, (i) => [375 + (hash(i + 11) - 0.5) * 220, 720 + (hash(i + 13) - 0.5) * 120],
+      (i, a, b) => [(a[0] + b[0]) / 2, a[1] + 40 - hash(i + 5) * 120], () => CORE)
+    // outputs
+    OUT.forEach((o, k) => {
+      const a = 26.6 + k * 0.35, p = E.outBack(prog(t, a, a + 0.55)), focus = E.inout3(prog(t, 30.6, 31.4))
+      const isRisk = k === 2
+      o.e.style.opacity = clamp(p) * (isRisk ? 1 : 1 - focus) * (isRisk ? 1 - E.in3(prog(t, 31.75, 32)) : 1)
+      place(o.e, o.x + (1 - p) * -90, o.y, `scale(${(0.85 + 0.15 * p) * (isRisk ? 1 + 0.08 * focus : 1)})`)
+      o.e.style.transformOrigin = '0 50%'
+    })
+    glowAt(riskGlow, t, 30.6, 31.95, [OUT[2].x, OUT[2].y, 500 * 1.08, 128 * 1.08], '#ef4444', 6)
+    riskGlow.style.transform += ` translateY(${-128 * 0.04}px)`
+    outP.forEach(({ e, k, i }) => {
+      const a = 26.6 + k * 0.35, P = 1.2, s = a + (i / 6) * P
+      const cyc = Math.floor((t - s) / P), born = s + cyc * P
+      if (t < s || born > 30.4) { e.style.opacity = 0; return }
+      const u = (t - born) / P, dst = [OUT[k].x, OUT[k].y + 64]
+      const [x, y] = bez(CORE, [1180, (CORE[1] + dst[1]) / 2], dst, E.inout3(u))
+      e.style.opacity = Math.min(1, u * 6, (1 - u) * 6)
+      place(e, x, y, 'translate(-50%, -50%)')
+    })
+  }
+})
+
+function contours() {
+  let d = ''
+  for (let k = 0; k < 7; k++) {
+    const r0 = 22 + k * 19, cx = 150 + (hash(k) - 0.5) * 14, cy = 150 + (hash(k + 4) - 0.5) * 14
+    for (let a = 0; a <= 64; a++) {
+      const th = (a / 64) * Math.PI * 2, r = r0 * (1 + 0.16 * Math.sin(3 * th + k) + 0.08 * Math.cos(5 * th - k))
+      d += (a ? 'L' : 'M') + (cx + r * Math.cos(th)).toFixed(1) + ',' + (cy + r * Math.sin(th) * 0.9).toFixed(1)
+    }
+    d += 'Z'
+  }
+  return `<svg viewBox="0 0 300 300" width="300" height="300"><path d="${d}" fill="none" stroke="#fbbf24" stroke-width="2.2" opacity=".85"/></svg>`
+}
+function plotsLayer() {
+  let s = '<svg viewBox="0 0 300 300" width="300" height="300"><g stroke="rgba(255,255,255,.55)" stroke-width="2">'
+  for (const v of [70, 160, 235]) s += `<line x1="${v}" y1="0" x2="${v + 8}" y2="300"/><line x1="0" y1="${v}" x2="300" y2="${v - 6}"/>`
+  s += '</g>'
+  for (let i = 0; i < 11; i++) {
+    const x = 20 + hash(i + 20) * 260, y = 20 + hash(i + 40) * 260
+    s += i % 3 ? `<circle cx="${x}" cy="${y}" r="7" fill="#34a865" stroke="#fff" stroke-width="2"/>` : `<rect x="${x - 10}" y="${y - 10}" width="20" height="20" fill="none" stroke="#fde047" stroke-width="3"/>`
+  }
+  return s + '</svg>'
+}
+
+// =====================================================================================
+// 32-38 s  Crop disease risk
+// =====================================================================================
+scene(32, 38, (root) => {
+  const up = header(root, { k: '<b>04</b>Crop disease risk', h: 'Which crops are <span class="hl">at risk here?</span>', s: 'Plant-pathogenic fungi in the soil, scored for every crop against the neighbouring plots' }, WX, 50)
+  const RK = R.risk
+  const w = browserWindow(root, ['risk'], WX, WY, VW, VH)
+  const cover = el('div', 'abs', w.layer); css(cover, { background: '#fff' })
+  const COVER = [244, 676, 1114, 470]
+  // the visible cells (8 crop columns x 10 plots), popping in diagonally
+  const cells = RK.heatCell.map((r, i) => ({ r, row: Math.floor(i / 10), col: i % 10 })).filter((c) => c.col < 8)
+    .map((c) => ({ ...c, e: tile(w.layer, 'risk', c.r, 1) }))
+  for (const c of cells) css(c.e, { borderRadius: '3px', boxShadow: 'none' })
+  // the crop names above the visible columns, so the grid reads as plots x crops
+  const cols = RK.heatCol.slice(0, 8).map((r, col) => ({ r, col, e: tile(w.layer, 'risk', r, 1) }))
+  for (const c of cols) css(c.e, { borderRadius: '3px', boxShadow: 'none' })
+  const corn = RK.heatCell[10] // STER_010 (second row) x corn (first column)
+  const rowGlow = el('div', 'glow', root), cellRings = [0, 1, 2].map(() => el('div', 'ring', root))
+  const chips = [chip(root, '10', 'crops scored<br>for every plot', '#3fae6a'), chip(root, '1.72', 'corn on this plot<br>red = higher risk', '#ef4444'),
+    chip(root, 'ITS', 'fungal DNA<br>behind the score', '#fbbf24')]
+  return (t) => {
+    up(t, 32.05, 37.9)
+    const ent = E.outExpo(prog(t, 32.0, 32.7))
+    w.win.style.transform = `translateX(${(1 - ent) * 300}px) scale(${0.92 + 0.08 * ent})`
+    w.win.style.opacity = clamp(ent * 1.5)
+    w.camera(kf(t, [[32.0, FULL], [32.6, FULL], [33.3, [0, 520, 1392, 783]], [36.85, [0, 520, 1392, 783]], [37.7, [104, 628, 420, 236]]]))
+    const s = w.scale()
+    const [cx, cy] = w.toVp(COVER[0], COVER[1]); css(cover, { width: COVER[2] * s + 'px', height: COVER[3] * s + 'px' }); place(cover, cx, cy)
+    for (const c of cells) {
+      const a = 33.0 + (c.row + c.col) * 0.05, p = E.outBack(prog(t, a, a + 0.35))
+      if (!show(c.e, t >= a)) continue
+      const [x, y] = w.toVp(c.r[0] + c.r[2] / 2, c.r[1] + c.r[3] / 2), k = s * (0.3 + 0.7 * p)
+      c.e.style.opacity = clamp(p * 2)
+      place(c.e, x - (c.r[2] * k) / 2, y - (c.r[3] * k) / 2, `scale(${k})`)
+    }
+    for (const c of cols) {
+      const a = 32.85 + c.col * 0.05, p = E.out3(prog(t, a, a + 0.3))
+      if (!show(c.e, t >= a)) continue
+      const [x, y] = w.toVp(c.r[0], c.r[1])
+      c.e.style.opacity = clamp(p * 1.5)
+      place(c.e, x, y - (1 - p) * 12 * s, `scale(${s})`)
+    }
+    glowAt(rowGlow, t, 34.7, 36.9, w.rectStage([33, corn[1] - 3, 1325, corn[3] + 6]), '#b5f26b', 6)
+    const [rx, ry] = w.toStage(...center(corn))
+    cellRings.forEach((r, i) => {
+      const ph = ((t - 35.3 - i * 0.33) % 1 + 1) % 1, vis = t > 35.3 + i * 0.33 && t < 37.6
+      const d = 40 + ph * 150
+      css(r, { width: d + 'px', height: d + 'px', opacity: vis ? (1 - ph) * 0.9 : 0, borderColor: '#ef4444' }); place(r, rx - d / 2, ry - d / 2)
+    })
+    chips.forEach((c, i) => popIn(c, t, 33.4 + i * 0.25, 37.4, CX, 330 + i * 132))
+    cursor(t, [[35.6, [1250, 1000]], [36.6, [rx + 10, ry + 6]], [38, [rx + 10, ry + 6]]], 35.55, 37.95, [36.75])
+  }
+})
+
+// =====================================================================================
+// 38-60 s  Break: two neighbours, sugar beet and corn
+// =====================================================================================
+// A small cartoon in one SVG "world" behind a camera. The two characters are rigs: a build function draws the parts once
+// and returns pose(p), which only sets transforms and a few path strings.
+const GROUND = 880, CORN_X = 1300, INK = '#3b2a20'
+const OUT = { stroke: INK, 'stroke-width': 5, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }
+const tf = (e, s) => e.setAttribute('transform', s)
+/** A bump of height 1 between a and a + d. */
+const bump = (t, a, d) => Math.sin(Math.PI * prog(t, a, a + d))
+/** Mouth: half-width w, curve c (> 0 smiles), opening o, and how much the upper lip opens too (1 = "O"). */
+const mouthD = (w, c, o, sym = 0.35) => (o > 0.5 ? `M${-w},0 Q0,${c + o * 1.7} ${w},0 Q0,${c - o * 1.7 * sym} ${-w},0Z` : `M${-w},0 Q0,${c * 1.6} ${w},0`)
+/** Leaf from the origin along +x; bend drops the tip. */
+const leafD = (len, wid, bend) =>
+  `M0,0 C${len * 0.25},${-wid} ${len * 0.7},${-wid * 0.9 + bend * 0.45} ${len},${bend} C${len * 0.7},${wid * 0.35 + bend * 0.75} ${len * 0.3},${wid * 0.7} 0,0Z`
+/** Rubber-hose limb: an outlined thick stroke. Returns a setter for its path. */
+function limb(parent, w, color) {
+  const a = { fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }
+  const o = S('path', { ...a, stroke: INK, 'stroke-width': w + 9 }, parent), f = S('path', { ...a, stroke: color, 'stroke-width': w }, parent)
+  return (d) => { o.setAttribute('d', d); f.setAttribute('d', d) }
+}
+/** Shoulder (sx, sy) to hand (tx, ty) with a bent elbow; the hand is pulled in if out of reach. Returns path and hand. */
+function reach(sx, sy, tx, ty, l, dir) {
+  let dx = tx - sx, dy = ty - sy, d = Math.hypot(dx, dy)
+  const m = 2 * l - 2
+  if (d > m) { dx *= m / d; dy *= m / d; d = m }
+  const a = Math.atan2(dy, dx), b = Math.acos(clamp(d / (2 * l), -1, 1)) * dir
+  const ex = sx + l * 1.25 * Math.cos(a + b), ey = sy + l * 1.25 * Math.sin(a + b)
+  return [`M${sx},${sy} Q${ex},${ey} ${sx + dx},${sy + dy}`, sx + dx, sy + dy]
+}
+/** An eye with a pupil, a blink and a happy closed arc. */
+function makeEye(parent, x, y, rx, ry, pr) {
+  const g = S('g', { transform: `translate(${x},${y})` }, parent), open = S('g', {}, g)
+  S('ellipse', { rx, ry, fill: '#fff', stroke: INK, 'stroke-width': 4 }, open)
+  const pupil = S('g', {}, open)
+  S('circle', { r: pr, fill: INK }, pupil); S('circle', { cx: -pr * 0.35, cy: -pr * 0.4, r: pr * 0.38, fill: '#fff' }, pupil)
+  const arc = S('path', { d: `M${-rx},${ry * 0.35} Q0,${-ry * 1.2} ${rx},${ry * 0.35}`, fill: 'none', stroke: INK, 'stroke-width': 6, 'stroke-linecap': 'round' }, g)
+  return (look, blink = 0, scale = 1, joy = false) => {
+    show(open, !joy); show(arc, joy)
+    tf(open, `scale(${scale},${scale * Math.max(0.08, 1 - blink)})`)
+    tf(pupil, `translate(${look[0] * (rx - pr - 2)},${look[1] * (ry - pr - 2)})`)
+  }
+}
+/** A burst of soft dust: play(t, t0, x, y). */
+function makePuff(parent, n, color) {
+  const cs = Array.from({ length: n }, () => S('circle', { fill: color }, parent))
+  return (t, t0, x, y, spread = 70, dur = 0.5, r = 16) => cs.forEach((c, i) => {
+    const p = prog(t, t0, t0 + dur), a = Math.PI * (1 + (i + 0.5) / n), q = E.out3(p)
+    at(c, { cx: x + Math.cos(a) * spread * q, cy: y + Math.sin(a) * spread * 0.5 * q - 4, r: r * (0.5 + hash(i + n) * 0.7) * (1 - p * 0.4), opacity: p > 0 && p < 1 ? 0.85 * (1 - p) : 0 })
+  })
+}
+
+/** The farmer: straw hat, moustache, dungarees. Origin at the feet, facing right.
+ *  L recolours him (shirt, dungarees, hair, hat band, seed on the bag) and can give him glasses. */
+function makeFarmer(parent, L = {}) {
+  const SKIN = '#f6c9a2', SHIRT = L.shirt ?? '#e2573f', SHIRT_D = L.shirtD ?? '#c94a36', DENIM = L.denim ?? '#3f6fb3', DENIM_D = L.denimD ?? '#35609c'
+  const POCKET = L.pocket ?? '#2c4f85', STRAW = '#f6d262', HAIR = L.hair ?? '#e9e6dc', MOU = L.mou ?? '#f4f1e8', BAND = L.band ?? SHIRT, SEED = L.seed ?? '#ffc93c'
+  const root = S('g', {}, parent)
+  const shadow = S('ellipse', { cy: 3, rx: 92, ry: 13, fill: '#1b140e', opacity: 0.2 }, root)
+  const flip = S('g', {}, root), sq = S('g', {}, flip)
+  const boot = () => {
+    const g = S('g', {}, sq)
+    S('path', { d: 'M-19,-36 L-19,-8 Q-19,0 -10,0 L34,0 Q45,0 43,-12 Q39,-24 18,-27 L17,-36Z', fill: '#7a4a2b', ...OUT }, g)
+    S('path', { d: 'M-18,-8 L42,-8', stroke: INK, 'stroke-width': 4, fill: 'none' }, g)
+    return g
+  }
+  const legB = limb(sq, 34, DENIM_D), bootB = boot(), legF = limb(sq, 34, DENIM), bootF = boot()
+  const up = S('g', {}, sq)
+  const armB = limb(up, 28, SHIRT_D)
+  // the far hand and what it holds sit behind the torso, like the far arm
+  const handB = S('g', {}, up)
+  const bag = S('g', {}, handB)
+  S('path', { d: 'M-20,-4 Q-30,38 -20,50 L20,50 Q30,38 20,-4 Q0,6 -20,-4Z', fill: '#e2cb97', ...OUT, 'stroke-width': 4 }, bag)
+  S('path', { d: 'M-14,-6 Q0,-22 14,-6', fill: '#e2cb97', ...OUT, 'stroke-width': 4 }, bag)
+  S('path', { d: 'M0,16 C10,22 10,36 0,40 C-10,36 -10,22 0,16Z', fill: SEED, stroke: INK, 'stroke-width': 3 }, bag)
+  S('circle', { r: 16, fill: SKIN, ...OUT, 'stroke-width': 4.5 }, handB)
+  // torso: shirt, dungarees with a bib, straps, pocket
+  S('path', { d: 'M-58,-232 C-70,-252 -40,-264 0,-264 C40,-264 70,-252 58,-232 C80,-180 86,-130 62,-108 C30,-96 -30,-96 -62,-108 C-86,-130 -80,-180 -58,-232Z', fill: SHIRT, ...OUT }, up)
+  S('path', { d: 'M-52,-226 L-38,-262 M48,-226 L52,-258', stroke: INK, 'stroke-width': 21, 'stroke-linecap': 'round', fill: 'none' }, up)
+  S('path', { d: 'M-52,-226 L-38,-262 M48,-226 L52,-258', stroke: DENIM, 'stroke-width': 12, 'stroke-linecap': 'round', fill: 'none' }, up)
+  S('path', { d: 'M-79,-172 C-86,-134 -80,-118 -62,-106 C-30,-94 30,-94 62,-106 C80,-118 86,-134 79,-172 L50,-176 L50,-228 L-54,-228 L-54,-176Z', fill: DENIM, ...OUT }, up)
+  S('rect', { x: -22, y: -210, width: 40, height: 30, rx: 6, fill: 'none', stroke: POCKET, 'stroke-width': 4 }, up)
+  for (const x of [-42, 38]) S('circle', { cx: x, cy: -217, r: 6, fill: '#ffd84a', stroke: INK, 'stroke-width': 3 }, up)
+  // head
+  const head = S('g', {}, up)
+  S('path', { d: 'M-48,-20 C-70,-30 -72,-70 -50,-86 L-30,-60Z', fill: HAIR, ...OUT }, head)
+  S('ellipse', { cx: 4, cy: -50, rx: 60, ry: 63, fill: SKIN, ...OUT }, head)
+  S('path', { d: 'M-52,-58 C-66,-62 -68,-36 -52,-36', fill: SKIN, ...OUT }, head)
+  S('path', { d: 'M-46,-78 C-52,-60 -44,-44 -34,-38', fill: 'none', stroke: HAIR, 'stroke-width': 12, 'stroke-linecap': 'round' }, head)
+  S('ellipse', { cx: -8, cy: -30, rx: 13, ry: 9, fill: '#f08a7b', opacity: 0.45 }, head)
+  const eyes = [makeEye(head, 14, -66, 13, 17, 6.5), makeEye(head, 52, -66, 12, 17, 6.5)]
+  if (L.glasses) {
+    const gl = S('g', { fill: 'rgba(255,255,255,.18)', stroke: INK, 'stroke-width': 5, 'stroke-linecap': 'round' }, head)
+    S('circle', { cx: 14, cy: -66, r: 21 }, gl); S('circle', { cx: 53, cy: -66, r: 19 }, gl)
+    S('path', { d: 'M33,-70 Q34,-76 35,-70 M-7,-70 L-46,-62', fill: 'none' }, gl)
+  }
+  const mouth = S('path', { fill: '#7a2e2a', ...OUT, 'stroke-width': 4.5 }, S('g', { transform: 'translate(36,-6)' }, head))
+  const mou = S('g', {}, head)
+  S('path', { d: 'M36,-33 C18,-42 0,-32 -8,-12 C8,-10 26,-13 36,-22 C46,-13 64,-10 80,-12 C72,-32 54,-42 36,-33Z', fill: MOU, ...OUT, 'stroke-width': 4.5 }, mou)
+  S('ellipse', { cx: 37, cy: -44, rx: 17, ry: 15, fill: '#eda482', ...OUT, 'stroke-width': 4.5 }, head)
+  const hat = S('g', {}, head)
+  S('ellipse', { rx: 106, ry: 21, fill: STRAW, ...OUT }, hat)
+  S('path', { d: 'M-58,-4 C-62,-72 -30,-86 0,-86 C30,-86 62,-72 58,-4 C30,6 -30,6 -58,-4Z', fill: STRAW, ...OUT }, hat)
+  S('path', { d: 'M-59,-12 C-30,-2 30,-2 59,-12 L59,-32 C30,-22 -30,-22 -60,-32Z', fill: BAND, ...OUT, 'stroke-width': 4 }, hat)
+  S('path', { d: 'M-40,-52 q8,-6 16,0 M6,-62 q8,-6 16,0 M-86,2 q10,6 22,6 M60,8 q12,0 22,-5', fill: 'none', stroke: '#d9ac3a', 'stroke-width': 4, 'stroke-linecap': 'round' }, hat)
+  const brows = [14, 52].map((x) => S('path', { d: 'M-13,0 Q0,-5 13,0', fill: 'none', stroke: INK, 'stroke-width': 6.5, 'stroke-linecap': 'round' }, S('g', { transform: `translate(${x},-97)` }, head)))
+  // the near arm and hand, in front of everything
+  const armF = limb(up, 28, SHIRT)
+  const handF = S('g', {}, up)
+  const phone = S('g', {}, handF)
+  S('rect', { x: -6, y: -50, width: 34, height: 58, rx: 7, fill: '#1c2026', ...OUT, 'stroke-width': 4 }, phone)
+  S('rect', { x: -1, y: -44, width: 24, height: 44, rx: 3, fill: '#b5f26b' }, phone)
+  S('circle', { r: 16, fill: SKIN, ...OUT, 'stroke-width': 4.5 }, handF)
+
+  return (p) => {
+    tf(root, `translate(${p.x},${GROUND})`)
+    const air = clamp(-p.y / 120)
+    at(shadow, { rx: 92 * (1 - 0.35 * air), opacity: 0.2 * (1 - 0.5 * air) })
+    tf(flip, `scale(${p.face},1)`)
+    tf(sq, `translate(0,${p.y}) scale(${1 / Math.sqrt(p.sy)},${p.sy})`)
+    // legs: a walk cycle, or tucked up a little in the air
+    const w = p.walk, ph = p.ph
+    const foot = (o, hx) => {
+      const fx = hx + 4 + 30 * Math.sin(ph + o) * w, fy = -Math.max(0, 20 * Math.cos(ph + o)) * w - 14 * air
+      return [`M${hx},-112 Q${(hx + fx) / 2 + 12},${-78 + fy / 2} ${fx},${fy - 34}`, fx, fy]
+    }
+    const [dB, bx, by] = foot(Math.PI, 28), [dF, fx, fy] = foot(0, -28)
+    legB(dB); tf(bootB, `translate(${bx},${by}) rotate(${-14 * Math.sin(ph + Math.PI) * w + 14 * air})`)
+    legF(dF); tf(bootF, `translate(${fx},${fy}) rotate(${-14 * Math.sin(ph) * w + 14 * air})`)
+    const bob = -5 * Math.abs(Math.sin(ph)) * w
+    tf(up, `translate(0,${bob}) rotate(${p.lean} 0 -112)`)
+    const [da, hbx, hby] = reach(46, -230, p.hb[0], p.hb[1], 58, -1)
+    armB(da); tf(handB, `translate(${hbx},${hby})`)
+    const [df, hfx, hfy] = reach(-36, -230, p.hf[0], p.hf[1], 58, 1)
+    armF(df); tf(handF, `translate(${hfx},${hfy})`)
+    show(bag, p.bag); show(phone, p.phone)
+    tf(head, `translate(6,-258) rotate(${p.head})`)
+    eyes.forEach((e) => e(p.look, p.blink, p.eye, p.joy))
+    brows.forEach((b, i) => tf(b, `translate(0,${-p.browL}) rotate(${(i ? 1 : -1) * p.browA})`))
+    mouth.setAttribute('d', mouthD(...p.mouth))
+    tf(mou, `rotate(${p.mou} 36 -28)`)
+    tf(hat, `translate(4,${-108 + p.hatY}) rotate(${p.hatR})`)
+    return [p.x + p.face * hfx, GROUND + p.y + hfy]  // where the near hand is, for the phone
+  }
+}
+
+/** The corn: an ear on a stalk with a face, leaf arms and a silk quiff. Origin at the foot of the stalk. */
+function makeCorn(parent) {
+  const root = S('g', {}, parent)
+  const shadow = S('ellipse', { cy: 3, rx: 120, ry: 15, fill: '#1b140e', opacity: 0.2 }, root)
+  const lean = S('g', {}, root), grow = S('g', {}, lean)
+  const greens = []
+  const green = (e, a, b) => { greens.push([e, a, b]); return e }
+  const leaf = (par, x, y, side, len, wid, a, b) => {
+    const g = S('g', {}, par), e = green(S('path', { ...OUT }, g), a, b)
+    return (ang, bend) => { tf(g, `translate(${x},${y}) scale(${side},1) rotate(${ang})`); e.setAttribute('d', leafD(len, wid, bend)) }
+  }
+  const baseL = [leaf(grow, 0, -30, -1, 150, 30, '#3f9a3c', '#a39d45'), leaf(grow, 0, -30, 1, 150, 30, '#4aa942', '#b0a94c'),
+    leaf(grow, 0, -120, -1, 104, 22, '#4aa942', '#b0a94c'), leaf(grow, 0, -120, 1, 104, 22, '#3f9a3c', '#a39d45')]
+  green(S('path', { d: 'M-16,2 C-13,-80 -15,-150 -13,-232 L13,-232 C15,-150 13,-80 16,2Z', ...OUT }, grow), '#5cb84a', '#b9b356')
+  S('path', { d: 'M-13,-78 Q0,-72 13,-78 M-13,-156 Q0,-150 13,-156', fill: 'none', stroke: INK, 'stroke-width': 3, opacity: 0.5 }, grow)
+  const stalkV = S('g', {}, grow)
+  const cob = S('g', {}, grow)
+  const arms = [leaf(cob, -90, -118, -1, 172, 32, '#4aa942', '#b0a94c'), leaf(cob, 90, -118, 1, 172, 32, '#4aa942', '#b0a94c')]
+  const silk = [-22, -11, 0, 11, 22].map((x, i) => S('path', { fill: 'none', stroke: i % 2 ? '#c98a2b' : '#e8ab45', 'stroke-width': 6, 'stroke-linecap': 'round' }, cob))
+  const COB = 'M-70,10 C-102,-60 -96,-232 -42,-310 C-22,-338 22,-338 42,-310 C96,-232 102,-60 70,10 C40,28 -40,28 -70,10Z'
+  const cobFill = S('path', { d: COB, ...OUT }, cob)
+  const clip = S('clipPath', { id: 'cobclip' }, cob); S('path', { d: COB }, clip)
+  const kern = S('g', { 'clip-path': 'url(#cobclip)', fill: '#f2b91f', opacity: 0.5 }, cob)
+  for (let y = -322, r = 0; y < 20; y += 27, r++) for (let x = -96; x <= 96; x += 25) S('rect', { x: x + (r % 2 ? 12.5 : 0) - 10, y: y - 11, width: 20, height: 22, rx: 8 }, kern)
+  S('path', { d: 'M-52,-250 C-70,-200 -76,-150 -70,-100', fill: 'none', stroke: '#fff', 'stroke-width': 10, 'stroke-linecap': 'round', opacity: 0.35 }, cob)
+  // face
+  const face = S('g', {}, cob)
+  const cheeks = [-58, 58].map((x) => S('ellipse', { cx: x, cy: -168, rx: 17, ry: 11, fill: '#ff8a65', opacity: 0.55 }, face))
+  const bags = S('path', { d: 'M-48,-178 q16,9 32,0 M16,-178 q16,9 32,0', fill: 'none', stroke: '#8f8a4a', 'stroke-width': 4, 'stroke-linecap': 'round' }, face)
+  const eyes = [makeEye(face, -32, -208, 21, 26, 10.5), makeEye(face, 32, -208, 21, 26, 10.5)]
+  const brows = [-32, 32].map((x) => S('path', { d: 'M-15,0 Q0,-6 15,0', fill: 'none', stroke: INK, 'stroke-width': 6, 'stroke-linecap': 'round' }, S('g', { transform: `translate(${x},-250)` }, face)))
+  const mouth = S('path', { fill: '#8a2f2a', ...OUT, 'stroke-width': 4.5 }, S('g', { transform: 'translate(0,-152)' }, face))
+  // thermometer, bulb outwards
+  const thermo = S('g', {}, face)
+  S('rect', { x: 2, y: -9, width: 112, height: 18, rx: 9, fill: '#fff', ...OUT, 'stroke-width': 4 }, thermo)
+  const merc = S('rect', { y: -3.5, height: 7, rx: 3, fill: '#ef4444' }, thermo)
+  S('path', { d: 'M34,-9 v7 M50,-9 v7 M66,-9 v7 M82,-9 v7', stroke: INK, 'stroke-width': 2.5, fill: 'none' }, thermo)
+  const bulb = S('circle', { cx: 122, r: 14, fill: '#ef4444', ...OUT, 'stroke-width': 4 }, thermo)
+  const hot = S('path', { d: 'M144,-14 l16,-10 M148,2 l20,0 M144,18 l16,10', stroke: '#ef4444', 'stroke-width': 5, 'stroke-linecap': 'round', fill: 'none' }, thermo)
+  // husk, wrapped around the lower half like a coat
+  const husk = [green(S('path', { d: 'M-74,12 C-124,-40 -122,-118 -96,-176 C-80,-112 -50,-40 4,24 C-30,28 -56,24 -74,12Z', ...OUT }, cob), '#6cc04a', '#bdb85c'),
+    green(S('path', { d: 'M74,12 C124,-40 122,-118 96,-176 C80,-112 50,-40 -4,24 C30,28 56,24 74,12Z', ...OUT }, cob), '#58b043', '#aca750')]
+  const spots = S('g', { fill: '#8a6a2f' }, cob)
+  for (const [x, y, r] of [[-86, -70, 9], [-70, -30, 6], [84, -92, 8], [66, -22, 7], [92, -52, 5]]) S('circle', { cx: x, cy: y, r }, spots)
+  // red veins: the infection climbs out of the soil, up the stalk and into the cob (p.vein 0..1)
+  const vein = (par, d, w) => [S('path', { d, fill: 'none', stroke: '#ff6b6b', 'stroke-width': w + 9, 'stroke-linecap': 'round', opacity: 0.35, pathLength: 1 }, par),
+    S('path', { d, fill: 'none', stroke: '#c0262d', 'stroke-width': w, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', pathLength: 1 }, par)]
+  const stalkVeins = ['M-5,2 C-10,-50 3,-100 -4,-160 C-8,-196 1,-218 -3,-236', 'M6,2 C11,-60 -2,-120 5,-176 C8,-204 2,-222 4,-236'].map((d) => vein(stalkV, d, 4))
+  const cobVeins = ['M-8,26 C-30,-10 -44,-50 -60,-110 M-44,-50 C-62,-58 -72,-70 -84,-96', 'M10,26 C28,-14 40,-54 62,-104 M36,-40 C54,-48 70,-64 82,-90',
+    'M0,26 C4,-20 -4,-60 2,-112'].map((d) => vein(cob, d, 5))
+
+  return (p) => {
+    tf(root, `translate(${CORN_X + p.dx},${GROUND})`)
+    show(root, p.s > 0)
+    at(shadow, { rx: 120 * p.s * (1 - 0.3 * clamp(-p.y / 100)), opacity: 0.2 })
+    tf(lean, `translate(0,${p.y}) rotate(${p.lean})`)
+    tf(grow, `scale(${p.s / Math.sqrt(p.sy)},${p.s * p.sy})`)
+    for (const [e, a, b] of greens) e.setAttribute('fill', mix(a, b, p.sick))
+    const dr = p.sick * 30
+    baseL[0](-34 + dr + p.sway, 50 + dr); baseL[1](-34 + dr - p.sway, 50 + dr)
+    baseL[2](-40 + dr * 1.2 - p.sway, 34 + dr); baseL[3](-40 + dr * 1.2 + p.sway, 34 + dr)
+    tf(cob, `translate(0,-222) rotate(${p.head})`)
+    arms[0](...p.armL); arms[1](...p.armR)
+    silk.forEach((e, i) => {
+      const x = -22 + i * 11, s = p.silk * (0.7 + i * 0.12), d = p.sick * 34, k = (i - 2) * 9
+      e.setAttribute('d', `M${x * 0.7},-318 C${x + k * 0.4},${-352 + d * 0.3} ${x + k - s * 0.5},${-372 + d * 0.8} ${x + k * 2.1 + s},${-392 + d * 1.5 + Math.abs(i - 2) * 9}`)
+    })
+    cobFill.setAttribute('fill', mix('#ffd84a', '#d6d294', p.sick))
+    kern.setAttribute('opacity', 0.5 - 0.25 * p.sick)
+    at(spots, { opacity: p.sick * 0.55 }); at(bags, { opacity: p.sick })
+    const v = p.vein ?? 0
+    for (const [veins, a, b] of [[stalkVeins, 0, 0.5], [cobVeins, 0.4, 1]]) {
+      const r = prog(v, a, b)
+      for (const pair of veins) for (const e of pair) at(e, { 'stroke-dasharray': `${r} 1`, visibility: r > 0 ? 'visible' : 'hidden' })
+    }
+    cheeks.forEach((c) => at(c, { opacity: 0.55 * (1 - p.sick) + p.blush, fill: p.blush ? '#ef5a4a' : '#ff8a65' }))
+    eyes.forEach((e) => e(p.look, p.blink, p.eye, p.joy))
+    brows.forEach((b, i) => tf(b, `translate(0,${-p.browL}) rotate(${(i ? 1 : -1) * p.browA})`))
+    mouth.setAttribute('d', mouthD(...p.mouth))
+    if (show(thermo, p.thermo > 0)) {
+      const [tx, ty, tr] = p.thermoAt
+      tf(thermo, `translate(${6 + tx},${-152 + ty}) rotate(${-20 + tr})`)
+      at(thermo, { opacity: p.thermo })
+      at(merc, { x: 112 - 100 * p.merc, width: 100 * p.merc + 2 })
+      tf(bulb, `translate(${122 * (1 - (1 + 0.25 * p.hot))},0) scale(${1 + 0.25 * p.hot})`)
+      at(hot, { opacity: p.hot })
+    }
+  }
+}
+
+/** The sugar beet: a white, tapering root with a face, under a crown of big leaves on pink stems; the outer two leaves are its arms.
+ *  Origin at the ground under the root. Pose as the corn's, with `awn` for the leaves' flutter. */
+function makeBeet(parent) {
+  const root = S('g', {}, parent)
+  const shadow = S('ellipse', { cy: 3, rx: 118, ry: 15, fill: '#1b140e', opacity: 0.2 }, root)
+  const lean = S('g', {}, root), grow = S('g', {}, lean), body = S('g', {}, grow)
+  const leaf = (par, len, wid, fill) => {
+    const g = S('g', {}, par)
+    const stem = limb(g, 9, '#8cc44c')
+    const blade = S('path', { fill, ...OUT }, g), rib = S('path', { fill: 'none', stroke: '#a9d97a', 'stroke-width': 4, 'stroke-linecap': 'round', opacity: 0.8 }, g)
+    return (x, y, side, ang, bend) => {
+      tf(g, `translate(${x},${y}) scale(${side},1) rotate(${ang})`)
+      const s0 = len * 0.32
+      stem(`M0,0 Q${s0 * 0.5},${bend * 0.1} ${s0},${bend * 0.15}`)
+      blade.setAttribute('transform', `translate(${s0},${bend * 0.15})`); blade.setAttribute('d', leafD(len - s0, wid, bend))
+      rib.setAttribute('d', `M${s0},${bend * 0.15} Q${s0 + (len - s0) * 0.5},${bend * 0.45} ${len - 12},${bend * 1.1}`)
+    }
+  }
+  // the crown of leaves (behind the root): three in the middle, two outer ones as arms
+  const crown = S('g', {}, body)
+  const inner = [[-24, 230, 60, '#4f9e3f'], [0, 260, 66, '#5cb84a'], [24, 230, 60, '#4f9e3f']].map(([a, len, wid, fill]) => ({ a, f: leaf(crown, len, wid, fill) }))
+  const arms = [leaf(body, 200, 56, '#5cb84a'), leaf(body, 200, 56, '#4aa942')]
+  // the root
+  const BULB = 'M0,-206 C76,-206 112,-168 108,-118 C104,-68 54,-16 0,6 C-54,-16 -104,-68 -108,-118 C-112,-168 -76,-206 0,-206Z'
+  S('path', { d: 'M8,0 C14,26 2,40 22,56', fill: 'none', stroke: INK, 'stroke-width': 11, 'stroke-linecap': 'round' }, body)
+  S('path', { d: 'M8,0 C14,26 2,40 22,56', fill: 'none', stroke: '#e6dcc0', 'stroke-width': 5, 'stroke-linecap': 'round' }, body)
+  S('path', { d: BULB, fill: '#f6f0de', ...OUT }, body)
+  S('path', { d: 'M-84,-156 C-96,-120 -86,-90 -62,-58 M84,-156 C96,-120 86,-90 62,-58 M-40,-190 C-54,-150 -50,-90 -26,-30 M40,-190 C54,-150 50,-90 26,-30',
+    fill: 'none', stroke: '#ddd0ad', 'stroke-width': 5, 'stroke-linecap': 'round', opacity: 0.8 }, body)
+  S('path', { d: 'M-70,-170 C-90,-140 -96,-110 -92,-84', fill: 'none', stroke: '#fff', 'stroke-width': 10, 'stroke-linecap': 'round', opacity: 0.7 }, body)
+  S('ellipse', { cx: 0, cy: -202, rx: 34, ry: 10, fill: '#a9b86a', stroke: INK, 'stroke-width': 4 }, body)
+  for (const x of [-64, 64]) S('ellipse', { cx: x, cy: -78, rx: 17, ry: 10, fill: '#ff9a8a', opacity: 0.55 }, body)
+  const eyes = [makeEye(body, -34, -116, 19, 23, 9.5), makeEye(body, 34, -116, 19, 23, 9.5)]
+  const brows = [-34, 34].map((x) => S('path', { d: 'M-14,0 Q0,-6 14,0', fill: 'none', stroke: INK, 'stroke-width': 6, 'stroke-linecap': 'round' }, S('g', { transform: `translate(${x},-154)` }, body)))
+  const mouth = S('path', { fill: '#8a2f2a', ...OUT, 'stroke-width': 4.5 }, S('g', { transform: 'translate(0,-64)' }, body))
+
+  return (p) => {
+    tf(root, `translate(${BEET_X + p.dx},${GROUND})`)
+    show(root, p.s > 0)
+    at(shadow, { rx: 118 * p.s * (1 - 0.3 * clamp(-p.y / 100)) })
+    tf(lean, `translate(0,${p.y}) rotate(${p.lean})`)
+    tf(grow, `scale(${p.s / Math.sqrt(p.sy)},${p.s * p.sy})`)
+    tf(body, `rotate(${p.head} 0 -100)`)
+    inner.forEach(({ a, f }, i) => f(0, -196, 1, -90 + a + p.sway * (i - 1) + p.awn * 0.25 * (i - 1), -14 + 0.4 * p.awn))
+    arms[0](-46, -178, -1, p.armL[0] - 42, p.armL[1] * 0.6)
+    arms[1](46, -178, 1, p.armR[0] - 42, p.armR[1] * 0.6)
+    eyes.forEach((e) => e(p.look, p.blink, p.eye, p.joy))
+    brows.forEach((b, i) => tf(b, `translate(0,${-p.browL}) rotate(${(i ? 1 : -1) * p.browA})`))
+    mouth.setAttribute('d', mouthD(...p.mouth))
+  }
+}
+
+/** A sprout: a kernel with two leaves and a face. play(t, t0, d, x, lookX) pops it up at t0 and lets it go after d seconds. */
+function makeSprout(parent, kernel) {
+  const sprout = S('g', {}, parent), sproutIn = S('g', {}, sprout)
+  S('path', { d: 'M0,2 C-3,-12 3,-22 0,-34', fill: 'none', stroke: INK, 'stroke-width': 13, 'stroke-linecap': 'round' }, sproutIn)
+  S('path', { d: 'M0,2 C-3,-12 3,-22 0,-34', fill: 'none', stroke: '#5cb84a', 'stroke-width': 6, 'stroke-linecap': 'round' }, sproutIn)
+  const head = S('g', { transform: 'translate(0,-52)' }, sproutIn)
+  const leaves = [-1, 1].map((sd) => S('path', { d: leafD(40, 13, 6), fill: sd < 0 ? '#4aa942' : '#5cb84a', ...OUT, 'stroke-width': 4 }, S('g', {}, head)))
+  S('path', { d: 'M0,-26 C24,-26 30,4 20,20 C10,30 -10,30 -20,20 C-30,4 -24,-26 0,-26Z', fill: kernel, ...OUT, 'stroke-width': 4 }, head)
+  const eyes = [makeEye(head, -9, -2, 6.5, 8, 4), makeEye(head, 9, -2, 6.5, 8, 4)]
+  S('path', { d: 'M-6,12 Q0,18 6,12', fill: 'none', stroke: INK, 'stroke-width': 3, 'stroke-linecap': 'round' }, head)
+  // timed in "sprout seconds": 0 pop, 0.55 looks at its farmer, 0.77 squashes down, 1.07 gone (the plant takes over)
+  return (t, t0, d, x, lookX) => {
+    const u = (t - t0) * (1.07 / d)
+    if (!show(sprout, u >= 0 && u < 1.07)) return
+    const s = E.outElastic(prog(u, 0, 0.6)), sy = kf(u, [[0, 1.5], [0.25, 1], [0.77, 1], [1.05, 0.5]]), rot = 7 * Math.sin(u * 7) * (1 - prog(u, 0.75, 0.95))
+    tf(sprout, `translate(${x},${GROUND - 4})`); tf(sproutIn, `rotate(${rot}) scale(${s / Math.sqrt(sy)},${s * sy})`)
+    leaves.forEach((l, i) => tf(l.parentNode, `translate(0,-22) scale(${i ? 1 : -1},1) rotate(${-38 + 10 * Math.sin(u * 7 + i) - 30 * prog(u, 0.77, 1.05)})`))
+    eyes.forEach((e) => e(u < 0.55 ? [0, -0.3] : [lookX, -0.2], Math.max(bump(u, 0.53, 0.14), bump(u, 0.85, 0.3)), 1))
+  }
+}
+
+// Two neighbours, one fence. The careful one (glasses, green shirt) checks Terranos and plants low-risk sugar beet;
+// the other plants high-risk corn anyway, it falls ill, and he finally opens the Treatment plan.
+const BEET_X = 560, FENCE_X = 960
+const SMART = { shirt: '#2f9e5a', shirtD: '#25804a', denim: '#8a6240', denimD: '#74512f', pocket: '#5e4126', hair: '#6b4a2b', mou: '#6b4a2b',
+  band: '#1f6f43', seed: '#c9a66b', glasses: true }
+/** Default farmer pose; scenes override what they animate. */
+const POSE = { y: 0, sy: 1, walk: 0, ph: 0, lean: 0, hf: [-42, -124], hb: [54, -126], bag: false, phone: false, head: 0, look: [0.6, 0], blink: 0,
+  eye: 1, joy: false, browL: 0, browA: 0, mouth: [16, 9, 0], mou: 0, hatY: 0, hatR: 0 }
+
+scene(38, 60, (root) => {
+  const full = { width: '1920px', height: '1080px' }
+  css(el('div', 'abs', root), { ...full, background: 'linear-gradient(#74c3f4 0%, #bfe6fb 46%, #fdf3cf 74%)' })
+  const svg = svgLayer(root), far = S('g', {}, svg), mid = S('g', {}, svg)
+
+  // ---- far layer (moves less than the rest): sun, clouds, hills, a barn on each side
+  const sun = S('g', { transform: 'translate(330,290)' }, far)
+  S('circle', { r: 120, fill: '#fff6c2', opacity: 0.5 }, sun); S('circle', { r: 76, fill: '#ffe066' }, sun)
+  const cloud = (x, y, s) => {
+    const g = S('g', {}, far)
+    for (const [cx, cy, r] of [[-70, 10, 38], [-30, -18, 50], [26, -26, 58], [76, 4, 42]]) S('circle', { cx, cy, r }, g)
+    S('rect', { x: -108, y: 0, width: 226, height: 48, rx: 24 }, g)
+    return { g, x, y, s }
+  }
+  const clouds = [cloud(260, 360, 0.8), cloud(900, 330, 0.7), cloud(1900, 330, 0.9), cloud(2500, 280, 1.1), cloud(-300, 380, 0.8)]
+  const rays = S('g', { fill: '#fff8c4' }, far)
+  for (let i = 0; i < 12; i++) S('path', { d: 'M0,0 L-60,-900 L60,-900Z', transform: `rotate(${i * 30})` }, rays)
+  S('path', { d: 'M-900,760 C-500,600 -100,650 300,700 C700,750 1000,610 1500,650 C2000,690 2400,620 3000,720 L3000,1300 L-900,1300Z', fill: '#a9dcae' }, far)
+  const barn = (x, roof, wall) => {
+    const g = S('g', { transform: `translate(${x},668) scale(0.9)` }, far)
+    S('rect', { x: 96, y: -150, width: 46, height: 150, rx: 6, fill: '#d7dee6', stroke: '#5b6470', 'stroke-width': 3 }, g)
+    S('path', { d: 'M96,-146 Q119,-186 142,-146Z', fill: '#9aa7b5', stroke: '#5b6470', 'stroke-width': 3, 'stroke-linejoin': 'round' }, g)
+    S('path', { d: 'M-70,0 L-70,-80 L-44,-118 L44,-118 L70,-80 L70,0Z', fill: wall, stroke: roof, 'stroke-width': 3, 'stroke-linejoin': 'round' }, g)
+    S('path', { d: 'M-80,-76 L-48,-124 L48,-124 L80,-76', fill: 'none', stroke: roof, 'stroke-width': 8, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, g)
+    S('path', { d: 'M-22,0 V-52 H22 V0 M-22,-52 L22,0 M22,-52 L-22,0', fill: '#fff3e6', stroke: '#fff3e6', 'stroke-width': 4, 'stroke-linejoin': 'round', 'fill-opacity': 0.25 }, g)
+  }
+  barn(330, '#1d5e36', '#3f9a5c'); barn(1560, '#6b2a22', '#cf4f3c')
+  S('path', { d: 'M-900,800 C-400,700 100,740 600,770 C1100,800 1600,700 2100,730 C2500,750 2800,720 3000,760 L3000,1300 L-900,1300Z', fill: '#86cc8f' }, far)
+
+  // ---- the two fields, with a fence between them
+  S('path', { d: 'M-900,786 Q960,754 3000,786 L3000,1400 L-900,1400Z', fill: '#6dbd6b' }, mid)
+  S('path', { d: 'M-900,812 Q960,784 3000,812 L3000,1400 L-900,1400Z', fill: '#a8744a' }, mid)
+  let rows = ''
+  for (let i = -22; i <= 22; i++) rows += `M${960 + i * 100},806 L${960 + i * 330},1400 `
+  S('path', { d: rows, fill: 'none', stroke: '#8d5d38', 'stroke-width': 12, 'stroke-linecap': 'round', opacity: 0.55 }, mid)
+  let fence = ''
+  for (let x = -840; x <= 2960; x += 170) fence += `M${x},806 V736 `
+  for (const [c, w] of [['#7a5a3c', 9], ['#e3c79a', 4]]) S('path', { d: fence + 'M-900,754 H3000 M-900,782 H3000', fill: 'none', stroke: c, 'stroke-width': w, 'stroke-linecap': 'round' }, mid)
+  let tufts = ''
+  for (let i = 0; i < 26; i++) { const x = -800 + i * 146 + hash(i) * 60; tufts += `M${x},812 q-6,-18 -12,-22 M${x},812 q0,-22 2,-30 M${x},812 q8,-16 14,-20 ` }
+  S('path', { d: tufts, fill: 'none', stroke: '#4d9f52', 'stroke-width': 5, 'stroke-linecap': 'round' }, mid)
+  // the boundary fence, running from the horizon to the front
+  let picket = ''
+  for (let k = 0; k < 6; k++) { const y = 816 + k * k * 9 + k * 14, h = 40 + k * 13; picket += `M${FENCE_X + k * k * 2.2},${y} v${-h} ` }
+  for (const [c, w] of [['#7a5a3c', 11], ['#e3c79a', 5]]) S('path', { d: picket + `M${FENCE_X},790 Q${FENCE_X + 20},${880} ${FENCE_X + 55},1000`, fill: 'none', stroke: c, 'stroke-width': w, 'stroke-linecap': 'round' }, mid)
+
+  // ---- props and characters, back to front
+  const mound = (x) => {
+    const g = S('g', {}, mid)
+    S('ellipse', { rx: 74, ry: 17, fill: '#7d4f2e', ...OUT, 'stroke-width': 4 }, g)
+    S('ellipse', { cx: -8, cy: -5, rx: 40, ry: 6, fill: '#96633c' }, g)
+    return (t, land, burst) => tf(g, `translate(${x},${GROUND + 2}) scale(${1 + 0.12 * bump(t, land, 0.25)},${1 - 0.25 * bump(t, land, 0.25) + 0.3 * bump(t, burst, 0.2)})`)
+  }
+  const moundW = mound(BEET_X), moundC = mound(CORN_X)
+  const fallLeaf = S('path', { d: leafD(62, 15, 8), fill: '#c4ae4a', ...OUT, 'stroke-width': 4 }, mid)
+  S('radialGradient', { id: 'infect' }, S('defs', {}, svg)).innerHTML = '<stop offset="0" stop-color="#dc2626" stop-opacity=".75"/><stop offset=".6" stop-color="#dc2626" stop-opacity=".3"/><stop offset="1" stop-color="#dc2626" stop-opacity="0"/>'
+  const footGlow = S('ellipse', { cx: CORN_X, cy: GROUND + 4, rx: 150, ry: 34, fill: 'url(#infect)' }, mid)
+  const beet = makeBeet(mid), corn = makeCorn(mid)
+  const sproutW = makeSprout(mid, '#f6f0de'), sproutC = makeSprout(mid, '#ffd84a')
+  // the parcel
+  const BOX_X = 1100
+  const box = S('g', {}, mid), boxIn = S('g', {}, box)
+  S('rect', { x: -58, y: -88, width: 116, height: 88, rx: 6, fill: '#d9aa72', ...OUT }, boxIn)
+  S('rect', { x: -58, y: -88, width: 116, height: 18, fill: '#b98a55', opacity: 0.6 }, boxIn)
+  S('rect', { x: -11, y: -86, width: 22, height: 84, fill: '#8fd14f' }, boxIn)
+  S('rect', { x: 18, y: -56, width: 30, height: 38, rx: 4, fill: '#fff', stroke: INK, 'stroke-width': 3 }, boxIn)
+  S('path', { d: 'M24,-28 C24,-44 34,-48 42,-48 C42,-36 38,-28 24,-28Z', fill: '#34a865' }, boxIn)
+  const flaps = [-1, 1].map(() => { const g = S('g', {}, boxIn); S('rect', { x: 0, y: -7, width: 58, height: 12, rx: 4, fill: '#e3b983', ...OUT, 'stroke-width': 4 }, g); return g })
+  const smart = makeFarmer(mid, SMART), neigh = makeFarmer(mid)
+  const seedShape = (fill) => S('path', { d: 'M0,-11 C10,-9 12,6 0,11 C-12,6 -10,-9 0,-11Z', fill, ...OUT, 'stroke-width': 3.5 }, mid)
+  const seedW = seedShape('#c9a66b'), seedC = seedShape('#ffc93c')
+  const puff = (n, c) => makePuff(mid, n, c)
+  const puffSeedW = puff(6, '#b98a5e'), puffSeedC = puff(6, '#b98a5e'), puffGrowW = puff(9, '#b98a5e'), puffGrowC = puff(9, '#b98a5e')
+  const puffBox = puff(10, '#e9dcc4')
+  const clods = (n) => Array.from({ length: n }, () => S('circle', { r: 8, fill: '#7d4f2e', stroke: INK, 'stroke-width': 3 }, mid))
+  const clodsW = clods(7), clodsC = clods(5)
+  const grains = Array.from({ length: 12 }, (_, i) => S('circle', { r: 7 + (i % 3) * 2, fill: i % 2 ? '#b5f26b' : '#e8ff9a', stroke: '#5a9a1f', 'stroke-width': 2.5 }, mid))
+  const STAR = 'M0,-16 Q3,-3 16,0 Q3,3 0,16 Q-3,3 -16,0 Q-3,-3 0,-16Z'
+  const stars = Array.from({ length: 16 }, (_, i) => S('path', { d: STAR, fill: i % 3 ? '#fff' : '#ffe066', stroke: '#f0a81c', 'stroke-width': 2.5, 'stroke-linejoin': 'round' }, mid))
+  const shockLines = () => S('path', { d: 'M-34,0 L-52,-22 M0,-12 L0,-42 M34,0 L52,-22', fill: 'none', stroke: INK, 'stroke-width': 7, 'stroke-linecap': 'round' }, mid)
+  const shockA = shockLines(), shockB = shockLines()
+  const bulbG = S('g', {}, mid)
+  S('path', { d: 'M-46,-34 l-18,-12 M0,-62 v-22 M46,-34 l18,-12 M-58,8 h-20 M58,8 h20', stroke: '#f0a81c', 'stroke-width': 6, 'stroke-linecap': 'round', fill: 'none' }, bulbG)
+  S('path', { d: 'M-12,34 C-12,20 -34,14 -34,-10 A34,34 0 1 1 34,-10 C34,14 12,20 12,34Z', fill: '#ffe066', ...OUT, 'stroke-width': 4 }, bulbG)
+  S('rect', { x: -12, y: 34, width: 24, height: 16, rx: 4, fill: '#9aa3ad', ...OUT, 'stroke-width': 4 }, bulbG)
+
+  // ---- beat 4: under the corn. A plant-pathogenic fungus and its bacterial friends attack the roots
+  const soil = svgLayer(root)
+  soil.innerHTML = `<defs><linearGradient id="soilV" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7a5232"/><stop offset=".5" stop-color="#4f3320"/>
+    <stop offset="1" stop-color="#2a1a0f"/></linearGradient><radialGradient id="evilGlow"><stop offset="0" stop-color="#c084fc" stop-opacity=".55"/>
+    <stop offset="1" stop-color="#c084fc" stop-opacity="0"/></radialGradient></defs>`
+  const sw = S('g', {}, soil)
+  S('rect', { x: -400, y: -300, width: 2720, height: 1680, fill: 'url(#soilV)' }, sw)
+  S('path', { d: 'M-400,-300 H2320 V70 Q1600,92 960,78 Q300,64 -400,86Z', fill: '#a8744a' }, sw)
+  S('path', { d: 'M-400,86 Q300,64 960,78 Q1600,92 2320,70', fill: 'none', stroke: INK, 'stroke-width': 6, opacity: 0.5 }, sw)
+  for (let i = 0; i < 70; i++) S('ellipse', { cx: -300 + hash(i + 300) * 2520, cy: 130 + hash(i + 400) * 1100, rx: 6 + hash(i + 500) * 20, ry: 4 + hash(i + 600) * 12,
+    fill: i % 3 ? '#6b4a30' : '#8a6a4a', opacity: 0.8 }, sw)
+  // the corn's roots, base to tip; a second copy, tip to base, carries the infection upwards
+  const smooth = (pts) => pts.reduce((d, p, i) => (i === 0 ? `M${p[0]},${p[1]}` : i === pts.length - 1 ? d + ` ${p[0]},${p[1]}`
+    : d + ` Q${p[0]},${p[1]} ${(p[0] + pts[i + 1][0]) / 2},${(p[1] + pts[i + 1][1]) / 2}`), '').replace(/^(M[^ ]+) (\d)/, '$1 L$2')
+  const ROOTS = [[[960, 70], [900, 220], [820, 380], [760, 560], [730, 730], 17], [[960, 70], [1010, 240], [1100, 400], [1180, 560], [1240, 690], 17],
+    [[960, 70], [955, 300], [970, 520], [960, 760], 15], [[960, 70], [870, 170], [700, 260], [540, 320], 13], [[960, 70], [1060, 170], [1230, 250], [1390, 300], 13],
+    [[820, 380], [700, 430], [610, 530], 9], [[1100, 400], [1220, 420], [1330, 480], 9], [[970, 520], [1060, 600], [1120, 700], 9], [[760, 560], [660, 640], 7]]
+  const roots = ROOTS.map((r) => { const w = r.pop(); return { pts: r, w } })
+  for (const r of roots) S('path', { d: smooth(r.pts), fill: 'none', stroke: INK, 'stroke-width': r.w + 7, 'stroke-linecap': 'round' }, sw)
+  for (const r of roots) S('path', { d: smooth(r.pts), fill: 'none', stroke: '#f1e3b8', 'stroke-width': r.w, 'stroke-linecap': 'round' }, sw)
+  const sickRoots = roots.map((r) => S('path', { d: smooth([...r.pts].reverse()), fill: 'none', stroke: '#dc2626', 'stroke-width': Math.max(4, r.w - 6), 'stroke-linecap': 'round', pathLength: 1 }, sw))
+  S('rect', { x: 942, y: -300, width: 36, height: 380, rx: 10, fill: '#5cb84a', stroke: INK, 'stroke-width': 6 }, sw)
+  // the fungus: hyphae, a lumpy purple body, an evil face
+  const FX = 1330, FY = 820
+  const glow = S('circle', { cx: FX, cy: FY, r: 360, fill: 'url(#evilGlow)' }, sw)
+  const HY = [[1240, 690], [1120, 700], [1330, 480], [960, 760], [1500, 700], [1560, 900], [1180, 980], [1450, 1000], [1600, 780]]
+  const hyphae = HY.map(([x, y], i) => {
+    const mx = (FX + x) / 2 + (hash(i + 70) - 0.5) * 140, my = (FY + y) / 2 + (hash(i + 80) - 0.5) * 140
+    return S('path', { d: `M${FX},${FY} Q${mx},${my} ${x},${y}`, fill: 'none', stroke: '#d8b4fe', 'stroke-width': 5, 'stroke-linecap': 'round', pathLength: 1 }, sw)
+  })
+  const fung = S('g', {}, sw)
+  let blob = ''
+  for (let k = 0; k <= 48; k++) { const a = (k / 48) * 2 * Math.PI, r = 104 + 12 * Math.sin(a * 7) + 6 * Math.sin(a * 3 + 1); blob += (k ? 'L' : 'M') + (Math.cos(a) * r).toFixed(1) + ',' + (Math.sin(a) * r).toFixed(1) }
+  S('path', { d: blob + 'Z', fill: '#8b5cf6', stroke: INK, 'stroke-width': 7, 'stroke-linejoin': 'round' }, fung)
+  for (const [x, y, r] of [[-62, -40, 12], [58, 52, 15], [-40, 64, 9], [70, -58, 8], [8, 84, 7]]) S('circle', { cx: x, cy: y, r, fill: '#6d3fd1' }, fung)
+  const fEyes = [-34, 34].map((x) => {
+    const g = S('g', { transform: `translate(${x},-18)` }, fung)
+    S('ellipse', { rx: 24, ry: 17, fill: '#fff', stroke: INK, 'stroke-width': 5 }, g)
+    const pupil = S('circle', { r: 8.5, fill: '#ef4444', stroke: INK, 'stroke-width': 2.5 }, g)
+    S('path', { d: x < 0 ? 'M-30,-26 L26,-6' : 'M30,-26 L-26,-6', stroke: INK, 'stroke-width': 11, 'stroke-linecap': 'round' }, g)
+    return pupil
+  })
+  const fMouth = S('g', { transform: 'translate(0,34)' }, fung)
+  const jaw = S('path', { fill: '#2a0f12', stroke: INK, 'stroke-width': 5, 'stroke-linejoin': 'round' }, fMouth)
+  const teeth = S('path', { fill: '#fff', stroke: INK, 'stroke-width': 2.5, 'stroke-linejoin': 'round' }, fMouth)
+  // grumpy rod-shaped bacteria with whipping tails
+  const bact = [[640, 680, 20], [1580, 560, -25], [470, 430, 35], [1040, 980, -10], [760, 920, 15]].map(([x, y, r], i) => {
+    const g = S('g', {}, sw)
+    const tail = S('path', { fill: 'none', stroke: INK, 'stroke-width': 4, 'stroke-linecap': 'round' }, g)
+    S('rect', { x: -40, y: -19, width: 80, height: 38, rx: 19, fill: i % 2 ? '#ea580c' : '#c2410c', stroke: INK, 'stroke-width': 5 }, g)
+    S('path', { d: 'M-16,-10 L-4,-4 M16,-10 L4,-4', stroke: INK, 'stroke-width': 4, 'stroke-linecap': 'round' }, g)
+    for (const ex of [-10, 10]) S('circle', { cx: ex, cy: 2, r: 4, fill: INK }, g)
+    S('path', { d: 'M-8,12 Q0,7 8,12', fill: 'none', stroke: INK, 'stroke-width': 3.5, 'stroke-linecap': 'round' }, g)
+    return { g, tail, x, y, r, i }
+  })
+  const spores = Array.from({ length: 14 }, (_, i) => ({ e: S('circle', { r: 5 + hash(i + 900) * 5, fill: '#c4b5fd', stroke: INK, 'stroke-width': 2 }, sw), i }))
+
+  const frost = css(el('div', 'abs', root), { ...full, background: '#eef6ef' })
+
+  // ---- beat 1: the careful neighbour's phone shows the crop disease risk of his soil: corn high, sugar beet low
+  const cornIcon = `<svg width="54" height="64" viewBox="-27 -34 54 64"><path d="M-16,26 C-30,6 -26,-22 0,-32 C26,-22 30,6 16,26Z" fill="#ffd84a" stroke="${INK}" stroke-width="3.5"/>
+    <path d="M-20,28 C-30,10 -26,-6 -20,-14 C-16,4 -8,18 2,28Z M20,28 C30,10 26,-6 20,-14 C16,4 8,18 -2,28Z" fill="#58b043" stroke="${INK}" stroke-width="3.5" stroke-linejoin="round"/></svg>`
+  const beetIcon = `<svg width="54" height="64" viewBox="-27 -34 54 64"><path d="M-4,-12 C-16,-24 -18,-34 -8,-38 C0,-34 0,-22 -4,-12Z M4,-12 C14,-26 22,-32 26,-26 C22,-16 12,-12 4,-12Z M0,-12 C-2,-26 2,-38 8,-40" fill="#5cb84a" stroke="${INK}" stroke-width="2.5" stroke-linejoin="round"/>
+    <path d="M0,-14 C18,-14 22,-2 18,10 C14,20 6,26 1,34 C-4,26 -14,20 -18,10 C-22,-2 -18,-14 0,-14Z" fill="#f6f0de" stroke="${INK}" stroke-width="3" stroke-linejoin="round"/></svg>`
+  const rcard = el('div', 'rcard', root, `<div class="hd"><img src="brand/terranos.png"><b>Crop disease risk</b></div>
+    <div class="lab">Your plot · soil fungi scored for each crop</div>
+    <div class="row bad"><span class="ic">${cornIcon}</span><span class="nm">Corn</span><span class="cell">Higher risk</span><i class="ring"></i></div>
+    <div class="row good"><span class="ic">${beetIcon}</span><span class="nm">Sugar beet</span><span class="cell">Lower risk</span><i class="ring"></i><span class="tick">✓</span></div>
+    <div class="key"><i style="background:#1f7a45"></i>lower risk <i style="background:#c0262d;margin-left:18px"></i>higher risk</div>`)
+  const [ringC, ringW] = rcard.querySelectorAll('.ring'), tick = rcard.querySelector('.tick')
+  const RC_X = 1010, RC_Y = 250
+
+  // ---- beat 6: the Treatment plan on the neighbour's phone
+  const PX = 1150, PY = 160, ZOOM = 1.45
+  const PL = R.plan, item = PL.planItem[0], buy = PL.buyNow[0], TS = 488 / item[2], TILE_Y = 208
+  const phone = el('div', 'phone', root, `<div class="screen"><div class="appbar"><img src="brand/terranos.png"></div>
+    <div class="ptabs"><span>Crop disease risk</span><span>Greenness</span><b>Treatment plan</b></div><div class="crop">Corn · products to consider</div></div><div class="notch"></div>`)
+  const screen = phone.querySelector('.screen')
+  place(tile(screen, 'plan', item, TS), 12, TILE_Y); place(tile(screen, 'plan', PL.planItem[1], TS), 12, TILE_Y + item[3] * TS + 12)
+  const BUY = [12 + (buy[0] - item[0]) * TS, TILE_Y + (buy[1] - item[1]) * TS, buy[2] * TS, buy[3] * TS]  // in screen px
+  const tapRing = el('div', 'tapring', screen)
+  const ordered = el('div', 'ordered', screen, 'Ordered ✓'); css(ordered, { width: BUY[2] + 8 + 'px', height: BUY[3] + 6 + 'px' })
+  const toast = el('div', 'toast', screen, '<span>✓</span>Order placed · arriving today')
+  // overlay: the link from the phone to the risk card, and the tapping hand (fingertip at the origin)
+  const over = svgLayer(root)
+  const link = S('path', { fill: 'none', stroke: '#1f6f43', 'stroke-width': 5, 'stroke-dasharray': '4 14', 'stroke-linecap': 'round' }, over)
+  const hand = S('g', {}, over), handIn = S('g', { transform: 'rotate(-30) scale(1.25)' }, hand)
+  S('rect', { x: -30, y: 150, width: 104, height: 420, fill: '#e2573f', ...OUT }, handIn)
+  S('rect', { x: -36, y: 136, width: 116, height: 34, rx: 12, fill: '#c94a36', ...OUT }, handIn)
+  S('rect', { x: -24, y: 62, width: 92, height: 88, rx: 30, fill: '#f6c9a2', ...OUT }, handIn)
+  S('rect', { x: -14, y: 0, width: 30, height: 104, rx: 15, fill: '#f6c9a2', ...OUT }, handIn)
+  S('path', { d: 'M-22,104 C-44,96 -46,128 -26,134', fill: '#f6c9a2', ...OUT }, handIn)
+  S('path', { d: 'M22,82 q14,-6 24,2 M24,104 h40', fill: 'none', stroke: INK, 'stroke-width': 4, 'stroke-linecap': 'round' }, handIn)
+
+
+  const blinkAt = (t, off) => bump((t + off) % 2.7, 0, 0.16)
+  const CHEER = 58.12  // jumps land on the beats 58.5, 59.0, 59.5, 60.0
+  const hop = (t, lag = 0) => (t >= CHEER + lag ? bump((t - CHEER - lag) % 0.5, 0, 0.38) : 0)
+  const cheerSquash = (t, lag) => (t >= CHEER + lag ? 0.08 * hop(t, lag) - 0.16 * bump((t - CHEER - lag) % 0.5, 0.38, 0.12) : 0)
+  /** A seed thrown from (x0, y0) that lands at x1 between a and b. */
+  const toss = (e, t, a, b, x0, y0, x1) => {
+    const p = prog(t, a, b)
+    at(e, { opacity: p > 0 && p < 1 ? 1 : 0 })
+    tf(e, `translate(${lerp(x0, x1, p)},${lerp(y0, GROUND - 8, p) - 150 * Math.sin(Math.PI * p)}) rotate(${p * 540}) scale(1.5)`)
+  }
+  const flyClods = (cs, t, a, x, reach) => cs.forEach((c, i) => {
+    const p = prog(t, a, a + 0.65), k = (i - (cs.length - 1) / 2) / ((cs.length - 1) / 2)
+    at(c, { cx: x + k * reach * p, cy: GROUND - 10 - (190 + hash(i) * 110) * Math.sin(Math.PI * p) * (1 - 0.3 * Math.abs(k)), r: 5 + hash(i + 5) * 6, opacity: p > 0 && p < 1 ? 1 : 0 })
+  })
+
+  return (t) => {
+    // ---- mood and camera
+    const sick = kf(t, [[49.8, 0], [50.5, 1], [57.92, 1], [58.45, 0]])
+    const [cx, cy, z] = kf(t, [[38, [960, 600, 1.05]], [38.9, [960, 600, 1]], [39.05, [960, 600, 1]], [39.6, [550, 615, 1.32]], [41.3, [550, 615, 1.32]],
+      [41.8, [960, 590, 1]], [42.15, [960, 590, 1]], [42.65, [440, 620, 1.25]], [45.05, [440, 620, 1.25]], [45.6, [1440, 610, 1.2]], [48.05, [1440, 610, 1.2]],
+      [48.45, [1300, 935, 3.4]], [49.55, [1300, 935, 3.4]], [50.0, [1420, 600, 1.25]], [51.3, [1420, 600, 1.25]], [51.8, [1090, 590, 1]], [57.3, [1090, 590, 1]], [57.7, [1080, 570, 1]], [60, [1080, 565, 1.06]]])
+    tf(mid, `translate(960,540) scale(${z}) translate(${-cx},${-cy})`)
+    const PAR = 0.3
+    const zf = 1 + (z - 1) * PAR, cxf = 960 + (cx - 960) * PAR, cyf = 540 + (cy - 540) * PAR
+    tf(far, `translate(960,540) scale(${zf}) translate(${-cxf},${-cyf})`)
+    const toScreen = (x, y) => [960 + (x - cx) * z, 540 + (y - cy) * z]
+    const toFar = (x, y) => { const [sx, sy] = toScreen(x, y); return [(sx - 960) / zf + cxf, (sy - 540) / zf + cyf] }
+    for (const c of clouds) { tf(c.g, `translate(${c.x + (t - 38) * 9},${c.y}) scale(${c.s})`); c.g.setAttribute('fill', '#fff') }
+
+    // ---- the careful neighbour (A): walks in, checks the risk on his phone, plants beet, is amazed, later shows the app across the fence
+    const aWalk = Math.max(1 - prog(t, 38.85, 38.98), life(t, 51.4, 52.4, 0.08, 0.1))
+    const ax = kf(t, [[38, -60], [38.95, 300], [51.4, 300], [52.4, 860]], E.lin), aph = ax / 20, aSwing = 26 * Math.sin(aph) * aWalk
+    const aSur = life(t, 43.37, 44.4, 0.08, 0.3), aLaugh = t >= 43.95 && t < 44.8, aConcern = life(t, 50.0, 51.5, 0.4, 0.3)
+    const aCheer = prog(t, 57.95, 58.15), aJump = hop(t, 0.1), aTalk = t >= 52.5 && t < 53.4
+    const aWave = life(t, 44.45, 45.0, 0.12, 0.12)
+    const aHf = kf(t, [[38, [-42, -124]], [39.05, [-42, -124]], [39.4, [62, -252]], [41.3, [62, -252]], [41.6, [-42, -124]], [43.32, [-42, -124]], [43.48, [-118, -318]],
+      [43.92, [-110, -300]], [44.32, [-42, -130]], [52.2, [-42, -130]], [52.5, [124, -296]], [53.45, [124, -296]], [53.75, [-42, -124]], [57.9, [-42, -124]], [58.1, [-78, -338]]])
+    const aHb = kf(t, [[38, [66, -150]], [42.05, [66, -150]], [42.18, [100, -318]], [42.3, [134, -232]], [42.5, [54, -126]], [43.32, [54, -126]], [43.48, [128, -310]],
+      [43.92, [120, -296]], [44.32, [54, -126]], [44.45, [54, -126]], [44.6, [106, -322]], [44.9, [106, -322]], [45.05, [54, -126]], [57.9, [54, -126]], [58.1, [106, -338]]])
+    const aMouth = t >= 57.95 ? [20, 5, 20, 0.2] : aTalk ? [12, 4, 6 + 10 * Math.abs(Math.sin(t * 13)), 0.3] : t >= 50.0 && t < 51.5 ? [11, -5, 0]
+      : t >= 44.8 ? [15, 7, 0] : aLaugh ? [18, 6, 13 + 5 * Math.sin(t * 22), 0.25] : t >= 43.37 ? [11, 0, 25, 1] : [16, 9, 0]
+    const aHand = smart({ ...POSE,
+      x: ax, face: 1, walk: aWalk, ph: aph,
+      y: -95 * bump(t, 43.37, 0.45) - 78 * aJump,
+      sy: 1 - 0.16 * bump(t, 43.24, 0.14) + 0.1 * bump(t, 43.38, 0.3) - 0.2 * bump(t, 43.82, 0.24) + cheerSquash(t, 0.1),
+      lean: kf(t, [[38, 4], [38.95, 0], [39.4, 5], [41.3, 5], [41.6, 0], [42.18, -6], [42.3, 10], [42.5, 0], [43.32, 0], [43.44, -14], [43.92, -8], [44.4, 0],
+        [52.3, 0], [52.5, 8], [53.45, 8], [53.75, 0]]),
+      hf: [aHf[0] - aSwing, aHf[1]], hb: [aHb[0] + aSwing * 0.5 + 14 * Math.sin(t * 20) * aWave + 8 * Math.sin(t * 13) * aCheer, aHb[1]],
+      bag: t < 42.32, phone: true,
+      head: kf(t, [[38, 0], [39.4, 8], [40.8, 8], [40.95, 16], [41.1, 4], [41.3, 8], [41.6, 0], [43.32, 0], [43.44, -14], [44.6, -10], [45.0, 0], [52.5, -4]]) + 4 * Math.sin(t * 13) * aCheer,
+      look: kf(t, [[38, [0.6, 0]], [39.4, [0.8, 0.6]], [41.3, [0.8, 0.6]], [41.6, [0.6, 0.1]], [42.3, [0.8, 0.5]], [43.37, [0.6, -0.6]], [44.4, [0.6, -0.5]], [45.2, [0.8, 0]],
+        [50.0, [0.9, 0.1]], [52.5, [0.9, -0.1]], [57.9, [0.9, 0.1]], [58.2, [0.6, -0.5]]]),
+      blink: Math.max(blinkAt(t, 0.9), 0.25 * aConcern), eye: 1 + 0.35 * aSur + 0.1 * life(t, 57.76, 58.1, 0.06, 0.2),
+      joy: aLaugh || (t >= 40.92 && t < 41.25), browL: 12 * aSur + 6 * aCheer + 4 * aConcern, browA: 14 * aConcern,
+      mouth: aMouth, mou: 9 * Math.sin(t * 34) * life(t, 43.37, 44.1, 0.05, 0.4),
+      hatY: -(150 * bump(t, 43.39, 0.75) + 26 * aJump) - 4 * Math.abs(Math.sin(aph - 0.6)) * aWalk, hatR: 22 * Math.sin(2 * Math.PI * prog(t, 43.39, 44.14)),
+    })
+    at(shockA, { opacity: life(t, 43.4, 43.87, 0.06, 0.2) }); tf(shockA, `translate(${ax + 6},${GROUND - 500 - 95 * bump(t, 43.37, 0.45) * 0.4}) scale(${0.7 + 0.5 * E.out3(prog(t, 43.4, 43.62))})`)
+
+    // ---- the other neighbour (B), facing left: shrugs the app off, plants corn, worries, finally listens and buys
+    const bWalk = 1 - prog(t, 38.85, 38.98)
+    const bx = kf(t, [[38, 1840], [38.95, 1600]], E.lin), bph = bx / 20, bSwing = 26 * Math.sin(bph) * bWalk
+    const shrug = life(t, 41.5, 42.35, 0.15, 0.15), bWorried = Math.max(life(t, 50.0, 53.42, 0.4, 0.05), 0.5 * life(t, 54.1, 55.85, 0.2, 0.1))
+    const bShock = life(t, 51.0, 51.4, 0.08, 0.2), bCheer = prog(t, 57.95, 58.15), bJump = hop(t)
+    const bTremble = bWorried * (1 - bShock) * Math.sin(t * 34) * 2
+    const bHf = kf(t, [[38, [-42, -124]], [41.5, [-42, -124]], [41.68, [-96, -262]], [42.15, [-96, -262]], [42.35, [-42, -124]], [50.0, [-42, -130]], [50.6, [14, -204]],
+      [50.98, [14, -204]], [51.1, [-14, -284]], [51.4, [-14, -284]], [53.3, [-42, -130]], [53.5, [-58, -342]], [53.9, [-58, -342]], [54.08, [-8, -160]], [54.36, [70, -262]],
+      [56.95, [70, -262]], [57.25, [-42, -124]], [57.5, [-42, -124]], [57.8, [-72, -300]], [58.1, [-78, -338]]])
+    const bHb = kf(t, [[38, [66, -150]], [41.5, [66, -150]], [41.68, [112, -262]], [42.15, [112, -262]], [42.35, [66, -150]], [45.55, [66, -150]], [45.68, [100, -318]],
+      [45.8, [134, -232]], [46.0, [54, -126]], [50.0, [54, -126]], [50.6, [36, -208]], [50.98, [36, -208]], [51.1, [72, -286]], [51.4, [72, -286]], [51.6, [54, -140]],
+      [55.3, [54, -140]], [55.7, [96, -246]], [55.85, [84, -262]], [56.0, [96, -244]], [56.3, [54, -126]], [57.5, [54, -126]], [57.8, [112, -296]], [58.1, [106, -338]]])
+    const bMouth = t >= 57.95 ? [20, 5, 20, 0.2] : t >= 57.45 ? [8, 0, 11, 1] : t >= 55.9 ? [17, 8, 9, 0.2] : t >= 54.1 ? [9, 2, 0] : t >= 53.45 ? [17, 6, 13, 0.25]
+      : t >= 51.4 ? [13, -8, 0] : t >= 51.0 ? [10, 0, 18, 1] : t >= 50.0 ? [13, -8, 0] : t >= 47.3 ? [18, 7, 0] : t >= 42.35 ? [16, 9, 0]
+      : t >= 41.5 ? [9, 0, 7 + 3 * Math.sin(t * 30), 1] : [16, 9, 0]
+    const handPos = neigh({ ...POSE,
+      x: bx, face: -1, walk: bWalk, ph: bph,
+      y: -26 * bump(t, 51.02, 0.25) - 36 * bump(t, 57.78, 0.26) - 78 * bJump,
+      sy: 1 - 0.1 * bump(t, 58.04, 0.16) + cheerSquash(t, 0),
+      lean: kf(t, [[38, 4], [38.95, 0], [41.5, 0], [41.68, -6], [42.15, -6], [42.35, 0], [45.55, 0], [45.68, -12], [45.82, 16], [46.05, 4], [46.3, 0], [50.0, 0],
+        [50.6, 6], [51.4, 6], [51.6, 0], [53.4, 0], [53.6, -6], [53.9, 0], [57.4, 0], [57.6, -6], [57.9, 0]]),
+      hf: [bHf[0] - bSwing, bHf[1] + bTremble], hb: [bHb[0] + bSwing * 0.5 + 8 * Math.sin(t * 13) * bCheer, bHb[1] - bTremble],
+      bag: t < 45.84, phone: t >= 54.1 && t < 57.2,
+      head: kf(t, [[38, 0], [41.5, 0], [41.68, -8], [42.25, -8], [42.45, 0], [45.9, 12], [46.3, 0], [47.3, -6], [50.0, 0], [50.6, -10], [51.6, -8], [52.4, 0],
+        [53.3, -4], [53.5, -14], [53.9, -8], [54.3, 6], [56.2, 6], [56.5, -8], [57.3, -8], [57.5, -18], [57.72, -18], [57.85, 8], [58.1, -6]])
+        + 11 * Math.sin(t * 24) * shrug + 4 * Math.sin(t * 13) * bCheer,
+      look: kf(t, [[38, [0.6, 0.1]], [41.4, [0.6, 0.1]], [41.6, [0.2, -0.5]], [42.3, [0.2, -0.5]], [42.5, [0.9, 0]], [45.2, [0.9, 0]], [45.5, [0.7, 0.5]], [46.3, [0.8, 0.7]],
+        [47.0, [0.6, -0.6]], [48.6, [0.6, 0.2]], [51.6, [0.6, 0.2]], [52.2, [0.9, -0.1]], [53.3, [0.9, -0.1]], [53.5, [0.3, -0.9]], [53.9, [0.4, -0.9]], [54.3, [0.75, 0.2]],
+        [56.2, [0.75, 0.2]], [56.5, [0.6, -0.5]], [57.3, [0.5, -0.5]], [57.5, [0.3, -0.9]], [57.72, [0.4, -0.9]], [57.8, [0.6, 0.7]], [58.15, [0.6, -0.5]]]),
+      blink: Math.max(blinkAt(t, 1.7), 0.3 * bWorried, 0.45 * shrug), eye: 1 + 0.22 * bShock + 0.15 * life(t, 57.76, 58.1, 0.06, 0.2) + 0.15 * life(t, 53.45, 53.9, 0.06, 0.2),
+      joy: t >= 47.35 && t < 47.95, browL: 6 * bWorried + 8 * bShock + 6 * bCheer + 10 * shrug, browA: 18 * bWorried - 6 * shrug,
+      mouth: bMouth, hatY: -(190 * bump(t, 58.62, 0.86) + 26 * hop(t, 0.07) * (t < 58.6 || t > 59.5 ? 1 : 0) + 20 * bump(t, 57.82, 0.3)) - 4 * Math.abs(Math.sin(bph - 0.6)) * bWalk,
+      hatR: 360 * E.inout3(prog(t, 58.66, 59.44)),
+    })
+    at(shockB, { opacity: life(t, 51.02, 51.45, 0.06, 0.2) }); tf(shockB, `translate(${bx - 6},${GROUND - 500}) scale(${0.7 + 0.5 * E.out3(prog(t, 51.02, 51.2))})`)
+    const bl = life(t, 53.45, 54.1, 0.25, 0.15, E.outBack)
+    at(bulbG, { opacity: clamp(bl * 3) }); tf(bulbG, `translate(${bx - 14},${GROUND - 510}) scale(${Math.max(0, bl) * 0.9}) rotate(${4 * Math.sin(t * 12)})`)
+
+    // ---- seeds, mounds, sprouts
+    toss(seedW, t, 42.3, 42.62, ax + 110, GROUND - 250, BEET_X); puffSeedW(t, 42.62, BEET_X, GROUND - 6, 50, 0.4, 11); moundW(t, 42.62, 43.0)
+    toss(seedC, t, 45.82, 46.14, bx - 110, GROUND - 250, CORN_X); puffSeedC(t, 46.14, CORN_X, GROUND - 6, 50, 0.4, 11); moundC(t, 46.14, 46.72)
+    sproutW(t, 42.64, 0.5, BEET_X, -0.75); sproutC(t, 46.16, 0.7, CORN_X, 0.75)
+
+    // ---- the beet: shoots up at once, waves at its farmer, worries for the corn, cheers at the end
+    const wGrown = prog(t, 43.12, 43.7), wtw = Math.max(0, t - 43.7), wSpring = t > 43.7 ? 1 : 0
+    const wWave = life(t, 44.2, 45.1, 0.2, 0.25), wWorry = life(t, 50.0, 51.6, 0.4, 0.3), wHappy = prog(t, 58.1, 58.5), wBop = wHappy * Math.sin((t - 58) * 2 * Math.PI + 1)
+    const wArm = (sd) => {
+      if (t < 44.15) return kf(t, [[43.12, [86, 44]], [43.4, [-64, -16]], [43.7, [-20, 30]], [43.9, [40, 10]], [44.15, [28, 18]]])
+      if (t >= 57.75) { const k = E.outBack(prog(t, 57.95, 58.4)); return [lerp(28, -56 + 16 * Math.sin((t - 58) * 4 * Math.PI + sd + 1), k), lerp(18, -4 + 14 * Math.sin((t - 58) * 4 * Math.PI + sd), k)] }
+      const base = [28 + 3 * Math.sin(t * 2 + sd) + 14 * wWorry * (sd > 0 ? 1 : 0.3), 18 + 10 * wWorry]
+      if (sd < 0 && wWave > 0) return [lerp(base[0], -52 + 24 * Math.sin(t * 12), wWave), lerp(base[1], 6 + 16 * Math.sin(t * 12 - 1.2), wWave)]
+      return base
+    }
+    beet({
+      s: t < 43.12 ? 0 : 0.12 + 0.88 * E.out3(wGrown), dx: 0,
+      sy: (t < 44.4 ? kf(t, [[43.12, 0.6], [43.37, 1.26], [43.7, 1.1], [43.85, 0.9], [44.0, 1.06], [44.17, 0.97], [44.35, 1]]) : 1) + cheerSquash(t, 0.06),
+      y: -46 * hop(t, 0.06),
+      lean: 8 * Math.exp(-3.5 * wtw) * Math.sin(15 * wtw) * wSpring + 4 * wBop + 1.5 * Math.sin(t * 1.9),
+      head: 6 * Math.exp(-3 * wtw) * Math.sin(15 * wtw - 1) * wSpring - 7 * wWave + 6 * wBop + 6 * wWorry,
+      sway: 3 * Math.sin(t * 2.3) + 10 * wBop, armL: wArm(-1), armR: wArm(1),
+      awn: 6 * Math.sin(t * 2.6) + 40 * Math.exp(-3 * wtw) * Math.sin(13 * wtw) * wSpring - 26 * (1 - wGrown) + 16 * Math.sin((t - 58.1) * 2 * Math.PI) * wHappy,
+      look: kf(t, [[43.7, [0, -0.3]], [44.0, [-0.7, 0.4]], [45.2, [-0.7, 0.4]], [45.6, [0.7, 0.2]], [50.0, [0.75, 0.3]], [52.4, [0.75, 0.3]], [52.7, [0.6, -0.2]], [57.5, [0.6, -0.2]],
+        [57.7, [0.7, -0.7]], [58.1, [0.2, 0.3]]]),
+      blink: blinkAt(t, 0.5), eye: 1 + 0.15 * life(t, 43.2, 44.0, 0.1, 0.3),
+      joy: t >= 58.5 || (t >= 44.5 && t < 45.0), browL: 8 * life(t, 43.2, 44.0, 0.1, 0.3) + 6 * wHappy, browA: 16 * wWorry,
+      mouth: t >= 57.95 ? [27, 8, 24 + 3 * Math.sin(t * 12), 0.15] : wWorry > 0.3 ? [12, -4, 0] : t >= 43.75 ? [24, 9, 11, 0.15] : [20, 4, 22, 0.5],
+    })
+    puffGrowW(t, 43.12, BEET_X, GROUND - 4, 130, 0.6, 20); flyClods(clodsW, t, 43.12, BEET_X, 190)
+
+    // ---- the corn: grows normally, falls ill, recovers when the parcel lands
+    const grown = prog(t, 46.85, 47.4), tw = Math.max(0, t - 47.4), cSpring = t > 47.4 ? 1 : 0
+    const happy = prog(t, 58.1, 58.5)
+    const shiver = sick * (0.35 + 0.65 * bump((t - 50.5) % 1.3, 0, 0.7)) * (t > 50.5 && t < 57.75 ? 1 : 0)
+    const cJump = hop(t, 0.03), bop = happy * Math.sin((t - 58) * 2 * Math.PI)
+    const armPose = (sd) => {
+      if (t < 47.65) return kf(t, [[46.85, [86, 44]], [47.1, [-64, -16]], [47.35, [-20, 30]], [47.5, [40, 10]], [47.65, [28, 18]]])
+      if (t >= 57.75) { const k = E.outBack(prog(t, 57.95, 58.4)); return [lerp(62, -56 + 16 * Math.sin((t - 58) * 4 * Math.PI + sd), k), lerp(46, -4 + 14 * Math.sin((t - 58) * 4 * Math.PI + sd - 1), k)] }
+      return [lerp(28 + 3 * Math.sin(t * 2 + sd), 62, sick) + shiver * 3 * Math.sin(t * 38 + sd), lerp(18, 46, sick)]
+    }
+    const tp = prog(t, 57.86, 58.45)
+    corn({
+      s: t < 46.85 ? 0 : 0.12 + 0.88 * E.out3(grown), dx: shiver * 2.2 * Math.sin(t * 41),
+      sy: (t < 47.9 ? kf(t, [[46.85, 0.6], [47.1, 1.18], [47.4, 1.08], [47.55, 0.94], [47.7, 1.03], [47.85, 1]]) : 1) - 0.07 * bump(t, 57.76, 0.2)
+        + 0.14 * bump(t, 58.0, 0.3) + cheerSquash(t, 0.03),
+      y: -46 * cJump - 18 * bump(t, 57.78, 0.22),
+      lean: -6 * sick + 6 * Math.exp(-3.5 * tw) * Math.sin(15 * tw) * cSpring + 5 * bop + 1.2 * Math.sin(t * 1.7) * sick,
+      head: -13 * sick + 4 * Math.exp(-3 * tw) * Math.sin(15 * tw - 1) * cSpring + 6 * bop + 2 * Math.sin(t * 1.7 - 0.8) * sick,
+      sick, sway: 3 * Math.sin(t * 2.1) + 10 * bop, armL: armPose(-1), armR: armPose(1),
+      silk: 9 * Math.sin(t * 2.3) + 36 * Math.exp(-3 * tw) * Math.sin(13 * tw) * cSpring - 30 * (1 - grown) + 22 * Math.sin((t - 58.1) * 2 * Math.PI) * happy,
+      look: kf(t, [[47.4, [0, -0.2]], [47.7, [0.65, 0.5]], [47.95, [0.65, 0.5]], [48.05, [0, 0.95]], [50.0, [0, 0.95]], [50.4, [0.2, 0.8]], [52.3, [0.2, 0.8]], [52.6, [-0.7, 0.3]], [54.0, [-0.7, 0.3]], [54.3, [0.7, 0.45]],
+        [57.3, [0.7, 0.45]], [57.5, [-0.5, -0.8]], [57.72, [-0.5, -0.8]], [57.8, [-0.8, 0.7]], [58.1, [0, 0.3]]]),
+      blink: Math.max(blinkAt(t, 0), 0.48 * sick * (1 - bump(t, 57.76, 0.3))), eye: 1 + 0.2 * bump(t, 57.76, 0.4) + 0.12 * life(t, 46.9, 47.6, 0.1, 0.3),
+      joy: t >= 58.5 || (t >= 47.45 && t < 47.95), browL: 6 * life(t, 46.9, 47.6, 0.1, 0.3) + 6 * happy - 2 * sick, browA: 20 * sick,
+      mouth: t >= 57.95 ? [27, 8, 24 + 3 * Math.sin(t * 12), 0.15] : t >= 57.76 ? [9, 0, 12, 1] : t >= 50.4 ? [11, -4, 0] : t >= 47.98 ? [15, -9, 0]
+        : t >= 47.4 ? [24, 9, 11, 0.15] : [20, 4, 22, 0.5],
+      blush: 0.5 * life(t, 51.0, 57.9, 0.2, 0.3), vein: prog(t, 49.8, 50.7) * (1 - prog(t, 57.92, 58.4)),
+      thermo: t >= 50.25 && t < 58.45 ? 1 - E.in3(prog(t, 58.2, 58.45)) : 0, merc: E.inout3(prog(t, 50.4, 51.0)), hot: life(t, 51.0, 51.6, 0.15, 0.3, E.outBack),
+      thermoAt: [430 * tp, -150 * Math.sin(Math.PI * tp * 0.8) + 260 * tp * tp + 3 * shiver * Math.sin(t * 40), 520 * tp],
+    })
+    puffGrowC(t, 46.85, CORN_X, GROUND - 4, 110, 0.6, 18); flyClods(clodsC, t, 46.85, CORN_X, 150)
+    // a leaf lets go
+    const lf = prog(t, 50.6, 51.9)
+    at(fallLeaf, { opacity: t >= 50.6 ? 1 - prog(t, 57.95, 58.3) : 0 })
+    tf(fallLeaf, `translate(${CORN_X - 96 - 70 * lf + 34 * Math.sin(lf * 9) * (1 - lf)},${lerp(GROUND - 170, GROUND + 22, E.in3(lf) * 0.4 + lf * 0.6)}) rotate(${150 + 40 * Math.sin(lf * 9) * (1 - lf) + 30 * lf})`)
+
+    // ---- the parcel and what is in it
+    const bp = prog(t, 57.38, 57.75)
+    if (show(box, t >= 57.38)) {
+      const bs = kf(t, [[57.75, 0.66], [57.9, 1.14], [58.05, 1]])
+      tf(box, `translate(${BOX_X},${lerp(GROUND - 1000, GROUND + 16, E.in3(bp))}) rotate(${14 * (1 - bp)})`)
+      tf(boxIn, `scale(${1 / Math.sqrt(bs)},${bs})`)
+      const open = E.outBack(prog(t, 57.88, 58.2))
+      flaps.forEach((f, i) => tf(f, `translate(${i ? 58 : -58},-88) scale(${i ? -1 : 1},1) rotate(${-142 * open})`))
+    }
+    puffBox(t, 57.75, BOX_X, GROUND + 14, 120, 0.5, 18)
+    grains.forEach((g, i) => {
+      const p = prog(t, 57.95 + i * 0.035, 58.4 + i * 0.035), x1 = CORN_X - 40 + hash(i) * 80
+      at(g, { cx: lerp(BOX_X, x1, p), cy: lerp(GROUND - 90, GROUND - 6, p) - (150 + hash(i + 3) * 120) * Math.sin(Math.PI * p), opacity: p > 0 && p < 1 ? 1 : 0 })
+    })
+    at(rays, { opacity: 0.5 * prog(t, 58.1, 58.6) })
+    tf(rays, `translate(${toFar(CORN_X, GROUND - 400).join(',')}) rotate(${(t - 58) * 14}) scale(${0.4 + 0.6 * E.outBack(prog(t, 58.1, 58.7))})`)
+    stars.forEach((s, i) => {
+      const a = i * 2.39996, born = 58.05 + (i % 8) * 0.06, p = prog(t, born, born + 0.4)
+      const rx = (170 + hash(i) * 150) * (Math.cos(a) < 0 ? 0.55 : 1), ry = 210 + hash(i + 20) * 150, tw2 = 0.55 + 0.45 * Math.sin(t * 9 + i * 1.7)
+      at(s, { opacity: p > 0 ? 1 : 0 })
+      tf(s, `translate(${CORN_X + Math.cos(a) * rx * E.out3(p)},${GROUND - 330 + Math.sin(a) * ry * E.out3(p) - 14 * (t - born)}) rotate(${t * 40 + i * 30}) scale(${E.outBack(p) * tw2 * (0.9 + hash(i + 40) * 0.9)})`)
+    })
+
+    // ---- under the corn: fade in as the camera dives, the fungus wakes up, the roots turn red, fade out as it pulls back
+    const sIn = E.out3(prog(t, 48.2, 48.45)), sOut = E.in3(prog(t, 49.55, 49.8))
+    if (show(soil, t >= 48.2 && t < 49.8)) {
+      soil.style.opacity = sIn * (1 - sOut)
+      tf(sw, `translate(960,540) scale(${(1.3 - 0.3 * E.out3(prog(t, 48.2, 48.8))) * (1 - 0.25 * sOut)}) translate(-960,-540)`)
+      const fp = E.outBack(prog(t, 48.45, 48.8)), laugh = life(t, 48.85, 49.35, 0.08, 0.15)
+      tf(fung, `translate(${FX + 4 * Math.sin(t * 40) * laugh},${FY}) scale(${Math.max(0.01, fp) * 1.45 * (1 + 0.04 * Math.sin(t * 6))}) rotate(${6 * Math.sin(t * 3)})`)
+      at(glow, { opacity: clamp(fp) * (0.7 + 0.3 * Math.sin(t * 9)) })
+      const look = t < 48.9 ? [-0.5, -0.5] : [-0.7, -0.3]
+      fEyes.forEach((e) => at(e, { cx: look[0] * 11, cy: look[1] * 6 }))
+      const o = 10 + 22 * laugh * (0.6 + 0.4 * Math.abs(Math.sin(t * 22))), W = 50
+      jaw.setAttribute('d', `M${-W},-6 Q0,${6 + o} ${W},-6 Q0,${4 + o * 0.2} ${-W},-6Z`)
+      let tt = `M${-W + 4},-5`
+      for (let k = 0; k < 6; k++) { const x0 = -W + 4 + k * ((2 * W - 8) / 6), x1 = x0 + (2 * W - 8) / 6; tt += ` L${(x0 + x1) / 2},${6 + o * 0.25} L${x1},-4` }
+      teeth.setAttribute('d', tt + 'Z')
+      const hp = E.inout3(prog(t, 48.6, 49.1))
+      hyphae.forEach((h, i) => at(h, { 'stroke-dasharray': `${clamp(hp * 1.3 - i * 0.04)} 1` }))
+      const rp = E.inout3(prog(t, 48.95, 49.6))
+      sickRoots.forEach((e, i) => at(e, { 'stroke-dasharray': `${clamp(rp * 1.25 - (i % 3) * 0.08)} 1`, visibility: rp > 0 ? 'visible' : 'hidden' }))
+      for (const b of bact) {
+        const p = E.outBack(prog(t, 48.5 + b.i * 0.07, 48.85 + b.i * 0.07)), w = t * 7 + b.i
+        tf(b.g, `translate(${b.x + 14 * Math.sin(t * 2 + b.i)},${b.y + 10 * Math.cos(t * 2.4 + b.i)}) rotate(${b.r + 8 * Math.sin(t * 5 + b.i)}) scale(${Math.max(0.01, p) * 1.6})`)
+        b.tail.setAttribute('d', `M40,0 C60,${18 * Math.sin(w)} 74,${-18 * Math.sin(w)} 96,${14 * Math.sin(w + 1)}`)
+      }
+      for (const sp of spores) {
+        const q = ((t - 48.5) * 0.6 + hash(sp.i + 950)) % 1, a = hash(sp.i + 960) * 2 * Math.PI
+        at(sp.e, { cx: FX + Math.cos(a) * 90 + (lerp(FX, 960, q) - FX) * 0.9, cy: FY + Math.sin(a) * 70 + (lerp(FY, 400, q) - FY) * 0.9, opacity: t > 48.6 ? 0.85 * (1 - q) : 0 })
+      }
+    }
+    at(footGlow, { opacity: prog(t, 49.8, 50.3) * (1 - prog(t, 57.92, 58.3)) * (0.65 + 0.35 * Math.sin(t * 7)) })
+
+    // ---- the risk card, linked to the careful neighbour's phone
+    const rIn = E.outBack(prog(t, 39.45, 39.95)), rOut = E.in3(prog(t, 41.1, 41.4))
+    if (show(rcard, t >= 39.45 && t < 41.4)) {
+      rcard.style.opacity = clamp(rIn * 2.5) * (1 - rOut)
+      place(rcard, RC_X + (1 - rIn) * 120, RC_Y + rOut * 60, `scale(${0.8 + 0.2 * rIn - 0.1 * rOut}) rotate(${(1 - rIn) * 3}deg)`)
+      const pc = life(t, 40.0, 41.3, 0.25, 0.2, E.outBack), pw = life(t, 40.45, 41.3, 0.25, 0.2, E.outBack)
+      css(ringC, { opacity: clamp(pc) * (0.75 + 0.25 * Math.sin(t * 16)), borderColor: '#c0262d', transform: `scale(${0.96 + 0.04 * clamp(pc)})` })
+      css(ringW, { opacity: clamp(pw), borderColor: '#1f7a45', transform: `scale(${0.96 + 0.04 * clamp(pw)})` })
+      const tk = E.outBack(prog(t, 40.7, 41.0)); css(tick, { opacity: clamp(tk * 2), transform: `scale(${tk})` })
+    }
+    const [lx, ly] = toScreen(aHand[0], aHand[1] - 30), lp = E.out3(prog(t, 39.5, 39.85)) * (1 - rOut)
+    const ex = RC_X, ey = RC_Y + 200
+    at(link, { d: `M${lx},${ly} C${lerp(lx, ex, 0.5)},${ly - 120} ${lerp(lx, ex, 0.6)},${ey} ${lerp(lx, ex, lp)},${lerp(ly, ey, lp)}`, opacity: t >= 39.5 && t < 41.4 ? lp : 0,
+      'stroke-dashoffset': -t * 40 })
+
+    // ---- frost behind the phone
+    const phIn = E.outBack(prog(t, 54.38, 54.85)), phOut = E.in3(prog(t, 56.95, 57.3))
+    frost.style.opacity = 0.55 * prog(t, 54.4, 54.8) * (1 - phOut) * 0.75
+
+    // ---- phone: the Treatment plan, and a tap on "Buy now"
+    if (show(phone, t >= 54.38 && t < 57.3)) {
+      const zoom = kf(t, [[54.95, 1], [55.45, ZOOM], [56.5, ZOOM], [56.9, 1]])
+      const [hx, hy] = toScreen(handPos[0], handPos[1] - 30)
+      const k = clamp(phIn) * (1 - phOut), s = (phIn - phOut * phIn) * zoom
+      // the phone scales about its top right corner (transform-origin), which travels from the farmer's hand to its place
+      place(phone, lerp(hx - 540, PX, k), lerp(hy, PY, k), `scale(${Math.max(0.02, s)}) rotate(${(1 - k) * -14}deg)`)
+      phone.style.opacity = clamp(k * 4)
+      const TAP = 55.85, done = t >= TAP + 0.06
+      const op = E.outBack(prog(t, TAP + 0.06, TAP + 0.36))
+      css(ordered, { opacity: done ? 1 : 0 }); place(ordered, BUY[0] - 4, BUY[1] - 3, `scale(${0.6 + 0.4 * op})`)
+      const rp = prog(t, TAP, TAP + 0.5)
+      css(tapRing, { opacity: rp > 0 && rp < 1 ? 1 - rp : 0 }); place(tapRing, BUY[0] + BUY[2] / 2, BUY[1] + BUY[3] / 2, `scale(${0.2 + E.out3(rp) * 0.9})`)
+      const tu = E.outBack(prog(t, TAP + 0.25, TAP + 0.65))
+      css(toast, { opacity: clamp(tu * 2), transform: `translateY(${(1 - tu) * 120}px)` })
+      // fingertip on the button (the phone is at rest there, only zoomed)
+      const bx2 = PX + 540 - (540 - 14 - BUY[0] - BUY[2] / 2) * zoom, by2 = PY + (14 + BUY[1] + BUY[3] / 2) * zoom
+      const hi = E.out3(prog(t, 55.25, 55.72)), ho = E.in3(prog(t, 56.2, 56.6)), press = bump(t, TAP - 0.08, 0.26)
+      at(hand, { opacity: t >= 55.25 && t < 56.6 ? 1 : 0 })
+      tf(hand, `translate(${bx2 + 8 + (1 - hi) * 300 + ho * 360 - press * 5},${by2 + 14 + (1 - hi) * 420 + ho * 520 - press * 9 + 26 * bump(t, 55.55, 0.3)}) scale(${1 - 0.05 * press})`)
+    } else at(hand, { opacity: 0 })
+  }
+})
+
+// ---------- overlays shared by all scenes ----------
+const cur = el('div', '', stage); cur.id = 'cursor'
+cur.innerHTML = '<svg viewBox="0 0 24 24" width="44" height="44"><path d="M4 2l15 11-7 1 4 8-3 1.5-4-8-5 5z" fill="#fff" stroke="#0b1a12" stroke-width="1.5" stroke-linejoin="round"/></svg>'
+const rip = el('div', '', stage); rip.id = 'ripple'
+let cursorSet = false
+/** Move the pointer along keyframes [[t, [x, y]], ...]; visible in [a, b]; clicks at the given times. */
+function cursor(t, path, a, b, clicks = []) {
+  if (t < a || t > b) return
+  cursorSet = true
+  const [x, y] = kf(t, path, E.inout3)
+  const c = clicks.find((c) => t >= c - 0.05 && t < c + 0.5)
+  const press = c != null ? 1 - 0.15 * Math.sin(Math.PI * prog(t, c - 0.05, c + 0.12)) : 1
+  css(cur, { display: 'block', opacity: life(t, a, b, 0.15, 0.15) })
+  place(cur, x - 6, y - 4, `scale(${press})`)
+  if (c != null && t >= c) {
+    const p = prog(t, c, c + 0.5)
+    css(rip, { display: 'block', opacity: 1 - p }); place(rip, x, y, `scale(${0.3 + E.out3(p) * 1.2})`)
+  }
+}
+
+const wipe = el('div', '', stage); wipe.id = 'wipe'; el('div', 'edge', wipe)
+const WIPES = [[24, '#14532d'], [32, '#1e3a5f'], [38, '#7cc25b']]  // in scene time
+const fadeOut = el('div', '', stage); css(fadeOut, { position: 'absolute', inset: '0', background: '#000', zIndex: 95, pointerEvents: 'none' })
+const progress = el('div', '', stage); progress.id = 'progress'
+
+// ---------- frame ----------
+function seek(v) {
+  v = clamp(v, 0, DURATION - 1e-6)
+  const t = sceneTime(v)
+  // background drift and the beat pulse on the dot grid run on video time, so they keep moving during a hold
+  place(blobA, -200 + Math.sin(v * 0.35) * 220, -300 + Math.cos(v * 0.27) * 160)
+  place(blobB, 1300 + Math.cos(v * 0.31) * 200, 500 + Math.sin(v * 0.4) * 160)
+  dots.style.transform = `translate(${(-v * 18) % 44}px, ${(-v * 9) % 44}px)`
+  dots.style.opacity = 0.6 + 0.4 * (1 - prog(v % 0.5, 0, 0.3))
+  fadeOut.style.opacity = 1 - E.out3(prog(v, 0, 0.35)) + E.in3(prog(v, DURATION - 0.8, DURATION))
+
+  cursorSet = false
+  css(rip, { display: 'none' })
+  for (const s of scenes) {
+    const on = t >= s.start && t < s.end
+    s.root.style.display = on ? 'block' : 'none'
+    if (on) s.update(t)
+  }
+  if (!cursorSet) cur.style.display = 'none'
+
+  // diagonal wipe across scene cuts
+  const w = WIPES.find(([b]) => Math.abs(t - b) < 0.24)
+  if (w) {
+    const p = E.inout3(prog(t, w[0] - 0.24, w[0] + 0.24))
+    css(wipe, { display: 'block', background: w[1] })
+    wipe.style.transform = `translateX(${lerp(-2900, 2100, p)}px) skewX(-14deg)`
+  } else wipe.style.display = 'none'
+  progress.style.width = (v / DURATION) * 1920 + 'px'
+}
+window.seek = seek
+window.DURATION = DURATION
+window.FPS = FPS
+
+// ---------- preview player ----------
+const ready = Promise.all([...document.images].map((i) => i.decode().catch(() => {})))
+window.ready = ready.then(() => document.fonts.ready).then(() => true)
+if (new URLSearchParams(location.search).has('render')) {
+  document.body.classList.add('render')
+} else {
+  const fit = () => { const s = Math.min(innerWidth / 1920, (innerHeight - 34) / 1080); stage.style.transform = `scale(${s})`; document.getElementById('fit').style.bottom = '34px' }
+  addEventListener('resize', fit); fit()
+  let t = Number(new URLSearchParams(location.search).get('t') ?? 0), playing = true, last = performance.now()
+  const loop = (now) => {
+    if (playing) { t += (now - last) / 1000; if (t >= DURATION) t = 0 }
+    last = now
+    seek(t)
+    document.getElementById('time').textContent = t.toFixed(2) + ' s'
+    document.getElementById('bar').style.width = (t / DURATION) * 100 + '%'
+    requestAnimationFrame(loop)
+  }
+  window.ready.then(() => requestAnimationFrame(loop))
+  addEventListener('keydown', (e) => {
+    if (e.code === 'Space') playing = !playing
+    if (e.code === 'ArrowRight') { playing = false; t = Math.min(DURATION - 0.01, t + 1 / FPS) }
+    if (e.code === 'ArrowLeft') { playing = false; t = Math.max(0, t - 1 / FPS) }
+  })
+  document.getElementById('track').addEventListener('pointerdown', (e) => {
+    const r = e.currentTarget.getBoundingClientRect(); t = ((e.clientX - r.left) / r.width) * DURATION
+  })
+}
+</script>
+</body>
+</html>

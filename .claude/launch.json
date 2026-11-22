@@ -1,0 +1,47 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "gui",
+      "runtimeExecutable": ".venv/bin/python",
+      "runtimeArgs": [
+        "scripts/12_gui.py"
+      ],
+      "port": 8000
+    },
+    {
+      "name": "gui-8001",
+      "runtimeExecutable": ".venv/bin/python",
+      "runtimeArgs": [
+        "scripts/12_gui.py",
+        "--port",
+        "8001"
+      ],
+      "port": 8001
+    },
+    {
+      "name": "gui-8004",
+      "runtimeExecutable": ".venv/bin/python",
+      "runtimeArgs": [
+        "scripts/12_gui.py",
+        "--port",
+        "8004"
+      ],
+      "port": 8004
+    },
+    {
+      "name": "deck",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8090",
+        "--bind",
+        "127.0.0.1",
+        "--directory",
+        "showcase"
+      ],
+      "port": 8090
+    }
+  ]
+}
