@@ -138,6 +138,7 @@ def _prepare_weather_axis(
     base = pd.DataFrame({"date": date_strs})
 
     w_sub = weather_df.drop_duplicates(subset=["date"], keep="last").copy()
+    w_sub["date"] = pd.to_datetime(w_sub["date"]).dt.normalize()
     w_merged = base.merge(w_sub[["date", *WEATHER_COLS]], on="date", how="left")
     for col in WEATHER_COLS:
         w_merged[col] = pd.to_numeric(w_merged[col], errors="coerce")
