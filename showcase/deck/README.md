@@ -4,14 +4,14 @@ A slide deck that runs in the browser. reveal.js handles navigation, speaker not
 
 ## Run it
 
-The screenshots in `../shots/` and the video `../terranos-showcase.mp4` are generated, so they aren't in git. On a fresh clone, start the GUI and create them first (see `../README.md`):
+The video `../terranos-showcase.mp4` (shown in the demo break) is generated, so it isn't in git. On a fresh clone, start the GUI and render it first (see `../README.md`):
 
 ```bash
 node showcase/capture.mjs http://127.0.0.1:8000
 node showcase/render.mjs
 ```
 
-Serve the `showcase` folder, not just `deck`, because the slides load the GUI screenshots from `../shots/`:
+Serve the `showcase` folder, not just `deck`, because the demo break loads `../terranos-showcase.mp4`:
 
 ```bash
 python3 -m http.server 8090 --bind 127.0.0.1 --directory showcase
@@ -19,9 +19,9 @@ python3 -m http.server 8090 --bind 127.0.0.1 --directory showcase
 
 Then open <http://127.0.0.1:8090/deck/>. In the desktop app, the `deck` entry in `.claude/launch.json` does the same thing.
 
-Opening `index.html` directly from disk also works, but the speaker view and the live demo slide behave better over http.
+Opening `index.html` directly from disk also works, but the speaker view behaves better over http.
 
-For the live demo slide, also start the GUI on port 8000 (launch config `gui`). If the GUI isn't running, that slide plays `../terranos-showcase.mp4` instead.
+The demo break plays the video with sound. It starts by itself when you arrive on the slide with a key press or click; if the browser blocks sound, it plays muted.
 
 | Key | Action |
 |---|---|
@@ -40,12 +40,27 @@ To get a PDF, open `http://127.0.0.1:8090/deck/?print-pdf` in Chromium and print
 | File | What it is |
 |---|---|
 | `index.html` | The slides. Each `<section>` is one slide |
-| `css/theme.css` | Colors, type and per-slide layout (same palette as `../video.html`) |
-| `js/data.js` | Content the animations read: data sources, sites, chart data, nitrogen cycle |
+| `css/theme.css` | Colors, type, background, logo and shared components (same palette as `../video.html`) |
+| `css/story.css` | Layout of each slide |
+| `js/data.js` | Content the animations read: sequencing cost, PubMed counts, soil groups |
 | `js/engine.js` | Connects reveal.js and GSAP: builds, plays, steps through and resets each slide's animation |
 | `js/earth.js` | The spinning Earth in the title logo (a canvas drawn with d3-geo) |
-| `js/anims/*.js` | One animation per slide type |
+| `js/anims/story.js` | Each slide's animation, and the line icons |
+| `js/anims/basic.js` | Generic `text` slide animation |
 | `vendor/` | reveal.js 6.0.2, GSAP 3.15.1, and d3-geo + topojson-client + world-atlas land outlines for the spinning Earth (copied from npm) |
+
+## Slide order
+
+| # | Section | Slides (`data-anim`) |
+|---|---|---|
+| 0 | Title | `collide`: Geoinformatics ⇒ Terranos ⇐ Bioinformatics |
+| 1 | The problem | `genomics` · `trend` (cost per genome vs papers) · `meta` (what is metagenomics) · `merge` (metagenomics + geoinformation) |
+| 2 | Goal | `goal` (sowing, fertilization, spraying → biological balance) · `timeline` (history → now → future) |
+| 3 | Data | `stack` (shotgun sequencing, NDVI, geochemistry, qPCR) |
+| 4 | Demo | `reel`: a short break that plays `../terranos-showcase.mp4` full screen |
+| 5 | Business value | `value` (personalized soil analysis = fertilizer savings) |
+| 6 | Future | `future` (agro-chemical branch, EU sustainability) |
+| | Outro | `finale` |
 
 ## How a slide animates
 
@@ -53,18 +68,16 @@ To get a PDF, open `http://127.0.0.1:8090/deck/?print-pdf` in Chromium and print
 2. Register a builder: `Deck.anim('<name>', (slide, Deck) => timeline)`. It runs every time the slide is entered. Everything it animates is reset after you leave, so each visit starts fresh.
 3. For click-by-click steps, add one empty `<i class="fragment step"></i>` per click, and put the labels `step1`, `step2`, … into the timeline. Entering the slide plays up to `step1`, and each click plays to the next label. Going back rewinds.
 
-Plain reveal.js fragments (`class="fragment fade-up"`) still work alongside these steps (see slide 2).
+Plain reveal.js fragments (`class="fragment fade-up"`) still work alongside these steps.
 
 ### Reusable slide types
 
-- **`gui`**: a browser window around a real screenshot that zooms onto captured elements. Steps use `data-focus="<rect key>:<index>"` from `../shots/rects.json` (or `all`) and an optional `data-caption`. To add a screen, capture it with `../capture.mjs`, then copy a `gui` section and change `data-shot`.
-- **`wipe`**: a before/after slider between two screenshot crops (`data-under`, `data-over`). The presenter can drag the handle.
 - **`text`**: the heading's words rise into place, followed by every element with the `.rise` class.
 
 ## Before presenting
 
 - Search for `todo` in `index.html`. Orange TODO badges mark placeholder content (they're hidden in the PDF but not on screen).
-- Slide 6 uses an **illustrative** greenness curve. Replace `DeckData.greenness` in `js/data.js` with a real plot-year.
-- Slide 8: `greenness.png` and `greenness-map.png` were captured at different map zoom levels, so the wipe doesn't line up. Capture both map layers at the same zoom.
+- The `meta` and `value` slides use **illustrative** soil shares and a schematic field (`DeckData.taxa`, `value` in `story.js`). The `trend` chart is real data (NHGRI, PubMed); re-run the PubMed counts before presenting if the date has moved on.
+- Check the room's audio for the demo break: the video has a soundtrack.
 - Rehearse on the laptop and projector you'll use. Animations only move `transform` and `opacity`, and the background avoids `filter: blur`, so it should stay smooth on modest hardware.
 - When the viewer's OS asks for reduced motion, every step jumps straight to its end state.

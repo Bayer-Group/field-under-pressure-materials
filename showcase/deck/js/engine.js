@@ -199,7 +199,8 @@
       const printing = Reveal.isPrintView?.() ?? Reveal.isPrintingPDF?.() ?? false
       if (printing) return printAll()
       driftBackground()
-      enter(e.currentSlide, true)
+      // Start the opening slide from the top; anywhere else (a reload mid-deck) jump to its end state.
+      enter(e.currentSlide, Reveal.getIndices(e.currentSlide).h !== 0)
     })
     Reveal.on('slidechanged', (e) => {
       const from = e.previousSlide ? Reveal.getIndices(e.previousSlide) : null
