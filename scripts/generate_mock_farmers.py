@@ -176,11 +176,54 @@ def split_count(ha: float, rnd: random.Random) -> int:
 
 
 # ---------------------------------------------------------------- sprays that follow how septoria is controlled
+WEATHER_SQL = """
+SELECT EXISTS (SELECT 1 FROM curated.weather_hourly_features w WHERE w.grid_id = (
+    SELECT g.grid_id FROM raw.grid_cell g, app.crop_area a WHERE a.crop_area_id = %(id)s ORDER BY g.geom <-> ST_Centroid(a.geom) LIMIT 1))
+"""
+
+
+OVERLAP_SQL = """
+SELECT EXISTS (SELECT 1 FROM app.crop_area a JOIN app.crop_area o ON o.field_id <> a.field_id AND ST_Intersects(o.geom, a.geom)
+               JOIN app.field f ON f.field_id = o.field_id
+               WHERE a.crop_area_id = %(id)s AND f.owner_id NOT LIKE 'sbx-%%' AND ST_Area(ST_Transform(ST_Intersection(o.geom, a.geom), 2180)) > 1)
+"""
+
+
+def colour_on(cur, day: date, owner: str) -> list[tuple[str, str, str]]:
+    """(crop_area_id, crop, colour) of a farm on the demo day; the colour as the map shows it."""
+    cur.execute("SELECT a.crop_area_id, a.farmer_crop_id, CASE WHEN r.status = 'stage_unknown' THEN 'grey' WHEN r.status = 'protected' "
+                "THEN 'protected' ELSE coalesce(r.risk_class, 'grey') END FROM app.crop_area a JOIN app.field f USING (field_id) "
+                "JOIN curated.risk_assessment r ON r.crop_area_id = a.crop_area_id AND r.date = %s WHERE f.owner_id = %s ORDER BY 1", (day, owner))
+    return cur.fetchall()
+
+
+def vary_colours(con, cur, owner: str, day: date, d0: date, d1: date, rules, rnd: random.Random) -> bool:
+    """A farm of 3 or more crop areas that shows one colour on the demo day gets another colour on one wheat crop area: the sprays
+    of a protected one are taken away (the farm has not got to it yet), an unprotected one is sprayed now (at least 14 days after
+    its last spray, protection 21 days). Returns whether something was changed."""
+    areas = colour_on(cur, day, owner)
+    if len(areas) < 3 or len({c for _, _, c in areas}) > 1:
+        return False
+    wheat = [cid for cid, crop, _ in areas if crop == "wheat"]
+    if not wheat:
+        return False
+    cid = rnd.choice(wheat)
+    if areas[0][2] == "protected":
+        cur.execute("DELETE FROM app.spray WHERE crop_area_id = %s", (cid,))
+    else:
+        cur.execute("SELECT max(spray_date) FROM app.spray WHERE crop_area_id = %s", (cid,))
+        last = cur.fetchone()[0]
+        when = max(day - timedelta(days=rnd.randint(3, 10)), (last + timedelta(days=14)) if last else day - timedelta(days=30))
+        cur.execute("INSERT INTO app.spray (crop_area_id, spray_date, protection_duration_days) VALUES (%s, %s, 21)", (cid, min(when, day)))
+    refresh(con, cid, d0, d1, rules, "spray", what="risk")
+    return True
+
+
 def spray_plan(rnd: random.Random, kind: str, day: date, protection: int, field_idx: int, cutoff: int) -> list[tuple[date, int]]:
     """The sprays of one wheat field of a farm: a list of (date, protection days). T1 at BBCH 31-32 (late April), T2 on the flag leaf
     BBCH 37-39 (about three weeks later), never after the demo day."""
     t1 = date(2024, 4, 22) + timedelta(days=rnd.randint(0, 8))
-    t2 = date(2024, 5, 10) + timedelta(days=rnd.randint(0, 12))
+    t2 = max(date(2024, 5, 10) + timedelta(days=rnd.randint(0, 12)), t1 + timedelta(days=14))   # T2 at least two weeks after T1
     off = timedelta(days=min(field_idx, 3) + rnd.randint(0, 1))                # the farm works through its fields one after another
     sprays: list[tuple[date, int]] = []
     if kind == "two":
@@ -256,8 +299,8 @@ def main(argv=None) -> int:
         print(f"demo day (data time): {day}; cells {len(cells)}, of them with a neighbour of another class: {len(mixed)}", flush=True)
 
         if not a.no_replace:
-            cur.execute("DELETE FROM app.field WHERE data_status = 'mock' AND owner_id NOT LIKE 'sbx-%'")      # the example farmers only
-            cur.execute("DELETE FROM app.demo_user WHERE role = 'farmer'")
+            cur.execute("DELETE FROM app.field WHERE data_status = 'mock' AND owner_id LIKE 'farmer-%'")       # the example farmers only, not other accounts
+            cur.execute("DELETE FROM app.demo_user WHERE role = 'farmer' AND owner_id LIKE 'farmer-%'")
         if a.analyst_password:
             cur.execute("INSERT INTO app.demo_user (login, password_hash, owner_id, role, display_name) VALUES "
                         "('analyst', %s, 'analyst', 'analyst', 'Analyst') ON CONFLICT (login) DO NOTHING", (hash_password(a.analyst_password),))
@@ -341,6 +384,12 @@ def main(argv=None) -> int:
 
                         def dominated(cs, crop=crop):
                             for c in cs:
+                                cur.execute(WEATHER_SQL, {"id": c})
+                                if not cur.fetchone()[0]:                                  # outside the weather data: no risk there
+                                    return False
+                                cur.execute(OVERLAP_SQL, {"id": c})
+                                if cur.fetchone()[0]:                                      # cadastral parcels that overlap each other
+                                    return False
                                 rows = refresh_crop_map(cur, c)
                                 if not rows or min(rows, key=lambda x: (-x[1], x[0]))[0] != CODES[crop]:
                                     return False
@@ -414,6 +463,7 @@ def main(argv=None) -> int:
             for f in fields:
                 for cid in f["cids"]:
                     refresh(con, cid, a.d0, a.d1, rules, "created")
+            stats["varied_farms"] += vary_colours(con, cur, owner, day, a.d0, a.d1, rules, rnd)
             print(f"{owner}: {len(fields)} fields, {sum(f['pieces'] for f in fields)} crop areas, program {kind}"
                   f"{', two clusters' if len(centres) > 1 else ''}: {', '.join(f['name'] for f in fields)}", flush=True)
             done += 1
