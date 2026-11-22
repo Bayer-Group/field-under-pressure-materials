@@ -1,3 +1,14 @@
+
+def _is_unsown_crop_rule(crop_val) -> bool:
+    c = str(crop_val or "").strip().lower()
+    return (
+        not c
+        or c in ("none", "nan", "brak", "ugór", "ugor", "niezasiane")
+        or "brak uprawy" in c
+        or "pod zasiew" in c
+        or "niezasian" in c
+    )
+
 import json
 from pathlib import Path
 from typing import Optional
@@ -93,7 +104,7 @@ def load_weather_timeseries() -> pd.DataFrame:
             if not fields_df.empty:
                 c_lat, c_lon = float(fields_df["lat"].mean()), float(fields_df["lon"].mean())
                 url = (
-                    f"https://api.open-meteo.com/v1/forecast?latitude={c_lat:.4f}&longitude={c_lon:.4f}"
+                    f"https://api.open-meteo.com/v1/forecast?latitude={c_lat:.3f}&longitude={c_lon:.3f}"
                     "&past_days=5&forecast_days=5"
                     "&hourly=temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,soil_moisture_0_to_7cm"
                     "&wind_speed_unit=ms&timezone=Europe%2FWarsaw"

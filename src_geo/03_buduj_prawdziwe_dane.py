@@ -163,7 +163,7 @@ fields_final["grid_id"] = [
 
 # Zapisujemy współrzędne poligonu jako JSON string (niezawodny w Parquet i PyDeck)
 fields_final["polygon_json"] = [
-    json.dumps([[round(float(x), 6), round(float(y), 6)] for x, y in geom.exterior.coords])
+    json.dumps([[round(float(x), 3), round(float(y), 3)] for x, y in geom.exterior.coords])
     for geom in fields_final.geometry
 ]
 

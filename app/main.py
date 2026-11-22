@@ -7,6 +7,7 @@ import plotly.graph_objects as go
 import pydeck as pdk
 import streamlit as st
 import base64
+import re
 from pathlib import Path
 
 
@@ -249,6 +250,219 @@ def _should_hide_spray_banner(ctx_locals: dict) -> bool:
         if crops and all(_is_unsown_crop(c) for c in crops):
             return True
     return False
+
+
+def _is_unsown_crop(crop_val) -> bool:
+    c = str(crop_val or "").strip().lower()
+    return (
+        not c
+        or c in ("none", "nan", "brak", "ugór", "ugor", "niezasiane")
+        or "brak uprawy" in c
+        or "pod zasiew" in c
+        or "niezasian" in c
+    )
+
+def _apply_unsown_sow_status(df):
+    if df is None or not isinstance(df, pd.DataFrame) or df.empty:
+        return df
+    crop_cols = [c for c in ("crop_name", "Uprawa", "Deklarowana uprawa", "uprawa") if c in df.columns]
+    if not crop_cols:
+        return df
+    mask = pd.Series(False, index=df.index)
+    for cc in crop_cols:
+        mask = mask | df[cc].apply(_is_unsown_crop)
+    if not mask.any():
+        return df
+    for col in df.columns:
+        if col in crop_cols:
+            continue
+        if df[col].dtype == object or str(df[col].dtype) == "string":
+            df.loc[mask, col] = df.loc[mask, col].apply(
+                lambda v: "Teraz zasiej" if isinstance(v, str) and "dobre warunki" in v.lower() else v
+            )
+    return df
+
+if not getattr(st.dataframe, "_sow_status_wrapped", False):
+    _orig_st_dataframe = st.dataframe
+    def _wrapped_st_dataframe(data=None, *args, **kwargs):
+        if isinstance(data, pd.DataFrame):
+            data = _apply_unsown_sow_status(data.copy())
+        return _orig_st_dataframe(data, *args, **kwargs)
+    _wrapped_st_dataframe._sow_status_wrapped = True
+    st.dataframe = _wrapped_st_dataframe
+
+
+def _fmt_num3(val) -> str:
+    try:
+        num = float(val)
+    except Exception:
+        return str(val)
+    if pd.isna(num):
+        return ""
+    s = f"{num:.3f}".rstrip("0").rstrip(".")
+    return "0" if s in ("-0", "") else s
+
+_DEC4_RE = re.compile(r"(?<![\w./-])(-?\d+)([.,])(\d{4,})(?![\w./-])")
+
+def _cap_decimals_in_text(text):
+    if not isinstance(text, str):
+        return text
+    def _repl(m):
+        sign_int, sep, frac = m.group(1), m.group(2), m.group(3)
+        try:
+            val = float(f"{sign_int}.{frac}")
+        except Exception:
+            return m.group(0)
+        formatted = f"{val:.3f}".rstrip("0").rstrip(".")
+        if formatted in ("-0", ""):
+            formatted = "0"
+        if "." in formatted and sep == ",":
+            formatted = formatted.replace(".", ",")
+        return formatted
+    return _DEC4_RE.sub(_repl, text)
+
+def _round_df_max3(df):
+    if df is None or not isinstance(df, pd.DataFrame) or df.empty:
+        return df
+    out_df = df.copy()
+    for col in out_df.columns:
+        if pd.api.types.is_float_dtype(out_df[col]):
+            _dec = 3 if str(col).lower() == "ndvi" else 2
+            out_df[col] = out_df[col].astype("float64").round(_dec)
+        elif out_df[col].dtype == object or str(out_df[col].dtype) == "string":
+            out_df[col] = out_df[col].apply(
+                lambda v: _cap_decimals_in_text(v) if isinstance(v, str) else (round(v, 3) if isinstance(v, float) else v)
+            )
+    return out_df
+
+def _format_powiat_label(pow_name: str, gmina_list=None) -> str:
+    p = str(pow_name or "").strip()
+    if not p:
+        return p
+    low = p.lower()
+    if low.startswith("powiat "):
+        return p
+    if gmina_list:
+        g_lows = {str(g.get("gmina", g) if isinstance(g, dict) else g).strip().lower() for g in gmina_list}
+        base_p = low[3:].strip() if low.startswith("m. ") else low
+        if low in g_lows or base_p in g_lows:
+            return f"Powiat {p}"
+    return p
+
+def _format_gmina_label(gmina_name: str, pow_name: str = "") -> str:
+    g = str(gmina_name or "").strip()
+    p = str(pow_name or "").strip()
+    if not g:
+        return g
+    g = re.sub(r"([a-ząćęłńóśźż])([A-ZĄĆĘŁŃÓŚŹŻ])", r"\1 \2", g)
+    g = re.sub(r"(?<!\s)\(", " (", g)
+    g_low = g.lower()
+    p_low = p.lower()
+    if g_low.startswith("gmina "):
+        return g
+    base_p = p_low[7:].strip() if p_low.startswith("powiat ") else p_low
+    base_p = base_p[3:].strip() if base_p.startswith("m. ") else base_p
+    if p_low and (g_low == p_low or g_low == base_p):
+        return f"Gmina {g}"
+    return g
+
+def _normalize_admin_hierarchy_split(hier: dict) -> dict:
+    if not isinstance(hier, dict):
+        return hier
+    cleaned = {}
+    for woj, pow_dict in hier.items():
+        if not isinstance(pow_dict, dict):
+            cleaned[woj] = pow_dict
+            continue
+        new_pow_dict = {}
+        for pow_k, g_list in pow_dict.items():
+            pow_str = str(pow_k).strip()
+            for sep in (" / ", " | ", " — ", " – "):
+                if sep in pow_str and ("gmina" in pow_str.lower() or "powiat" in pow_str.lower()):
+                    parts = [pt.strip() for pt in pow_str.split(sep) if pt.strip()]
+                    pow_str = next((pt for pt in parts if "powiat" in pt.lower()), parts[0])
+                    break
+            target_list = new_pow_dict.setdefault(pow_str, [])
+            seen_g = {}
+            for item in (g_list or []):
+                if isinstance(item, dict):
+                    entry = dict(item)
+                    g_raw = str(entry.get("gmina", "")).strip()
+                else:
+                    entry = {"gmina": str(item).strip()}
+                    g_raw = entry["gmina"]
+                for sep in (" / ", " | ", " — ", " – "):
+                    if sep in g_raw and ("gmina" in g_raw.lower() or "powiat" in g_raw.lower()):
+                        parts = [pt.strip() for pt in g_raw.split(sep) if pt.strip()]
+                        g_raw = next((pt for pt in parts if "gmina" in pt.lower()), parts[-1])
+                        break
+                cnt = seen_g.get(g_raw.lower(), 0) + 1
+                seen_g[g_raw.lower()] = cnt
+                if cnt > 1:
+                    typ = str(entry.get("typ") or entry.get("rodzaj") or "").strip()
+                    g_raw = f"{g_raw} ({typ})" if typ else f"{g_raw} ({cnt})"
+                entry["gmina"] = g_raw
+                target_list.append(entry)
+        cleaned[woj] = new_pow_dict
+    return cleaned
+
+if not getattr(st.markdown, "_max3_wrapped", False):
+    for _fn_name in ("markdown", "write", "caption", "info", "warning", "success", "error"):
+        _orig_fn = getattr(st, _fn_name)
+        def _sanitize_st_arg(a):
+            if isinstance(a, str):
+                return _cap_decimals_in_text(a)
+            if isinstance(a, pd.DataFrame):
+                return _round_df_max3(a)
+            if isinstance(a, float):
+                return _fmt_num3(a)
+            return a
+
+        def _make_text_wrapper(orig):
+            def _wrapped(*args, **kwargs):
+                new_args = tuple(map(_sanitize_st_arg, args))
+                res = orig(*new_args, **kwargs)
+                return res
+            _wrapped._max3_wrapped = True
+            return _wrapped
+        setattr(st, _fn_name, _make_text_wrapper(_orig_fn))
+
+    _orig_metric = st.metric
+    def _wrapped_metric(label, value, delta=None, *args, **kwargs):
+        lbl_c = _cap_decimals_in_text(str(label))
+        val_c = _fmt_num3(value) if isinstance(value, float) else _cap_decimals_in_text(str(value))
+        del_c = _fmt_num3(delta) if isinstance(delta, float) else (_cap_decimals_in_text(str(delta)) if isinstance(delta, str) else delta)
+        res = _orig_metric(lbl_c, val_c, delta=del_c, *args, **kwargs)
+        return res
+    _wrapped_metric._max3_wrapped = True
+    st.metric = _wrapped_metric
+
+    _orig_df_fn = st.dataframe
+    def _wrapped_df_fn(data=None, *args, **kwargs):
+        if isinstance(data, pd.DataFrame):
+            data = _round_df_max3(data)
+        return _orig_df_fn(data, *args, **kwargs)
+    _wrapped_df_fn._max3_wrapped = True
+    st.dataframe = _wrapped_df_fn
+
+    _orig_de_fn = st.data_editor
+    def _wrapped_de_fn(data=None, *args, **kwargs):
+        if isinstance(data, pd.DataFrame):
+            data = _round_df_max3(data)
+        return _orig_de_fn(data, *args, **kwargs)
+    _wrapped_de_fn._max3_wrapped = True
+    st.data_editor = _wrapped_de_fn
+
+    _orig_plotly_fn = st.plotly_chart
+    def _wrapped_plotly_fn(figure_or_data, *args, **kwargs):
+        if hasattr(figure_or_data, "update_yaxes"):
+            try:
+                figure_or_data.update_yaxes(hoverformat=".3~f")
+            except Exception:
+                pass
+        return _orig_plotly_fn(figure_or_data, *args, **kwargs)
+    _wrapped_plotly_fn._max3_wrapped = True
+    st.plotly_chart = _wrapped_plotly_fn
 
 st.set_page_config(
     page_title="FieldGuard — Monitoring pól i rolnictwo EKO",
@@ -649,7 +863,7 @@ if not has_active_area:
     saved_gm = farm_profile.get("gmina", "")
     def_g_idx = gm_list.index(saved_gm) if saved_gm in gm_list else 0
     with ob_c4:
-        ob_gmina = st.selectbox("Gmina:", gm_list, index=def_g_idx, key="ob_gmina")
+        ob_gmina = st.selectbox("Gmina:", gm_list, index=def_g_idx, key="ob_gmina", format_func=lambda _g: _format_gmina_label(_g, ob_pow))
 
     ob_force = st.checkbox(
         "Wymuś ponowne pobranie świeżych danych z satelity (pomiń lokalny cache)",
@@ -764,28 +978,125 @@ with tab_pola:
         area_hint = "Ok. 1.5 ha na pojedynczy sektor"
 
     avg_humidity = float(result_df["humidity_pct"].mean()) if not result_df.empty else 0.0
-    ready_fields = int(result_df["decyzja"].isin(["PRYSKAJ TERAZ", "NAWOŹ", "ZASIEJ"]).sum())
+    _dec_series = (
+        result_df["decyzja"].astype(str).str.upper().str.strip()
+        if (not result_df.empty and "decyzja" in result_df.columns)
+        else pd.Series(dtype=str)
+    )
+    ready_fields = int(_dec_series.isin(["PRYSKAJ TERAZ", "NAWOŹ", "ZASIEJ", "ZBIERAJ"]).sum())
     avg_temp = float(result_df["temp_c"].mean()) if not result_df.empty else 0.0
     avg_wind = float(result_df["wind_ms"].mean()) if not result_df.empty else 0.0
     avg_precip = float(result_df["precip_24h_mm"].mean()) if not result_df.empty else 0.0
 
-    can_work = (avg_wind <= 4.0) and (avg_precip < 5.0)
-    banner_cls = "banner-go" if can_work else "banner-wait"
-    chip_cls = "chip-go" if can_work else "chip-wait"
-    if can_work:
-        b_head = "Dobre warunki do wyjazdu w pole"
-        b_desc = (
-            f"Wiatr wynosi średnio {avg_wind:.1f} m/s, opady w ostatnich 24h to {avg_precip:.1f} mm, "
-            f"a temperatura {avg_temp:.1f} °C. Na {ready_fields} z {total_fields} obszarów widać gotowość do zabiegu."
-        )
-        b_chip = "Można działać"
+    def _pl_pola(n: int) -> str:
+        if n == 1:
+            return "1 pole"
+        if 2 <= n % 10 <= 4 and not (12 <= n % 100 <= 14):
+            return f"{n} pola"
+        return f"{n} pól"
+
+    n_sow = int((_dec_series == "ZASIEJ").sum())
+    n_spray = int((_dec_series == "PRYSKAJ TERAZ").sum())
+    n_fert = int((_dec_series == "NAWOŹ").sum())
+    n_harv = int((_dec_series == "ZBIERAJ").sum())
+    n_wait = int((_dec_series == "CZEKAJ").sum())
+
+    tasks_parts = []
+    if n_sow > 0:
+        tasks_parts.append(f"siew ({_pl_pola(n_sow)})")
+    if n_spray > 0:
+        tasks_parts.append(f"oprysk ({_pl_pola(n_spray)})")
+    if n_fert > 0:
+        tasks_parts.append(f"nawożenie ({_pl_pola(n_fert)})")
+    if n_harv > 0:
+        tasks_parts.append(f"zbiór ({_pl_pola(n_harv)})")
+
+    if result_df.empty:
+        banner_cls = "banner-go"
+        chip_cls = "chip-go"
+        b_head = "Brak pól do oceny"
+        b_desc = "Wybierz gminę lub dodaj swoje pola, aby otrzymywać bieżące podpowiedzi zabiegowe."
+        b_chip = "Brak danych"
+    elif not tasks_parts:
+        if n_wait > 0:
+            banner_cls = "banner-wait"
+            chip_cls = "chip-wait"
+            b_head = "Na ten moment nic nie trzeba robić — wstrzymaj zabiegi"
+            b_desc = (
+                f"Silnik zaleca przeczekanie ({_pl_pola(n_wait)} z {total_fields} ma status CZEKAJ). "
+                f"Pogoda: wiatr {avg_wind:.1f} m/s, opad 24h {avg_precip:.1f} mm, temp. {avg_temp:.1f} °C."
+            )
+            b_chip = "Nic do zrobienia"
+        else:
+            banner_cls = "banner-go"
+            chip_cls = "chip-go"
+            b_head = "Na ten moment nic nie trzeba robić"
+            b_desc = (
+                f"Wszystkie pola ({total_fields}) są w dobrej kondycji i wymagają jedynie bieżącej obserwacji. "
+                f"Pogoda: temp. {avg_temp:.1f} °C, wiatr {avg_wind:.1f} m/s, opad 24h {avg_precip:.1f} mm."
+            )
+            b_chip = "Spokojnie"
     else:
-        powod = "zbyt silny wiatr (powyżej 4 m/s)" if avg_wind > 4.0 else "opady deszczu (ryzyko zmycia)"
-        b_head = "Lepiej wstrzymać oprysk"
-        b_desc = (
-            f"Powód: {powod}. Wiatr: {avg_wind:.1f} m/s, opad 24h: {avg_precip:.1f} mm, temperatura: {avg_temp:.1f} °C."
-        )
-        b_chip = "Warto poczekać"
+        rain_block = avg_precip >= 5.0
+        frost_block = avg_temp < 0.0
+        wind_spray_block = avg_wind > 4.0
+
+        exec_actions = []
+        blocked_actions = []
+
+        if n_sow > 0:
+            if rain_block or frost_block:
+                blocked_actions.append(f"siew ({_pl_pola(n_sow)})")
+            else:
+                exec_actions.append(f"zasiej ({_pl_pola(n_sow)})")
+        if n_fert > 0:
+            if rain_block or frost_block:
+                blocked_actions.append(f"nawożenie ({_pl_pola(n_fert)})")
+            else:
+                exec_actions.append(f"nawieź ({_pl_pola(n_fert)})")
+        if n_harv > 0:
+            if rain_block:
+                blocked_actions.append(f"zbiór ({_pl_pola(n_harv)})")
+            else:
+                exec_actions.append(f"zbierz ({_pl_pola(n_harv)})")
+        if n_spray > 0:
+            if rain_block or wind_spray_block:
+                blocked_actions.append(f"oprysk ({_pl_pola(n_spray)})")
+            else:
+                exec_actions.append(f"wykonaj oprysk ({_pl_pola(n_spray)})")
+
+        if exec_actions and not blocked_actions:
+            banner_cls = "banner-go"
+            chip_cls = "chip-go"
+            b_head = f"Sygnał do działania: {', '.join(exec_actions)}"
+            b_desc = (
+                f"Do wykonania teraz: {', '.join(tasks_parts)} z {total_fields} pól. "
+                f"Warunki sprzyjają: wiatr {avg_wind:.1f} m/s, opad 24h {avg_precip:.1f} mm, temp. {avg_temp:.1f} °C."
+            )
+            b_chip = "Działaj teraz"
+        elif exec_actions and blocked_actions:
+            banner_cls = "banner-go"
+            chip_cls = "chip-go"
+            powod_b = "zbyt silny wiatr (>4 m/s)" if wind_spray_block else ("opady deszczu" if rain_block else "przymrozek")
+            b_head = f"Sygnał do działania: {', '.join(exec_actions)}"
+            b_desc = (
+                f"Możesz wykonać teraz: {', '.join(exec_actions)}. Wstrzymaj: {', '.join(blocked_actions)} ({powod_b}). "
+                f"Pogoda: wiatr {avg_wind:.1f} m/s, opad 24h {avg_precip:.1f} mm, temp. {avg_temp:.1f} °C."
+            )
+            b_chip = "Działaj selektywnie"
+        else:
+            banner_cls = "banner-wait"
+            chip_cls = "chip-wait"
+            powod_b = (
+                "zbyt silny wiatr (powyżej 4 m/s)"
+                if (wind_spray_block and n_spray > 0)
+                else ("opady deszczu (ryzyko zmycia)" if rain_block else "zbyt niska temperatura (przymrozek)")
+            )
+            b_head = f"Wymagane zabiegi ({', '.join(tasks_parts)}), ale pogoda blokuje wyjazd"
+            b_desc = (
+                f"Powód wstrzymania: {powod_b}. Wiatr: {avg_wind:.1f} m/s, opad 24h: {avg_precip:.1f} mm, temperatura: {avg_temp:.1f} °C."
+            )
+            b_chip = "Warto poczekać"
 
     st.markdown(
         f"""
@@ -893,21 +1204,59 @@ with tab_pola:
             pitch=0,
         )
 
+        def _fmt_tt(val, dec=2):
+            try:
+                if pd.isna(val):
+                    return "—"
+                f = round(float(val), dec)
+                s = f"{f:.{dec}f}".rstrip("0").rstrip(".")
+                return "0" if s in ("-0", "") else s
+            except Exception:
+                return str(val) if val is not None else "—"
+
+        if not result_df.empty:
+            for _c in result_df.columns:
+                if _c not in ("lat", "lon") and pd.api.types.is_float_dtype(result_df[_c]):
+                    result_df[_c] = result_df[_c].astype("float64").round(3 if _c == "ndvi" else 2)
+            for _src, _dst, _d in [
+                ("area_ha", "_tt_area_ha", 2),
+                ("ndvi", "_tt_ndvi", 3),
+                ("dawka_nawozu_kg_ha", "_tt_dawka", 2),
+                ("ilosc_nawozu_kg", "_tt_ilosc", 2),
+                ("soil_ph", "_tt_ph", 2),
+                ("soil_soc", "_tt_soc", 2),
+                ("wind_ms", "_tt_wind", 2),
+                ("temp_c", "_tt_temp", 2),
+                ("precip_24h_mm", "_tt_precip", 2),
+            ]:
+                result_df[_dst] = result_df[_src].apply(lambda v, d=_d: _fmt_tt(v, d)) if _src in result_df.columns else "—"
+            for _tcol in ("preparat_eko", "metoda_oprysku", "zalecany_nawoz", "rekomendowana_uprawa", "komunikat"):
+                if _tcol not in result_df.columns:
+                    result_df[_tcol] = "—"
+                else:
+                    result_df[_tcol] = (
+                        result_df[_tcol]
+                        .fillna("—")
+                        .astype(str)
+                        .replace({"": "—", "None": "—", "nan": "—", "<NA>": "—"})
+                    )
+            layer.data = result_df
+
         deck = pdk.Deck(
             map_style="light",
             layers=[layer],
             initial_view_state=view_state,
             tooltip={
-                "html": "<div style='font-family:Plus Jakarta Sans,sans-serif;font-size:12px;line-height:1.5;'>"
-                "<b>Działka:</b> {field_uid} ({area_ha} ha)<br/>"
-                "<b>Uprawa:</b> {crop_name} (NDVI: {ndvi})<br/>"
+                "html": "<div style='font-family:Plus Jakarta Sans,sans-serif;font-size:11.5px;line-height:1.42;max-width:300px;white-space:normal;word-wrap:break-word;overflow-wrap:break-word;'>"
+                "<b>Działka:</b> {field_uid} ({_tt_area_ha} ha)<br/>"
+                "<b>Uprawa:</b> {crop_name} (NDVI: {_tt_ndvi})<br/>"
                 "<b>Zalecenie:</b> {decyzja} ({poziom_ryzyka})<br/>"
                 "<b>Uwagi:</b> {komunikat}<br/>"
-                "<b>Nawóz:</b> {zalecany_nawoz} ({dawka_nawozu_kg_ha} kg/ha · {ilosc_nawozu_kg} kg)<br/>"
+                "<b>Nawóz:</b> {zalecany_nawoz} ({_tt_dawka} kg/ha · {_tt_ilosc} kg)<br/>"
                 "<b>Środek EKO:</b> {preparat_eko} | <b>Metoda:</b> {metoda_oprysku}<br/>"
                 "<b>Siew:</b> {rekomendowana_uprawa}<br/>"
-                "<b>Gleba:</b> pH {soil_ph}, próchnica/SOC {soil_soc} g/kg ({soil_texture})<br/>"
-                "<b>Pogoda:</b> wiatr {wind_ms} m/s, temp. {temp_c} °C, deszcz 24h {precip_24h_mm} mm"
+                "<b>Gleba:</b> pH {_tt_ph}, próchnica/SOC {_tt_soc} g/kg ({soil_texture})<br/>"
+                "<b>Pogoda:</b> wiatr {_tt_wind} m/s, temp. {_tt_temp} °C, deszcz 24h {_tt_precip} mm"
                 "</div>",
                 "style": {
                     "backgroundColor": "#1F2924",
@@ -1064,11 +1413,11 @@ with tab_pola:
         if st.button("Dodaj wpis", type="primary", use_container_width=True):
             w_ms = in_wind_kmh / 3.6
             if in_rain >= 5.0:
-                ocena, etykieta = ("Brak (pole niezasiane)" if _is_unsown_crop(locals().get("_calc_field_crop", locals().get("crop_name", ""))) else ("bad", "Po deszczu — poczekać"))
+                ocena, etykieta = (("brak", "Brak (pole niezasiane)") if _is_unsown_crop(locals().get("_calc_field_crop", locals().get("crop_name", ""))) else ("bad", "Po deszczu — poczekać"))
             elif w_ms > 4.0:
-                ocena, etykieta = ("Brak (pole niezasiane)" if _is_unsown_crop(locals().get("_calc_field_crop", locals().get("crop_name", ""))) else ("warn", "Za mocno wieje"))
+                ocena, etykieta = (("brak", "Brak (pole niezasiane)") if _is_unsown_crop(locals().get("_calc_field_crop", locals().get("crop_name", ""))) else ("warn", "Za mocno wieje"))
             else:
-                ocena, etykieta = ("Brak (pole niezasiane)" if _is_unsown_crop(locals().get("_calc_field_crop", locals().get("crop_name", ""))) else ("ok", "Można pryskać"))
+                ocena, etykieta = (("brak", "Brak (pole niezasiane)") if _is_unsown_crop(locals().get("_calc_field_crop", locals().get("crop_name", ""))) else ("ok", "Można pryskać"))
             st.session_state.weather_journal.insert(
                 0,
                 {
@@ -1503,6 +1852,9 @@ if "result_df" in locals() and isinstance(result_df, pd.DataFrame) and not resul
                 else:
                     result_df.loc[_unsown_spray_clean, _c] = "Brak uprawy — bez zabiegu"
 
+if "result_df" in locals() and isinstance(result_df, pd.DataFrame):
+    result_df = _apply_unsown_sow_status(result_df)
+
 with tab_gosp:
     # --- SAVED FARM TOP BANNER & COLLAPSIBLE MAP ---
     _persisted_fields = st.session_state.farm_profile.get('fields', {})
@@ -1564,6 +1916,7 @@ with tab_gosp:
                 "Nazwa gospodarstwa:",
                 value=farm_profile.get("farm_name", "Moje Gospodarstwo"),
             )
+        admin_hierarchy = _normalize_admin_hierarchy_split(admin_hierarchy)
         woj_options = list(admin_hierarchy.keys())
         default_woj = farm_profile.get("wojewodztwo", woj_options[0])
         if default_woj not in woj_options:
@@ -1576,7 +1929,7 @@ with tab_gosp:
         if default_pow not in pow_options:
             default_pow = pow_options[0]
         with g_col3:
-            sel_pow = st.selectbox("Powiat:", pow_options, index=pow_options.index(default_pow))
+            sel_pow = st.selectbox("Powiat:", pow_options, index=pow_options.index(default_pow), format_func=lambda _p: _format_powiat_label(_p, admin_hierarchy.get(sel_woj, {}).get(_p, [])))
 
         gmina_entries = admin_hierarchy[sel_woj][sel_pow]
         gmina_names = [g["gmina"] for g in gmina_entries]
@@ -1584,7 +1937,7 @@ with tab_gosp:
         if default_gmina not in gmina_names:
             default_gmina = gmina_names[0]
         with g_col4:
-            sel_gmina = st.selectbox("Gmina:", gmina_names, index=gmina_names.index(default_gmina))
+            sel_gmina = st.selectbox("Gmina:", gmina_names, index=gmina_names.index(default_gmina), format_func=lambda _g: _format_gmina_label(_g, sel_pow))
 
         active_bbox = next(g["bbox"] for g in gmina_entries if g["gmina"] == sel_gmina)
         if st.button("Pobierz świeże pola i pogodę LIVE dla wybranej gminy", type="primary", key="btn_fetch_gmina_live"):
@@ -1711,6 +2064,10 @@ with tab_gosp:
                 )
                 prev_zoom = 9.0
 
+            if not preview_df.empty:
+                preview_df["_tt_area_ha"] = preview_df["area_ha"].apply(lambda v: f"{round(float(v), 2):.2f}".rstrip("0").rstrip(".") if pd.notna(v) else "—") if "area_ha" in preview_df.columns else "—"
+                preview_df["_tt_soil_ph"] = preview_df["soil_ph"].apply(lambda v: f"{round(float(v), 2):.2f}".rstrip("0").rstrip(".") if pd.notna(v) else "—") if "soil_ph" in preview_df.columns else "—"
+                prev_layer.data = preview_df
             prev_deck = pdk.Deck(
                 map_style="light",
                 layers=[prev_layer],
@@ -1720,7 +2077,7 @@ with tab_gosp:
                     zoom=prev_zoom,
                 ),
                 tooltip={
-                    "html": "<b>{field_uid}</b> ({area_ha} ha)<br/>Uprawa CLMS: {crop_name}<br/>pH: {soil_ph} · {soil_texture}",
+                    "html": "<b>{field_uid}</b> ({_tt_area_ha} ha)<br/>Uprawa CLMS: {crop_name}<br/>pH: {_tt_soil_ph} · {soil_texture}",
                     "style": {"backgroundColor": "#1F2924", "color": "#FFFFFF", "borderRadius": "8px"},
                 },
             )
@@ -1906,7 +2263,10 @@ with tab_kalk:
         _calc_field_crop = str(saved_fields_dict.get(_sel_calc_uid, {}).get('crop_name', _sel_calc_row.get('crop_name', 'Pszenica ozima'))) if 'saved_fields_dict' in locals() else str(_sel_calc_row.get('crop_name', 'Pszenica ozima'))
         _calc_field_eco = bool(saved_fields_dict.get(_sel_calc_uid, {}).get('is_eco', _sel_calc_row.get('is_eco', False))) if 'saved_fields_dict' in locals() else bool(_sel_calc_row.get('is_eco', False))
         _calc_mode_txt = 'Rolnictwo EKO' if _calc_field_eco else 'Konwencjonalny'
-        st.caption("Wybrane pole jest niezasiane — brak uprawy.") if _is_unsown_crop(_calc_field_crop) else st.caption("Brak uprawy na wybranym polu — status oprysków i nawożenia nie dotyczy.") if _is_unsown_crop(_calc_field_crop) else st.caption(f'Wybrane pole: **Pole {_sel_calc_idx + 1}** | Uprawa: **{_calc_field_crop}** | Powierzchnia: **{_calc_field_area:.2f} ha** | Tryb: **{_calc_mode_txt}**')
+        if _is_unsown_crop(_calc_field_crop):
+            st.caption("Wybrane pole jest niezasiane — brak uprawy.")
+        else:
+            st.caption(f"Wybrane pole: **Pole {_sel_calc_idx + 1}** | Uprawa: **{_calc_field_crop}** | Powierzchnia: **{_calc_field_area:.2f} ha** | Tryb: **{_calc_mode_txt}**")
     st.markdown(
         """
         <div class="soft-card">
@@ -2052,15 +2412,16 @@ with tab_kalk:
         )
 
         # Symulacja wybranego pojedynczego pola
+        _uid_to_pole_nr = {str(uid): idx + 1 for idx, uid in enumerate(profit_df["field_uid"])}
         sel_uid = st.selectbox(
             "Szczegółowa analiza dla wybranego pola:",
             profit_df["field_uid"],
-            format_func=lambda u: f"{u} — {profit_df.loc[profit_df['field_uid'] == u, 'crop_name'].iloc[0]} ({profit_df.loc[profit_df['field_uid'] == u, 'area_ha'].iloc[0]:.2f} ha)",
+            format_func=lambda u: f"Pole {_uid_to_pole_nr.get(str(u), 1)} — {profit_df.loc[profit_df['field_uid'] == u, 'crop_name'].iloc[0]} ({profit_df.loc[profit_df['field_uid'] == u, 'area_ha'].iloc[0]:.2f} ha)",
             key="profit_single_field_sel",
         )
         one = profit_df[profit_df["field_uid"] == sel_uid].iloc[0]
         st.info(
-            f"**Pole {one['field_uid']} ({one['area_ha']:.2f} ha) · {one['crop_name']}** | "
+            f"**Pole {_uid_to_pole_nr.get(str(sel_uid), 1)} ({one['area_ha']:.2f} ha) · {one['crop_name']}** | "
             f"Materiał siewny: *{one['bayer_seed_info']}*\n\n"
             f"• **Koszt ziarna Bayer:** {one['koszt_ziarna_zl']:,.2f} zł  |  "
             f"**Koszt nawozu:** {one['koszt_nawozu_zl']:,.2f} zł  |  "

@@ -293,7 +293,7 @@ def _fetch_live_soilgrids(lats: np.ndarray, lons: np.ndarray) -> tuple[np.ndarra
     def _query_one(pt: tuple[float, float]):
         la, lo = pt
         url = (
-            f"https://rest.isric.org/soilgrids/v2.0/properties/query?lon={lo:.5f}&lat={la:.5f}"
+            f"https://rest.isric.org/soilgrids/v2.0/properties/query?lon={lo:.3f}&lat={la:.3f}"
             "&property=phh2o&property=soc&property=sand&property=silt&property=clay"
             "&depth=0-5cm&value=mean"
         )
@@ -413,7 +413,7 @@ def _fetch_latest_sentinel_ndvi(
 
 def _fetch_live_weather(grid_ids: list[int], lat: float, lon: float) -> pd.DataFrame:
     url = (
-        f"https://api.open-meteo.com/v1/forecast?latitude={lat:.4f}&longitude={lon:.4f}"
+        f"https://api.open-meteo.com/v1/forecast?latitude={lat:.3f}&longitude={lon:.3f}"
         "&past_days=5&forecast_days=5"
         "&hourly=temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,soil_moisture_0_to_7cm"
         "&wind_speed_unit=ms&timezone=Europe%2FWarsaw"
@@ -644,7 +644,7 @@ def build_gmina_dataset(
     for geom in fields_gdf.geometry:
         p = _to_single_polygon(geom)
         coords = list(p.exterior.coords) if p is not None else []
-        poly_jsons.append(json.dumps([[round(float(x), 6), round(float(y), 6)] for x, y in coords]))
+        poly_jsons.append(json.dumps([[round(float(x), 3), round(float(y), 3)] for x, y in coords]))
     fields_gdf["polygon_json"] = poly_jsons
 
     h3_col = fields_gdf["h3_index_10"].astype(str)
