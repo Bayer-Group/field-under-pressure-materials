@@ -7,7 +7,7 @@ the VM, see `docker/VM.md`). CORS allows any origin and no cookies are used, so 
 call it with the `Authorization: Bearer` header.
 
 **Start here: the sandbox.** `POST /sandbox` `{"mode": "mock" | "empty"}` needs no password and returns a token for 8 hours:
-`mock` starts with a copy of a ready farm (4 to 8 crop areas with results), `empty` starts from scratch. Whatever the visitor saves
+`mock` starts with a copy of a ready farm (4 to 8 crop areas with results, **linked to their cadastral parcels**: `parcel_ids` and `parcel` of `GET /fields` are filled, and a copied field is edited in place by `PUT /fields/{id}` with the id it has in `GET /fields`), `empty` starts from scratch. Whatever the visitor saves
 belongs to that sandbox and is kept for the 8 hours (keep the token, for example in `localStorage`, and the data is there after a
 reload); `DELETE /sandbox` starts over. The development logins `farmer001` … `farmer050` exist only for the team and will be removed
 before the demo. The views of schema `serve` (`docker/README.md`, "Serving layer") are the single source: the API is a thin `SELECT`
@@ -20,7 +20,7 @@ over them, so the farmer front end and QGIS see the same data and no business lo
   shown time; the API translates them back before saving. No label about the shift is shown.
 - **The class is a statement about conditions**, never an instruction to spray. `conditions_met = true` means class `high`, growth stage
   zone B or C and no protection (`docs/curated_layer_contract.md`, section 3).
-- **Isolation.** A farmer sees only own crop areas (the server filters by `owner_id`); the `analyst` role sees all and the grid layer.
+- **Isolation.** A farmer sees only own crop areas (the server filters by `owner_id`); the `analyst` role sees all crop areas. The grid layer and the risk surface are public weather data (nothing of a farmer), so every signed-in user may read them; only `method=smooth` of the surface is for the analyst.
 - Geometry is GeoJSON, EPSG:4326, `[lon, lat]`. Dates are `YYYY-MM-DD` (local day). Times are ISO 8601 with offset.
 - **Colour is the reader's job.** Suggested: `low` green, `medium` amber, `high` red, any `status` other than `ok` grey
   (`protected`, `out_of_window`, `insufficient_data`, `stage_unknown`); `uncertain` is shown as the class with a hatch or an outline.
@@ -43,7 +43,8 @@ over them, so the farmer front end and QGIS see the same data and no business lo
 | `GET /crop-areas/{id}` | `serve.crop_area` | one crop area with soil and crop-map context |
 | `GET /crop-areas/{id}/risk?from=&to=` | `serve.risk_daily` | one row per day (the date slider), with `reasons` for the "Why?" screen |
 | `GET /crop-areas/{id}/changes` | `serve.risk_change_log` | when and why the class, status or `conditions_met` changed |
-| `GET /grid/risk?date=` | `serve.grid_risk_daily` | FeatureCollection of 4 km cells for the whole voivodeship (analyst), default today |
+| `GET /grid/risk?date=` | `serve.grid_risk_daily` | FeatureCollection of the grid cells (rectangles of 0.044°, about 3.0 x 4.9 km, tiling the plane) for the whole voivodeship (any signed-in user), default today |
+| `GET /grid/risk/surface?date=&format=json\|png\|asc&value=index\|hours&method=&resolution=&sigma_km=` | `serve.grid_risk_daily` | the cells as a continuous surface (a heatmap, any signed-in user), see section 3 |
 | `POST /crop-areas` | `app.crop_area` | saves a crop area (`geometry`, `farmer_crop_id`, `sowing_date`, optional `bbch_override`), recomputes, returns it with today's class |
 | `POST /crop-areas/{id}/sprays` | `app.spray` | `{spray_date, protection_duration_days}`, may be in the past; recomputes, returns `{crop_area, changed_days}` |
 | `DELETE /crop-areas/{id}` | `app.field` | deletes a crop area, 204 |
@@ -75,7 +76,45 @@ sandbox, 150 ha per crop area, a valid polygon of at most 500 points, only aroun
 `protected_until`, `growth_stage_zone`, `growth_stage_source`, `gdd_since_resumption`, `reasons` (object), `model_version`.
 Fields can be `null` (for example `risk_class` when `status` is `out_of_window`); the reader must handle that.
 
-`GET /grid/risk`: features with `grid_id`, `date`, `risk_class`, `uncertain`, `h_low`, `h_high`, `coverage`.
+`GET /grid/risk`: features with `grid_id`, `date`, `risk_class`, `uncertain`, `h_low`, `h_high`, `coverage`, `risk_index`,
+`index_low`, `index_high`.
+
+**`risk_index` (PROPOSAL, #49).** H on a continuous 0-1 scale aligned with the classes (`septoria.risk_index`, thresholds from
+`config/septoria.toml`): 0 at 0 h, 0.5 at the medium threshold, 1 at the high threshold and above, linear in between. So `< 0.5`
+is `low`, `0.5` to `< 1` is `medium`, `1` is `high`, the same as `risk_class`; it adds no rule, it keeps what the three classes
+round away. `index_low` / `index_high` come from `h_low` / `h_high` (missing hours counted dry / wet). NULL wherever `risk_class`
+is NULL (e.g. `out_of_window`). Added to `GET /me/crop-areas` (`risk_index`), `GET /crop-areas/{id}/risk` (all three) and
+`GET /grid/risk` (all three).
+
+**`GET /grid/risk/surface` (#49).** A heatmap of the voivodeship for one day (any signed-in user), the cells shown as a continuous surface
+(`backend/app/services/risk_surface.py`, standard library only). It is built from the **hours** `h_low` of the cells, and the
+`risk_index` is applied to each pixel afterwards. (Building it from the index lost the peaks: the index is capped at 20 h, so
+averaging it lowered every value next to a peak, and the first version showed no pixel of class high while 13 % of the cells were
+high on the check day.)
+
+| Parameter | Values | Meaning |
+| --- | --- | --- |
+| `date` | a date | the shown day, default today |
+| `format` | `json` (default), `png`, `asc` | `json`: the grid; `png`: an RGBA image on the fixed ramp (green 0, amber 0.5, red 1), the bounds in the header `X-Bounds` (`west,south,east,north`), for an image source in MapLibre; `asc`: an ESRI ASCII Grid (QGIS opens it directly, choose EPSG:4326) |
+| `value` | `index` (default), `hours` | what `json` and `asc` carry; `png` is always the index. `hours` shows how far above the threshold the cells are (the index stops at 20 h) |
+| `method` | `interpolate` (default), `smooth` | `interpolate`: bilinear on the regular lattice of the weather grid, exact at the cell centres (mean error 0.09 h, 33 / 55 / 12 % of low / medium / high pixels against 31 / 55 / 13 % of the cells); `smooth`: Gaussian mean (mean error 0.9 h, blurs the peaks), the fallback when the cells are not a lattice |
+| `resolution` | 0.01 to 0.1 degrees, default 0.02 | pixel size; `smooth` needs 0.02 or more |
+| `sigma_km` | 1 to 10, default 5 | smoothing radius of `method=smooth` |
+
+`json`: `{date, crs, bounds: [west, south, east, north], resolution_deg, width, height, method, value, values: [[...]] (row 0 is the
+north, null outside the data), max_distance_km, class_thresholds, index_scale, class_note, model_version}`. Pixels farther than 4 km
+from every cell centre are empty. A day computed once is kept in memory (the default surface takes about 0.3 s the first time).
+`method=smooth` costs seconds of CPU, so only one runs at a time per process (another one gets 503 at once; `interpolate` is instant and
+more accurate); about 90 grid or surface requests per minute per user in total (429; the limit is 30 a minute in each of the 3 worker
+processes). Measured on the VM: a user asking for the surface every second does not change the p95 of 100 people on the
+platform (0.42 s, as without it); eight parallel clients hammering it do (the limit exists for that).
+
+**How to mark the classes on it.** The classes belong to the cells (`GET /grid/risk`, `septoria.classify`); a pixel is a continuous
+estimate between two cell centres, not a cell. `class_thresholds` gives the landmarks: `{hours: {medium: 10, high: 20}, index:
+{medium: 0.5, high: 1.0}}` (from `config/septoria.toml`). In QGIS colour the raster by value with the stops at the thresholds
+(green below, amber at the medium one, red at the high one), draw the contour lines at them if the classes must be marked, and put
+the cell layer with its three classes over it for the decisions. The surface is a view for the analyst; `conditions_met` and every
+decision stay with the cells and the fields. Legend: "hours of continuous leaf wetness in the last 72 h".
 
 ## 4. Open points
 

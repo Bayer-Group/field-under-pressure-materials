@@ -150,12 +150,14 @@ def sandbox(body: SandboxIn, request: Request, con=Depends(get_db_rw)):
                 "SELECT a.crop_area_id FROM app.crop_area a JOIN app.field f USING (field_id) WHERE f.owner_id = %s "
                 "ORDER BY a.crop_area_id LIMIT 8", (t["owner_id"],)).fetchall()]
             p = {"sid": sid, "ids": ids}
-            ca = "%(sid)s || '-' || crop_area_id"
+            ca = "%(sid)s || '~' || crop_area_id"          # the id format of PUT /fields (owner~id), so a copy is edited in place
+            fld = "%(sid)s || '~' || field_id"
             _clone(con, "app", "field", "field_id IN (SELECT field_id FROM app.crop_area WHERE crop_area_id = ANY(%(ids)s))", p,
-                   {"field_id": "%(sid)s || '-' || field_id", "owner_id": "%(sid)s", "created_at": "now()",
+                   {"field_id": fld, "owner_id": "%(sid)s", "created_at": "now()",
                     "updated_at": "now()"})
-            _clone(con, "app", "crop_area", "crop_area_id = ANY(%(ids)s)", p,
-                   {"crop_area_id": ca, "field_id": "%(sid)s || '-' || field_id"})
+            _clone(con, "app", "field_parcel", "field_id IN (SELECT field_id FROM app.crop_area WHERE crop_area_id = ANY(%(ids)s))", p,
+                   {"field_id": fld})                       # the cadastral parcels of the copied fields (parcel_ids of GET /fields)
+            _clone(con, "app", "crop_area", "crop_area_id = ANY(%(ids)s)", p, {"crop_area_id": ca, "field_id": fld})
             _clone(con, "app", "spray", "crop_area_id = ANY(%(ids)s)", p, {"crop_area_id": ca})
             for table in ("crop_area_crop_map", "field_context", "risk_assessment"):
                 _clone(con, "curated", table, "crop_area_id = ANY(%(ids)s)", p, {"crop_area_id": ca})
