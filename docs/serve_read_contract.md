@@ -241,8 +241,8 @@ would use OIDC. There is nothing to confirm and no e-mail.
 | `sandbox` | a visitor of `POST /sandbox` | yes, on the copy, for 8 hours |
 
 The generated accounts each have their own copy of an example farm (the parcels and the computed risk included), so a user can edit it; the
-`nowy.rolnik*` accounts have no field, to try creating the first one. Their passwords are random and live only in the team's private file
-`data/_loader/user_accounts.csv` (outside git; `scripts/generate_user_accounts.py` writes it).
+`nowy.rolnik*` accounts have no field, to try creating the first one. Their passwords are set by `scripts/generate_user_accounts.py`: random ones kept only in the team's private file
+`data/_loader/user_accounts.csv` (outside git), or, for tests of the front end, one simple password for all of them (`--password`; a mock).
 
 **Endpoints**
 - `POST /login` `{login, password}`: the login is case-insensitive. Wrong password and unknown login give the same `401 wrong login or

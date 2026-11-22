@@ -9,8 +9,10 @@ Needs migration 010 (app.user_account). What it creates:
   handed out in turn; the copy includes the parcels and the computed risk, and can be edited: it is not an example farm),
 * `--empty M` accounts without any field (login nowy.rolnik1), to try creating the first field,
 * `--analysts K` accounts with the analyst role (login analityk): sees everything, edits nothing.
-Passwords are random (for example kuxa-7mqe-9dwp), stored only as scrypt hashes, and written to a CSV file (--out, by default
-data/_loader/user_accounts.csv, which git ignores): the only place that has them, so give it to the team through a private channel.
+Passwords are random by default (for example kuxa-7mqe-9dwp) or, with --password, ONE simple password for every account (for tests of
+the front end: a mock, the same for everybody). They are stored only as scrypt hashes and written to a CSV file (--out, by default
+data/_loader/user_accounts.csv, which git ignores). With random passwords the file is the only place that has them: give it to the team
+through a private channel.
 
 Safe to run again: an existing account keeps its password (unless --reset-passwords) and an account without fields gets its farm
 back (the mock data generator deletes every mock farm, accounts included in that: run this script again after it).
@@ -133,7 +135,8 @@ def main(argv=None) -> int:
     ap.add_argument("--empty", type=int, default=2, help="accounts without any field")
     ap.add_argument("--analysts", type=int, default=1)
     ap.add_argument("--seed", type=int, default=1)
-    ap.add_argument("--reset-passwords", action="store_true", help="new random passwords for all the accounts of this plan")
+    ap.add_argument("--password", help="one password for every account of this plan (default: a random one for each)")
+    ap.add_argument("--reset-passwords", action="store_true", help="new passwords (random, or --password) for all the accounts of this plan")
     ap.add_argument("--no-farms", action="store_true", help="accounts only, no farm copies")
     ap.add_argument("--out", type=Path, default=ROOT / "data" / "_loader" / "user_accounts.csv", help="where the passwords are written")
     ap.add_argument("--dsn", help="connection string (default: env LOAD_DB_DSN)")
@@ -163,7 +166,7 @@ def main(argv=None) -> int:
             exists = cur.fetchone() is not None
             password = None
             if not exists or a.reset_passwords:
-                password = generate_password()
+                password = a.password or generate_password()
                 cur.execute(
                     "INSERT INTO app.user_account (login, password_hash, owner_id, role, display_name) VALUES (%s, %s, %s, %s, %s) "
                     "ON CONFLICT (login) DO UPDATE SET password_hash = EXCLUDED.password_hash, display_name = EXCLUDED.display_name, "
