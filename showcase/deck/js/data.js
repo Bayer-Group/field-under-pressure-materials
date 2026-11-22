@@ -1,57 +1,43 @@
 // Content the animations read. Edit here rather than inside the animation files.
 // Anything marked ILLUSTRATIVE is placeholder data: replace it with real numbers before presenting.
-window.DeckData = {
-  // Slide "Everything links to the sampling event": one chip per data source, laid out on a ring.
-  sources: [
-    { name: 'NEON', what: 'field sites, soil cores' },
-    { name: 'NMDC', what: 'soil metagenomes' },
-    { name: 'SSURGO', what: 'soil survey' },
-    { name: 'Daymet', what: 'daily weather' },
-    { name: 'CDL', what: 'crop history' },
-    { name: 'Sentinel-2 / Landsat', what: 'greenness' },
-    { name: 'NAIP / NEON camera', what: 'aerial photos' },
-    { name: '3DEP', what: 'terrain' },
+window.DeckData = {}
+
+// Slide "Cheaper DNA, more research". Two panels on one year axis.
+//   cost:   NHGRI "Cost per Genome" (genome.gov DNA Sequencing Costs: Data, table of May 2022), [year + month/12, USD]
+//   papers: PubMed hits per publication year for the query  metagenomic agriculture  (fetched 2026-11-22).
+//           2026 is only part of the year.
+window.DeckData.trend = {
+  cost: [
+    [2001.67, 95263072], [2002.17, 70175437], [2002.67, 61448422], [2003.17, 53751684], [2003.75, 40157554],
+    [2004.0, 28780376], [2004.25, 20442576], [2004.5, 19934346], [2004.75, 18519312], [2005.0, 17534970],
+    [2005.25, 16159699], [2005.5, 16180224], [2005.75, 13801124], [2006.0, 12585659], [2006.25, 11732535],
+    [2006.5, 11455315], [2006.75, 10474556], [2007.0, 9408739], [2007.25, 9047003], [2007.5, 8927342],
+    [2007.75, 7147571], [2008.0, 3063820], [2008.25, 1352982], [2008.5, 752080], [2008.75, 342502],
+    [2009.0, 232735], [2009.25, 154714], [2009.5, 108065], [2009.75, 70333], [2010.0, 46774],
+    [2010.25, 31512], [2010.5, 31125], [2010.75, 29092], [2011.0, 20963], [2011.25, 16712],
+    [2011.5, 10497], [2011.75, 7743], [2012.0, 7666], [2012.25, 5901], [2012.5, 5985],
+    [2012.75, 6618], [2013.0, 5671], [2013.25, 5550], [2013.5, 5550], [2013.75, 5096],
+    [2014.0, 4008], [2014.25, 4920], [2014.5, 4905], [2014.75, 5731], [2015.0, 3970],
+    [2015.25, 4211], [2015.5, 1363], [2015.75, 1245], [2016.33, 1176], [2016.58, 1508],
+    [2016.83, 1356], [2017.08, 1015], [2017.33, 1333], [2017.58, 1134], [2017.83, 1844],
+    [2018.08, 1232], [2018.33, 1463], [2018.58, 1467], [2018.83, 1392], [2019.08, 993],
+    [2019.33, 606], [2019.58, 942], [2019.83, 695], [2020.08, 645], [2020.33, 702],
+    [2020.58, 689], [2020.83, 512], [2021.08, 851], [2021.33, 454], [2021.58, 562],
+    [2021.83, 552], [2022.08, 525], [2022.33, 525],
   ],
-
-  // Slide "Two sites, 29 plots".
-  sites: [
-    { name: 'North Sterling, CO', code: 'STER', plots: 19, tag: 'dryland' },
-    { name: 'Konza Prairie, KS', code: 'KONA', plots: 10, tag: 'prairie farm' },
+  papers: [
+    [2004, 1], [2005, 2], [2006, 4], [2007, 6], [2008, 13], [2009, 16], [2010, 51], [2011, 62], [2012, 103],
+    [2013, 91], [2014, 133], [2015, 174], [2016, 219], [2017, 314], [2018, 394], [2019, 468], [2020, 621],
+    [2021, 794], [2022, 980], [2023, 1023], [2024, 1269], [2025, 1553], [2026, 1815, 'partial'],
   ],
-
-  // Slide "Greenness over time". ILLUSTRATIVE: one synthetic growing season.
-  // Replace with a real export, e.g. one plot-year of satellite readings as { day, ndvi } pairs.
-  greenness: (() => {
-    const curve = (d) => 0.17 + 0.62 / (1 + Math.exp(-(d - 150) / 11)) - 0.6 / (1 + Math.exp(-(d - 232) / 10))
-    let seed = 7
-    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647)
-    const readings = []
-    for (let d = 95; d <= 300; d += 4 + Math.floor(rnd() * 7)) {
-      readings.push({ day: d, ndvi: Math.max(0.05, curve(d) + (rnd() - 0.5) * 0.08) })
-    }
-    return {
-      dayRange: [90, 305],
-      curve,
-      readings,
-      visits: [128, 176, 214], // soil sampling visits (day of year)
-    }
-  })(),
-
-  // Slide "Nitrogen cycle": nodes clockwise from the top, then the processes between them.
-  // Gene names follow rules/ko_panel.csv.
-  ncycle: {
-    nodes: [
-      { id: 'n2', label: 'N₂', angle: -90 },
-      { id: 'nh4', label: 'NH₄⁺', angle: 0 },
-      { id: 'no3', label: 'NO₃⁻', angle: 90 },
-      { id: 'n2o', label: 'N₂O', angle: 180 },
-    ],
-    processes: [
-      { from: 'n2', to: 'nh4', name: 'Fixation', genes: 'nifH · nifD · nifK' },
-      { from: 'nh4', to: 'no3', name: 'Nitrification', genes: 'amoA · hao · nxrB' },
-      { from: 'no3', to: 'n2o', name: 'Denitrification', genes: 'narG · napA · nirK/S · norB' },
-      { from: 'n2o', to: 'n2', name: 'N₂O reduction', genes: 'nosZ' },
-    ],
-    shortcut: { from: 'no3', to: 'nh4', name: 'DNRA', genes: 'nrfA · nirB' },
-  },
 }
+
+// Soil groups used by the metagenomics slides (colors pass the dataviz palette check on the deck background).
+// ILLUSTRATIVE shares, roughly typical for agricultural soil.
+window.DeckData.taxa = [
+  { name: 'Proteobacteria', pct: 30, c: '#3987e5' },
+  { name: 'Actinobacteria', pct: 25, c: '#d95926' },
+  { name: 'Acidobacteria', pct: 20, c: '#199e70' },
+  { name: 'Bacteroidetes', pct: 10, c: '#c98500' },
+  { name: 'Other', pct: 15, c: '#d55181' },
+]
