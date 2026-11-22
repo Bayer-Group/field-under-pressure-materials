@@ -5,7 +5,7 @@ on:
     - cron: "37 3 * * *"
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, "team/Misiaki"]
     paths: ["mapa/**", "rolnik/**", "skrypty/**", ".github/workflows/**"]
 
 permissions:
