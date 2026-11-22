@@ -103,6 +103,8 @@
 .s-goal .node.core { transform: translate(-50%, -50%); }
 .s-goal .node.out { transform: translate(-50%, -105px); }
 .s-goal .core img { width: 220px; height: 220px; max-width: none; margin: 0; filter: drop-shadow(0 0 50px rgba(121,224,170,.35)); }
+/* The wordmark hangs below the globe, out of the flow, so the globe stays centred where the links meet. */
+.s-goal .core img.name { position: absolute; left: 50%; top: 100%; width: 300px; height: auto; margin: 48px 0 0 -150px; filter: none; }
 .s-goal .out i { width: 210px; height: 210px; padding: 36px; color: var(--lime); border-color: var(--lime); box-shadow: 0 0 60px rgba(181,242,107,.3); }
 
 /* ---------- 2b · history → now → future ---------- */
