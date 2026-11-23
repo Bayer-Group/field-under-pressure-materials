@@ -1,0 +1,7 @@
+# The backend image needs only these two folders; everything else (data, .env, .git, loader files) stays out of the build context.
+*
+!backend
+!shared
+!config
+**/__pycache__
+**/*.pyc

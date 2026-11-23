@@ -1,0 +1,49 @@
+name: 🚀 Nowe Zadanie / Funkcjonalność (Feature / Task)
+description: Zgłoś nowe zadanie do realizacji lub podziału pracy w zespole.
+title: "[TASK]: "
+labels: ["task"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ### 📋 Zgłoszenie Zadania (Issue-Driven Development)
+        Używaj tego szablonu, aby zdefiniować zakres pracy przed rozpoczęciem kodowania.
+  - type: textarea
+    id: goal
+    attributes:
+      label: 🎯 Cel zadania (Co robimy?)
+      description: Zwięzły opis funkcjonalności lub problemu do rozwiązania (1-3 zdania).
+      placeholder: "Np. Dodać endpoint w backendzie do pobierania obrysu działki w formacie GeoJSON..."
+    validations:
+      required: true
+  - type: dropdown
+    id: module
+    attributes:
+      label: 📦 Dotknięty moduł
+      description: Wskaż główny obszar zmian.
+      options:
+        - backend (FastAPI / Ingestion)
+        - qgis_plugin (PyQGIS GUI / Task)
+        - shared (Pydantic / Stałe)
+        - web (MapLibre GL JS)
+        - docs (Rejestry / Dokumentacja)
+        - tests / devops
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: 🛠️ Zakres prac i Definition of Done (Kiedy zadanie jest gotowe?)
+      description: Krótka lista kroków (checklista), aby uniknąć domysłów i rozrostu zakresu.
+      value: |
+        - [ ] Krok 1: ...
+        - [ ] Krok 2: ...
+        - [ ] Zweryfikowano działanie lokalnie
+    validations:
+      required: true
+  - type: input
+    id: assignee_note
+    attributes:
+      label: 👤 Odpowiedzialny / Narzędzie wykonawcze
+      description: Kto realizuje zadanie (np. członek zespołu, wsparcie AI).
+      placeholder: "Np. Wiktor + Claude"

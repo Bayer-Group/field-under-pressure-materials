@@ -1,0 +1,96 @@
+version: '3.8'
+
+services:
+  # 1. Spatial database (PostGIS)
+  postgis:
+    image: postgis/postgis:15-3.3
+    container_name: spatial_postgis
+    restart: unless-stopped  # starts again together with the machine (VM stop/start, reboot)
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-gis_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secretpassword}
+      POSTGRES_DB: ${POSTGRES_DB:-spatial_db}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgis_data:/var/lib/postgresql/data
+      # Schema is created automatically on the first start with an empty volume
+      - ./initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-gis_user} -d ${POSTGRES_DB:-spatial_db}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # 1b. Backend API (FastAPI): reads the serve views, demo login. Build: docker/backend.Dockerfile
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/backend.Dockerfile
+    container_name: spatial_backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-gis_user}:${POSTGRES_PASSWORD:-secretpassword}@postgis:5432/${POSTGRES_DB:-spatial_db}
+      AUTH_SECRET: ${AUTH_SECRET:-}      # empty: random at start (tokens expire on restart)
+      DEMO_READONLY: ${DEMO_READONLY:-0}  # 1: nobody saves anything (kill switch for the audience demo)
+      ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-1}   # 0: POST /register is switched off
+      MAX_ACCOUNTS: ${MAX_ACCOUNTS:-500}
+      SANDBOX_RATE_PER_MIN: ${SANDBOX_RATE_PER_MIN:-150}
+      SANDBOX_TEMPLATES: ${SANDBOX_TEMPLATES-farmer-024,farmer-055,farmer-042,farmer-020,farmer-015,farmer-016,farmer-099,farmer-086,farmer-051,farmer-093}   # example farms a sandbox copies; empty: all
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-3}    # uvicorn worker processes (one Python process is limited by the GIL)
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:-8000}:8000"   # only this machine; the internet reaches the API through caddy (HTTPS)
+    depends_on:
+      postgis:
+        condition: service_healthy
+
+  # 1c. HTTPS (Caddy): ports 80 (certificate challenge, redirect) and 443; needs PUBLIC_HOST in .env
+  caddy:
+    image: caddy:2
+    container_name: spatial_caddy
+    restart: unless-stopped
+    environment:
+      PUBLIC_HOST: ${PUBLIC_HOST:-localhost}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./caddy:/etc/caddy:ro            # a directory, not a single file: a file replaced by git pull would stay stale in the container
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+
+  # 2. Local S3 for COG raster files (MinIO)
+  minio:
+    image: minio/minio:latest
+    container_name: spatial_minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadminpassword
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+
+  # 3. Dynamic raster tile server (TiTiler)
+  titiler:
+    image: ghcr.io/developmentseed/titiler:latest
+    container_name: spatial_titiler
+    environment:
+      PORT: 8080
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadminpassword
+      AWS_S3_ENDPOINT_URL: http://minio:9000
+    ports:
+      - "8080:8080"
+    depends_on:
+      - minio
+
+volumes:
+  postgis_data:
+  minio_data:
+  caddy_data:
+  caddy_config:

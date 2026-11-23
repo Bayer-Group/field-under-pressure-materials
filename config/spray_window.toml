@@ -1,0 +1,36 @@
+# Spray window rules (wheat / septoria first; maize and soy use the same logic with other values): the team's note
+# "Okno oprysku: jak to wyliczamy", version 3, sections 4-6, and docs/curated_layer_contract.md, section 3 ("Spray windows").
+# The window is an assessment of the weather, never an instruction or a consent to spray. Changing a value changes results
+# at once (computed on request, nothing is stored).
+
+[spray_window]
+model_version = "spray-window-v1"
+horizon_hours = 72                 # the next 72 hours (note 5)
+min_window_hours = 4               # 2 h to spray + 2 h without rain after it (note 5.3, team assumption)
+rain_free_after_hours = 2          # hours without rain needed after the spray (note 5.1): latest start = end of window - this
+max_windows = 3                    # up to three windows (note 1 and 6)
+indicative_after_hours = 48        # windows starting later are marked indicative (note 6, point 4)
+source_label = "replay"            # demo: the "forecast" is the actual weather of the next 72 h from raw.weather_hourly
+
+[spray_window.limits]
+wind_max_ms = 4.0                  # mean wind at 10 m (note 5.1): the stricter legal limit, always (no drift-reduction question)
+gust_over_wind_max_ms = 2.0        # gusts at most this much above wind_max_ms, so 6 m/s (note 5.1)
+temperature_min_c = 5.0            # note 5.1
+temperature_max_c = 25.0           # note 5.1
+precipitation_max_mm = 0.2         # "no rain": an hour with more than 0.2 mm counts as rain, the same cut as the wet hour of
+                                   # config/septoria.toml (the note says only "no rain"; IMERG has small non-zero values)
+confident_margin_ms = 1.0          # a window with at least this margin below the wind limit is "confident", else "borderline" (note 6)
+
+[spray_window.origin]              # shown next to the values (note 5.1: assumptions are shown as assumptions)
+wind_max_ms = "regulation"         # Dz.U. 2026 poz. 353, from 1.04.2026
+gust_over_wind_max_ms = "team_assumption"
+temperature_min_c = "team_assumption"
+temperature_max_c = "team_assumption"
+precipitation_max_mm = "team_assumption"
+min_window_hours = "team_assumption"
+rain_free_after_hours = "team_assumption"
+
+[spray_window.texts]
+disclaimer = "The tool does not check the label of the product or whether it is approved for the crop. The choice of the product and compliance with the label are the farmer's."
+wind_height = "Wind is forecast at 10 m; the boom works lower. No correction is made."
+replay = "Replay: the 'forecast' is the actual weather of the next 72 hours, so it looks better than a real forecast."

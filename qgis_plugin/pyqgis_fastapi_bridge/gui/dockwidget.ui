@@ -1,0 +1,459 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>PyQgisBridgeDockWidgetBase</class>
+ <widget class="QDockWidget" name="PyQgisBridgeDockWidgetBase">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>360</width>
+    <height>620</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Field Under Pressure</string>
+  </property>
+  <widget class="QScrollArea" name="scrollArea">
+   <property name="frameShape">
+    <enum>QFrame::NoFrame</enum>
+   </property>
+   <property name="horizontalScrollBarPolicy">
+    <enum>Qt::ScrollBarAlwaysOff</enum>
+   </property>
+   <property name="widgetResizable">
+    <bool>true</bool>
+   </property>
+   <widget class="QWidget" name="dockWidgetContents">
+   <layout class="QVBoxLayout" name="verticalLayout">
+    <property name="spacing">
+     <number>6</number>
+    </property>
+    <property name="leftMargin">
+     <number>12</number>
+    </property>
+    <property name="topMargin">
+     <number>12</number>
+    </property>
+    <property name="rightMargin">
+     <number>12</number>
+    </property>
+    <property name="bottomMargin">
+     <number>12</number>
+    </property>
+    <item>
+     <widget class="QGroupBox" name="grpConnection">
+      <property name="title">
+       <string>Connection</string>
+      </property>
+      <layout class="QVBoxLayout" name="connectionLayout">
+       <item>
+        <widget class="QLabel" name="lblConnection">
+         <property name="text">
+          <string>Not connected.</string>
+         </property>
+         <property name="wordWrap">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btnDisconnect">
+         <property name="text">
+          <string>Log out / change connection</string>
+         </property>
+         <property name="toolTip">
+          <string>Forgets the token and goes back to the sign-in step. The layers already on the map stay.</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <widget class="QGroupBox" name="grpBackend">
+      <property name="title">
+       <string>Backend</string>
+      </property>
+      <layout class="QVBoxLayout" name="backendLayout">
+       <item>
+        <widget class="QLabel" name="lblFarmerUrl">
+         <property name="text">
+          <string>Base URL</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLineEdit" name="txtFarmerUrl">
+         <property name="placeholderText">
+          <string>https://34-118-11-71.nip.io/api/v1</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <widget class="QGroupBox" name="grpSession">
+      <property name="title">
+       <string>Sign in</string>
+      </property>
+      <layout class="QVBoxLayout" name="sessionLayout">
+       <item>
+        <widget class="QPushButton" name="btnSandbox">
+         <property name="text">
+          <string>Start sandbox (farmer, mock farm)</string>
+         </property>
+         <property name="toolTip">
+          <string>POST /sandbox {"mode": "mock"}: no password, a token for 8 hours with a copy of a ready farm. Farmer role: own crop areas only, no grid.</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLineEdit" name="txtLogin">
+         <property name="toolTip">
+          <string>Account for POST /login. The analyst role sees all crop areas and the voivodeship grid.</string>
+         </property>
+         <property name="placeholderText">
+          <string>Login (analyst)</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLineEdit" name="txtPassword">
+         <property name="toolTip">
+          <string>Sent only to POST /login and cleared right after; never saved.</string>
+         </property>
+         <property name="placeholderText">
+          <string>Password</string>
+         </property>
+         <property name="echoMode">
+          <enum>QLineEdit::Password</enum>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btnLogin">
+         <property name="text">
+          <string>Log in</string>
+         </property>
+         <property name="toolTip">
+          <string>POST /login {login, password}; the returned token is put in the token field.</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLineEdit" name="txtToken">
+         <property name="toolTip">
+          <string>Sent as Authorization: Bearer. Filled by the sandbox or the login; kept only while QGIS runs.</string>
+         </property>
+         <property name="placeholderText">
+          <string>Access token (Bearer)</string>
+         </property>
+         <property name="echoMode">
+          <enum>QLineEdit::Password</enum>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="lblSession">
+         <property name="text">
+          <string>Not connected.</string>
+         </property>
+         <property name="wordWrap">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btnOffline">
+         <property name="text">
+          <string>Work offline (files only)</string>
+         </property>
+         <property name="toolTip">
+          <string>Skips the sign-in: only the buttons that read files work.</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <widget class="QGroupBox" name="grpFarmer">
+      <property name="title">
+       <string>Farmer fields</string>
+      </property>
+      <layout class="QVBoxLayout" name="farmerLayout">
+       <property name="spacing">
+        <number>8</number>
+       </property>
+       <item>
+        <widget class="QPushButton" name="btnLoadFarmer">
+         <property name="toolTip">
+          <string>GET {base URL}/fields and show parcels and crop areas</string>
+         </property>
+         <property name="text">
+          <string>Load from backend</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btnLoadFarmerFile">
+         <property name="toolTip">
+          <string>Use a JSON file with the same shape as the GET /fields response</string>
+         </property>
+         <property name="text">
+          <string>Load from JSON file&#8230;</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="lblFarmerStatus">
+         <property name="text">
+          <string>No farmer data loaded yet.</string>
+         </property>
+         <property name="wordWrap">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <widget class="QGroupBox" name="grpRisk">
+      <property name="title">
+       <string>Septoria risk (read contract)</string>
+      </property>
+      <layout class="QVBoxLayout" name="riskLayout">
+       <property name="spacing">
+        <number>6</number>
+       </property>
+       
+       
+       <item>
+        <widget class="QLabel" name="lblLimit">
+         <property name="text">
+          <string>Limit to area</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <layout class="QHBoxLayout" name="limitLayout">
+         <item>
+          <widget class="QComboBox" name="cmbLimitLayer">
+           <property name="toolTip">
+            <string>Polygon layer that limits what is loaded: only crop areas and grid cells that intersect it are kept (and only their details are requested). Sent as ?bbox= too, for when the API filters on the server.</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QToolButton" name="btnRefreshLimit">
+           <property name="text">
+            <string>&#x21bb;</string>
+           </property>
+           <property name="toolTip">
+            <string>Refresh the list of polygon layers</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <widget class="QCheckBox" name="chkLimitSelected">
+         <property name="text">
+          <string>Only the selected polygons of that layer</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="lblApiLayers">
+         <property name="text">
+          <string>Layers from the API (tick the ones to load)</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QListWidget" name="listApiLayers">
+         <property name="toolTip">
+          <string>Layers the API serves (docs/serve_read_contract.md). Greyed out: needs another role, or not in the API yet (ask in #12).</string>
+         </property>
+         <property name="verticalScrollBarPolicy">
+          <enum>Qt::ScrollBarAlwaysOff</enum>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QDateEdit" name="dateGrid">
+         <property name="toolTip">
+          <string>Day of the grid, sent as ?date=. Dates are already shifted for the demo; nothing is converted. Set from GET /clock.</string>
+         </property>
+         <property name="calendarPopup">
+          <bool>true</bool>
+         </property>
+         <property name="displayFormat">
+          <string>yyyy-MM-dd</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btnLoadApiLayers">
+         <property name="text">
+          <string>Load checked layers</string>
+         </property>
+         <property name="toolTip">
+          <string>Loads every ticked layer; the grid layers use the date above and the limit area.</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btnHistory">
+         <property name="text">
+          <string>Risk history of the selected crop area</string>
+         </property>
+         <property name="toolTip">
+          <string>Select one crop area on the map, then GET /crop-areas/{id}/risk and /changes: a table layer, one row per day.</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="lblFilesHead">
+         <property name="text">
+          <string>Offline (contract-shaped files)</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btnLoadCropAreasFile">
+         <property name="text">
+          <string>Crop areas from file&#8230;</string>
+         </property>
+         <property name="toolTip">
+          <string>GeoJSON with the shape of GET /me/crop-areas</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btnLoadGridFile">
+         <property name="text">
+          <string>Grid from file&#8230;</string>
+         </property>
+         <property name="toolTip">
+          <string>GeoJSON with the shape of GET /grid/risk</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="lblRiskStatus">
+         <property name="text">
+          <string>No risk data loaded yet.</string>
+         </property>
+         <property name="wordWrap">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    
+    
+    <item>
+     <widget class="QToolButton" name="btnToggleLog">
+      <property name="cursor">
+       <cursorShape>PointingHandCursor</cursorShape>
+      </property>
+      <property name="text">
+       <string>Details</string>
+      </property>
+      <property name="checkable">
+       <bool>true</bool>
+      </property>
+      <property name="toolButtonStyle">
+       <enum>Qt::ToolButtonTextBesideIcon</enum>
+      </property>
+      <property name="arrowType">
+       <enum>Qt::RightArrow</enum>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="QWidget" name="logBody" native="true">
+      <property name="visible">
+       <bool>false</bool>
+      </property>
+      <layout class="QVBoxLayout" name="logLayout">
+       <property name="spacing">
+        <number>4</number>
+       </property>
+       <property name="leftMargin">
+        <number>0</number>
+       </property>
+       <property name="topMargin">
+        <number>0</number>
+       </property>
+       <property name="rightMargin">
+        <number>0</number>
+       </property>
+       <property name="bottomMargin">
+        <number>0</number>
+       </property>
+       <item>
+        <widget class="QTextEdit" name="txtLog">
+         <property name="minimumSize">
+          <size>
+           <width>0</width>
+           <height>130</height>
+          </size>
+         </property>
+         <property name="readOnly">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <layout class="QHBoxLayout" name="clearLayout">
+         <item>
+          <spacer name="clearSpacer">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>40</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+         <item>
+          <widget class="QPushButton" name="btnClear">
+           <property name="text">
+            <string>Clear</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <spacer name="verticalSpacer">
+      <property name="orientation">
+       <enum>Qt::Vertical</enum>
+      </property>
+      <property name="sizeHint" stdset="0">
+       <size>
+        <width>20</width>
+        <height>0</height>
+       </size>
+      </property>
+     </spacer>
+    </item>
+   </layout>
+   </widget>
+  </widget>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

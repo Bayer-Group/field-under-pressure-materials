@@ -1,0 +1,47 @@
+# Septoria (wheat) rules for the curated layer: docs/curated_layer_contract.md (section 4).
+# Values come from the contract, which transcribes the team's notes; the origin of each is recorded.
+# Changing a value changes results: recompute with scripts/build_curated.py. Final values: issue "Define the wheat/septoria
+# business logic" (docs/wheat_septoria_logic.md); until it exists these are the contract's values.
+
+[septoria]
+model_version = "septoria-v1"
+window_hours = 72                 # H = longest run of wet hours in the 72 h ending at the last hour of the local day
+protection_days_default = 10      # used by the UI when a spray has no value (the farmer contract requires one)
+min_coverage = 0.80               # ASSUMPTION (not in the contract): below it the result is insufficient_data
+max_gap_hours = 4                 # "uncertain" is shown when missing hours (a gap of up to 4 h) can move H across a threshold
+                                  # (Piotrek's thresholds note); what to do with longer gaps is open (#33)
+
+[septoria.wet_hour]               # contract 1: wet hour = RH >= 85 % or precipitation > 0.2 mm
+rh_min = 85.0
+precipitation_min_mm = 0.2
+
+[septoria.thresholds]             # contract 3: H >= 20 h high, >= 10 h medium, else low
+medium = 10
+high = 20
+
+[septoria.threshold_origin]
+high = "literature"               # SPOT-IT, per the team's thresholds note
+medium = "team_assumption"
+
+[septoria.growth_stage]           # contract 1.1, 1.2 and 3
+bbch_window = [30, 59]
+calendar_window = ["04-01", "06-30"]   # winter wheat fallback when the stage is not estimated (month-day)
+resumption_after = "02-01"        # first day AFTER this date
+resumption_t_mean_min = 3.0       # degrees C
+resumption_consecutive_days = 5
+gdd_base = 3.0                    # gdd3 = max(t_mean - base, 0)
+zone_b_from = 160.0               # degree-days since resumption: A below, B from here, C from zone_c_from (to be calibrated)
+zone_c_from = 510.0
+
+# Other diseases are configured for later and stay disabled (thresholds note, 2026-11-21). Not used in v1.
+[white_mold]                      # soybean: p = probability of apothecia (Sporecaster), percent
+enabled = false
+thresholds = { medium = 20, high = 30 }
+threshold_origin = { high = "literature", medium = "team_assumption" }   # high: MSU Sclero-cast (UW-Madison: 35 % for 15 inch rows)
+stage = "R1-R3"
+
+[nclb]                            # maize yellow leaf spot: E = wetting episodes of >= 6 h at 18-27 C in the last 14 days
+enabled = false
+thresholds = { medium = 1, high = 2 }
+threshold_origin = { high = "team_assumption", medium = "team_assumption" }  # no thresholds in the sources
+stage = "after emergence"

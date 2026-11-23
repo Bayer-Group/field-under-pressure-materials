@@ -28,3 +28,7 @@ earthengine-api>=1.1
 geemap>=0.32
 # Uncomment if you Export.*.toCloudStorage and need to list/download GCS objects in Python:
 # google-cloud-storage>=2.14
+
+# Database loader (scripts/load_db.py): reads parquet/GeoTIFF and writes to PostGIS
+# (pyarrow, numpy and rasterio are listed above)
+psycopg[binary]>=3.1

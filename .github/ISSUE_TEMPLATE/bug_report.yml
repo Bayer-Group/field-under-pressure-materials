@@ -1,0 +1,28 @@
+name: 🐛 Zgłoszenie Błędu (Bug Report)
+description: Zgłoś błąd w kodzie, wtyczce QGIS lub API.
+title: "[BUG]: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 🛑 Opis błędu
+      description: Co nie działa i jaki jest oczekiwany rezultat?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: 🔄 Kroki do odtworzenia
+      description: Jak wywołać błąd?
+      value: |
+        1. 
+        2. 
+        3. 
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 📄 Logi / Komunikat błędu (Stack trace)
+      placeholder: "Wklej treść błędu z konsoli..."

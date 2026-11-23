@@ -1,0 +1,19 @@
+[general]
+name=Field Under Pressure
+qgisMinimumVersion=3.28
+qgisMaximumVersion=3.99
+description=Septoria weather-risk layers and farmer fields from the Field Under Pressure backend
+about=Loads crop areas with today's septoria assessment, the 4 km weather grid and an hours-based heatmap of weather conditions favourable to septoria (Mazowieckie). Needs the Field Under Pressure backend: start a sandbox (no password) or log in; offline GeoJSON files work without the server.
+version=0.2.0
+author=geoearth-junction
+email=wwitkowski.important@gmail.com
+homepage=https://github.com/geoearth-junction/field-under-pressure-materials
+repository=https://github.com/geoearth-junction/field-under-pressure-materials
+tracker=https://github.com/geoearth-junction/field-under-pressure-materials/issues
+hasProcessingProvider=no
+category=Plugins
+experimental=True
+deprecated=False
+tags=agriculture,septoria,risk,heatmap,weather
+icon=icon.png
+changelog=0.2.0 - two-step panel (sign-in, then layers), heatmap from the API, farmer fields, risk history

@@ -1,0 +1,7 @@
+# HTTPS in front of the backend API (docker compose service `caddy`). The certificate is requested and renewed automatically.
+# PUBLIC_HOST is set in .env by `scripts/provision_vm.sh deploy` (<external-ip-with-dashes>.nip.io unless you set your own domain).
+{$PUBLIC_HOST} {
+	encode gzip
+	log                     # access log (JSON, stdout): `docker logs spatial_caddy` survives redeploys of the backend
+	reverse_proxy backend:8000
+}
